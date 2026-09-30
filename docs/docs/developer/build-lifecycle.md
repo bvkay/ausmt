@@ -105,7 +105,7 @@ entry, counts it as `corrupt` and rebuilds the file.
 `corrupt`: the parse and XML entries, as the `C18 cache [...]` line prints them) and a `kinds`
 block with `hits`, `misses`, `writes`, `corrupt`, `link_fallbacks` and `evicted` for each of the
 four kinds, final after the end-of-build prune, which the build also prints to stderr as one
-`C18 cache kind <kind>: ...` line per kind. The size cap is `AUSMT_CACHE_MAX_MB` (default 8192).
+`C18 cache kind <kind>: ...` line per kind. The size cap is `AUSMT_CACHE_MAX_MB` (default 16384).
 When the prune evicts entries to meet it the build prints `C18 cache WARN: the size cap ...
 evicted N entries, M of them used by this build`; entries this build used are misses for the next
 one, so a repeating warning with M above zero means the cap is too small for the corpus. The prune

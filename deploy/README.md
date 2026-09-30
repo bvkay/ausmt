@@ -237,7 +237,7 @@ a small change. Operator-relevant facts:
   `note: C18 cache DISABLED …` and `build_provenance.json` records `cache.enabled:false` + the reason.
 - **Force a full re-verified rebuild** that still repopulates the cache: run the engine with
   `--cache-mode refresh` (e.g. after an engine upgrade you want re-verified from scratch). Size is
-  capped by `AUSMT_CACHE_MAX_MB` (default 8192), pruned oldest-first per successful build. The cache
+  capped by `AUSMT_CACHE_MAX_MB` (default 16384), pruned oldest-first per successful build. The cache
   holds the MTH5 files too, hardlinked into each build, so a warm rebuild writes no MTH5 at all. A
   build whose prune evicted entries prints `C18 cache WARN: the size cap ... evicted N entries`; if it
   says any were used by that build, raise the cap, or every rebuild re-writes what was evicted.

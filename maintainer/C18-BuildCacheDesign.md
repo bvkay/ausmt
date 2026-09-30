@@ -561,38 +561,93 @@ source of a miss; a hit reads no source.
 
 ### The cap, sized from measured sizes
 
-§3's default of 2048 MB is superseded: `CACHE_MAX_MB_DEFAULT = 8192`, and `deploy/compose.yaml`
-forwards the same default (`test_compose_default_cap_matches_the_engine_default` pins them equal).
-Measured on the locked stack (mt_metadata 1.0.10, mth5 0.6.8, h5py 3.16.0, HDF5 2.0.0):
+§3's default of 2048 MB is superseded: `CACHE_MAX_MB_DEFAULT = 16384`, and `deploy/compose.yaml`
+forwards the same default (`test_compose_default_cap_matches_the_engine_default` pins them equal;
+`test_every_written_copy_of_the_default_cap_matches_the_engine_default` pins the env template, the
+operator pages and this section). The prune reads the cap as `max_mb * 1024 * 1024` bytes, so 16384
+is 17,179,869,184 B.
 
-* the fixture (2 sample stations, one cold build): parse 10,615 B for 2 entries, XML 121,069 B
-  for 2, station MTH5 208,487 B each, the 2-station survey MTH5 276,327 B, sidecars 190 B each;
-* the corpus (`ausmt-surveys-base`: 27 surveys, 2,631 EDIs): one-station MTH5 files for a
-  first/middle/last sample of every survey, 79 written, 170,429 / 201,445 / 194,573 / 240,294 B
-  (min / median / mean / max); full survey bundles of 20, 36 and 100 stations at 57,640, 70,038
-  and 68,431 B per station; the 2,605 served XML of a full-corpus build tree
-  (`sm/tip-battery-b9/base-out`) total 177,369,754 B.
+Every figure below is from the live-corpus acceptance run: one cold build then one warm build of
+engine commit `b362918` over 15,265 stations in 161 surveys (`n_stations`, `n_surveys` in
+`sm/.corpus-live-out/builds/{cold,warm}/build_provenance.json`), mt_metadata 1.0.10 and mth5 0.6.8
+(the same files' `software` block), h5py 3.16.0 and HDF5 2.0.0 (`h5py.__version__` and
+`h5py.version.hdf5_version` in `ausmt-lock`), four workers, both MTH5 flags on
+(`logs/run_build.sh`). Paths are relative to `sm/.corpus-live-out/`.
 
-Projected over 2,631 stations: station MTH5 488 MiB at the mean (603 MiB at the max), survey MTH5
-176 MiB at 70,038 B per station, XML 169 MiB, parse 13 MiB: one key generation of the corpus is
-846 to 961 MiB. The old 2048 cap holds 2.1 generations of the high estimate; 8192 holds 8.5. A
-generation larger than the cap would evict live entries on every build and turn every warm build
-cold without a word, which is the failure the cap must not produce; 8192 leaves room for the
-corpus to grow several-fold, or for several key generations (an engine-source change re-keys
-everything; the old generation is aged out after 90 days or evicted oldest-first) before that
-happens.
+* **One key generation is 5,480,914,613 B (5,227 MiB).** The cold build's `cache.prune` block
+  records `bytes: 5480914613`, `kept: 41741`, `pruned_age: 0`, `pruned_size: 0`, so the cache after
+  that build is exactly one generation; the warm build's block records the same bytes and entries.
+  Summing `stat -f %z` over every file under `cache/` gives the same 5,480,914,613 B.
+* **By kind** (`find cache -type f -name '*.<ext>' -print0 | xargs -0 stat -f %z`, summed):
+  station MTH5 13,267 payloads, 2,889,318,340 B; survey MTH5 147 payloads, 985,145,227 B; XML 13,049
+  `.xml` payloads, 1,469,314,736 B, plus 13,049 `.meta` files, 11,363,184 B; parse 15,278 `.json`
+  entries, 122,986,259 B; file-entry sidecars 13,414 `.ref` files, 2,786,867 B. The entry counts
+  agree with the cold build's `kinds` writes (`parse` 15,278, `xml` 26,098 as two files per key,
+  `station_h5` 13,267, `survey_h5` 147).
+* **On disk:** `du -sh cache` prints `5.3G`; `find cache | wc -l` prints `68461`, which is the
+  68,204 files (`find cache -type f | wc -l`) plus the 256 shard directories and the root.
+* **The served MTH5 tiers of the cold build:** `du -sh builds/cold/h5` prints `2.7G`,
+  `find builds/cold/h5 | wc -l` prints `13424` (13,267 files, 2,889,318,340 B, and 157
+  directories); `du -sh builds/cold/bundles` prints `1.4G`, `find builds/cold/bundles | wc -l` prints
+  `604` (603 files: the 147 `-tf.h5` survey MTH5 at 985,145,227 B, plus 309 `.zip` and 147 `.txt`
+  EDI bundle files at 507,101,106 B, which the cache does not hold).
+* **The fixture** (the two sample stations, one cold build into an empty cache, re-run on this
+  stack): parse 10,615 B for 2 entries, XML 121,069 B for 2 (plus 839 B of meta each), station
+  MTH5 208,487 B each, the 2-station survey MTH5 276,327 B, sidecars 190 B each.
+
+The cap holds 17,179,869,184 / 5,480,914,613 = 3.13 generations: three whole generations at
+today's corpus. At 359,051 B per station (5,480,914,613 B over 15,265 stations, assuming a
+generation grows linearly with station count), one generation exceeds the cap at about 47,850
+stations, 3.13 times today's corpus; a 25,000-station corpus would make a generation of 8.36 GiB
+and the cap would hold 1.9 of them. The previous default of 8192 held 1.57 generations and a
+single generation would have exceeded it at about 23,920 stations.
+
+What the cap does at each stage. Below the growth point a new generation (an engine-source or
+library change re-keys everything) is written beside the old ones; once the retained generations
+together pass the cap (the fourth, at today's size), the prune evicts oldest-first, which is the old
+generations, and the build prints the WARN below with `M = 0`. Past the growth point one generation
+no longer fits: every build's prune evicts entries that build used, the next build misses them, and
+the WARN fires on every build with `M > 0`. That is the signal to raise the cap, or the corpus
+turns cold build after build. Old generations also age out after 90 days untouched.
 
 The cap counts the cache's own file sizes, so a payload hardlinked into retained builds is counted
 in full although the disk holds it once: the cap bounds what the cache would cost if every build
 sharing it were pruned. Disk use of the whole data volume goes DOWN with this amendment: the box
-retains 5 builds (`tail -n +6`), each of which held its own ~664 MiB of MTH5 (the projection
-above); warm builds now share one inode per file with the cache.
+retains 5 builds (`deploy/Makefile`, `ls -1t | tail -n +6`), each of which held its own copy of the
+MTH5 tiers, 2,889,318,340 B of station MTH5 and 985,145,227 B of survey MTH5 at today's corpus
+(3.61 GiB); warm builds now share one inode per file with the cache (after the acceptance run all
+13,267 station MTH5 in `builds/cold/h5` and all 147 survey MTH5 in `builds/cold/bundles` carry link
+count 3, `stat -f %l`: the cache payload, the cold tree and the warm tree).
 
 When the size cap does evict, the build says so: `C18 cache WARN: the size cap
 (AUSMT_CACHE_MAX_MB=...) evicted N entries, M of them used by this build`. `M` counts evicted
 entries whose mtime is at or after the build's start, which the next build misses; a repeating
 warning with `M > 0` means the cap is too small for the corpus
 (`test_size_cap_eviction_warns_and_is_counted`).
+
+An entry's age for the 90-day rule is the newest mtime of its files, so a file entry hit by a build
+keeps its place through the sidecar that hit touched, however old its payload
+(`test_a_hit_keeps_a_file_entry_whose_payload_is_older_than_the_age_window`).
+
+### Negative outcomes are recomputed
+
+The cache stores only a file it verified, so a station or survey for which no entry is ever stored
+is recomputed on every build by design: a withheld rendition, an `n == 0` write, or a writer or
+round-trip failure. The warm build's `kinds` block (`builds/warm/build_provenance.json`, and the
+`C18 cache kind` lines of `logs/warm.log`) counts them: `xml` 26,098 hits and 1,779 misses,
+`station_h5` 13,267 hits and 1,561 misses, `survey_h5` 147 hits and 9 misses, every kind with
+`writes=0`, so every miss was an outcome that stores nothing. The cold build's misses (`xml` and
+`station_h5` 14,828 each, `survey_h5` 156) less its stored entries (13,049, 13,267, 147) give the
+same 1,779, 1,561 and 9. Two surveys account for a share of them in `logs/warm.log`:
+`seahorse-2022-23` logs `[h5] WARN ... MTH5Error: does not exist, check station_list for existing
+names - 167 file(s)` and 111 derived EDI round-trip failures, and serves 278 station MTH5 and 334
+XML for 445 EDIs; `black-hill-2005-06` logs 180 round-trip failures (177 derived EDI, 3 canonical
+EMTF-XML), every one on lines 11, 12, 16, 25 and 26, which its `survey.yaml` declares the 180
+figure-recovered files, and serves 229 XML for 409 EDIs. The whole warm build, these
+recomputations included, took 525 s (`logs/warm.log`: `BUILD_RC=0 wall_s=525`) against 4,037 s cold
+(`logs/cold.log`: `BUILD_RC=0 wall_s=4037`). Caching a negative outcome would need a sentinel entry
+that a hit replays as "nothing to serve", with its own key and verification rules; that is out of
+scope for this amendment.
 
 ### Counters
 

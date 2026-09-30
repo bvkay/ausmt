@@ -116,7 +116,7 @@ Authoritative list of every `AUSMT_*` the running system reads, and where:
 - `AUSMT_GIT_CREDS_DIR` — push-credential dir, mounted ro. Already `:-./git-creds.placeholder`.
 
 **Optional tuning (env-only, engine or gateway reads directly, defaults in code):**
-- `AUSMT_CACHE_MAX_MB`: C18 build-cache cap (default 8192, `CACHE_MAX_MB_DEFAULT` in
+- `AUSMT_CACHE_MAX_MB`: C18 build-cache cap (default 16384, `CACHE_MAX_MB_DEFAULT` in
   `engine/extract/cache.py`).
 - `AUSMT_EDIT_TIMEOUT_S` — C31 editor poll timeout (default 120; `gateway/config.py`).
 - `AUSMT_MAX_UPLOAD_MB` (250), `AUSMT_MAX_INFLIGHT` (8), `AUSMT_MAX_PER_DAY` (25),
