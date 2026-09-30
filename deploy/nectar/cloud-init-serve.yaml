@@ -1,0 +1,77 @@
+#cloud-config
+# AusMT serving replica (ausmt-serve): first-boot configuration for a NeCTAR Ubuntu 24.04 (Noble)
+# instance. Paste it into the dashboard at launch (Launch Instance, Configuration, Customisation
+# Script) after replacing the one placeholder below. Procedure: deploy/nectar/RUNBOOK-NECTAR.md.
+#
+# NOTHING HERE IS A SECRET. The placeholder takes a PUBLIC ssh key; the Tailscale join, the GHCR
+# login and every other credential are typed on the running host by the person provisioning it.
+#
+# What first boot does: installs the host packages, Docker, the compose plugin and Tailscale; turns
+# on unattended security upgrades; writes the fstab line that mounts the data volume by filesystem
+# label at /srv/ausmt; creates the publish account as uid 10001 (the uid that owns site-data) with
+# its key restricted to the publish gate; and, when the volume is already mounted, clones the
+# repository and hands over to deploy/nectar/provision-serve.sh. On a first boot the volume is
+# normally not attached yet, so the hand-over prints what to do and stops; the runbook attaches,
+# labels and mounts the volume, then runs provision-serve.sh by hand.
+#
+# This host serves. It holds no git write credential, no gateway, no sqlite and no build cache, and
+# first boot installs no curation timer.
+
+package_update: true
+package_upgrade: true
+packages:
+  - acl
+  - ca-certificates
+  - curl
+  - dnsutils
+  - docker-compose-v2
+  - docker.io
+  - git
+  - make
+  - python3
+  - rsync
+  - unattended-upgrades
+
+# The data volume, by filesystem label so a device renumbering cannot mount the wrong disk. nofail:
+# an instance whose volume is detached still boots, and the serve doctor's volume check then FAILs.
+mounts:
+  - [LABEL=ausmt-data, /srv/ausmt, ext4, "defaults,nofail,x-systemd.device-timeout=30s", "0", "2"]
+
+write_files:
+  # Unattended upgrades switched ON, not only installed: the package alone runs nothing.
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    permissions: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+  # The publish account's OpenSSH key. The account is reached over Tailscale SSH, which ignores this
+  # file and runs the account's login shell (the same gate); the key serves an OpenSSH path over the
+  # tailnet when Tailscale SSH is off. The file and its directories stay root-owned, so the account
+  # cannot rewrite its own restriction.
+  - path: /var/lib/ausmt-publish/.ssh/authorized_keys
+    owner: root:root
+    permissions: "0644"
+    content: |
+      command="/usr/local/bin/ausmt-publish-gate",restrict REPLACE_WITH_THE_CURATION_HOST_PUBLISH_PUBLIC_KEY
+
+runcmd:
+  - [sh, -c, "getent group 10001 >/dev/null || groupadd -g 10001 ausmt"]
+  - [sh, -c, "id -u publish >/dev/null 2>&1 || useradd -u 10001 -g 10001 -M -d /var/lib/ausmt-publish -s /usr/sbin/nologin publish"]
+  - [sh, -c, "chown root:root /var/lib/ausmt-publish /var/lib/ausmt-publish/.ssh && chmod 0755 /var/lib/ausmt-publish /var/lib/ausmt-publish/.ssh"]
+  - [systemctl, enable, --now, docker]
+  # Tailscale from its own signed apt repository for Noble. Joining the tailnet is NOT done here: it
+  # takes an auth key or an interactive login, which the runbook has the person provisioning type.
+  - [sh, -c, "curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg"]
+  - [sh, -c, "curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list"]
+  - [sh, -c, "apt-get update && apt-get install -y tailscale"]
+  # Hand over to the provisioning script only when the volume is mounted: a clone made before the
+  # mount would land on the root disk and vanish behind the volume.
+  - - sh
+    - -c
+    - |
+      if mountpoint -q /srv/ausmt; then
+        [ -d /srv/ausmt/code/.git ] || git clone https://github.com/bvkay/ausmt.git /srv/ausmt/code
+        sh /srv/ausmt/code/deploy/nectar/provision-serve.sh
+      else
+        echo "ausmt: /srv/ausmt is not mounted yet; attach, label and mount the volume, then run deploy/nectar/provision-serve.sh (deploy/nectar/RUNBOOK-NECTAR.md)"
+      fi

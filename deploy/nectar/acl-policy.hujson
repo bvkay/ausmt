@@ -1,0 +1,85 @@
+// AusMT on Nectar - tailnet policy entries to MERGE into the existing policy in the Tailscale admin
+// console (Access controls). Merge them beside the front-door stanza (deploy/frontdoor/acl-policy.hujson);
+// never replace the whole policy with this file. Design: maintainer/C48-NectarTopology.md.
+//
+// The tailnet is the identity layer: the curation host reaches the serving host only over it (the
+// publish channel and the log pull), people reach both hosts only over it (Tailscale SSH), and
+// curators reach the curation workbench only over it. Neither host opens SSH to the internet.
+//
+// Placeholders in <> are filled in the admin console, never committed:
+//   <ADMIN_TAG_OWNER>     the admin user or group that may apply the tags (e.g. "autogroup:admin")
+//   <CURATOR_n>           each curator's tailnet login (invited through the Tailscale admin console)
+//   <BOX_NODE_USER>       the login that owns the home box's node (see the phase-one rule below)
+//   <BOX_TAILNET_IP>      the box's tailnet address, the same alias the front-door stanza defines
+
+{
+  "tagOwners": {
+    // Applied when each host joins: `tailscale up --ssh --advertise-tags=tag:ausmt-serve` on the
+    // serving host, `--advertise-tags=tag:ausmt-curate` on the curation host once it exists.
+    "tag:ausmt-serve":  ["<ADMIN_TAG_OWNER>"],
+    "tag:ausmt-curate": ["<ADMIN_TAG_OWNER>"],
+  },
+
+  "groups": {
+    // Curators reach the curation workbench and nothing else. Each is a tailnet invite signed in
+    // with a passkey or institutional single sign-on, then a named entry in AUSMT_CURATOR_KEYS and a
+    // TOTP enrolment on the gateway; the tailnet login is the first factor, the gateway the second.
+    "group:curators": ["<CURATOR_1>", "<CURATOR_2>"],
+  },
+
+  "hosts": {
+    // Defined once in the front-door stanza; repeat it here only if that stanza is not merged.
+    "ausmt-box": "<BOX_TAILNET_IP>",
+  },
+
+  "acls": [
+    // The curation host to the serving host, port 22 only: the publish account (rsync and the
+    // receiver, behind its gate) and the log account (read-only pull of the masked access log).
+    // Phase one: the home box curates. Once the curation host is lifted to Nectar, drop ausmt-box.
+    {
+      "action": "accept",
+      "src":    ["ausmt-box", "tag:ausmt-curate"],
+      "dst":    ["tag:ausmt-serve:22"],
+    },
+    // Curators reach the workbench port on the curation host and no other port on any host.
+    {
+      "action": "accept",
+      "src":    ["group:curators"],
+      "dst":    ["ausmt-box:8444", "tag:ausmt-curate:8444"],
+    },
+    // Administrators reach both Nectar hosts for Tailscale SSH.
+    {
+      "action": "accept",
+      "src":    ["autogroup:admin"],
+      "dst":    ["tag:ausmt-serve:22", "tag:ausmt-curate:22"],
+    },
+  ],
+
+  "ssh": [
+    // The two service accounts, non-interactively (accept, no browser check), and no other account.
+    // Their login shells are the gates in deploy/nectar/, which admit the publish commands and the
+    // read-only log pull and refuse a shell.
+    {
+      "action": "accept",
+      "src":    ["tag:ausmt-curate"],
+      "dst":    ["tag:ausmt-serve"],
+      "users":  ["publish", "caddylog"],
+    },
+    // Phase one only. An SSH rule cannot name a host alias, and the box is an untagged node, so the
+    // rule names the login that owns it, which admits that login's other devices too (still only as
+    // the two gated accounts). Remove this rule at the curation lift, or tag the box earlier.
+    {
+      "action": "accept",
+      "src":    ["<BOX_NODE_USER>"],
+      "dst":    ["tag:ausmt-serve"],
+      "users":  ["publish", "caddylog"],
+    },
+    // People: a fresh sign-in check before a session on either Nectar host.
+    {
+      "action": "check",
+      "src":    ["autogroup:admin"],
+      "dst":    ["tag:ausmt-serve", "tag:ausmt-curate"],
+      "users":  ["autogroup:nonroot", "root"],
+    },
+  ],
+}
