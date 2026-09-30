@@ -24,12 +24,19 @@
 #               or for an explicit rebuild.request.
 #   4. status — write reconcile-status.json ATOMICALLY (tmp+mv) to the gateway state dir so the
 #               curator panel can show the last outcome.
+#   5. publish  with AUSMT_PUBLISH_TARGET set, a pass that settles what this host serves (rebuilt,
+#               noop, paused, pinned) hands the served build to the serving replica through
+#               deploy/scripts/publish.sh before its status is written, and the status carries
+#               publish=ok|failed|skipped (skipped: no target, or a pass that settled nothing). A
+#               replica already serving the build answers with a no-op, so a noop pass is how a
+#               replica that missed a publish catches up and a pinned pass is how a curator rollback
+#               reaches it. The local current is never touched by the publish.
 #
 # EXIT CODE: 0 on noop / rebuilt / sync_failed (the timer must NOT flap on an operator-visible
-# sync divergence or a normal no-op); 1 on action=failed (a build/verify failure) AND on
-# action=untracked_blocked (a refused rebuild — both need an operator, neither self-heals), so a
-# monitoring `systemctl status` surfaces them while a diverged checkout stays a quiet, panel-visible
-# state.
+# sync divergence or a normal no-op); 1 on action=failed (a build/verify failure), on
+# action=untracked_blocked (a refused rebuild) AND on publish=failed (the replica is behind) - all
+# three need an operator and none self-heals - so a monitoring `systemctl status` surfaces them while
+# a diverged checkout stays a quiet, panel-visible state.
 #
 # LOCK: flock -n on a lock file (default $AUSMT_DATA_DIR/reconcile.lock). If another run holds it,
 # exit 0 SILENTLY without touching the status file (two overlapping ticks must not both build;
@@ -46,6 +53,9 @@
 #   AUSMT_RECONCILE_LOCK  (optional) lock-file path override; default $AUSMT_DATA_DIR/reconcile.lock
 #   AUSMT_RECONCILE_JOURNALCTL (optional) the journalctl command that asks the KERNEL journal whether
 #                                    a failed rebuild was OOM-killed (test shim); default `journalctl`
+#   AUSMT_PUBLISH_TARGET  (optional) the serving replica's ssh destination; unset => no publish step
+#   AUSMT_RECONCILE_PUBLISH (optional) override the publish command (test shim); default:
+#                                    `sh $AUSMT_CODE_DIR/deploy/scripts/publish.sh`
 #
 # FLAGS:
 #   --dry-run  print the decision and take NO actions (no request-file consume, no build, no status
@@ -86,6 +96,11 @@ STATUS_FILE="$STATE_DIR/reconcile-status.json"
 LOCK_FILE="${AUSMT_RECONCILE_LOCK:-$AUSMT_DATA_DIR/reconcile.lock}"
 MAKE_CMD="${AUSMT_RECONCILE_MAKE:-make -C $AUSMT_CODE_DIR/deploy rebuild-data}"
 JOURNALCTL="${AUSMT_RECONCILE_JOURNALCTL:-journalctl}"
+PUBLISH_TARGET="${AUSMT_PUBLISH_TARGET:-}"
+PUBLISH_CMD="${AUSMT_RECONCILE_PUBLISH:-sh $AUSMT_CODE_DIR/deploy/scripts/publish.sh}"
+# The publish outcome every status write carries: skipped until run_publish says otherwise.
+PUBLISH_STATE="skipped"
+PUBLISH_DETAIL=""
 # The curator "pause auto-rebuild" flag + the "serve this build"
 # rollback pin: both host-written by the actions agent (deploy/scripts/actions.sh) / the gateway, and
 # RESPECTED here (this agent never writes them). A FRESH pause.flag suppresses the drift rebuild; a
@@ -97,8 +112,8 @@ ROLLBACK_PIN="$STATE_DIR/rollback.pin"
 PAUSE_EXPIRY_MIN="${AUSMT_RECONCILE_PAUSE_EXPIRY_MIN:-360}"   # 6 h
 BUILDS_DIR="$SITE_DATA/builds"
 # How many build dirs to keep besides the one `current` points at. The DEPTH matches the Makefile's
-# own `ls -1t | tail -n +6` retention so the two cannot keep different amounts of history; the
-# ordering here is by name rather than mtime (see prune_builds for why).
+# own five-build retention so the two cannot keep different amounts of history; the ordering here is
+# by name rather than mtime (see prune_builds for why).
 KEEP_BUILDS="${AUSMT_RECONCILE_KEEP_BUILDS:-5}"
 
 now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -166,7 +181,8 @@ newest_build_log() {
 # whatever the outcome, not only on the happy path.
 #
 # SAFETY. The build `current` points at is skipped UNCONDITIONALLY, before any retention arithmetic,
-# so this can never delete what is being served. Newest-first, keep KEEP_BUILDS, drop the rest.
+# so this can never delete what is being served. Newest-first, keep KEEP_BUILDS, drop the rest. A
+# pruned build's publish sidecar (builds/<ts>.sha256, a file, so never counted as a build) goes with it.
 prune_builds() {
   [ -d "$BUILDS_DIR" ] || return 0
   _cur=$(served_build_name)
@@ -184,7 +200,7 @@ prune_builds() {
     _n=$((_n + 1))
     [ "$_n" -le "$KEEP_BUILDS" ] && continue
     printf 'reconcile: pruning stale build %s\n' "$_b"
-    rm -rf -- "$BUILDS_DIR/$_b"
+    rm -rf -- "${BUILDS_DIR:?}/$_b" "${BUILDS_DIR:?}/$_b.sha256"
   done; }
 }
 
@@ -400,6 +416,33 @@ oom_kills_since() {
   return 0
 }
 
+# run_publish: hand the served build to the serving replica and set PUBLISH_STATE / PUBLISH_DETAIL
+# for the status write that follows. Returns 1 when the publish failed, so the pass exits 1: the
+# replica is behind and that needs an operator, while this host goes on serving its own build. The
+# sender's output is kept, and on a failure its last lines are the status detail, because the step it
+# names (ask-receiver, rsync-build, receive...) is what an operator acts on.
+run_publish() {
+  PUBLISH_DETAIL=""
+  if [ -z "$PUBLISH_TARGET" ]; then
+    PUBLISH_STATE="skipped"
+    return 0
+  fi
+  printf 'reconcile: publishing the served build to %s\n' "$PUBLISH_TARGET"
+  # shellcheck disable=SC2086 -- PUBLISH_CMD is an intentional word-split command (default or shim).
+  _pout=$($PUBLISH_CMD 2>&1)
+  _prc=$?
+  [ -n "$_pout" ] && printf '%s\n' "$_pout"
+  if [ "$_prc" -eq 0 ]; then
+    PUBLISH_STATE="ok"
+    return 0
+  fi
+  PUBLISH_STATE="failed"
+  PUBLISH_DETAIL=$(printf '%s\n' "$_pout" | tail -n 20)
+  printf 'reconcile: publish to %s FAILED (rc=%s); this host keeps serving its build and the replica is behind\n' \
+    "$PUBLISH_TARGET" "$_prc" >&2
+  return 1
+}
+
 # write_status <action> <head> <built> <build_id> <log_file> [detail]: build reconcile-status.json in
 # a temp file then mv it over the target — an atomic rename so the gateway panel never reads a
 # half-written file. Values are passed as argv (never interpolated into the JSON) so a stray
@@ -427,6 +470,7 @@ write_status() {
   AUSMT_RS_PAUSE_SINCE="${PAUSE_SINCE:-}" \
   AUSMT_RS_PINNED="${PINNED:-0}" AUSMT_RS_PINNED_BUILD="${PINNED_BUILD:-}" \
   AUSMT_RS_OOM_KILL="${OOM_KILL:-0}" \
+  AUSMT_RS_PUBLISH="${PUBLISH_STATE:-skipped}" AUSMT_RS_PUBLISH_DETAIL="${PUBLISH_DETAIL:-}" \
   "$PY" - > "$_tmp" <<'PYEOF'
 import json, os
 action = os.environ["AUSMT_RS_ACTION"]
@@ -467,6 +511,10 @@ doc = {
     # (oom_kills_since); the kernel lines themselves lead log_tail. False on every other outcome, so
     # a consumer (alert.sh, the ops floor) can name the cause without parsing prose.
     "oom_kill": os.environ.get("AUSMT_RS_OOM_KILL") == "1",
+    # The serving replica: ok, failed (publish_detail carries the sender's own words) or skipped (no
+    # target configured, or a pass that settled nothing about what this host serves).
+    "publish": os.environ.get("AUSMT_RS_PUBLISH") or "skipped",
+    "publish_detail": orval("AUSMT_RS_PUBLISH_DETAIL"),
 }
 print(json.dumps(doc, indent=1))
 PYEOF
@@ -482,6 +530,9 @@ run_pass() {
   #     goes on to noop, fail, or be killed. See prune_builds for why this cannot live only after a
   #     successful swap. Cheap (a readlink, a listing) and never touches the served build.
   [ "$DRY_RUN" -eq 0 ] && prune_builds
+  if [ "$DRY_RUN" -eq 1 ] && [ -n "$PUBLISH_TARGET" ]; then
+    printf 'reconcile: [dry-run] publish target %s: a rebuilt, noop, paused or pinned pass would publish the served build to it\n' "$PUBLISH_TARGET"
+  fi
   # 0. PAUSE + ROLLBACK-PIN state. Computed FIRST so EVERY status write below surfaces
   #    it (an authenticated attacker must not be able to keep serving frozen silently). PAUSED == a
   #    pause.flag within its expiry window (honoured); PAUSE_EXPIRED == a stale flag that is IGNORED
@@ -648,9 +699,11 @@ PYEOF
       return 0
     fi
     _pd="auto-rebuild PAUSED by a curator pause.flag${PAUSE_SINCE:+ (since $PAUSE_SINCE)}; drift is not being rebuilt. Resume from the serve screen (or it auto-expires after ${PAUSE_EXPIRY_MIN} min)."
+    run_publish
+    _pub=$?
     write_status "paused" "$head" "$built" "$(read_build_id)" "" "$_pd"
     printf 'reconcile: auto-rebuild paused (fresh pause.flag) — head=%s built=%s, NOT rebuilding\n' "${head:-?}" "${built:-?}"
-    return 0
+    return "$_pub"
   fi
 
   # 2c. ROLLBACK PIN (the rollback-repoints pin). While a manual "serve this build" pin stands,
@@ -667,9 +720,11 @@ PYEOF
         return 0
       fi
       _pd="serving a manually pinned build${PINNED_BUILD:+ (builds/$PINNED_BUILD)}; reconcile is holding and will NOT auto-rebuild. Press Request rebuild to move forward to the published HEAD."
+      run_publish
+      _pub=$?
       write_status "pinned" "$head" "$built" "$(read_build_id)" "" "$_pd"
       printf 'reconcile: rollback pin present (serving builds/%s) — holding, NOT rebuilding\n' "${PINNED_BUILD:-?}"
-      return 0
+      return "$_pub"
     fi
   fi
 
@@ -738,9 +793,11 @@ $_prev_tail"
       printf 'reconcile: [dry-run] head=%s built=%s => noop\n' "${head:-?}" "${built:-?}"
       return 0
     fi
+    run_publish
+    _pub=$?
     write_status "noop" "$head" "$built" "$(read_build_id)" ""
     printf 'reconcile: up to date (head=%s built=%s) — noop\n' "${head:-?}" "${built:-?}"
-    return 0
+    return "$_pub"
   fi
 
   reason="drift (head=$head != built=${built:-<none>})"
@@ -804,9 +861,11 @@ $_prev_tail"
     else
       new_head=$(git -C "$SURVEYS_LIVE" rev-parse --short HEAD 2>/dev/null || true)
     fi
+    run_publish
+    _pub=$?
     write_status "rebuilt" "$new_head" "$new_built" "$(read_build_id)" "$log_file"
     printf 'reconcile: rebuild OK (now serving head=%s built=%s)\n' "${new_head:-?}" "${new_built:-?}"
-    return 0
+    return "$_pub"
   fi
 
   # Build/verify failed: the atomic swap left the OLD build serving. Report failed + the log tail so

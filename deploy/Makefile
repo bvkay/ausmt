@@ -6,7 +6,7 @@
 # every compose invocation below is relative to this file's directory, matching the .env lookup
 # `docker compose` does by default (a sibling .env next to the compose file it's given).
 
-.PHONY: build up down rebuild-data cut-release smoke sync-surveys preflight reconcile refresh-pid-status doctor
+.PHONY: build up down rebuild-data cut-release smoke sync-surveys preflight reconcile refresh-pid-status doctor publish
 
 # Read deploy/.env so `make` targets see the SAME truth `docker compose` does (compose
 # auto-loads a sibling .env; make does not). `-include` => absent .env is not an error (portal-only /
@@ -75,8 +75,8 @@ down:
 # "Force full rebuild" writes rebuild.request with a `full` flag; reconcile.sh reads it and sets
 # AUSMT_BUILD_CACHE_MODE=refresh, so the engine recomputes everything (no cache reuse) for that one
 # build. Unset => rw (today's behaviour, byte-identical). The cache lives at /out/cache -- a SIBLING
-# of /out/builds, so the `ls -1t | tail -n +6 | rm -rf` prune below (which runs INSIDE /out/builds)
-# never touches it, and it survives the `mv -T current` swap. It only speeds a rebuild; it can never
+# of /out/builds, so the build prune below (which runs INSIDE /out/builds) never touches it, and it
+# survives the `mv -T current` swap. It only speeds a rebuild; it can never
 # change output bytes (verify.py stays full/cache-blind, and the CI equivalence test pins that). The
 # engine default is OFF and the gateway runner stays non-incremental. The key salt is a content
 # digest of the engine's product code (engine/extract, engine/ausmt_science, engine/schema and the
@@ -97,6 +97,9 @@ down:
 # /go/ts/ route in the committed table - the table AHEAD of the data, which doctor-box.sh's
 # ts-parity leg reports as a FAIL. Fail-closed by design: a register the build cannot read stops the
 # build rather than publishing the part of it that happened to parse.
+# The prune keeps the 5 newest build DIRECTORIES (`ls -1td -- */`, mtime order) and removes each pruned
+# build's publish sidecar (builds/<ts>.sha256, written beside it by scripts/publish.sh) with it; counting
+# plain entries would count every sidecar as a build and keep half the history.
 # The engine image deliberately excludes portal/, so the portal.config.yaml flags cannot reach a box
 # build; these CLI flags are the production enable and this line is their single source of truth. A
 # producer enabled in the YAML alone is a no-op here, which has bitten twice, so
@@ -126,7 +129,7 @@ rebuild-data:
 	  echo "rebuild-data: VERIFY FAILED -- current left untouched. Inspect $$DATA_DIR/$$BUILD_REL" >&2; \
 	  exit 1; \
 	fi; \
-	if ! docker compose -f compose.yaml --profile jobs run --rm -e TS="$$TS" --entrypoint sh build-runner -c 'set -e; ln -s "builds/$$TS" "/out/current.tmp.$$TS"; mv -T "/out/current.tmp.$$TS" /out/current; cd /out/builds; ls -1t | tail -n +6 | while read -r old; do echo "rebuild-data: pruning old build $$old"; rm -rf -- "$$old"; done'; then \
+	if ! docker compose -f compose.yaml --profile jobs run --rm -e TS="$$TS" --entrypoint sh build-runner -c 'set -e; ln -s "builds/$$TS" "/out/current.tmp.$$TS"; mv -T "/out/current.tmp.$$TS" /out/current; cd /out/builds; ls -1td -- */ | tail -n +6 | while read -r old; do old=$${old%/}; echo "rebuild-data: pruning old build $$old"; rm -rf -- "$$old" "$$old.sha256"; done'; then \
 	  echo "rebuild-data: SWAP FAILED -- inspect $$DATA_DIR (current still points at the previous build, if any)" >&2; \
 	  exit 1; \
 	fi; \
@@ -225,3 +228,16 @@ sync-surveys:
 # without acting. The script itself exits 0 on noop/rebuilt/sync_failed and 1 only on a build failure.
 reconcile:
 	AUSMT_CODE_DIR=$${AUSMT_CODE_DIR:-$$(cd .. && pwd)} scripts/reconcile.sh $(ARGS)
+
+# Hand the served build to the serving replica (scripts/publish.sh; maintainer/C48-NectarTopology.md):
+# sidecar, rsync with --link-dest against the replica's current, then the replica's receive-build.sh
+# verifies and swaps. The local current is only read. `make publish ARGS=--dry-run` resolves and
+# checks the build and prints what would be sent; `ARGS="--build <ts>"` sends a retained build (a
+# replica rollback). Runs as the operator, which needs the one-time write grant on site-data/builds
+# that deploy/README.md describes (the sidecar sits beside the build). Reconcile runs the same script
+# at the end of every pass that settles what this host serves.
+publish:
+	@set -e; \
+	: "$${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR (see .env)}"; \
+	: "$${AUSMT_PUBLISH_TARGET:?set AUSMT_PUBLISH_TARGET (the serving replica; see .env.example)}"; \
+	sh scripts/publish.sh $(ARGS)

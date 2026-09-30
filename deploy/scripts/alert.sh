@@ -24,7 +24,8 @@
 #   * a service down / unhealthy (portal, gateway, clamd have healthchecks; a failed rebuild leaves the
 #     build-runner untouched but a wedged portal/gateway shows unhealthy here).
 #   * a full disk (uploads + builds + the DB all live under $AUSMT_DATA_DIR).
-#   * a stale / failed serve-reconcile pass (reconcile-status.json age + action).
+#   * a stale / failed serve-reconcile pass (reconcile-status.json age + action), and a failed
+#     publish to the serving replica (publish=failed in the same document).
 #   * a stale or failed nightly backup (newest snapshot age + `systemctl is-failed`).
 #   * KERNEL-side memory growth: unreclaimable slab (/proc/meminfo SUnreclaim) is memory no PROCESS
 #     owns, so container healthchecks, `df` and every RSS figure stay green while the kernel walks
@@ -469,6 +470,13 @@ if action == "untracked_blocked":
     # names are carried in log_tail — surface them so the dead-man ping names the dir(s).
     detail = doc.get("log_tail") or "untracked survey dir(s) present"
     print(f"action=untracked_blocked - reconcile REFUSED the rebuild: {detail} (last_run={last_run})")
+    raise SystemExit(0)
+
+if doc.get("publish") == "failed":
+    # This host serves the right build and the public serving replica does not have it. The sender
+    # names the step it stopped at, and that line is what the operator acts on.
+    detail = doc.get("publish_detail") or "see publish_detail in reconcile-status.json"
+    print(f"publish=failed - the serving replica did not take the served build: {detail} (last_run={last_run})")
     raise SystemExit(0)
 
 # Age check on last_run (ISO-8601 UTC, e.g. 2026-07-10T03:20:00Z — the format reconcile.sh writes).
