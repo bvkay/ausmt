@@ -29,8 +29,9 @@
 #       edge).
 #   4d. the TIME-SERIES HAND-OFF TABLE: map hash parity, open-302, unlisted-404. Detail at
 #       the check itself; skips cleanly on a routeless table or an unresponsive edge.
-#   5. tailscale is up and the box peer is visible
-#   5b. the tailnet path to the box is DIRECT, not DERP-relayed (the relay trap: a
+#   5. tailscale is up and the box peer is visible (on a loopback upstream, the serving replica's
+#      case, there is no box peer and the peer match is skipped)
+#   5b. the tailnet path to the box is DIRECT, not DERP-relayed (skipped on a loopback upstream; the relay trap: a
 #       relayed path serves the whole portal through a shared third-party relay with multi-second
 #       TTFB outliers and capped throughput, and nothing else surfaces it)
 #   6. the zombie-process count is under the warn threshold (see the `zombies` subcommand for the kit)
@@ -447,6 +448,15 @@ check_ts_routes() {
 	fi
 }
 
+# On the serving replica the front door and the reader share one host (upstream 127.0.0.1:8445), so
+# the two tailnet legs have no box peer to examine; they say so instead of failing on the address.
+_is_loopback() {
+	case "$1" in
+		127.*|localhost|::1|\[::1\]) return 0 ;;
+	esac
+	return 1
+}
+
 check_tailscale() {
 	if ! $TAILSCALE status >/dev/null 2>&1; then
 		fail "tailscale: not up (tailscale status failed) - the edge cannot reach the box"
@@ -456,7 +466,9 @@ check_tailscale() {
 	# generic 'peer visible' check if we cannot.
 	up="${AUSMT_BOX_READER_UPSTREAM:-}"
 	peer="$(printf '%s' "$up" | sed -e 's#^[a-z]*://##' -e 's#[:/].*$##')"
-	if [ -n "$peer" ]; then
+	if _is_loopback "$peer"; then
+		pass "tailscale: up; the upstream is loopback ($peer), the reader is on this host, so there is no box peer to find"
+	elif [ -n "$peer" ]; then
 		if $TAILSCALE status 2>/dev/null | grep -qi "$peer"; then
 			pass "tailscale: up and the box peer ($peer) is visible"
 		else
@@ -477,6 +489,10 @@ check_tailnet_path() {
 	peer="$(printf '%s' "$up" | sed -e 's#^[a-z]*://##' -e 's#[:/].*$##')"
 	if [ -z "$peer" ]; then
 		warn "tailnet-path: box peer name not derivable from upstream; skipped"
+		return
+	fi
+	if _is_loopback "$peer"; then
+		pass "tailnet-path: skipped; the upstream is loopback ($peer), so no reader traffic crosses the tailnet"
 		return
 	fi
 	verdict="$($TAILSCALE ping -c 3 "$peer" 2>/dev/null | grep 'pong from' | tail -1)"
