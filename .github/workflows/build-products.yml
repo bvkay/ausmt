@@ -98,7 +98,7 @@ jobs:
       # and the build still produces Tier 0-2 products.
       - name: Install decomposition engine (optional, Tier 3)
         if: ${{ vars.DECOMP_COMMIT != '' }}
-        run: pip install "mtpy-v2 @ git+https://github.com/bvkay/mtpy-v2.git@${{ vars.DECOMP_COMMIT }}"
+        run: pip install -c environments/requirements-mtmetadata-lock.txt "mtpy-v2 @ git+https://github.com/bvkay/mtpy-v2.git@${{ vars.DECOMP_COMMIT }}"
 
       # THE PER-PR RUN IS A GATE SUBSET; THE FULL HOST-ENV SUITE RUNS ON PUSH AND DISPATCH.
       # Measured per-job Actions timings showed PR CI's ~37 min
