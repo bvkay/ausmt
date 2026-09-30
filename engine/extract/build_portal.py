@@ -4933,10 +4933,26 @@ def _mth5_cache_fetch(cache, key, kind, hpath):
     return n, err, rows
 
 
-def _mth5_cache_store(cache, key, kind, hpath, n, err, rows) -> None:
+def _sources_unmoved(sources) -> bool:
+    """True when every source file still hashes to the digest its key was derived from. The writer
+    re-reads each source after the key is derived, so a source edited in between (a surveys
+    checkout moved mid-build) was written and gated as bytes the key does not name."""
+    for p in sources:
+        used = _SHA_CACHE.get(str(p))
+        try:
+            now = hashlib.sha256(Path(p).read_bytes()).hexdigest()
+        except OSError:
+            return False
+        if used is None or now != used:
+            return False
+    return True
+
+
+def _mth5_cache_store(cache, key, kind, hpath, n, err, rows, sources) -> None:
     """Put a gate-passed MTH5 into the cache with what a hit must replay: its station count, its
-    captured stderr and its per-station failure rows."""
-    if key and n:
+    captured stderr and its per-station failure rows. Not stored when a source moved after the key
+    was derived: the file is still served by this build, but its bytes are not the key's."""
+    if key and n and _sources_unmoved(sources):
         cache.put_file(key, kind, Path(hpath), {"n": n, "err": err, "rows": rows})
 
 
@@ -4966,7 +4982,7 @@ def _write_tf_mth5_cached(stations, slug, label, hpath, smeta, failure_rows, con
                                                                   context)
     _replay_mth5_result(err, rows, failure_rows)
     if hit is None:
-        _mth5_cache_store(cache, key, kind, hpath, n, err, rows)
+        _mth5_cache_store(cache, key, kind, hpath, n, err, rows, [p for (p, _r) in stations])
     return n
 
 
@@ -5078,11 +5094,11 @@ def emit_station_mth5(stations, slug, label, h5dir, smeta=None, failure_rows=Non
             hit = _mth5_cache_fetch(cache, key, "station_h5", hpath) if key else None
             fut = _DoneFuture(hit) if hit is not None else _MTH5_POOL.submit(
                 _mth5_write_task, [(str(p), r)], slug, label, str(hpath), smeta)
-            plan.append((r["id"], hpath, key if hit is None else None, fut))
-        for sid, hpath, key, fut in plan:
+            plan.append((p, r["id"], hpath, key if hit is None else None, fut))
+        for p, sid, hpath, key, fut in plan:
             n, err, rows = fut.result()
             _replay_mth5_result(err, rows, failure_rows)
-            _mth5_cache_store(cache, key, "station_h5", hpath, n, err, rows)
+            _mth5_cache_store(cache, key, "station_h5", hpath, n, err, rows, [p])
             if n:
                 written[sid] = hpath
         return written
@@ -6394,6 +6410,7 @@ def _main_build(argv=None):
                             _mth5_write_task, [(str(p), r) for (p, r) in _h5_stations],
                             slug, label, str(_hpath), meta, "survey bundle"),
                         "cache_key": _hkey if _hhit is None else None,
+                        "sources": [p for (p, _r) in _h5_stations],
                         "rows": _product_failure_rows,
                         "row": _row, "slug": slug, "label": label, "lic": lic,
                         "lic_txt": _lic_txt, "hpath": _hpath, "custodian": _custodian,
@@ -6641,7 +6658,8 @@ def _main_build(argv=None):
     # Ordered strictly BEFORE the QC/mask seam and every manifest/_bundle_formats consumer.
     for _d in _deferred_bundles:
         _n, _err, _rows = _d["fut"].result()
-        _mth5_cache_store(build_cache, _d["cache_key"], "survey_h5", _d["hpath"], _n, _err, _rows)
+        _mth5_cache_store(build_cache, _d["cache_key"], "survey_h5", _d["hpath"], _n, _err, _rows,
+                          _d["sources"])
         if _err:
             sys.stderr.write(_err)
         # Fold the bundle's per-station failures into THIS survey's ledger and print only what the

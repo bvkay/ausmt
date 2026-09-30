@@ -78,6 +78,10 @@ _REF = "ref"   # sidecar suffix of a file entry: <key>.<kind>.ref
 _KIND_OF_EXT = {"json": "parse", "xml": "xml", "meta": "xml",
                 **{k: k for k in FILE_KINDS}, **{f"{k}.{_REF}": k for k in FILE_KINDS}}
 _ENTRY_NAME = re.compile(r"^([0-9a-f]{64})\.(.+)$")
+# The temporary a put writes beside its entry before the rename. One older than the grace period
+# belongs to a put that was killed between the two steps; a younger one may be a put in flight.
+_TMP_NAME = re.compile(r"^\.[0-9a-f]{64}\..*\.tmp$")
+TMP_GRACE_SECONDS = 86400
 
 
 def _dirty_checkout(cwd: Path) -> bool | None:
@@ -561,6 +565,9 @@ class BuildCache:
             _safe_unlink(tmp)
             self._tally(kind, "misses")
             return None
+        # A rename between two names of one inode (dest already links this payload) succeeds and
+        # leaves both names; after a real rename tmp is gone and this is a no-op.
+        _safe_unlink(tmp)
         self._tally(kind, "hits")
         # Only the sidecar is touched: the payload inode is also a served file, whose mtime is the
         # instant it was written and must not move with cache bookkeeping.
@@ -660,6 +667,22 @@ class BuildCache:
                 g[3] = g[3] or _KIND_OF_EXT.get(m.group(2))
         return groups
 
+    def _drop_stale_temporaries(self) -> None:
+        """Remove put temporaries (`.<key>.<ext>.<pid>.<ns>.tmp` in a shard) older than
+        TMP_GRACE_SECONDS. They are not entries, so neither the age rule nor the cap sees them."""
+        stale = time.time() - TMP_GRACE_SECONDS
+        for shard in self.root.iterdir():
+            if not shard.is_dir() or len(shard.name) != 2:
+                continue
+            for p in shard.iterdir():
+                if not _TMP_NAME.match(p.name):
+                    continue
+                try:
+                    if p.is_file() and p.stat().st_mtime < stale:
+                        _safe_unlink(p)
+                except OSError:
+                    pass
+
     def prune(self) -> dict:
         """Drop entries untouched for PRUNE_MAX_AGE_DAYS, then enforce the size cap oldest-first.
         Runs at the end of a successful build. A prune failure must never fail the build; returns a
@@ -674,6 +697,7 @@ class BuildCache:
         empty = {"pruned_age": 0, "pruned_size": 0, "evicted_live": 0, "kept": 0, "bytes": 0}
         if not self.enabled or self.mode == "ro" or not self.root.exists():
             return empty
+        self._drop_stale_temporaries()
         now = time.time()
         max_age = PRUNE_MAX_AGE_DAYS * 86400
         pruned_age = 0

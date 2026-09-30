@@ -103,7 +103,10 @@ When the prune evicts entries to meet it the build prints `C18 cache WARN: the s
 evicted N entries, M of them used by this build`; entries this build used are misses for the next
 one, so a repeating warning with M above zero means the cap is too small for the corpus. The prune
 only touches cache entries (files named by their key inside the two-character shard directories),
-so a file kept beside them in the cache root, such as `pid_status.json`, is never aged or evicted.
+so a file kept beside them in the cache root, such as `pid_status.json`, is never aged or evicted;
+it also removes a temporary a killed build left in a shard once that temporary is a day old. An
+MTH5 miss is stored only if its source EDIs still hash to what the key was derived from, so an
+EDI edited while the build ran is served by that build but never cached under its old bytes.
 
 ## Exit codes
 

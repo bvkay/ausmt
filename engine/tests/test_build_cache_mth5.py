@@ -804,6 +804,9 @@ def test_a_hit_replays_the_populating_writes_diagnostics(tmp_path, monkeypatch, 
     monkeypatch.setattr(build_portal, "_mth5_write_task", _task)
     key = bc.key_parts("survey_h5", ["replay"])
     st = [(SAMPLE_EDIS[0], {"id": "S1"})]
+    # A real key derivation memoises each source's digest; the store checks the source against it.
+    build_portal._SHA_CACHE.clear()
+    build_portal.sha256(SAMPLE_EDIS[0])
 
     def run(dest, ledger):
         n = build_portal._write_tf_mth5_cached(st, "s", "S", tmp_path / dest / "s-tf.h5", None, ledger,

@@ -427,7 +427,8 @@ sidecar, and only then rename it into place: what was hashed is what is served. 
 sidecar, a missing payload or a digest mismatch deletes both files and counts `corrupt` and a
 miss, and the seam recomputes (`test_corrupt_payload_is_deleted_counted_and_recomputed`,
 `test_corrupt_sidecar_is_deleted_counted_and_recomputed`). A stored meta the seam cannot use is
-rejected the same way (`reject_file`). The cache stays a passive store: `key_parts` binds the
+rejected the same way (`reject_file`,
+`test_a_verified_entry_whose_meta_is_unusable_is_rejected_and_rewritten`). The cache stays a passive store: `key_parts` binds the
 fixed salt and the kind, and the seam owns which parts it passes.
 
 ### Key components
@@ -518,7 +519,11 @@ are ONE inode. That is safe only because nothing ever writes into an existing MT
   tree whose files are cache links and asserts every payload keeps its bytes (removing the unlink
   turns it red: "a write into a served tree changed a cache payload");
 * the cache stores or replaces an entry by renaming a new file over the old name, and places a hit
-  by renaming a verified link into place; neither ever opens an existing payload for writing;
+  by renaming a verified link into place; neither ever opens an existing payload for writing. A
+  hit placed at a dest that already links the same payload (a second build into the same `--out`)
+  is a rename between two names of one inode, which succeeds and moves nothing, so the temporary
+  name is unlinked after every rename
+  (`test_relinking_a_dest_that_already_is_the_payload_leaves_no_temporary`);
 * served trees are never mutated in place; the box prunes old builds with `rm -rf`, which unlinks
   names; a release (`cut_release._copy_tree`) is a `shutil.copy2` byte copy, a new inode that shares
   nothing with the cache.
@@ -540,7 +545,19 @@ two-character shard, aged and evicted together, so a payload and its sidecar liv
 and anything else in the cache root (the Makefile keeps `pid_status.json` there) is never counted,
 aged or evicted (`test_file_entry_roundtrip_and_prune_keeps_foreign_files`). A hit touches the
 sidecar only: the payload's mtime is also the served file's mtime and must not move with cache
-bookkeeping; an entry's age is the newest mtime of its files.
+bookkeeping; an entry's age is the newest mtime of its files. A put killed between its link and
+its rename strands `.<key>.<kind>.<pid>.<ns>.tmp` in the shard, which for an MTH5 kind is a whole
+file; it is not an entry, so the prune removes such a temporary once it is older than
+`TMP_GRACE_SECONDS` (one day), which no live put reaches
+(`test_prune_removes_stale_put_temporaries_and_nothing_else`).
+
+A miss is stored only if every source file still hashes to the digest its key was derived from.
+The key hashes each EDI when the build first reads it, and the writer reads it again later, often
+in a worker; an EDI edited in between (a surveys checkout moved during `rebuild-data`) is written
+and gated as bytes the key does not name. Such a file is served by the
+build that wrote it and not stored, so a later build over the original bytes cannot hit it
+(`test_a_source_edited_after_its_key_was_derived_is_not_stored`). The check costs one hash per
+source of a miss; a hit reads no source.
 
 ### The cap, sized from measured sizes
 
