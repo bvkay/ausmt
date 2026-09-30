@@ -188,7 +188,9 @@ mt_metadata to the commit that upstream tag v1.0.11 names, because v1.0.11 is no
 commit declares `1.0.10`. A build on the pin therefore reports `"mt_metadata_version": "1.0.10"`,
 the same string PyPI's older 1.0.10 release reports. When v1.0.11 reaches PyPI the pin becomes
 `mt_metadata==1.0.11` and the key follows whatever that release declares. mth5 is pinned to PyPI's
-0.6.9. The pins and their reasons are in `engine/environments/README.md`.
+0.6.9. The pins and their reasons are in `engine/environments/README.md`. A build that ran on a
+mt_metadata without the pinned commit's bounded field-tree memo says so in its log, as a
+`[mth5] WARN` line at start, not in this document.
 
 The document is a few hundred bytes and every response carries an `ETag`, so a conditional request costs
 a `304` when nothing has changed.

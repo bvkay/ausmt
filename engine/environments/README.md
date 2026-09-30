@@ -8,7 +8,7 @@ The Phase-1 canonical-ingest path (`ausmt_science.ingest.normalize`) needs the c
 
 | File | What | Use |
 |------|------|-----|
-| `environment-lock.yml` | Exact conda lock of the tested env (win-64, captured 2026-06-16) | local/dev on win-64: `conda env create -f environments/environment-lock.yml` |
+| `environment-lock.yml` | Conda lock of the tested env (win-64, captured 2026-06-16; its pip section was edited for the mt_metadata and mth5 pins below, not re-captured) | local/dev on win-64: `conda env create -f environments/environment-lock.yml` |
 | `requirements-mtmetadata-lock.txt` | Exact all-pip lock (full transitive pins) | Linux / CI / **the engine image**: `pip install -r requirements-mtmetadata-lock.txt` |
 | `environment.yml` | Human-readable source spec (loose major pins) | starting point; not the reproducibility anchor |
 | `../requirements-mtmetadata.txt` | Direct deps only (`mt_metadata`, `mth5`); lives in `engine/`, **not** in this `environments/` dir | convenience; transitive deps float — prefer the lock |
@@ -46,11 +46,16 @@ gives. Two consequences:
   workflow and `deploy/docker/engine.Dockerfile` do), or pass `--force-reinstall`.
 - A served version key cannot tell the pinned commit from PyPI's 1.0.10. The installed commit is in
   `mt_metadata-*.dist-info/direct_url.json`.
+- Installing the lock, `environment.yml` or `environment-lock.yml` needs `git` on PATH, because pip
+  resolves the `git+https` pin by cloning. The engine image installs git before its pip layer.
 
 **When PyPI carries it.** Replace the commit with `mt_metadata==1.0.11` (or the first release
 carrying #289) in `../requirements-mtmetadata.txt`, `requirements-mtmetadata-lock.txt`,
 `environment.yml` and `environment-lock.yml` together, and check that the release reports the
-version it is named for.
+version it is named for. Then re-read mt_metadata's `information.py` and `define_measurement.py` and
+move `extract/edi_preflight.py`'s `MIRRORED_MT_METADATA` to the new version
+(`tests/test_edi_preflight.py` fails until it matches), and update the version comment above
+`requires-python` in `../pyproject.toml`.
 
 ## What the engine relies on the pinned stack for
 
@@ -59,7 +64,11 @@ version it is named for.
   The pinned mt_metadata holds that memo's keys weakly and reuses the class built for an added field
   (kujaku11/mt_metadata#289, commits 97c09616 and 6a361343), so the MTH5 arm of a build stays flat
   without the engine emptying the memo. A mt_metadata without those commits leaks about 7.6 MiB per
-  served station; `tests/test_build_memory.py` fails on it.
+  served station. The engine reads the memo's type rather than the version string
+  (`extract/_mth5.py`, `field_tree_memo_mode`): on a strong-keyed memo it prints a `[mth5] WARN`
+  line at build start and empties the memo after every station-sized MTH5 unit, which bounds the
+  build again. `tests/test_build_memory.py` pins both arms, and
+  `test_pinned_library_holds_the_field_tree_memo_weakly` fails on an env that got PyPI's 1.0.10.
 
 ## ABI history (the important correction)
 

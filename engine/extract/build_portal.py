@@ -4547,6 +4547,7 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
             report["mismatches"].append({"station": "*",
                                          "reason": f"time-series samples present (n_samples={_max_samples})"})
         for _, row in tfs.iterrows():
+            m5.release_field_tree_memo()   # the previous station's classes, when the library keeps them
             sid = row["station"]
             src = by_key.get((row.get("survey"), sid)) or by_key.get((None, sid))
             if src is None:
@@ -4593,6 +4594,7 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
             m.close_mth5()
         except Exception as ex:  # noqa: BLE001
             report["mismatches"].append({"station": "*", "reason": f"close failed: {type(ex).__name__}"})
+        m5.release_field_tree_memo()
     ok = report["tf_only"] and not report["mismatches"]
     return ok, report
 
@@ -4665,6 +4667,10 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None, failure_rows=None,
                           file=sys.stderr)
                 else:
                     failure_rows.append(_fail_row)
+            finally:
+                # Per station, inside the open file, so a bundle stays flat on a library that does
+                # not bound its own field-tree memo (see _mth5.field_tree_memo_mode).
+                m5.release_field_tree_memo()
     finally:
         # Guarded: one h5 close failure must NOT abort the whole portal build; the round-trip gate
         # below withholds this file if the close left it unreadable.
@@ -5126,6 +5132,8 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
                     # collection_h5_allowed caps this tier at a few hundred stations, so the line
                     # count is bounded by construction rather than by the corpus.
                     print(f"  [h5] WARN {p.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
+                finally:
+                    m5.release_field_tree_memo()   # per station, same bound as _write_tf_mth5
     finally:
         # Guarded like the survey writer above: withhold-not-crash at the file, never the corpus.
         try:
@@ -5710,6 +5718,11 @@ def _main_build(argv=None):
     # Resolve the served-tool versions ONCE (the single source of truth) - reused by the
     # cache salt below and folded into build.json / build_provenance.json / mtcat as additive keys.
     LIB_VERSIONS = lib_versions()
+    # The served version key cannot tell a mt_metadata that bounds its field-tree memo from one that
+    # does not (both report 1.0.10), so the memo is checked directly and a leaking library is named.
+    _memo_warn = m5.field_tree_memo_warning()
+    if _memo_warn:
+        print(_memo_warn, file=sys.stderr)
 
     # === Incremental build cache ===
     # OFF by default; a no-op without --cache-dir. Keyed by source-EDI content sha + the engine
