@@ -29,6 +29,8 @@ What is pinned here, and what each pin fails on:
   * the engine bounds a memo the library does not: with the memo swapped for a plain dict and the
     added-field class reuse switched off (the pre-#289 library), the memo and the live class count
     still stay at the first unit's level, and the build-start check names the library as unbounded.
+  * that fallback is for the plain dict alone: a memo of any other type is the library's own design,
+    so the engine neither empties it nor warns.
   * the bound, end to end: two synthetic corpora built by the real CLI with the production flag set,
     the SAME largest survey in each and 10x the surveys in the second, and the peak RSS of the two
     child processes (os.wait4 rusage, independent of anything the engine reports) must not grow with
@@ -240,6 +242,34 @@ def test_build_start_names_a_library_that_does_not_bound_its_memo(monkeypatch):
     assert m5.field_tree_memo_mode() == "engine"
     msg = m5.field_tree_memo_warning()
     assert msg and "requirements-mtmetadata-lock.txt" in msg, msg
+
+
+def test_engine_empties_only_a_plain_dict_memo(monkeypatch):
+    """The fallback clear is for one known shape, the pre-#289 plain class-keyed dict. Any other memo
+    (a dict subclass such as a bounded LRU, a weak-valued mapping, an object with no clear) is the
+    library's own design: the engine neither empties it nor warns. FAILS on an engine that treats
+    every memo that is not a WeakKeyDictionary as leaking, which also raises inside the per-unit
+    finally blocks on a memo with no clear method."""
+    import collections  # noqa: PLC0415
+    import weakref  # noqa: PLC0415
+    from mt_metadata.base import pydantic_helpers as ph  # noqa: PLC0415
+    import _mth5 as m5  # noqa: PLC0415
+    calls = []
+    monkeypatch.setattr(ph, "clear_field_caches", lambda: calls.append(1))
+
+    class BoundedMemo(collections.OrderedDict):
+        pass
+
+    for memo in (collections.OrderedDict(), BoundedMemo(), weakref.WeakValueDictionary(), object(), None):
+        monkeypatch.setattr(ph, "_FIELDS_TREE_CACHE", memo)
+        assert m5.field_tree_memo_mode() != "engine", type(memo).__name__
+        assert m5.field_tree_memo_warning() is None, type(memo).__name__
+        m5.release_field_tree_memo()
+    assert not calls, f"the engine emptied a memo that is not a plain dict {len(calls)} times"
+    monkeypatch.setattr(ph, "_FIELDS_TREE_CACHE", {})
+    assert m5.field_tree_memo_mode() == "engine"
+    m5.release_field_tree_memo()
+    assert len(calls) == 1
 
 
 # --------------------------------------------------------------------------- the end-to-end bound
