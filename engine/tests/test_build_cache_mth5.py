@@ -929,6 +929,33 @@ def test_prune_removes_stale_put_temporaries_and_nothing_else(tmp_path):
     assert live.exists() and keep.exists() and foreign.exists()
 
 
+def test_a_hit_keeps_a_file_entry_whose_payload_is_older_than_the_age_window(tmp_path):
+    """FAILS IF: the age rule reads a file entry's PAYLOAD mtime. A hit touches only the sidecar
+    (the payload is also a served file whose mtime must not move), so a payload written 91 days ago
+    and hit today belongs to a live entry; an age test on the payload would drop it and turn every
+    long-lived hot MTH5 into a miss. The unhit twin pins that the window still ages entries out."""
+    import time
+    bc = _bc(tmp_path)
+    old = time.time() - (cache_mod.PRUNE_MAX_AGE_DAYS + 1) * 86400
+    keys = {}
+    for name in ("hot", "cold"):
+        src = tmp_path / f"{name}.h5"
+        src.write_bytes(os.urandom(4096))
+        keys[name] = bc.key_parts("station_h5", [name])
+        bc.put_file(keys[name], "station_h5", src, {"n": 1})
+        for p in (bc.root / keys[name][:2]).glob(f"{keys[name]}.*"):
+            os.utime(p, (old, old))
+    assert bc.link_file(keys["hot"], "station_h5", tmp_path / "out" / "hot.h5") == {"n": 1}
+    hot = bc.root / keys["hot"][:2] / f"{keys['hot']}.station_h5"
+    assert hot.stat().st_mtime == pytest.approx(old), "a hit moved the payload's mtime"
+    summary = bc.prune()
+    assert hot.exists() and hot.with_name(hot.name + ".ref").exists(), \
+        f"the age rule dropped a file entry hit by this build: {summary}"
+    assert not list((bc.root / keys["cold"][:2]).glob(f"{keys['cold']}.*")), \
+        f"an unhit entry past the age window survived: {summary}"
+    assert summary["pruned_age"] == 1, summary
+
+
 def _rewrite_sidecar_meta(ref: Path, meta) -> None:
     """Replace a file entry's stored meta while keeping the sidecar self-verifying."""
     raw = ref.read_bytes()
