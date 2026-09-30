@@ -514,7 +514,8 @@ cat "$AUSMT_DATA_DIR/gateway/state/reconcile-status.json"   # should show action
 
 To preview what a pass **would** do without acting: `make reconcile ARGS=--dry-run` (or
 `deploy/scripts/reconcile.sh --dry-run`). Exit codes: `0` on `noop`/`rebuilt`/`sync_failed` (the
-timer must not flap), `1` only on a genuine build `failed`.
+timer must not flap), `1` on a genuine build `failed`, an `untracked_blocked` refusal, or a failed
+publish to the serving replica (`publish` = `failed`; see "Nectar serving replica" below).
 
 > **Note on the lock:** the script serialises overlapping ticks with `flock -n` on
 > `$AUSMT_DATA_DIR/reconcile.lock` (a second concurrent run exits 0 silently). On a host without
@@ -1290,6 +1291,70 @@ curl -sSI 'https://ausmt.au/data/mtcat.schema.json?v=1.2' | grep -iE '^(HTTP|loc
 `install-frontdoor.sh` is idempotent and reversible; rollback (withdraw public exposure entirely) is
 unchanged, in `deploy/frontdoor/RUNBOOK.md` section 10. The runtime pins for both walls live in
 `deploy/tests/test_frontdoor_bridge.py` and run in CI (`gateway-ci.yml` installs Caddy).
+
+---
+
+## Nectar serving replica
+
+The public site moves off the home box onto Nectar as two roles (design record
+`maintainer/C48-NectarTopology.md`, procedure `deploy/nectar/RUNBOOK-NECTAR.md`):
+
+- **ausmt-serve** has the public address and runs the front door and the portal container on one
+  host, the front door proxying to the reader listener on `127.0.0.1:8445`. It holds the built tree on
+  a volume at `/srv/ausmt` and nothing else: no gateway, no sqlite, no build cache, no git write
+  credential, no curation timer.
+- **the curation host** (the box today, ausmt-curate once curation is lifted) builds as before and
+  **publishes** each served build to ausmt-serve over the tailnet.
+
+**The publish contract.** `scripts/publish.sh` on the curation host writes `builds/<ts>.sha256`
+beside the build (the sorted `sha256sum` list of every file), rsyncs the build to the replica with a
+relative `--link-dest` against the replica's current build (content-compared, so every byte-identical
+file is hard-linked rather than stored again), sends the sidecar after it, then runs the replica's
+`receive-build.sh <ts>`. The receiver refuses the build unless the files on disk are exactly the
+listed files with exactly the listed hashes, swaps `current` by renaming a temporary symlink (as
+`rebuild-data` does), writes `site-data/published.json` (`ts`, `build_id`, `source_commit`,
+`received_at`) and prunes to the keep depth, never the current build and never a directory whose
+sidecar has not arrived. A build the replica already serves is a no-op, and the local `current` is
+never touched. Both build prunes on the curation host (`rebuild-data` and reconcile's) take a pruned
+build's sidecar with it.
+
+**On the curation host (one-time).** `builds/` belongs to uid 10001, and the sidecar is written by the
+operator, so grant the operator write on that one directory, then name the replica in `deploy/.env`:
+
+```sh
+sudo setfacl -m u:"$USER":rwx "$AUSMT_DATA_DIR/site-data/builds"
+# deploy/.env
+AUSMT_PUBLISH_TARGET=publish@ausmt-serve      # the replica's publish account (MagicDNS name)
+# optional: AUSMT_PUBLISH_DATA_DIR (default /srv/ausmt), AUSMT_PUBLISH_KEEP (default 5)
+```
+
+```sh
+make publish ARGS=--dry-run          # resolve and check the served build, print what would be sent
+make publish                         # send it now
+make publish ARGS="--build <ts>"     # send a retained build instead of current
+```
+
+With the target set, every reconcile pass that settles what the box serves (`rebuilt`, `noop`,
+`paused`, `pinned`) publishes the served build before writing `reconcile-status.json`, which gains
+`publish` (`ok`, `failed`, `skipped`) and `publish_detail` (the sender's own words, naming the step it
+stopped at). A `noop` pass costs one ssh round trip and lets a replica that missed a publish catch up;
+a `pinned` pass is how a curator rollback reaches the public site. A failed publish exits the pass 1
+and `alert.sh` fail-pings on it; the box keeps serving its own build either way.
+
+**On ausmt-serve.** `deploy/nectar/cloud-init-serve.yaml` (first boot) and
+`deploy/nectar/provision-serve.sh` (idempotent, as root) build the host: the volume mounted by label,
+the tree with the ownership above (`site-data` 10001:10001), the receiver at
+`/usr/local/bin/receive-build.sh`, and two accounts reached only over Tailscale SSH whose login shells
+are gates: `publish` (uid 10001, the uid that owns `site-data`; `deploy/nectar/publish-gate.sh` admits
+the receiver and an rsync that receives into `site-data/builds`, and nothing else) and `caddylog`
+(`deploy/nectar/caddylog-gate.sh`, the read-only pull of the masked front-door log the stats fold
+reads). `deploy/nectar/acl-policy.hujson` holds the tailnet policy entries to merge, and
+`sh deploy/nectar/doctor-serve.sh` is the serve role's one-screen doctor.
+
+**Known gap.** The four public gateway routes of the Add Survey flow are proxied by the reader
+listener to a gateway container, and ausmt-serve runs none, so they answer 502 there;
+`doctor-serve.sh` WARNs on every run. C48 (open questions) sets out the options; decide before the
+public address moves.
 
 ---
 

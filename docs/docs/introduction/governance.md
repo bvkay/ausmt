@@ -53,6 +53,7 @@ licence:
 This is a pre-institutional operating arrangement. The framework code is public and the portal's public
 reader is served at <https://ausmt.auscope.org.au>, including the machine-readable products under
 `/data/`. The curator and administrative surfaces are not exposed there, and the survey-data repository
-is private because it holds embargoed material. Before full public operation, AusMT is intended to move
+is private because it holds embargoed material. How the public site is hosted, and how builds reach
+it, is set out in [Hosting and serving](../operations/hosting.md). Before full public operation, AusMT is intended to move
 to an organisational repository home with at least two maintainers, a tagged and DOI'd release, and
 formal data-contribution agreements with custodian agencies.
