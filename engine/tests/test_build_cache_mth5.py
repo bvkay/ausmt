@@ -1,0 +1,649 @@
+"""Both MTH5 tiers are build-cache entries: h5/<slug>/<station>.h5 and bundles/<slug>-tf.h5.
+
+Design: maintainer/C18-BuildCacheDesign.md, Amendment A6. The pins here:
+
+  * a warm build places every MTH5 file by HARDLINK to the cache payload (same inode), skips the
+    MTH5 write and the round-trip gate for it, and the placed file still passes
+    mth5_survey_roundtrip_ok against the stations of THAT build;
+  * equality is SEMANTIC: an independent write differs from a cached one only in the root
+    `file.access.time` attribute and in the raw address bytes of HDF5 object references, so the
+    comparator below resolves references to object names and drops that one attribute, and every
+    other attribute and dataset is compared exactly;
+  * the station key binds every input that reaches the file, and the survey key is derived from the
+    sorted member station keys, so a one-byte EDI edit moves the station file AND its survey file,
+    and nothing in another survey;
+  * ro never writes, refresh rewrites, a degenerate salt never touches the cache, a corrupt payload
+    is deleted, counted and recomputed, a failed hardlink falls back to a counted copy;
+  * build_provenance.json carries per-kind counters and the build WARNs when the size cap evicted;
+  * the prune only ever touches cache entries: a foreign file in the cache root survives it.
+
+Every test states how it fails. The integration tests patch cache._dirty_checkout to clean and pin
+the engine commit, exactly as test_build_cache.py's clean_salt does, so a dirty dev worktree cannot
+turn the cache inert and a moving HEAD cannot flip the salt between two builds.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+pytest.importorskip("mt_metadata")
+pytest.importorskip("mth5")
+h5py = pytest.importorskip("h5py")
+np = pytest.importorskip("numpy")
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent
+sys.path.insert(0, str(REPO / "extract"))
+sys.path.insert(0, str(REPO))
+import build_portal  # noqa: E402
+import cache as cache_mod  # noqa: E402
+
+SAMPLE_EDIS = sorted((REPO / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))
+N = len(SAMPLE_EDIS)
+KINDS = ("parse", "xml", "station_h5", "survey_h5")
+KIND_FIELDS = ("hits", "misses", "writes", "corrupt", "link_fallbacks", "evicted")
+
+
+@pytest.fixture
+def clean_salt(monkeypatch):
+    """The cache fires deterministically: the dirty-checkout gate INPUT reads clean, the engine
+    commit is pinned (never a live rev-parse between two builds), the cap env and worker env are
+    cleared."""
+    monkeypatch.setattr(cache_mod, "_dirty_checkout", lambda cwd: False)
+    monkeypatch.setattr(build_portal, "_git_commit_at",
+                        lambda cwd: "testpin" if Path(cwd) == build_portal.HERE else None)
+    monkeypatch.delenv("AUSMT_ENGINE_COMMIT", raising=False)
+    monkeypatch.delenv("AUSMT_CACHE_MAX_MB", raising=False)
+    monkeypatch.delenv("AUSMT_BUILD_WORKERS", raising=False)
+
+
+def _write_pkg(root: Path, slug: str, name: str, yaml_extra: str = "") -> Path:
+    edir = root / slug / "transfer_functions" / "edi"
+    edir.mkdir(parents=True)
+    (root / slug / "survey.yaml").write_text(
+        f"name: {name}\nslug: {slug}\ncountry: Australia\norganisation: Test Org\n"
+        f"access: open\nlicense: CC-BY-4.0\n{yaml_extra}", encoding="utf-8")
+    for src in SAMPLE_EDIS:
+        (edir / src.name).write_text(src.read_text(encoding="latin-1"), encoding="latin-1")
+    return root / slug
+
+
+def _one_survey(tmp_path) -> Path:
+    root = tmp_path / "surveys"
+    _write_pkg(root, "mc-a", "Cache MTH5 A")
+    return root
+
+
+def _two_surveys(tmp_path) -> Path:
+    """The sample survey composed twice under two slugs: the SAME EDI bytes in both, so the only
+    thing keeping their entries apart is the survey-level key material."""
+    root = tmp_path / "surveys"
+    _write_pkg(root, "mc-a", "Cache MTH5 A")
+    _write_pkg(root, "mc-b", "Cache MTH5 B")
+    return root
+
+
+def _build(surveys, out, cache_dir, mode="rw", workers=None, extra=None):
+    argv = ["--surveys", str(surveys), "--out", str(out), "--bundle-edi", "--no-validate",
+            "--survey-h5", "--station-h5"]
+    if cache_dir is not None:
+        argv += ["--incremental", "--cache-dir", str(cache_dir), "--cache-mode", mode]
+    if workers is not None:
+        argv += ["--workers", str(workers)]
+    if extra:
+        argv += extra
+    rc = build_portal.main(argv)
+    assert rc == 0, f"build rc={rc}"
+    return out
+
+
+def _prov_cache(out: Path) -> dict:
+    return json.loads((out / "build_provenance.json").read_text(encoding="utf-8"))["cache"]
+
+
+def _kind(out: Path, kind: str) -> dict:
+    return _prov_cache(out)["kinds"][kind]
+
+
+def _served_h5(out: Path) -> dict:
+    return {p.relative_to(out).as_posix(): p for p in sorted(out.rglob("*.h5"))}
+
+
+def _payloads(cache_dir: Path, kind: str) -> list:
+    return sorted(p for p in cache_dir.rglob(f"*.{kind}") if p.is_file())
+
+
+def _stations_by_survey(out: Path) -> dict:
+    """{slug: [(served EDI path, {"id": station})]} from the manifest's EDI rows. The served EDI is
+    a byte copy of the source (the integrity ledger pins that), so it is the build's own station
+    input for the round-trip gate."""
+    man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    by = {}
+    for r in man["files"]:
+        if r["format"] == "edi":
+            slug = r["url"].split("/")[1]
+            by.setdefault(slug, []).append((out / r["url"], {"id": r["station"]}))
+    return by
+
+
+# ---- semantic HDF5 comparison ---------------------------------------------------------------------
+
+VOLATILE_ATTRS = {"/@file.access.time"}
+
+
+def _canon(f, v):
+    if isinstance(v, h5py.Reference):
+        return ("ref", f[v].name if v else None)
+    if isinstance(v, np.void) and v.dtype.names:
+        return tuple(_canon(f, v[n]) for n in v.dtype.names)
+    if isinstance(v, np.ndarray):
+        if v.dtype.names or v.dtype.kind == "O":
+            return ("arr", v.shape, [_canon(f, x) for x in v.reshape(-1)])
+        return ("arr", v.dtype.str, v.shape, v.tobytes())
+    if isinstance(v, np.generic):
+        return repr(v.item())
+    return repr(v)
+
+
+def _h5_semantic(path: Path) -> dict:
+    """Every attribute and dataset of an HDF5 file, object references resolved to the NAME they
+    point at, minus the write clock. Two writes of the same inputs are equal under this map."""
+    out = {}
+    with h5py.File(path, "r") as f:
+        for k, a in f.attrs.items():
+            out[f"/@{k}"] = _canon(f, a)
+
+        def visit(name, obj):
+            for k, a in obj.attrs.items():
+                out[f"/{name}@{k}"] = _canon(f, a)
+            if isinstance(obj, h5py.Dataset):
+                out[f"/{name}#"] = _canon(f, obj[()])
+        f.visititems(visit)
+    for k in VOLATILE_ATTRS:
+        out.pop(k, None)
+    return out
+
+
+def test_semantic_comparator_sees_value_changes_but_not_the_write_clock(tmp_path):
+    """FAILS IF: the comparator every other test leans on is blind. Two independent writes of one
+    station must compare EQUAL (they differ in bytes), and a write of a value-changed EDI must
+    compare UNEQUAL."""
+    import time
+    src = SAMPLE_EDIS[0]
+    a, b, c = tmp_path / "a.h5", tmp_path / "b.h5", tmp_path / "c.h5"
+    assert build_portal._write_tf_mth5([(src, {"id": "S1"})], "s", "S", a)
+    time.sleep(1.05)
+    assert build_portal._write_tf_mth5([(src, {"id": "S1"})], "s", "S", b)
+    assert a.read_bytes() != b.read_bytes(), "two writes were byte-identical: the premise moved"
+    assert _h5_semantic(a) == _h5_semantic(b)
+    edited = tmp_path / src.name
+    edited.write_text(_one_byte_impedance_edit(src.read_text(encoding="latin-1")), encoding="latin-1")
+    assert build_portal._write_tf_mth5([(edited, {"id": "S1"})], "s", "S", c)
+    assert _h5_semantic(a) != _h5_semantic(c), "the comparator cannot see an impedance change"
+
+
+def _one_byte_impedance_edit(txt: str) -> str:
+    """Change ONE byte of the first ZXYR datum: its last mantissa digit, so the value provably moves."""
+    m = re.search(r"(>ZXYR[^\n]*\n\s*)(-?\d+\.\d+)([eE][+-]?\d+)?", txt)
+    assert m, "no ZXYR datum to edit"
+    i = m.end(2) - 1
+    d = txt[i]
+    return txt[:i] + str((int(d) + 1) % 10) + txt[i + 1:]
+
+
+# ---- cold then warm ------------------------------------------------------------------------------
+
+def test_warm_build_hardlinks_both_tiers_and_skips_write_and_gate(tmp_path, clean_salt, monkeypatch):
+    """FAILS IF: a warm build rewrites an MTH5 file it could have linked, re-runs the round-trip gate
+    on a cache hit, serves a file that is not the cache payload's inode, or serves bytes that differ
+    from the populating build (the manifest is then byte-identical too, h5 sha256 included)."""
+    surveys = _one_survey(tmp_path)
+    cache = tmp_path / "cache"
+    cold = _build(surveys, tmp_path / "cold", cache)
+    k_st, k_sv = _kind(cold, "station_h5"), _kind(cold, "survey_h5")
+    assert (k_st["hits"], k_st["misses"], k_st["writes"]) == (0, N, N), k_st
+    assert (k_sv["hits"], k_sv["misses"], k_sv["writes"]) == (0, 1, 1), k_sv
+    assert len(_payloads(cache, "station_h5")) == N and len(_payloads(cache, "survey_h5")) == 1
+
+    calls = {"write": 0, "gate": 0}
+    real_write, real_gate = build_portal._write_tf_mth5, build_portal.mth5_survey_roundtrip_ok
+
+    def _count_write(*a, **k):
+        calls["write"] += 1
+        return real_write(*a, **k)
+
+    def _count_gate(*a, **k):
+        calls["gate"] += 1
+        return real_gate(*a, **k)
+    monkeypatch.setattr(build_portal, "_write_tf_mth5", _count_write)
+    monkeypatch.setattr(build_portal, "mth5_survey_roundtrip_ok", _count_gate)
+    warm = _build(surveys, tmp_path / "warm", cache)
+    monkeypatch.setattr(build_portal, "_write_tf_mth5", real_write)
+    monkeypatch.setattr(build_portal, "mth5_survey_roundtrip_ok", real_gate)
+    assert calls == {"write": 0, "gate": 0}, f"a warm build wrote or gated an MTH5 file: {calls}"
+
+    k_st, k_sv = _kind(warm, "station_h5"), _kind(warm, "survey_h5")
+    assert (k_st["hits"], k_st["misses"], k_st["writes"]) == (N, 0, 0), k_st
+    assert (k_sv["hits"], k_sv["misses"], k_sv["writes"]) == (1, 0, 0), k_sv
+
+    payload_inodes = {p.stat().st_ino for k in ("station_h5", "survey_h5") for p in _payloads(cache, k)}
+    served = _served_h5(warm)
+    assert len(served) == N + 1, sorted(served)
+    for rel, p in served.items():
+        assert p.stat().st_ino in payload_inodes, f"{rel} is not a hardlink to a cache payload"
+    assert (warm / "manifest.json").read_bytes() == (cold / "manifest.json").read_bytes(), \
+        "the warm manifest differs from the populating build's"
+
+
+def test_warm_h5_files_pass_the_roundtrip_gate_against_this_builds_stations(tmp_path, clean_salt):
+    """FAILS IF: a file placed from the cache would fail the round-trip gate the miss build ran:
+    every warm station file against its one station, every warm survey file against all of its
+    stations, each station read from THIS build's served EDI."""
+    surveys = _two_surveys(tmp_path)
+    cache = tmp_path / "cache"
+    _build(surveys, tmp_path / "cold", cache)
+    warm = _build(surveys, tmp_path / "warm", cache)
+    assert _kind(warm, "station_h5")["hits"] == 2 * N and _kind(warm, "survey_h5")["hits"] == 2
+    by = _stations_by_survey(warm)
+    assert sorted(by) == ["mc-a", "mc-b"], sorted(by)
+    for slug, stations in by.items():
+        ok, rep = build_portal.mth5_survey_roundtrip_ok(warm / "bundles" / f"{slug}-tf.h5", stations)
+        assert ok and rep["checked"] == N, (slug, rep)
+        for (p, r) in stations:
+            ok, rep = build_portal.mth5_survey_roundtrip_ok(warm / "h5" / slug / f"{r['id']}.h5", [(p, r)])
+            assert ok and rep["checked"] == 1, (slug, r, rep)
+    # The two slugs carry identical EDI bytes, yet each survey file groups under its OWN slug.
+    for slug in ("mc-a", "mc-b"):
+        with h5py.File(warm / "bundles" / f"{slug}-tf.h5", "r") as f:
+            assert list(f["Experiment/Surveys"].keys()) == [slug]
+
+
+def test_one_byte_edi_edit_moves_its_station_and_survey_files_only(tmp_path, clean_salt):
+    """FAILS IF: a one-byte EDI change is served from a stale MTH5 entry at either tier, or it
+    disturbs anything outside its own survey. Exact arithmetic: the edited station misses (1) and
+    its survey file misses (1); every other station file (2N-1) and the other survey file (1) hit."""
+    surveys = _two_surveys(tmp_path)
+    cache = tmp_path / "cache"
+    cold = _build(surveys, tmp_path / "cold", cache)
+    target = sorted((surveys / "mc-a").rglob("*.edi"))[0]
+    target.write_text(_one_byte_impedance_edit(target.read_text(encoding="latin-1")), encoding="latin-1")
+    warm = _build(surveys, tmp_path / "warm", cache)
+    k_st, k_sv = _kind(warm, "station_h5"), _kind(warm, "survey_h5")
+    assert (k_st["hits"], k_st["misses"]) == (2 * N - 1, 1), k_st
+    assert (k_sv["hits"], k_sv["misses"]) == (1, 1), k_sv
+
+    cold_h5, warm_h5 = _served_h5(cold), _served_h5(warm)
+    moved = sorted(rel for rel in warm_h5 if _h5_semantic(warm_h5[rel]) != _h5_semantic(cold_h5[rel]))
+    sid = [r["station"] for r in json.loads((cold / "manifest.json").read_text(encoding="utf-8"))["files"]
+           if r["format"] == "edi" and r["url"].endswith(f"mc-a/{target.name}")][0]
+    assert moved == sorted([f"bundles/mc-a-tf.h5", f"h5/mc-a/{sid}.h5"]), moved
+    by = _stations_by_survey(warm)
+    ok, rep = build_portal.mth5_survey_roundtrip_ok(warm / "bundles" / "mc-a-tf.h5", by["mc-a"])
+    assert ok, rep
+
+
+def test_survey_yaml_edit_misses_that_survey_only(tmp_path, clean_salt):
+    """FAILS IF: a survey.yaml edit is served from a stale MTH5 entry (the survey metadata travels
+    inside every file of that survey), or it colds the OTHER survey."""
+    surveys = _two_surveys(tmp_path)
+    cache = tmp_path / "cache"
+    _build(surveys, tmp_path / "cold", cache)
+    y = surveys / "mc-a" / "survey.yaml"
+    y.write_text(y.read_text(encoding="utf-8").replace("Cache MTH5 A", "Cache MTH5 A edited"),
+                 encoding="utf-8")
+    warm = _build(surveys, tmp_path / "warm", cache)
+    k_st, k_sv = _kind(warm, "station_h5"), _kind(warm, "survey_h5")
+    assert (k_st["hits"], k_st["misses"]) == (N, N), k_st
+    assert (k_sv["hits"], k_sv["misses"]) == (1, 1), k_sv
+    with h5py.File(warm / "bundles" / "mc-a-tf.h5", "r") as f:
+        name = f["Experiment/Surveys/mc-a"].attrs.get("name")
+    assert "edited" in str(name), f"survey name inside the h5 is stale: {name!r}"
+
+
+# ---- modes, salt, corruption, fallback -----------------------------------------------------------
+
+def test_refresh_rewrites_and_ro_never_writes(tmp_path, clean_salt):
+    """FAILS IF: refresh reads an MTH5 hit or leaves the old payload in place, or ro writes a single
+    cache file (ro against an empty cache must leave it empty; ro against a populated cache hits
+    and leaves the listing unchanged)."""
+    surveys = _one_survey(tmp_path)
+    cache = tmp_path / "cache"
+    _build(surveys, tmp_path / "ro_empty", cache, mode="ro")
+    assert not any(p.is_file() for p in cache.rglob("*")), "ro persisted cache files"
+    assert _kind(tmp_path / "ro_empty", "station_h5")["writes"] == 0
+
+    _build(surveys, tmp_path / "cold", cache)
+    before = {p: p.stat().st_ino for p in _payloads(cache, "station_h5") + _payloads(cache, "survey_h5")}
+    ref = _build(surveys, tmp_path / "refresh", cache, mode="refresh")
+    for k, n in (("station_h5", N), ("survey_h5", 1)):
+        c = _kind(ref, k)
+        assert (c["hits"], c["misses"], c["writes"]) == (0, n, n), (k, c)
+    after = {p: p.stat().st_ino for p in _payloads(cache, "station_h5") + _payloads(cache, "survey_h5")}
+    assert set(after) == set(before)
+    assert all(after[p] != before[p] for p in before), "refresh did not rewrite the payloads"
+
+    listing = sorted((p.relative_to(cache).as_posix(), p.stat().st_ino) for p in cache.rglob("*")
+                     if p.is_file())
+    ro = _build(surveys, tmp_path / "ro_warm", cache, mode="ro")
+    assert _kind(ro, "station_h5")["hits"] == N and _kind(ro, "survey_h5")["hits"] == 1
+    assert sorted((p.relative_to(cache).as_posix(), p.stat().st_ino) for p in cache.rglob("*")
+                  if p.is_file()) == listing, "ro changed the cache"
+
+
+def test_corrupt_payload_is_deleted_counted_and_recomputed(tmp_path, clean_salt):
+    """FAILS IF: a bit-rotted station payload is linked into the served tree instead of being
+    re-hashed, deleted, counted corrupt and recomputed; or the recompute leaves the cache without a
+    good entry (the next build must hit everything)."""
+    surveys = _one_survey(tmp_path)
+    cache = tmp_path / "cache"
+    cold = _build(surveys, tmp_path / "cold", cache)
+    victim = _payloads(cache, "station_h5")[0]
+    raw = bytearray(victim.read_bytes())
+    raw[len(raw) // 2] ^= 0x01
+    tmp = victim.with_name(victim.name + ".rot")
+    tmp.write_bytes(bytes(raw))
+    os.replace(tmp, victim)   # cache-side rot only: the served cold tree keeps its own inode
+    warm = _build(surveys, tmp_path / "warm", cache)
+    c = _kind(warm, "station_h5")
+    assert (c["corrupt"], c["misses"], c["hits"], c["writes"]) == (1, 1, N - 1, 1), c
+    for rel, p in _served_h5(warm).items():
+        assert _h5_semantic(p) == _h5_semantic(cold / rel), f"{rel}: corrupt bytes shipped"
+    again = _build(surveys, tmp_path / "again", cache)
+    c = _kind(again, "station_h5")
+    assert (c["hits"], c["misses"], c["corrupt"]) == (N, 0, 0), c
+
+
+def test_corrupt_sidecar_is_deleted_counted_and_recomputed(tmp_path, clean_salt):
+    """FAILS IF: a damaged sidecar (the entry's own checksum line) is trusted, or not counted."""
+    surveys = _one_survey(tmp_path)
+    cache = tmp_path / "cache"
+    _build(surveys, tmp_path / "cold", cache)
+    ref = sorted(cache.rglob("*.survey_h5.ref"))
+    assert len(ref) == 1, ref
+    raw = bytearray(ref[0].read_bytes())
+    raw[-3] ^= 0x01
+    ref[0].write_bytes(bytes(raw))
+    warm = _build(surveys, tmp_path / "warm", cache)
+    c = _kind(warm, "survey_h5")
+    assert (c["corrupt"], c["misses"], c["hits"], c["writes"]) == (1, 1, 0, 1), c
+
+
+def test_degenerate_salt_writes_fresh_and_never_touches_the_cache(tmp_path, monkeypatch):
+    """FAILS IF: an unknown engine commit reads or writes a single MTH5 entry, or the build stops
+    producing its MTH5 files (it must write them fresh, gate included)."""
+    monkeypatch.setattr(build_portal, "_git_commit_at", lambda cwd: None)
+    monkeypatch.delenv("AUSMT_ENGINE_COMMIT", raising=False)
+    monkeypatch.delenv("AUSMT_BUILD_WORKERS", raising=False)
+    surveys = _one_survey(tmp_path)
+    cache = tmp_path / "cache"
+    out = _build(surveys, tmp_path / "out", cache)
+    c = _prov_cache(out)
+    assert c["enabled"] is False and c["degenerate"] is True, c
+    for k in KINDS:
+        assert all(c["kinds"][k][f] == 0 for f in KIND_FIELDS), (k, c["kinds"][k])
+    assert not any(p.is_file() for p in cache.rglob("*")), "a degenerate salt created cache files"
+    assert len(_served_h5(out)) == N + 1
+
+
+def test_failed_hardlink_falls_back_to_a_counted_copy(tmp_path, clean_salt, monkeypatch):
+    """FAILS IF: a filesystem that refuses hardlinks (a cross-device cache, EXDEV) breaks the build or
+    serves nothing, or the fallback copy goes uncounted. The copy is a new inode with the same bytes."""
+    import errno
+    surveys = _one_survey(tmp_path)
+    cache = tmp_path / "cache"
+    cold = _build(surveys, tmp_path / "cold", cache)
+
+    def _no_link(src, dst, *a, **k):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+    monkeypatch.setattr(os, "link", _no_link)
+    warm = _build(surveys, tmp_path / "warm", cache)
+    c_st, c_sv = _kind(warm, "station_h5"), _kind(warm, "survey_h5")
+    assert (c_st["hits"], c_st["link_fallbacks"]) == (N, N), c_st
+    assert (c_sv["hits"], c_sv["link_fallbacks"]) == (1, 1), c_sv
+    payload_inodes = {p.stat().st_ino for k in ("station_h5", "survey_h5") for p in _payloads(cache, k)}
+    for rel, p in _served_h5(warm).items():
+        assert p.stat().st_ino not in payload_inodes
+        assert p.read_bytes() == (cold / rel).read_bytes(), rel
+
+
+# ---- the gates, the counters, the log -----------------------------------------------------------
+
+def test_verify_passes_on_the_warm_build(tmp_path, clean_salt):
+    """FAILS IF: scripts/verify.py (unmodified, cache-blind) rejects a warm build whose MTH5 files
+    came from the cache, with and without the --surveys consistency leg."""
+    surveys = _one_survey(tmp_path)
+    cache = tmp_path / "cache"
+    _build(surveys, tmp_path / "cold", cache)
+    warm = _build(surveys, tmp_path / "warm", cache)
+    assert _kind(warm, "station_h5")["hits"] == N
+    for extra in ([], ["--surveys", str(surveys)]):
+        proc = subprocess.run([sys.executable, str(REPO / "scripts" / "verify.py"), "--data-dir",
+                               str(warm), *extra], cwd=str(REPO), stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, text=True, check=False)
+        assert proc.returncode == 0 and "VERIFY: PASS" in proc.stdout, proc.stdout[-3000:]
+
+
+def test_build_provenance_carries_per_kind_counters_and_the_log_prints_them(tmp_path, clean_salt, capfd):
+    """FAILS IF: build_provenance.json's cache block loses a per-kind counter, the corpus-total
+    counters stop being the parse+xml tally, or the end-of-build stderr summary omits a kind."""
+    surveys = _one_survey(tmp_path)
+    cache = tmp_path / "cache"
+    _build(surveys, tmp_path / "cold", cache)
+    capfd.readouterr()
+    warm = _build(surveys, tmp_path / "warm", cache)
+    err = capfd.readouterr().err
+    c = _prov_cache(warm)
+    assert set(c["kinds"]) == set(KINDS), c.get("kinds")
+    for k in KINDS:
+        assert set(KIND_FIELDS) <= set(c["kinds"][k]), (k, c["kinds"][k])
+    assert c["hits"] == c["kinds"]["parse"]["hits"] + c["kinds"]["xml"]["hits"], c
+    assert c["misses"] == c["kinds"]["parse"]["misses"] + c["kinds"]["xml"]["misses"], c
+    for k in KINDS:
+        line = [ln for ln in err.splitlines() if ln.startswith(f"C18 cache kind {k}:")]
+        assert len(line) == 1, f"no end-of-build summary line for {k}:\n{err[-2000:]}"
+        for f in KIND_FIELDS:
+            assert f" {f}=" in line[0], (f, line[0])
+
+
+def test_size_cap_eviction_warns_and_is_counted(tmp_path, clean_salt, monkeypatch, capfd):
+    """FAILS IF: the size cap evicts entries at the end of a build without a WARN on stderr, or the
+    evictions are not in build_provenance.json. A cap that silently colds every build is the
+    failure this guards against."""
+    surveys = _two_surveys(tmp_path)
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("AUSMT_CACHE_MAX_MB", "1")
+    capfd.readouterr()
+    out = _build(surveys, tmp_path / "cold", cache)
+    err = capfd.readouterr().err
+    c = _prov_cache(out)
+    evicted = sum(c["kinds"][k]["evicted"] for k in KINDS)
+    assert evicted > 0, c["kinds"]
+    assert re.search(r"C18 cache WARN: .*evicted", err), err[-2000:]
+
+
+def test_parallel_build_hits_the_same_entries(tmp_path, clean_salt):
+    """FAILS IF: the pool path keys, links or populates differently from the serial path: a cold
+    --workers 2 build must populate exactly what a serial warm build then hits, and a warm
+    --workers 2 build must hit everything with hardlinks."""
+    surveys = _two_surveys(tmp_path)
+    cache = tmp_path / "cache"
+    _build(surveys, tmp_path / "cold_par", cache, workers=2)
+    ser = _build(surveys, tmp_path / "warm_ser", cache, workers=1)
+    par = _build(surveys, tmp_path / "warm_par", cache, workers=2)
+    for out in (ser, par):
+        assert (_kind(out, "station_h5")["hits"], _kind(out, "station_h5")["misses"]) == (2 * N, 0)
+        assert (_kind(out, "survey_h5")["hits"], _kind(out, "survey_h5")["misses"]) == (2, 0)
+    payload_inodes = {p.stat().st_ino for k in ("station_h5", "survey_h5") for p in _payloads(cache, k)}
+    for rel, p in _served_h5(par).items():
+        assert p.stat().st_ino in payload_inodes, rel
+    assert (par / "manifest.json").read_bytes() == (ser / "manifest.json").read_bytes()
+
+
+# ---- key completeness ----------------------------------------------------------------------------
+
+def _bc(tmp_path, **over):
+    base = dict(root=tmp_path / "c", engine_commit="commitA", source_digest="sourceA",
+                lib_versions={"mt_metadata": "1.0.10", "mth5": "0.6.8"}, contract_digest="contractA",
+                mode="rw", checkout_dir=None)
+    base.update(over)
+    return cache_mod.BuildCache(**base)
+
+
+SMETA = {"cite": {"ti": "Title"}, "blurb": "b", "doi": "10.1234/x", "org": "Org", "lic": "CC-BY-4.0",
+         "pubs": [{"doi": "10.5/y", "t": "Paper", "j": "J", "y": 2020}],
+         "creators": [{"name": "Lead", "orcid": "0000-0002-1825-0097"}],
+         "funders": [{"name": "Funder", "grant_id": "G1"}]}
+
+
+def test_station_key_moves_with_every_component(tmp_path):
+    """FAILS IF: any input that reaches a station MTH5 can change without moving its key: the
+    source bytes, the source filename (it picks the reader), the survey digest, slug, label, final
+    station id, declared source provenance, the h5-read SMETA fields, and every salt field."""
+    edi = tmp_path / "S1.edi"
+    edi.write_text(SAMPLE_EDIS[0].read_text(encoding="latin-1"), encoding="latin-1")
+    r = {"id": "S1"}
+    bc = _bc(tmp_path)
+
+    def key(bc=bc, p=edi, r=r, slug="s", label="S", smeta=SMETA, dig="d0"):
+        build_portal._SHA_CACHE.clear()
+        return build_portal._station_h5_key(bc, p, r, slug, label, smeta, dig)
+    k0 = key()
+    assert k0 == key(), "the key is not stable"
+    other = tmp_path / "S1b.edi"
+    other.write_text(_one_byte_impedance_edit(edi.read_text(encoding="latin-1")), encoding="latin-1")
+    renamed = tmp_path / "S1.xml"
+    renamed.write_bytes(edi.read_bytes())
+    variants = {
+        "bytes": key(p=other), "filename": key(p=renamed), "digest": key(dig="d1"),
+        "slug": key(slug="t"), "label": key(label="T"), "id": key(r={"id": "S2"}),
+        "provenance": key(r={"id": "S1", "source_provenance": {"original_filename": "x.edi"}}),
+        "smeta": key(smeta={**SMETA, "doi": "10.1234/z"}), "no smeta": key(smeta=None),
+        "source digest": key(bc=_bc(tmp_path, source_digest="sourceB")),
+        "libs": key(bc=_bc(tmp_path, lib_versions={"mt_metadata": "1.0.11", "mth5": "0.6.8"})),
+        "contract": key(bc=_bc(tmp_path, contract_digest="contractB")),
+    }
+    for name, k in variants.items():
+        assert k != k0, f"the station key ignores {name}"
+    assert len(set(variants.values())) == len(variants), "two different inputs collided"
+
+
+def test_station_key_moves_with_the_hdf5_stack(tmp_path, monkeypatch):
+    """FAILS IF: an h5py or HDF5 library upgrade reuses an entry written by the previous stack.
+    lib_versions() names mt_metadata and mth5 only, so the h5 keys add the h5py/HDF5 pair."""
+    edi = tmp_path / "S1.edi"
+    edi.write_text(SAMPLE_EDIS[0].read_text(encoding="latin-1"), encoding="latin-1")
+    bc = _bc(tmp_path)
+    k0 = build_portal._station_h5_key(bc, edi, {"id": "S1"}, "s", "S", SMETA, "d")
+    monkeypatch.setattr(build_portal, "_mth5_lib_fingerprint", lambda: "h5py=0;hdf5=0")
+    assert build_portal._station_h5_key(bc, edi, {"id": "S1"}, "s", "S", SMETA, "d") != k0
+
+
+def test_survey_key_is_the_sorted_member_keys_plus_digest_and_salt(tmp_path):
+    """FAILS IF: the survey key depends on member ORDER (it is a set), ignores a member change, a
+    member added or removed, the survey digest, or the salt."""
+    a, b = tmp_path / "A.edi", tmp_path / "B.edi"
+    a.write_text(SAMPLE_EDIS[0].read_text(encoding="latin-1"), encoding="latin-1")
+    b.write_text(SAMPLE_EDIS[1].read_text(encoding="latin-1"), encoding="latin-1")
+    ra, rb = {"id": "A"}, {"id": "B"}
+    bc = _bc(tmp_path)
+
+    def key(st, dig="d0", bc=bc):
+        build_portal._SHA_CACHE.clear()
+        return build_portal._survey_h5_key(bc, st, "s", "S", SMETA, dig)
+    k0 = key([(a, ra), (b, rb)])
+    assert key([(b, rb), (a, ra)]) == k0, "member order moved the survey key"
+    assert key([(a, ra)]) != k0
+    assert key([(a, ra), (b, {"id": "B2"})]) != k0
+    assert key([(a, ra), (b, rb)], dig="d1") != k0
+    assert key([(a, ra), (b, rb)], bc=_bc(tmp_path, source_digest="sourceB")) != k0
+    st_key = build_portal._station_h5_key(bc, a, ra, "s", "S", SMETA, "d0")
+    assert st_key != k0 and key([(a, ra)]) != st_key, "tiers share a key namespace"
+
+
+def test_pid_status_and_unread_smeta_fields_cannot_reach_the_h5(tmp_path):
+    """FAILS IF: an SMETA field the MTH5 mapping does not read (the --pid-status resolution facets,
+    which come from a file OUTSIDE the survey package, or any other) changes the written file or its
+    key, or the projection the key digests misses a field the mapping does read. Both are proven on
+    real writes: the full SMETA and its projection alone write semantically identical files."""
+    full = json.loads(json.dumps(SMETA))
+    build_portal.apply_pid_resolution(full, {"10.1234/x": {"status": "resolved"},
+                                             "10.5/y": {"status": "unregistered"}})
+    full["slug"] = "s"
+    full["access"] = "open"
+    assert full.get("doi_resolution") == "ok", "fixture did not exercise the pid facets"
+    proj = build_portal._mth5_survey_fields(full)
+    assert proj == build_portal._mth5_survey_fields(SMETA), "pid facets entered the projection"
+    assert build_portal._mth5_survey_fields(proj) == proj, "the projection is not idempotent"
+    edi = SAMPLE_EDIS[0]
+    bc = _bc(tmp_path)
+    assert build_portal._station_h5_key(bc, edi, {"id": "S1"}, "s", "S", full, "d") == \
+        build_portal._station_h5_key(bc, edi, {"id": "S1"}, "s", "S", SMETA, "d")
+    h_full, h_proj = tmp_path / "full.h5", tmp_path / "proj.h5"
+    assert build_portal._write_tf_mth5([(edi, {"id": "S1"})], "s", "S", h_full, smeta=full)
+    assert build_portal._write_tf_mth5([(edi, {"id": "S1"})], "s", "S", h_proj, smeta=proj)
+    assert _h5_semantic(h_full) == _h5_semantic(h_proj)
+    h_none = tmp_path / "none.h5"
+    assert build_portal._write_tf_mth5([(edi, {"id": "S1"})], "s", "S", h_none, smeta=None)
+    assert _h5_semantic(h_none) != _h5_semantic(h_full), "the SMETA mapping wrote nothing"
+
+
+def test_record_fields_outside_the_key_cannot_reach_the_h5(tmp_path):
+    """FAILS IF: a station-record field the key does not bind (the coordinate mask, run facts,
+    channel masks, anything but id and source_provenance) changes the written file."""
+    edi = SAMPLE_EDIS[0]
+    lean = {"id": "S1", "source_provenance": {"original_filename": "orig.edi"}}
+    fat = {**lean, "lat": None, "lon": None, "elev": None, "variant": "v1", "components": ["Z"],
+           "run_facts": {"x": 1}, "tipper_masked": True, "survey": "Other", "ausmt_id": "au.s.S1"}
+    h1, h2 = tmp_path / "lean.h5", tmp_path / "fat.h5"
+    assert build_portal._write_tf_mth5([(edi, lean)], "s", "S", h1, smeta=SMETA)
+    assert build_portal._write_tf_mth5([(edi, fat)], "s", "S", h2, smeta=SMETA)
+    assert _h5_semantic(h1) == _h5_semantic(h2)
+    bc = _bc(tmp_path)
+    assert build_portal._station_h5_key(bc, edi, lean, "s", "S", SMETA, "d") == \
+        build_portal._station_h5_key(bc, edi, fat, "s", "S", SMETA, "d")
+
+
+# ---- cache.py file entries -----------------------------------------------------------------------
+
+def test_file_entry_roundtrip_and_prune_keeps_foreign_files(tmp_path):
+    """FAILS IF: put_file/link_file do not round-trip a payload by hardlink with its meta, or the
+    prune touches a file that is not a cache entry. deploy/Makefile keeps pid_status.json in the
+    cache root, and an entry-blind prune would age it out or evict it under the size cap."""
+    bc = _bc(tmp_path, max_mb=1)
+    src = tmp_path / "src.h5"
+    src.write_bytes(os.urandom(700 * 1024))
+    k1 = bc.key_parts("station_h5", ["one"])
+    k2 = bc.key_parts("station_h5", ["two"])
+    bc.put_file(k1, "station_h5", src, {"n": 1})
+    dest = tmp_path / "out" / "x.h5"
+    assert bc.link_file(k1, "station_h5", dest) == {"n": 1}
+    assert dest.stat().st_ino == src.stat().st_ino
+    foreign = bc.root / "pid_status.json"
+    foreign.write_text("{}", encoding="utf-8")
+    old = 10 ** 9
+    os.utime(foreign, (old, old))
+    src2 = tmp_path / "src2.h5"
+    src2.write_bytes(os.urandom(700 * 1024))
+    bc.put_file(k2, "station_h5", src2, {"n": 1})
+    summary = bc.prune()
+    assert foreign.exists(), f"the prune deleted a foreign file: {summary}"
+    assert summary["pruned_size"] == 1, summary
+    remaining = sorted(p.name for p in bc.root.rglob("*") if p.is_file() and p != foreign)
+    assert len(remaining) == 2 and all(n.startswith(k2) for n in remaining), \
+        f"the size cap split an entry or evicted the newest: {remaining}"
+
+
+def test_compose_default_cap_matches_the_engine_default():
+    """FAILS IF: deploy/compose.yaml forwards a different default cap than cache.py declares. The
+    compose default is what production runs under, so a raised engine default alone changes nothing
+    on the box."""
+    compose = REPO.parent / "deploy" / "compose.yaml"
+    if not compose.is_file():
+        pytest.skip("deploy/ is not shipped in this tree")
+    m = re.search(r"AUSMT_CACHE_MAX_MB:\s*\$\{AUSMT_CACHE_MAX_MB:-(\d+)\}", compose.read_text(encoding="utf-8"))
+    assert m, "compose.yaml no longer forwards AUSMT_CACHE_MAX_MB"
+    assert int(m.group(1)) == cache_mod.CACHE_MAX_MB_DEFAULT
