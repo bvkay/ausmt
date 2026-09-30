@@ -647,3 +647,152 @@ def test_compose_default_cap_matches_the_engine_default():
     m = re.search(r"AUSMT_CACHE_MAX_MB:\s*\$\{AUSMT_CACHE_MAX_MB:-(\d+)\}", compose.read_text(encoding="utf-8"))
     assert m, "compose.yaml no longer forwards AUSMT_CACHE_MAX_MB"
     assert int(m.group(1)) == cache_mod.CACHE_MAX_MB_DEFAULT
+
+
+# ---- hardlink discipline, replayed diagnostics, inputs that are deliberately not key parts --------
+
+FILE_KINDS = ("station_h5", "survey_h5")
+
+
+def _payload_bytes(cache: Path) -> dict:
+    return {p: p.read_bytes() for k in FILE_KINDS for p in _payloads(cache, k)}
+
+
+def test_rewriting_a_served_tree_never_writes_through_to_the_cache(tmp_path, clean_salt):
+    """FAILS IF: an MTH5 write into a build tree whose files are hardlinks to cache payloads writes
+    INTO the shared inode (an in-place truncate) instead of replacing the name. The payload would
+    then change under its sidecar and under every other tree that links it; the next build would
+    find it corrupt at best."""
+    surveys = _one_survey(tmp_path)
+    cache = tmp_path / "cache"
+    _build(surveys, tmp_path / "cold", cache)
+    warm = _build(surveys, tmp_path / "warm", cache)
+    before = _payload_bytes(cache)
+    assert len(before) == N + 1
+    inodes = {p.stat().st_ino for p in before}
+    assert all(p.stat().st_ino in inodes for p in _served_h5(warm).values())
+    _build(surveys, warm, None)   # no cache: every MTH5 is written fresh at the SAME paths
+    assert _payload_bytes(cache) == before, "a write into a served tree changed a cache payload"
+    for rel, p in _served_h5(warm).items():
+        assert p.stat().st_ino not in inodes, f"{rel} was rewritten in place, not replaced"
+    again = _build(surveys, tmp_path / "again", cache)
+    for k, n in (("station_h5", N), ("survey_h5", 1)):
+        c = _kind(again, k)
+        assert (c["hits"], c["corrupt"]) == (n, 0), (k, c)
+
+
+def test_evicting_every_entry_leaves_the_served_tree_intact(tmp_path, clean_salt):
+    """FAILS IF: pruning a cache entry changes a build tree that links its payload. The prune only
+    ever unlinks names, so a served file keeps its inode and bytes and the build still verifies."""
+    surveys = _one_survey(tmp_path)
+    cache = tmp_path / "cache"
+    _build(surveys, tmp_path / "cold", cache)
+    warm = _build(surveys, tmp_path / "warm", cache)
+    served = {rel: (p.stat().st_ino, p.read_bytes()) for rel, p in _served_h5(warm).items()}
+    summary = _bc(tmp_path, root=cache, max_mb=0).prune()
+    assert summary["pruned_size"] > 0 and not _payload_bytes(cache), summary
+    after = {rel: (p.stat().st_ino, p.read_bytes()) for rel, p in _served_h5(warm).items()}
+    assert after == served, "evicting cache entries changed the served tree"
+    proc = subprocess.run([sys.executable, str(REPO / "scripts" / "verify.py"), "--data-dir", str(warm)],
+                          cwd=str(REPO), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                          check=False)
+    assert proc.returncode == 0 and "VERIFY: PASS" in proc.stdout, proc.stdout[-3000:]
+
+
+def test_a_hit_replays_the_populating_writes_diagnostics(tmp_path, monkeypatch, capfd):
+    """FAILS IF: a cache hit loses what the populating write reported: its per-station failure rows
+    (they fold into build_report.json) and its captured file-level stderr, or prints the rows as
+    WARN lines when the caller keeps no ledger. failure_rows is an OUTPUT of the writer, never an
+    input, so it is replayed from the entry's meta rather than keyed. Also fails if a withheld
+    write (n == 0) is stored: the next build must write it again."""
+    bc = _bc(tmp_path)
+    rows = [{"producer": "h5", "file": "X.edi", "error": "ValueError", "message": "bad",
+             "context": "survey bundle"}]
+    calls = []
+
+    def _task(stations, slug, label, hpath, smeta, context="station product"):
+        calls.append(context)
+        Path(hpath).parent.mkdir(parents=True, exist_ok=True)
+        Path(hpath).write_bytes(b"payload")
+        return 1, "  [h5] note file-level line\n", [dict(r) for r in rows]
+    monkeypatch.setattr(build_portal, "_mth5_write_task", _task)
+    key = bc.key_parts("survey_h5", ["replay"])
+    st = [(SAMPLE_EDIS[0], {"id": "S1"})]
+
+    def run(dest, ledger):
+        n = build_portal._write_tf_mth5_cached(st, "s", "S", tmp_path / dest / "s-tf.h5", None, ledger,
+                                               "survey bundle", bc, key, "survey_h5")
+        return n, capfd.readouterr().err
+    capfd.readouterr()
+    miss_rows, hit_rows = [], []
+    n1, err1 = run("a", miss_rows)
+    n2, err2 = run("b", hit_rows)
+    assert len(calls) == 1, f"the second call wrote instead of hitting: {calls}"
+    assert (n1, n2) == (1, 1) and miss_rows == hit_rows == rows, (miss_rows, hit_rows)
+    assert err1 == err2 == "  [h5] note file-level line\n", (err1, err2)
+    n3, err3 = run("c", None)
+    assert n3 == 1 and "  [h5] WARN X.edi: ValueError: bad" in err3, err3
+
+    def _withheld(stations, slug, label, hpath, smeta, context="station product"):
+        calls.append("withheld")
+        return 0, "  [h5] WITHHOLD s-tf.h5\n", []
+    monkeypatch.setattr(build_portal, "_mth5_write_task", _withheld)
+    key = bc.key_parts("survey_h5", ["withheld"])
+    run("d", [])
+    run("e", [])
+    assert calls.count("withheld") == 2, "a withheld write was stored and replayed"
+
+
+def test_source_directory_is_not_a_key_part_because_it_never_reaches_the_h5(tmp_path):
+    """FAILS IF: the directory a source file is read from reaches the written file (the key binds
+    the bytes and the file NAME only, so a surveys checkout moved to another path must not serve an
+    entry naming the old one)."""
+    src = SAMPLE_EDIS[0]
+    a, b = tmp_path / "one" / "deep", tmp_path / "two"
+    for d in (a, b):
+        d.mkdir(parents=True)
+        (d / src.name).write_bytes(src.read_bytes())
+    ha, hb = tmp_path / "a.h5", tmp_path / "b.h5"
+    assert build_portal._write_tf_mth5([(a / src.name, {"id": "S1"})], "s", "S", ha, smeta=SMETA)
+    assert build_portal._write_tf_mth5([(b / src.name, {"id": "S1"})], "s", "S", hb, smeta=SMETA)
+    assert _h5_semantic(ha) == _h5_semantic(hb)
+    assert str(a).encode("utf-8") not in ha.read_bytes()
+    bc = _bc(tmp_path)
+    build_portal._SHA_CACHE.clear()
+    assert build_portal._station_h5_key(bc, a / src.name, {"id": "S1"}, "s", "S", SMETA, "d") == \
+        build_portal._station_h5_key(bc, b / src.name, {"id": "S1"}, "s", "S", SMETA, "d")
+
+
+def test_raw_seed_meta_build_never_caches_an_mth5(tmp_path, clean_salt):
+    """FAILS IF: a --raw build, whose survey metadata comes from --seed-meta (a file no key part
+    digests), stores or reads an MTH5 entry, or a rebuild after a seed edit serves the OLD seed's
+    organisation inside the survey MTH5."""
+    raw_root = tmp_path / "raw"
+    edir = raw_root / "survey1"
+    edir.mkdir(parents=True)
+    for src in SAMPLE_EDIS:
+        (edir / src.name).write_bytes(src.read_bytes())
+    coll = tmp_path / "collections.json"
+    coll.write_text(json.dumps({"survey1": ["Raw Survey", "Org One"]}), encoding="utf-8")
+    seed = tmp_path / "seed.json"
+    cache = tmp_path / "cache"
+
+    def raw_build(out, org):
+        seed.write_text(json.dumps({"Raw Survey": {"org": org, "lic": "CC-BY-4.0", "edi": "ok"}}),
+                        encoding="utf-8")
+        assert build_portal.main([
+            "--raw", str(raw_root), "--collections", str(coll), "--seed-meta", str(seed),
+            "--out", str(out), "--bundle-edi", "--no-validate", "--survey-h5", "--station-h5",
+            "--incremental", "--cache-dir", str(cache), "--cache-mode", "rw"]) == 0
+        return out
+    raw_build(tmp_path / "o1", "Org One")
+    out2 = raw_build(tmp_path / "o2", "Org Two")
+    assert not any(p.is_file() for p in cache.rglob("*")), "a --raw build persisted cache entries"
+    for k in FILE_KINDS:
+        assert all(v == 0 for v in _kind(out2, k).values()), (k, _kind(out2, k))
+    bundles = sorted((out2 / "bundles").glob("*-tf.h5"))
+    assert bundles, "the raw build wrote no survey MTH5 (test set-up wrong)"
+    with h5py.File(bundles[0], "r") as f:
+        orgs = [str(v) for name, grp in f["Experiment/Surveys"].items()
+                for k, v in grp.attrs.items() if k == "acquired_by.organization"]
+    assert orgs and all("Org Two" in o for o in orgs), orgs

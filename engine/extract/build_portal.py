@@ -4672,6 +4672,9 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None, failure_rows=None,
     from mth5.mth5 import MTH5  # noqa: PLC0415
     hpath = Path(hpath)
     hpath.parent.mkdir(parents=True, exist_ok=True)
+    # The unlink is load-bearing: a file already at hpath may be a hardlink to a build-cache
+    # payload, and mode "w" truncates in place, which would write through into the cache and every
+    # tree that links the same inode. Unlinking first makes the write a new inode.
     if hpath.exists():
         hpath.unlink()
     # Opening the h5 can itself fail (file lock, HDF5 driver). Keep it best-effort like the per-station
