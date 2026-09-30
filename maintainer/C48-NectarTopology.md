@@ -133,9 +133,9 @@ no-op.
 on the box (`deploy/README.md`, ownership split). The two candidates were a publish account in the
 owning group, and running the receiver inside the portal container as uid 10001. Neither holds:
 
-* *a group member* could create a build directory but could not rename `current` or prune a build,
-  because rsync `-a` carries the sender's modes (0644 files, 0755 directories, no group write), so
-  every directory it lands is writable by its owner alone;
+* *a group member* could create a build directory, but renaming `current` and pruning builds would
+  depend on group write on every directory, and rsync `-a` carries the sender's modes, so that would
+  rest on the sending host's umask rather than on anything the replica controls;
 * *the container route* makes the publish account a docker user, which is root on the host, the
   opposite of a restricted account, and the portal mounts `site-data` read-only.
 
@@ -186,7 +186,7 @@ at cutover.
 The public name already resolves to 203.101.226.191, so the cutover moves the address, not DNS:
 
 1. Seed: the first publish from the box over the tailnet; `doctor-serve.sh` green except the gateway
-   WARN (D10).
+   WARN (D11, question 3).
 2. Copy the `caddy_data` volume from ausmt-test to ausmt-serve BEFORE the serving front door first
    starts, so the certificate travels and no ACME order is attempted for a name that does not yet
    point at the new host.
