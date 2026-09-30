@@ -65,8 +65,11 @@ and the output is byte-identical to a build from before the flag existed.
 
 With `--incremental --cache-dir`, unchanged stations are served from the build cache, keyed on the EDI
 bytes, a content digest of the engine's product-producing code (`engine/extract`, `engine/ausmt_science`,
-`engine/schema` and the column contract), library versions and the `survey.yaml` digest, so it can only
-affect build speed, never output bytes. The engine git commit is not part of the key: an engine image
+`engine/schema` and the column contract), the installed library stack (every distribution in the
+requirement closure of mt_metadata and mth5, by version and, for the git-pinned forks, by commit) and
+the `survey.yaml` digest. For the parse and XML products it can only affect build speed, never output
+bytes; for the MTH5 files it can also change which of several equal-content writes is served (see
+below). The engine git commit is not part of the key: an engine image
 whose product code is unchanged keeps the cache warm. A degenerate salt (an unknown engine commit, a
 dirty checkout, or no digestable engine tree) disables it. Raw/bulk mode (`--raw` with `--collections` and `--seed-meta`, for regenerating a seed from
 loose EDI folders) is excluded from caching; see [How to extend](extending.md#bulk-and-seed-mode).
@@ -78,11 +81,11 @@ cached file (a byte copy where the filesystem refuses a link, counted as a `link
 neither the MTH5 write nor its round-trip gate runs for it; a miss writes and gates exactly as
 without a cache and stores the file only if the gate passed. The station key binds the source
 file's bytes and name, the final station id, its declared source provenance, the slug, label and
-`survey.yaml` digest, the survey metadata fields the MTH5 carries, and the mt_metadata, mth5, h5py
-and HDF5 versions; the survey key is the sorted set of its member station keys with the survey
-digest, so any member edit moves the bundle too. Two MTH5 writes of the same inputs are not
-byte-identical (HDF5 records a write clock and internal addresses), so a cached MTH5 is equal to a
-fresh write in content, not in bytes, and a warm build serves the bytes of the build that populated
+`survey.yaml` digest, the survey metadata fields the MTH5 carries, and the h5py and HDF5 versions
+on top of the installed library stack every key carries; the survey key is the sorted set of its
+member station keys with the survey digest, so any member edit moves the bundle too. Two MTH5
+writes of the same inputs are not byte-identical (HDF5 records a write clock and internal
+addresses), so a cached MTH5 is equal to a fresh write in content, not in bytes, and a warm build serves the bytes of the build that populated
 the entry: its manifest SHA-256 holds across warm builds and moves when the file is written again.
 
 Nothing ever writes into an existing MTH5 file: a build writes a new file, and the cache stores or

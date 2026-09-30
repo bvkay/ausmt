@@ -434,13 +434,21 @@ fixed salt and the kind, and the seam owns which parts it passes.
 
 Every input that reaches the writer, per tier, and where each is bound. Common to both tiers:
 the fixed salt (`ausmt-c47-cache-v7`, the engine source digest, `lib_versions` = mt_metadata and
-mth5, the contract digest), then `"parts"` and the kind, so no kind shares a key with another.
+mth5, the installed library identity, the contract digest), then `"parts"` and the kind, so no kind
+shares a key with another. The installed library identity (`cache.installed_lib_identity`) is every
+installed distribution in the requirement closure of mt_metadata and mth5 as `name==version`, with
+`@<commit>` for one installed from a VCS URL: the forks are pinned to git commits whose
+`__version__` does not move (mt_metadata 1.0.10, mth5 0.6.8 at the time of writing), so the
+version alone would let a new pin reuse entries the old pin wrote. It is in the fixed salt, so the
+parse and XML entries move with it too
+(`test_keys_move_with_the_installed_library_commit_and_dependency_versions`).
 
 **Station tier** (`_station_h5_key`), in order:
 
 1. `mth5-entry-v1`, the entry-format tag;
-2. the h5py and HDF5 versions (`_mth5_lib_fingerprint`): both shape the file and `lib_versions`
-   names neither (`test_station_key_moves_with_the_hdf5_stack`);
+2. the h5py and HDF5 versions (`_mth5_lib_fingerprint`): both shape the file, and the HDF5 C
+   library build is not a distribution version the installed identity can see
+   (`test_station_key_moves_with_the_hdf5_stack`);
 3. sha256 of the source file bytes, and its file NAME (the extension selects the reader);
 4. the survey.yaml digest (the same single-read digest §2 item 5 and A4 use);
 5. slug and label;
@@ -476,8 +484,10 @@ member order does not (mth5 addresses stations by name)
   policy gap in `derived_rendition_withheld`, not a cache matter: the cache serves exactly what a
   fresh write would.)
 * *Run facts* (`run-metadata.csv`, the >INFO dialect facts in the parse row). `_write_tf_mth5`
-  reads the record in two places only, `r["id"]` and `source_provenance`; run facts reach
-  station.json, not the MTH5 (same test).
+  reads the record in three places only: `r["id"]`, `source_provenance`, and the round-trip
+  gate's `_survey` lookup tag, which only the collection tier sets and which that tier's
+  `(None, id)` fallback makes irrelevant for the two cached tiers. Run facts reach station.json,
+  not the MTH5 (same test, whose record also carries a `_survey` tag).
 * *The --pid-status resolution facets.* The one file outside the survey package that feeds SMETA
   (`/out/cache/pid_status.json` on the box) adds `doi_resolution` and related facets. They are not
   in the projection, and `test_pid_status_and_unread_smeta_fields_cannot_reach_the_h5` writes the
@@ -490,9 +500,11 @@ member order does not (mth5 addresses stations by name)
   replayed on a hit.
 * *The source file's directory.* It never reaches the file
   (`test_source_directory_is_not_a_key_part_because_it_never_reaches_the_h5`).
-* *numpy and other transitive libraries, the lock file.* Not key parts, the same stance the parse
-  and XML entries have always taken; a lock change that should re-derive the corpus is a
-  `--cache-mode refresh` build.
+* *The pin and lock files* (`engine/requirements*.txt`, `engine/environments/`). Not key parts:
+  what they pin reaches the key through the installed identity above, which reads the
+  distributions the build actually imports rather than the files that were meant to install them.
+  A library outside the mt_metadata/mth5 requirement closure is not keyed; a change there that
+  should re-derive the corpus is a `--cache-mode refresh` build.
 
 ### Hardlink discipline and prune
 

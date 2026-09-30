@@ -682,7 +682,8 @@ def test_record_fields_outside_the_key_cannot_reach_the_h5(tmp_path):
     edi = SAMPLE_EDIS[0]
     lean = {"id": "S1", "source_provenance": {"original_filename": "orig.edi"}}
     fat = {**lean, "lat": None, "lon": None, "elev": None, "variant": "v1", "components": ["Z"],
-           "run_facts": {"x": 1}, "tipper_masked": True, "survey": "Other", "ausmt_id": "au.s.S1"}
+           "run_facts": {"x": 1}, "tipper_masked": True, "survey": "Other", "ausmt_id": "au.s.S1",
+           "_survey": "other"}
     h1, h2 = tmp_path / "lean.h5", tmp_path / "fat.h5"
     assert build_portal._write_tf_mth5([(edi, lean)], "s", "S", h1, smeta=SMETA)
     assert build_portal._write_tf_mth5([(edi, fat)], "s", "S", h2, smeta=SMETA)

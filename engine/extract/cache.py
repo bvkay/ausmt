@@ -47,6 +47,7 @@ whether a given key is present and readable. The build seams decide what to comp
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import os
 import re
@@ -191,6 +192,49 @@ def engine_source_digest(engine_root) -> str:
     return h.hexdigest()
 
 
+# The libraries whose installed identity keys every entry: the product writers, and through their
+# declared requirements the stack beneath them. A fork pinned to a git commit keeps its release
+# __version__, so the version alone cannot tell two installs apart.
+LIB_IDENTITY_ROOTS = ("mt_metadata", "mth5")
+
+
+def _dist_key(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def installed_lib_identity(roots=LIB_IDENTITY_ROOTS) -> str:
+    """Every installed distribution in the requirement closure of `roots`, as sorted
+    `name==version` lines, each suffixed `@<commit>` when the distribution was installed from a
+    VCS URL. Requirements behind an extra are not followed; one not installed is left out. Any
+    change to the installed stack moves the string, which over-invalidates at worst."""
+    seen: dict = {}
+    stack = list(roots)
+    while stack:
+        name = stack.pop()
+        key = _dist_key(name)
+        if key in seen:
+            continue
+        seen[key] = None
+        try:
+            dist = importlib.metadata.distribution(name)
+            ident = f"{key}=={dist.version}"
+            try:
+                commit = json.loads(dist.read_text("direct_url.json") or "{}") \
+                    .get("vcs_info", {}).get("commit_id")
+            except (ValueError, AttributeError):
+                commit = None
+            seen[key] = f"{ident}@{commit}" if commit else ident
+            for req in dist.requires or []:
+                if "extra" in req.partition(";")[2]:
+                    continue
+                m = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", req)
+                if m:
+                    stack.append(m.group(1))
+        except Exception:  # noqa: BLE001  (absent or unreadable metadata: that library is omitted)
+            continue
+    return "\n".join(sorted(v for v in seen.values() if v))
+
+
 # NOTE: the per-survey yaml digest is not derived here. It is
 # computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from,
 # one read feeds both, so a mid-build survey.yaml edit can never key products under a digest their
@@ -212,7 +256,7 @@ class BuildCache:
     def __init__(self, root: Path, *, engine_commit, lib_versions: dict,
                  contract_digest: str, mode: str = "rw", checkout_dir: Path | None = None,
                  max_mb: int | None = None, disabled_reason: str = "",
-                 source_digest: str | None = None):
+                 source_digest: str | None = None, lib_identity: str | None = None):
         self.root = Path(root)
         self.mode = mode if mode in CACHE_MODES else "rw"
         self.engine_commit = engine_commit
@@ -222,6 +266,8 @@ class BuildCache:
             source_digest = engine_source_digest(Path(__file__).resolve().parent.parent)
         self.source_digest = str(source_digest)
         self.lib_versions = dict(lib_versions or {})
+        # None derives the identity of the library stack installed in this interpreter.
+        self.lib_identity = installed_lib_identity() if lib_identity is None else str(lib_identity)
         self.contract_digest = contract_digest or ""
         self.max_mb = int(max_mb) if max_mb is not None else _env_max_mb()
         # Counters: deterministic build-report evidence, NOT wall-clock timing.
@@ -282,12 +328,14 @@ class BuildCache:
             "ausmt-c47-cache-v7",
             self.source_digest,                                      # coarse engine-source salt
             json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions
+            self.lib_identity,                                       # installed stack, VCS commits
             self.contract_digest,                                    # columns + schema digest
         ])
         # Forensics: a short fingerprint of the FULL fixed salt (version tag + engine source digest +
-        # lib versions + contract digest). Two builds that should key identically expose identical
-        # fingerprints; a mid-process salt flip (the flake class: moving HEAD, transient
-        # rev-parse failure, contract-file read failure) is attributable from the build report alone.
+        # lib versions + installed stack + contract digest). Two builds that should key identically
+        # expose identical fingerprints; a mid-process salt flip (the flake class: moving HEAD,
+        # transient rev-parse failure, contract-file read failure) is attributable from the build
+        # report alone.
         self.salt_fp = hashlib.sha256(self._fixed_salt.encode("utf-8")).hexdigest()[:12]
         if self.enabled:
             self.root.mkdir(parents=True, exist_ok=True)
@@ -345,7 +393,7 @@ class BuildCache:
 
         Integrity: the entry is `<sha256-hex>\\n<payload>`; the payload is RE-HASHED on every
         read. A malformed entry or a digest mismatch (bit rot, tampering) is deleted, counted in
-        `corrupt`, tallied as a MISS, and None returned so the caller recomputes — fail-safe.
+        `corrupt`, tallied as a MISS, and None returned so the caller recomputes: fail-safe.
         A PRESENT-but-unreadable entry (Windows AV/indexer lock, permissions) is tallied as a miss
         too, but counted in read_errors so a lock-induced spurious miss is attributable from the
         build report instead of masquerading as content drift."""

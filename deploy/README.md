@@ -214,19 +214,23 @@ cache is on). A metadata-only edit reuses cached per-station products for every 
 only touched stations re-parse — a full ~8-min (national-scale ~30-min) rebuild drops to seconds for
 a small change. Operator-relevant facts:
 
-- **Bytes never change, only speed.** Every cache entry embeds a sha256 verified on read (a
+- **Content never changes, only speed.** Every cache entry embeds a sha256 verified on read (a
   corrupt/tampered entry is deleted, counted in `build_provenance.json`, recomputed from source). A
   stale entry cannot exist by construction (the key is the source EDI content sha + salts).
   `verify.py` still runs full and byte-re-hashes the served tree before the swap. A CI test pins the
-  warm build byte-identical to the build that populated its cache.
+  warm build byte-identical to the build that populated its cache. The parse and XML products are
+  byte-identical to a fresh build. An MTH5 file is equal in content to a fresh write but not in
+  bytes (HDF5 records a write clock), so its manifest SHA-256 holds across warm builds and moves
+  after the cache is lost or a `--cache-mode refresh` build rewrites it.
 - **Location.** `${AUSMT_DATA_DIR}/site-data/cache/` — a **sibling** of `builds/`, owned by uid
   10001. It survives the `builds/` prune and the `current` swap, and is **safe to lose entirely**
   (one slow rebuild rebuilds it). Do NOT move it under `builds/` or `surveys-live/`.
 - **One cold rebuild after an engine update that changes product code (expected).** The cache salt
   is a content digest of the engine's product-producing code (`engine/extract`, `engine/ausmt_science`,
-  `engine/schema`, `contract/columns.json`), not the git commit. After you `pull` a NEW engine image
-  whose product code changed, the FIRST `rebuild-data` runs full (cache miss on every station) and
-  repopulates the cache; the next rebuild is fast again. An image built from a commit that touched only
+  `engine/schema`, `contract/columns.json`), not the git commit, plus the installed mt_metadata/mth5
+  library stack (versions, and the fork pins' git commits). After you `pull` a NEW engine image
+  whose product code or library pins changed, the FIRST `rebuild-data` runs full (cache miss on
+  every station) and repopulates the cache; the next rebuild is fast again. An image built from a commit that touched only
   deploy scripts, docs or tests keys identically and stays warm. This is correct, not a fault. The
   engine commit still matters as an identity gate: a degenerate salt (unknown engine commit, a dirty
   checkout, or no digestable engine tree) disables the cache for that build: the log prints

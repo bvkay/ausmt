@@ -4870,16 +4870,18 @@ def _mth5_pool_stop():
 # file (its bytes, and its name, which selects the reader), the survey.yaml digest, the slug and
 # label, the FINAL station id (sanitised inside the writer), the record's declared
 # source_provenance (stamped into station comments), the SMETA projection the survey_metadata
-# mapping reads, mt_metadata/mth5 (in the salt) and h5py/HDF5 (below). Nothing else of the
-# record is read by _write_tf_mth5; the coordinate policy, the withhold predicate and the
+# mapping reads, the installed mt_metadata/mth5 stack with its VCS commits (in the salt) and
+# h5py/HDF5 (below). Nothing else of the record is read by _write_tf_mth5 but the gate's `_survey`
+# tag, which only the collection tier sets; the coordinate policy, the withhold predicate and the
 # channel masks decide MEMBERSHIP (which stations reach a writer), and the survey key binds
 # membership through its member keys. tests/test_build_cache_mth5.py pins every component.
 _MTH5_ENTRY_TAG = "mth5-entry-v1"
 
 
 def _mth5_lib_fingerprint() -> str:
-    """h5py and the HDF5 C library it links: both shape the file, and lib_versions() names
-    neither, so the MTH5 keys carry them."""
+    """h5py and the HDF5 C library it links: both shape the file, and the HDF5 build is not a
+    distribution version the salt's installed-stack identity can see, so the MTH5 keys carry
+    them."""
     try:
         import h5py  # noqa: PLC0415
         return f"h5py={h5py.__version__};hdf5={h5py.version.hdf5_version}"
@@ -5618,7 +5620,8 @@ def _main_build(argv=None):
                          "ORs with portal.config flags.station_h5_enabled. Wired into deploy/Makefile's "
                          "rebuild-data, which is the ONLY enable that reaches a production build.")
     ap.add_argument("--workers", default=None, metavar="N|auto", type=_workers_arg,
-                    help="MTH5 writer processes (the ~68%%-cold / ~99%%-warm seam of a build). "
+                    help="MTH5 writer processes (~68%% of a cold build; a warm build places "
+                         "cached MTH5 files and writes none). "
                          "Default 1: byte-for-byte identical to a serial build. "
                          "'auto' (or 0) = min(6, cpus). Overrides the AUSMT_BUILD_WORKERS env var; "
                          "only the MTH5 writes parallelise (parse, XML, cache and manifest stay in "
