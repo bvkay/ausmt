@@ -3,8 +3,9 @@
 # instance. Paste it into the dashboard at launch (Launch Instance, Configuration, Customisation
 # Script) after replacing the one placeholder below. Procedure: deploy/nectar/RUNBOOK-NECTAR.md.
 #
-# NOTHING HERE IS A SECRET. The placeholder takes a PUBLIC ssh key; the Tailscale join, the GHCR
-# login and every other credential are typed on the running host by the person provisioning it.
+# NOTHING HERE IS A SECRET. The placeholder takes a PUBLIC ssh key; the Tailscale join and every
+# other credential are typed on the running host by the person provisioning it. The GHCR images are
+# public, so the host holds no registry credential.
 #
 # What first boot does: installs the host packages, Docker, the compose plugin and Tailscale; turns
 # on unattended security upgrades; writes the fstab line that mounts the data volume by filesystem

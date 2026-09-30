@@ -11,7 +11,9 @@
 #
 # CONFIG (deploy/frontdoor/.env - see .env.example): AUSMT_PUBLIC_NAME, AUSMT_BOX_READER_UPSTREAM,
 # AUSMT_ACME_EMAIL, and optionally AUSMT_LEGACY_REDIRECT_NAME (the retired name kept as a permanent
-# 301 to the canonical one; empty means no legacy site block is rendered at all).
+# 301 to the canonical one; empty means no legacy site block is rendered at all) and
+# AUSMT_GATEWAY_UPSTREAM (the upstream of the four public gateway routes; empty means the reader
+# upstream).
 
 set -eu
 
@@ -37,22 +39,48 @@ set +a
 # The legacy redirect name is OPTIONAL: empty is a valid, fully supported state (canonical only).
 AUSMT_LEGACY_REDIRECT_NAME="${AUSMT_LEGACY_REDIRECT_NAME:-}"
 export AUSMT_LEGACY_REDIRECT_NAME
+# The gateway upstream is OPTIONAL: empty renders the four public gateway routes onto the reader
+# upstream (below), which is the whole config of a host whose reader listener fronts its own gateway.
+AUSMT_GATEWAY_UPSTREAM="${AUSMT_GATEWAY_UPSTREAM:-}"
+export AUSMT_GATEWAY_UPSTREAM
 
-# ----- render the Caddyfile (the legacy redirect block in or out) --------------------------------
+# ----- render the Caddyfile (the legacy redirect block in or out, the gateway upstream) -----------
 # Caddyfile `{$VAR}` interpolation cannot conditionally omit a SITE BLOCK: with the legacy var
 # unset, the legacy block's address would render EMPTY, a parse error, so Caddy would fail to start
 # on exactly the deploy that has no legacy name. The installer therefore templates the block: the
 # tracked Caddyfile carries it between the `# >>> legacy-redirect` / `# <<< legacy-redirect`
 # markers, and this step writes Caddyfile.rendered (gitignored; compose mounts it) with the marked
-# range kept (var set) or stripped (var empty). doctor.sh re-renders the same way for its
-# running-config hash compare, so keep the two sed expressions identical.
+# range kept (var set) or stripped (var empty). An empty gateway upstream would likewise render an
+# empty reverse_proxy address, so with it empty the render names the reader upstream in its place,
+# and the adapted config is then exactly the one with every route on the reader. doctor.sh re-renders
+# the same way for its running-config hash compare, so keep the sed expressions identical.
+# `>` truncates in place, so the mounted inode survives a re-render.
+[ -f Caddyfile ] || die "Caddyfile is missing from $HERE."
 if [ -n "$AUSMT_LEGACY_REDIRECT_NAME" ]; then
 	log "rendering Caddyfile.rendered WITH the legacy redirect block ($AUSMT_LEGACY_REDIRECT_NAME -> $AUSMT_PUBLIC_NAME)"
-	cp Caddyfile Caddyfile.rendered
 else
 	log "rendering Caddyfile.rendered WITHOUT the legacy redirect block (AUSMT_LEGACY_REDIRECT_NAME empty)"
-	sed '/^# >>> legacy-redirect/,/^# <<< legacy-redirect/d' Caddyfile > Caddyfile.rendered
 fi
+if [ -n "$AUSMT_GATEWAY_UPSTREAM" ]; then
+	log "the public gateway routes use $AUSMT_GATEWAY_UPSTREAM"
+else
+	log "the public gateway routes use the reader upstream (AUSMT_GATEWAY_UPSTREAM empty)"
+fi
+render_legacy() {
+	if [ -n "$AUSMT_LEGACY_REDIRECT_NAME" ]; then
+		cat Caddyfile
+	else
+		sed '/^# >>> legacy-redirect/,/^# <<< legacy-redirect/d' Caddyfile
+	fi
+}
+render_gateway() {
+	if [ -n "$AUSMT_GATEWAY_UPSTREAM" ]; then
+		cat
+	else
+		sed 's/{\$AUSMT_GATEWAY_UPSTREAM}/{$AUSMT_BOX_READER_UPSTREAM}/g'
+	fi
+}
+render_legacy | render_gateway > Caddyfile.rendered
 
 # ----- log directory the masked access log + the box-side shipper use ----------------------------
 # Caddy writes /var/log/caddy/access-frontdoor.json here; ship-frontdoor-logs.sh (on the box) pulls it.
@@ -87,6 +115,7 @@ fi
 log "validating Caddyfile.rendered against caddy:2-alpine"
 docker run --rm \
 	-e AUSMT_PUBLIC_NAME -e AUSMT_BOX_READER_UPSTREAM -e AUSMT_ACME_EMAIL -e AUSMT_LEGACY_REDIRECT_NAME \
+	-e AUSMT_GATEWAY_UPSTREAM \
 	-v "$HERE/Caddyfile.rendered:/etc/caddy/Caddyfile:ro" \
 	-v "$HERE/ts-routes.map.rendered:/etc/caddy/ts-routes.map:ro" \
 	-v /var/log/caddy:/var/log/caddy \

@@ -46,6 +46,7 @@
 # CONFIG (env; every external command + path is overridable so the checks are testable and portable):
 #   AUSMT_DOCTOR_ENV         path to the front-door .env (default: ./.env) - sources AUSMT_PUBLIC_NAME,
 #                            AUSMT_BOX_READER_UPSTREAM and (optional) AUSMT_LEGACY_REDIRECT_NAME
+#                            and AUSMT_GATEWAY_UPSTREAM
 #   AUSMT_DOCTOR_CADDYFILE   the repo Caddyfile to hash the running config against (default: ./Caddyfile)
 #   AUSMT_DOCTOR_COMPOSE     the compose file (default: ./compose.yaml)
 #   AUSMT_DOCTOR_TS_MAP      the repo time-series route table (default: ./ts-routes.map)
@@ -188,15 +189,20 @@ check_running_config() {
 		return
 	fi
 	# The container mounts the RENDERED Caddyfile (install-frontdoor.sh templates the legacy redirect
-	# block in or out between the legacy-redirect markers), so the expected hash is a FRESH render of
-	# the repo template under the current .env state, not the raw repo file. Keep this sed identical
-	# to the installer's render step: the cross-check test drives both and fails on drift.
+	# block in or out between the legacy-redirect markers, and renders the reader upstream in place of
+	# an empty gateway upstream), so the expected hash is a FRESH render of the repo template under the
+	# current .env state, not the raw repo file. Keep these sed expressions identical to the
+	# installer's render step: the cross-check test drives both and fails on drift.
 	tmp_render="$(mktemp)" || { warn "config: mktemp failed (cannot render the expected config)"; return; }
 	if [ -n "${AUSMT_LEGACY_REDIRECT_NAME:-}" ]; then
-		cat "$CADDYFILE_REPO" > "$tmp_render"
+		cat "$CADDYFILE_REPO"
 	else
-		sed '/^# >>> legacy-redirect/,/^# <<< legacy-redirect/d' "$CADDYFILE_REPO" > "$tmp_render"
-	fi
+		sed '/^# >>> legacy-redirect/,/^# <<< legacy-redirect/d' "$CADDYFILE_REPO"
+	fi | if [ -n "${AUSMT_GATEWAY_UPSTREAM:-}" ]; then
+		cat
+	else
+		sed 's/{\$AUSMT_GATEWAY_UPSTREAM}/{$AUSMT_BOX_READER_UPSTREAM}/g'
+	fi > "$tmp_render"
 	want="$(_sha256 "$tmp_render")"
 	rm -f "$tmp_render"
 	if [ -z "$want" ]; then
@@ -582,6 +588,6 @@ run_report() {
 case "${1:-report}" in
 	report) run_report ;;
 	zombies) zombie_kit ;;
-	-h|--help) sed -n '2,68p' "$0" ;;
+	-h|--help) sed -n '2,69p' "$0" ;;
 	*) printf 'doctor: unknown subcommand: %s (try: report | zombies | --help)\n' "$1" >&2; exit 2 ;;
 esac

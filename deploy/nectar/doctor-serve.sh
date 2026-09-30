@@ -11,8 +11,10 @@
 #   1. containers: the portal (deploy/compose.yaml) and the front door (deploy/frontdoor/compose.yaml)
 #   2. listeners: the portal answers on 127.0.0.1:8443 and the reader on 127.0.0.1:8445
 #   3. wall: the reader listener refuses the curator workbench (404), wall 2 proving itself here
-#   4. gateway: this host runs no gateway, so the four public submission routes have no upstream
-#      unless one is arranged; a WARN names them on every run until /gateway/healthz answers 200
+#   4. gateway: this host runs no gateway; the front door sends the four public submission routes to
+#      the curation host (AUSMT_GATEWAY_UPSTREAM in deploy/frontdoor/.env). GET /gateway/healthz
+#      through the front door, by the public name pinned to loopback; anything but 200 is a WARN that
+#      names the routes, since readers are served here either way
 #   5. volume: the data root is its own mounted volume, never a directory on the root disk
 #   6. disk: headroom on the data volume
 #   7. current: a symlink to an existing builds/<ts>
@@ -29,6 +31,8 @@
 #                                   AUSMT_DATA_DIR
 #   AUSMT_DOCTOR_COMPOSE            the portal compose file (default: deploy/compose.yaml)
 #   AUSMT_DOCTOR_FRONTDOOR_COMPOSE  the front-door compose file (default: deploy/frontdoor/compose.yaml)
+#   AUSMT_DOCTOR_FRONTDOOR_ENV      the front-door .env (default: deploy/frontdoor/.env); read, never
+#                                   sourced, for AUSMT_PUBLIC_NAME and AUSMT_GATEWAY_UPSTREAM
 #   AUSMT_DOCTOR_FRONTDOOR          the front-door doctor command (default: sh deploy/frontdoor/doctor.sh)
 #   AUSMT_DOCTOR_DOCKER             docker command (default: docker)
 #   AUSMT_DOCTOR_CURL               curl command (default: curl)
@@ -44,6 +48,7 @@ DEPLOY_DIR="$(cd "$HERE/.." && pwd)"
 ENV_FILE="${AUSMT_DOCTOR_ENV:-$DEPLOY_DIR/.env}"
 COMPOSE_FILE="${AUSMT_DOCTOR_COMPOSE:-$DEPLOY_DIR/compose.yaml}"
 FD_COMPOSE_FILE="${AUSMT_DOCTOR_FRONTDOOR_COMPOSE:-$DEPLOY_DIR/frontdoor/compose.yaml}"
+FD_ENV_FILE="${AUSMT_DOCTOR_FRONTDOOR_ENV:-$DEPLOY_DIR/frontdoor/.env}"
 FRONTDOOR="${AUSMT_DOCTOR_FRONTDOOR:-sh $DEPLOY_DIR/frontdoor/doctor.sh}"
 DOCKER="${AUSMT_DOCTOR_DOCKER:-docker}"
 CURL="${AUSMT_DOCTOR_CURL:-curl}"
@@ -118,12 +123,28 @@ check_wall() {
 	fi
 }
 
+_fd_var() {
+	# The last value of $1 in the front-door .env, empty when absent. Read rather than sourced, so no
+	# front-door setting leaks into this run or the front-door doctor it starts.
+	[ -f "$FD_ENV_FILE" ] || return 0
+	sed -n "s/^$1=//p" "$FD_ENV_FILE" | tail -n 1
+}
+
 check_gateway() {
-	code="$(_code 8445 /gateway/healthz)"
+	routes="POST /gateway/submit, POST /gateway/request-key, GET /gateway/healthz, GET /gateway/status/*"
+	name="$(_fd_var AUSMT_PUBLIC_NAME)"
+	if [ -z "$name" ]; then
+		warn "gateway: AUSMT_PUBLIC_NAME unset in $FD_ENV_FILE, so the public gateway routes cannot be probed through the front door"
+		return
+	fi
+	# shellcheck disable=SC2086 # CURL may be a word-split override.
+	code="$($CURL -sS -o /dev/null -w '%{http_code}' --max-time 8 --resolve "$name:443:127.0.0.1" "https://$name/gateway/healthz" 2>/dev/null)"
 	if [ "$code" = "200" ]; then
-		pass "gateway: /gateway/healthz answers 200 through the reader listener"
+		pass "gateway: /gateway/healthz answers 200 through the front door"
+	elif [ -z "$(_fd_var AUSMT_GATEWAY_UPSTREAM)" ]; then
+		warn "gateway: /gateway/healthz -> ${code:-no-response}; AUSMT_GATEWAY_UPSTREAM is unset in $FD_ENV_FILE, so the front door sends $routes to this host's reader, which has no gateway; set it to the curation host's reader listener and re-run install-frontdoor.sh (readers are unaffected)"
 	else
-		warn "gateway: /gateway/healthz -> ${code:-no-response}; this host runs no gateway, so the public submission routes (POST /gateway/submit, POST /gateway/request-key, GET /gateway/healthz, GET /gateway/status/*) do not answer here (maintainer/C48-NectarTopology.md, open questions)"
+		warn "gateway: /gateway/healthz -> ${code:-no-response} through the front door; the curation host's reader listener ($(_fd_var AUSMT_GATEWAY_UPSTREAM)) is not answering, so $routes are down at the public name (readers are unaffected)"
 	fi
 }
 

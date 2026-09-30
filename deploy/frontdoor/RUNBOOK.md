@@ -245,6 +245,7 @@ sudo systemctl enable --now ausmt-frontdoor-logs.timer
 AUSMT_PUBLIC_NAME=ausmt.auscope.org.au
 AUSMT_LEGACY_REDIRECT_NAME=ausmt.au          # optional: empty = no legacy redirect block at all
 AUSMT_BOX_READER_UPSTREAM=http://ausmt-box:8445
+AUSMT_GATEWAY_UPSTREAM=                      # optional: empty = the four public gateway routes use the reader upstream
 AUSMT_ACME_EMAIL=you@example.org
 ```
 6.2  Apply (validates the Caddyfile, then brings the one service up):

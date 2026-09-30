@@ -14,7 +14,7 @@
 # `trusted_proxies` — it must not honour a client-supplied X-Forwarded-For (that would let a caller
 # spoof the logged client_ip). The masked access log below is therefore taken on the genuine client.
 #
-# NO hostname is baked into git: the public name and the box upstream are `{$ENV}` placeholders the
+# NO hostname is baked into git: the public name and the upstreams are `{$ENV}` placeholders the
 # compose file supplies from deploy/frontdoor/.env (config-side names only, same discipline as the box
 # stack). `caddy validate` in the install script fails the deploy LOUDLY on any slip.
 {
@@ -51,6 +51,24 @@
 # the box reader accepts h2c would 502 the whole site. Box litany, then install-frontdoor.sh.
 (box_upstream) {
 	reverse_proxy {$AUSMT_BOX_READER_UPSTREAM} {
+		transport http {
+			versions h2c 2
+			keepalive 90s
+			keepalive_idle_conns 64
+		}
+	}
+}
+
+# ---- The public gateway routes' upstream ---------------------------------------------------------
+# The four public gateway handles below import this snippet instead of box_upstream. The upstream is
+# a reader listener whose wall 2 proxies exactly those four routes to a gateway: the box's own, or,
+# on a host that runs no gateway (the serving replica), the curation host's reader listener over the
+# tailnet. install-frontdoor.sh renders {$AUSMT_GATEWAY_UPSTREAM} as {$AUSMT_BOX_READER_UPSTREAM}
+# when the variable is empty, so a deploy that never sets it adapts to exactly the config it had
+# with every route on box_upstream. The transport block must stay identical to box_upstream's: the
+# far end is the same kind of listener (deploy/tests/test_frontdoor_bridge.py pins the match).
+(gateway_upstream) {
+	reverse_proxy {$AUSMT_GATEWAY_UPSTREAM} {
 		transport http {
 			versions h2c 2
 			keepalive 90s
@@ -155,6 +173,8 @@
 	# of the SAME subset behind the port-scoped tailnet ACL: it proxies only these four gateway routes to
 	# the gateway container and serves add-survey.html itself, refusing every other /gateway path on its
 	# own (invariant b). Two independent allowlists of one subset - a breach needs BOTH to widen.
+	# add-survey.html is a reader page and goes to box_upstream; the four gateway routes go to
+	# gateway_upstream, which is a reader listener too, so the wall-2 half of that holds wherever it is.
 	@public_add_survey {
 		method GET
 		path /add-survey.html /add-survey.html/
@@ -179,16 +199,16 @@
 		import box_upstream
 	}
 	handle @public_gw_submit {
-		import box_upstream
+		import gateway_upstream
 	}
 	handle @public_gw_request_key {
-		import box_upstream
+		import gateway_upstream
 	}
 	handle @public_gw_healthz {
-		import box_upstream
+		import gateway_upstream
 	}
 	handle @public_gw_status {
-		import box_upstream
+		import gateway_upstream
 	}
 
 	# ---- PATH-URL CONTRACT (tier 3: prerendered entity landing pages) -------------------------------

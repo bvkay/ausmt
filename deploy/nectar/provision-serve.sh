@@ -19,8 +19,9 @@
 #   4. installs the receiver and the two account gates, and makes each gate its account's login
 #      shell: publish (uid 10001, receives builds) and caddylog (reads the masked front-door log)
 #   5. renders deploy/.env from deploy/nectar/serve.env.example and deploy/frontdoor/.env from
-#      deploy/frontdoor/.env.example with the reader upstream on loopback, the first time; stops
-#      with exit 3 while either still has a value to fill
+#      deploy/frontdoor/.env.example with the reader upstream on loopback, the first time; carries
+#      AUSMT_GATEWAY_UPSTREAM from deploy/.env into deploy/frontdoor/.env on every run; stops with
+#      exit 3 while either still has a value to fill
 #   6. fetches the self-hosted basemap when compose mounts one and it is not there yet
 #   7. starts the portal (make up) and then the front door (install-frontdoor.sh)
 #
@@ -105,9 +106,22 @@ if grep -q '^AUSMT_BOX_READER_UPSTREAM=' "$DEPLOY/frontdoor/.env"; then
 else
   printf 'AUSMT_BOX_READER_UPSTREAM=http://127.0.0.1:8445\n' >> "$DEPLOY/frontdoor/.env"
 fi
+# The public gateway routes leave this host for the curation host's reader listener, named once in
+# deploy/.env and carried into the front door's .env, where its compose file reads it.
+gw="$(sed -n 's/^AUSMT_GATEWAY_UPSTREAM=//p' "$DEPLOY/.env" | tail -n 1)"
+case "$gw" in
+  ''|*REPLACE_WITH*) ;;
+  *)
+    if grep -q '^AUSMT_GATEWAY_UPSTREAM=' "$DEPLOY/frontdoor/.env"; then
+      sed -i "s#^AUSMT_GATEWAY_UPSTREAM=.*#AUSMT_GATEWAY_UPSTREAM=$gw#" "$DEPLOY/frontdoor/.env"
+    else
+      printf 'AUSMT_GATEWAY_UPSTREAM=%s\n' "$gw" >> "$DEPLOY/frontdoor/.env"
+    fi
+    ;;
+esac
 todo=""
 if grep -q 'REPLACE_WITH' "$DEPLOY/.env"; then
-  todo="$todo $DEPLOY/.env (OWNER)"
+  todo="$todo $DEPLOY/.env ($(grep '=REPLACE_WITH' "$DEPLOY/.env" | cut -d= -f1 | tr '\n' ' ' | sed 's/ $//'))"
 fi
 for var in AUSMT_PUBLIC_NAME AUSMT_ACME_EMAIL; do
   if grep -Eq "^$var=\$" "$DEPLOY/frontdoor/.env"; then
@@ -131,7 +145,7 @@ fi
 
 # ----- 7. the portal, then the front door ---------------------------------------------------------
 log "starting the portal (make up)"
-(cd "$DEPLOY" && make up) || die "make up failed (docker login ghcr.io first if the images are private)"
+(cd "$DEPLOY" && make up) || die "make up failed (the GHCR images are public: check OWNER and TAG in $DEPLOY/.env)"
 log "starting the front door (install-frontdoor.sh, reader upstream AUSMT_BOX_READER_UPSTREAM=http://127.0.0.1:8445)"
 (cd "$DEPLOY/frontdoor" && sh ./install-frontdoor.sh) || die "install-frontdoor.sh failed"
 
