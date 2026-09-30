@@ -882,3 +882,97 @@ def test_raw_seed_meta_build_never_caches_an_mth5(tmp_path, clean_salt):
         orgs = [str(v) for name, grp in f["Experiment/Surveys"].items()
                 for k, v in grp.attrs.items() if k == "acquired_by.organization"]
     assert orgs and all("Org Two" in o for o in orgs), orgs
+
+
+# ---- temporaries, rejected metas, sources that move during a build -------------------------------
+
+def test_relinking_a_dest_that_already_is_the_payload_leaves_no_temporary(tmp_path):
+    """FAILS IF: placing an entry at a dest that already links the same payload (a second build into
+    the same --out) leaves the temporary name behind. rename(2) between two names of one inode
+    succeeds and does nothing, so the temporary must be removed explicitly."""
+    bc = _bc(tmp_path)
+    src = tmp_path / "src.h5"
+    src.write_bytes(os.urandom(4096))
+    key = "ab" * 32
+    bc.put_file(key, "station_h5", src, {"n": 1})
+    out = tmp_path / "out"
+    out.mkdir()
+    dest = out / "S1.h5"
+    assert bc.link_file(key, "station_h5", dest) == {"n": 1}
+    assert bc.link_file(key, "station_h5", dest) == {"n": 1}
+    assert sorted(p.name for p in out.iterdir()) == ["S1.h5"]
+
+
+def test_prune_removes_stale_put_temporaries_and_nothing_else(tmp_path):
+    """FAILS IF: a temporary stranded by a put that was killed mid-write (an MTH5-sized hardlink or
+    copy) is never removed, or the prune removes a temporary young enough to belong to a put that
+    is still running, or any file that is not a cache temporary."""
+    import time
+    bc = _bc(tmp_path)
+    key = "ab" * 32
+    shard = bc.root / key[:2]
+    shard.mkdir(parents=True, exist_ok=True)
+    old = time.time() - 2 * 86400
+    stale = shard / f".{key}.survey_h5.4242.1.tmp"
+    live = shard / f".{key}.station_h5.4243.2.tmp"
+    keep = shard / ".keep"
+    foreign = bc.root / "pid_status.json"
+    for p in (stale, live, keep, foreign):
+        p.write_bytes(b"x" * 1024)
+    for p in (stale, keep, foreign):
+        os.utime(p, (old, old))
+    bc.prune()
+    assert not stale.exists(), "a stale put temporary survived the prune"
+    assert live.exists() and keep.exists() and foreign.exists()
+
+
+def _rewrite_sidecar_meta(ref: Path, meta) -> None:
+    """Replace a file entry's stored meta while keeping the sidecar self-verifying."""
+    raw = ref.read_bytes()
+    side = json.loads(raw.partition(b"\n")[2].decode("utf-8"))
+    side["meta"] = meta
+    body = json.dumps(side, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    import hashlib  # noqa: PLC0415
+    ref.write_bytes(hashlib.sha256(body).hexdigest().encode("ascii") + b"\n" + body)
+
+
+@pytest.mark.parametrize("meta", [{"n": 0, "err": "", "rows": []}, {"err": "", "rows": []}])
+def test_a_verified_entry_whose_meta_is_unusable_is_rejected_and_rewritten(tmp_path, clean_salt,
+                                                                           meta):
+    """FAILS IF: an entry whose checksums verify but whose stored meta cannot describe a written
+    file (no station count, or a count below one) is served with an invented count, instead of
+    being dropped, counted corrupt and a miss, and written fresh."""
+    surveys = _one_survey(tmp_path)
+    cache = tmp_path / "cache"
+    _build(surveys, tmp_path / "cold", cache)
+    ref = sorted(cache.rglob("*.survey_h5.ref"))
+    assert len(ref) == 1, ref
+    payload = ref[0].with_name(ref[0].name[:-len(".ref")])
+    old_ino = payload.stat().st_ino
+    _rewrite_sidecar_meta(ref[0], meta)
+    warm = _build(surveys, tmp_path / "warm", cache)
+    c = _kind(warm, "survey_h5")
+    assert (c["corrupt"], c["misses"], c["hits"], c["writes"]) == (1, 1, 0, 1), c
+    served = warm / "bundles" / "mc-a-tf.h5"
+    assert served.stat().st_ino != old_ino, "the rejected payload was served"
+    assert payload.stat().st_ino == served.stat().st_ino, "the fresh write was not stored"
+    assert json.loads(ref[0].read_bytes().partition(b"\n")[2])["meta"]["n"] == N
+
+
+def test_a_source_edited_after_its_key_was_derived_is_not_stored(tmp_path):
+    """FAILS IF: an EDI edited between key derivation and the MTH5 write (a surveys checkout
+    fast-forwarded mid-build) is stored under the key of its PRE-edit bytes. A later build over the
+    pre-edit bytes would then hit and serve the post-edit impedances, with the gate skipped."""
+    edi = tmp_path / "S1.edi"
+    edi.write_text(SAMPLE_EDIS[0].read_text(encoding="latin-1"), encoding="latin-1")
+    r = {"id": "S1"}
+    bc = _bc(tmp_path)
+    build_portal._SHA_CACHE.clear()
+    key = build_portal._station_h5_key(bc, edi, r, "s", "S", SMETA, "d")
+    edi.write_text(_one_byte_impedance_edit(edi.read_text(encoding="latin-1")), encoding="latin-1")
+    n = build_portal._write_tf_mth5_cached([(edi, r)], "s", "S", tmp_path / "S1.h5", SMETA, None,
+                                          "station product", bc, key, "station_h5")
+    build_portal._SHA_CACHE.clear()
+    assert n == 1, "the build must still serve the file it wrote and gated"
+    assert bc.kinds["station_h5"]["writes"] == 0, bc.kinds["station_h5"]
+    assert not _payloads(bc.root, "station_h5"), "a moved source was stored under its old key"
