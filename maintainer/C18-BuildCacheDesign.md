@@ -639,7 +639,7 @@ round-trip failure. The warm build's `kinds` block (`builds/warm/build_provenanc
 `writes=0`, so every miss was an outcome that stores nothing. The cold build's misses (`xml` and
 `station_h5` 14,828 each, `survey_h5` 156) less its stored entries (13,049, 13,267, 147) give the
 same 1,779, 1,561 and 9. Two surveys account for a share of them in `logs/warm.log`:
-`seahorse-2022-23` logs `[h5] WARN ... MTH5Error: does not exist, check station_list for existing
+`seahorse-2022-23` logs `[h5] WARN ... MTH5Error:  does not exist, check station_list for existing
 names - 167 file(s)` and 111 derived EDI round-trip failures, and serves 278 station MTH5 and 334
 XML for 445 EDIs; `black-hill-2005-06` logs 180 round-trip failures (177 derived EDI, 3 canonical
 EMTF-XML), every one on lines 11, 12, 16, 25 and 26, which its `survey.yaml` declares the 180
