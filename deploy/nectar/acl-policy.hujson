@@ -3,8 +3,10 @@
 // never replace the whole policy with this file. Design: maintainer/C48-NectarTopology.md.
 //
 // The tailnet is the identity layer: the curation host reaches the serving host only over it (the
-// publish channel and the log pull), people reach both hosts only over it (Tailscale SSH), and
-// curators reach the curation workbench only over it. Neither host opens SSH to the internet.
+// publish channel and the log pull), the serving host's front door reaches the curation host's reader
+// listener only over it (the four public gateway routes), people reach both hosts only over it
+// (Tailscale SSH), and curators reach the curation workbench only over it. Neither host opens SSH to
+// the internet.
 //
 // Placeholders in <> are filled in the admin console, never committed:
 //   <ADMIN_TAG_OWNER>     the admin user or group that may apply the tags (e.g. "autogroup:admin")
@@ -41,11 +43,24 @@
       "src":    ["ausmt-box", "tag:ausmt-curate"],
       "dst":    ["tag:ausmt-serve:22"],
     },
-    // Curators reach the workbench port on the curation host and no other port on any host.
+    // The serving host's front door to the curation host's reader listener, port 8445 only: the
+    // tailscale-serve reader port (`tailscale serve --bg --tcp=8445 tcp://127.0.0.1:8445`), the same
+    // grant the front-door stanza gives tag:ausmt-frontdoor. The front door sends it the four public
+    // gateway routes (AUSMT_GATEWAY_UPSTREAM); wall 2 on that listener admits only the public subset,
+    // so this grant reaches nothing the internet cannot. Drop ausmt-box once the curation host is lifted.
+    {
+      "action": "accept",
+      "src":    ["tag:ausmt-serve"],
+      "dst":    ["ausmt-box:8445", "tag:ausmt-curate:8445"],
+    },
+    // Curators reach the workbench on the curation host and no other port on any host. The workbench
+    // is the portal listener, which `tailscale serve --bg https / http://127.0.0.1:8443` publishes on
+    // port 443 under the host's MagicDNS name, and which proxies /gateway/* to the gateway. Port 8444
+    // is the gateway's loopback debug bind and is never granted.
     {
       "action": "accept",
       "src":    ["group:curators"],
-      "dst":    ["ausmt-box:8444", "tag:ausmt-curate:8444"],
+      "dst":    ["ausmt-box:443", "tag:ausmt-curate:443"],
     },
     // Administrators reach both Nectar hosts for Tailscale SSH.
     {

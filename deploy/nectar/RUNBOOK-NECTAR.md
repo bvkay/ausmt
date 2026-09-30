@@ -12,7 +12,8 @@ dashboard at that step.
 
 ```
 internet ──▶ 203.101.226.191 ──▶ ausmt-serve: front door (Caddy, TLS, masked log) ──▶ portal :8445 (loopback)
-                                        ▲
+                                        ▲        │
+                                        │        └─ 4 public /gateway routes ──▶ box reader :8445 (tailnet) ──▶ gateway
              box (curates, builds) ─────┘ publish over the tailnet: rsync + receive-build.sh
 ```
 
@@ -20,10 +21,10 @@ internet ──▶ 203.101.226.191 ──▶ ausmt-serve: front door (Caddy, TLS
 
 ## 0. Before you start
 
-- **Decide the public submission routes (C48 D11, question 3) first.** The serving host runs no
-  gateway, so after step 12 `POST /gateway/submit`, `POST /gateway/request-key`, `GET /gateway/healthz`
-  and `GET /gateway/status/*` answer 502 at the public name until a decision lands. Steps 1 to 11 are
-  safe to do before that decision; step 12 (the address move) is not, unless you accept the gap.
+- **The public submission routes stay live through the address move** (C48 D12). The serving host
+  runs no gateway, so its front door sends `POST /gateway/submit`, `POST /gateway/request-key`,
+  `GET /gateway/healthz` and `GET /gateway/status/*` to the box's reader listener over the tailnet
+  (`AUSMT_GATEWAY_UPSTREAM`, step 8), exactly where ausmt-test sends them today.
 - The amendment in step 1 is approved: the allocation has no volume storage, and the tree does not fit
   the 30 GB m3 root disk (C48 D3).
 - You have Tailscale admin access and the Nectar dashboard for the project.
@@ -41,8 +42,9 @@ In the Nectar dashboard: Allocations → My Requests → the project → Amend/E
 > measure 33 GB and the self-hosted basemap 2.4 GB, which does not fit the 30 GB m3 root disk.
 >
 > **RAM 16 to 32 GB and vCPU 8 to 16.** The curation role (submission gateway, antivirus, the survey
-> repository and the corpus build) moves to a separate, non-public instance. With two instances, the
-> current 8 vCPU / 16 GB leaves nothing above m3.medium for it.
+> repository and the corpus build) moves to a separate, non-public instance. The corpus build fits an
+> m3.medium; the increase is headroom to run it with more workers on a larger instance, which the
+> current 8 vCPU / 16 GB leaves no room for beside the serving instance.
 >
 > **Service units:** a top-up only if the allocation runs past 12 months.
 >
@@ -146,8 +148,9 @@ sudo sh /srv/ausmt/code/deploy/nectar/provision-serve.sh
 The first run stops with exit 3 and names the two `.env` files to fill. **Do step 7 before filling
 them**, so the front door never starts without the certificate.
 
-If the GHCR images are private, log in once with a read-only token you type: `sudo docker login
-ghcr.io` (C48 D11, question 6).
+The GHCR images are public: anonymous pulls of `ghcr.io/bvkay/ausmt-portal` succeeded on 2026-09-30
+(HTTP 200 on the tags list with an anonymous token). This host holds no registry credential and needs
+no `docker login`.
 
 ---
 
@@ -188,7 +191,10 @@ is in it with `sudo docker compose -f /srv/ausmt/code/deploy/frontdoor/compose.y
 
 ## 8. Fill the .env files and finish provisioning
 
-- `/srv/ausmt/code/deploy/.env`: `OWNER` (the GHCR namespace) and `TAG` (the tag the box runs).
+- `/srv/ausmt/code/deploy/.env`: `OWNER` (the GHCR namespace), `TAG` (the tag the box runs) and
+  `AUSMT_GATEWAY_UPSTREAM`, the box's reader listener: the value ausmt-test has as
+  `AUSMT_BOX_READER_UPSTREAM` in its `deploy/frontdoor/.env` (the box's MagicDNS name and the
+  tailscale-serve reader port). Provisioning copies it into `deploy/frontdoor/.env`.
 - `/srv/ausmt/code/deploy/frontdoor/.env`: `AUSMT_PUBLIC_NAME=ausmt.auscope.org.au`,
   `AUSMT_LEGACY_REDIRECT_NAME` exactly as ausmt-test has it, `AUSMT_ACME_EMAIL`, and
   `AUSMT_DOCTOR_EXPECT_IP=203.101.226.191`. Leave `AUSMT_BOX_READER_UPSTREAM` as provisioning set it
@@ -228,7 +234,7 @@ ssh -N -o ExitOnForwardFailure=yes -L 18445:127.0.0.1:8445 publish@ausmt-serve &
 sleep 3; curl -sS -m 5 http://127.0.0.1:18445/ ; kill %1 # expect: the ssh exited, curl cannot connect
 ```
      If either succeeds, the publish account is not confined to the gate over Tailscale SSH. Stop and
-     settle C48 D11 question 5 before going on.
+     settle C48 D11 question 2 before going on.
 9.3  Publish by hand. The first run sends the whole build; read its size first, so you know what the
      upload will take:
 ```sh
@@ -237,10 +243,12 @@ cd "$AUSMT_CODE_DIR/deploy"
 AUSMT_PUBLISH_TARGET=publish@ausmt-serve make publish ARGS=--dry-run
 AUSMT_PUBLISH_TARGET=publish@ausmt-serve make publish
 ```
-9.4  On ausmt-serve: `sh /srv/ausmt/code/deploy/nectar/doctor-serve.sh`. Expect PASS everywhere
-     except the `gateway` WARN (the open question of step 0). The DNS and TLS lines pass already: the
-     public name resolves to the address step 8 set as expected, and it still reaches ausmt-test,
-     which presents the same certificate. Neither line tells the two hosts apart.
+9.4  On ausmt-serve: `sh /srv/ausmt/code/deploy/nectar/doctor-serve.sh`. Expect PASS everywhere,
+     the `gateway` line included: it asks this host's front door for `/gateway/healthz`, which the
+     box answers. A `gateway` WARN means this host cannot reach the box's reader port: check the
+     `tag:ausmt-serve` rule of step 2.1 and `AUSMT_GATEWAY_UPSTREAM`. The DNS and TLS lines pass
+     already: the public name resolves to the address step 8 set as expected, and it still reaches
+     ausmt-test, which presents the same certificate. Neither line tells the two hosts apart.
 
 ---
 
@@ -256,12 +264,13 @@ curl -sS $R -o /dev/null -w '%{http_code}\n' https://$N/                        
 curl -sS $R -o /dev/null -w '%{http_code}\n' https://$N/data/catalogue.json          # 200
 curl -sS $R -o /dev/null -w '%{http_code}\n' https://$N/add-survey.html              # 200
 curl -sS $R -o /dev/null -w '%{http_code}\n' https://$N/gateway/curator/queue        # 404 (walled)
-curl -sS $R -o /dev/null -w '%{http_code}\n' https://$N/gateway/healthz              # 502 until step 0 is decided
+curl -sS $R -o /dev/null -w '%{http_code}\n' https://$N/gateway/healthz              # 200 (the box's gateway)
+curl -sS $R -o /dev/null -w '%{http_code}\n' https://$N/gateway/submit               # 404 (GET is the wrong verb)
 curl -sS $R https://$N/data/build.json                                               # the box's current build
 echo | openssl s_client -connect 127.0.0.1:443 -servername $N 2>/dev/null | openssl x509 -noout -issuer -enddate
 ```
 The `build.json` must name the same `build_id` and `source_commit` as the box's
-`site-data/current/build.json`.
+`site-data/current/build.json`. None of these probes POSTs, so none submits or requests a key.
 
 ---
 
@@ -282,7 +291,8 @@ timer fail-pings on it.
 
 ## 12. Move the floating IP
 
-Only after steps 9 to 11 are green and step 0 is decided.
+Only after steps 9 to 11 are green. The four public gateway routes stay live through the move: both
+front doors send them to the box's reader listener.
 
 12.1  Network → Floating IPs → the row for **203.101.226.191** (mapped to ausmt-test) → Actions →
       **Disassociate** → confirm.
@@ -364,18 +374,21 @@ the known WARNs. ausmt-test costs 125 SU a year until it is deleted, shut down o
 - **Retention:** the replica keeps the `AUSMT_PUBLISH_KEEP` newest complete builds (default 5, 1 to
   999, set on the sender), with current always among them. A build directory without a sidecar is an
   interrupted transfer; `doctor-serve.sh` names it and you delete it once no publish is running.
-- **Curators in phase one:** the tailnet policy grants `group:curators` port 8444 on the box, and on
-  the box 8444 is the gateway's loopback bind (`127.0.0.1:8444` in `deploy/compose.yaml`), so an
-  invited curator reaches nothing there. Either you decide to front the workbench on that port on the
-  box (`sudo tailscale serve --bg --https=8444 http://127.0.0.1:8443`; C48 D11 question 4), or
-  curator onboarding waits for the curate lift.
+- **Curators:** the tailnet policy grants `group:curators` port 443 on the curation host's tailnet
+  name (the box in phase one) and nothing else. That is how curators reach the workbench today:
+  `tailscale serve --bg https / http://127.0.0.1:8443` on the curation host publishes the portal
+  listener under its MagicDNS name (`deploy/README.md`), and the portal listener proxies `/gateway/*`
+  to the gateway. No new port or listener; 8444 is the gateway's loopback debug bind and is not
+  granted (C48 D7).
 
 ---
 
 ## 16. Lifting curate
 
-When the RAM and vCPU amendment is in place, the curation role moves to **ausmt-curate** (no floating
+The curation role moves to **ausmt-curate** (m3.medium, which holds the build, C48 D3; no floating
 IP, no security group that admits inbound traffic, `default` included; `tag:ausmt-curate`) and the box
 retires. The order and what moves are in
 `maintainer/C48-NectarTopology.md` D10; the publish contract does not change, only the sender's host
-and `AUSMT_PUBLISH_TARGET` moving with it.
+and `AUSMT_PUBLISH_TARGET` moving with it. The public gateway routes move with the curation role: set
+`AUSMT_GATEWAY_UPSTREAM` in ausmt-serve's `deploy/.env` to ausmt-curate's reader listener and re-run
+`provision-serve.sh`.

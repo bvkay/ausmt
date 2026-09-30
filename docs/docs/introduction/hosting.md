@@ -44,10 +44,12 @@ A curator's rollback to an earlier build travels the same path, so the public si
 
 - The public reaches the serving host's web ports only, and through them the reader, the data files
   and the Add Survey contribution page with its four submission routes. The submission routes are
-  answered by the gateway, which runs on the curation host; how the serving host forwards them is an
-  open item in the design record. The curator workbench is never on the public name.
+  answered by the gateway, which runs on the curation host: the serving host's front door forwards
+  exactly those four over the tailnet to the curation host's public-subset listener, which checks them
+  against its own allowlist. The curator workbench is never on the public name.
+- The serving host reaches the curation host over the tailnet on that one listener port only.
 - The curation host reaches the serving host over the tailnet as two restricted accounts: one that
   can only receive builds, and one that can only read the masked access log for the usage statistics.
 - Curators join the tailnet by invitation (a passkey or institutional sign-in), reach only the
-  workbench port on the curation host, and then sign in to the workbench with a named key and a
-  second factor.
+  workbench, served over HTTPS on the curation host's tailnet name, and then sign in to it with a
+  named key and a second factor.

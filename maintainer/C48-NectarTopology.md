@@ -39,7 +39,7 @@ and masked edge log carry over unchanged.
 |---|---|---|
 | Public address | floating IP (the one ausmt-test holds today) | none |
 | Security group | 80/tcp and 443/tcp from anywhere, nothing else | nothing inbound from the internet |
-| Runs | the front-door Caddy (`deploy/frontdoor`) and the portal container, on one host, reader upstream `http://127.0.0.1:8445` | gateway, clamd, gw-runner, surveys-live, git-creds, the sqlite, reconcile and the build |
+| Runs | the front-door Caddy (`deploy/frontdoor`) and the portal container, on one host, reader upstream `http://127.0.0.1:8445`, gateway upstream the curation host's reader listener (D12) | gateway, clamd, gw-runner, surveys-live, git-creds, the sqlite, reconcile and the build |
 | Holds | the built tree on a Cinder volume at `/srv/ausmt` | everything the build and the curator workbench need |
 | Never holds | a git write credential, the gateway, the sqlite, the build cache | a public listener |
 | Flavour | m3.small first, m3.medium if serving needs it | m3.medium, or larger after a RAM amendment |
@@ -47,10 +47,10 @@ and masked edge log carry over unchanged.
 
 The serving host is the only machine on the internet and it holds nothing that is not already public
 (the served tree) plus the TLS key. A compromise of it yields the public tree and the certificate; it
-cannot push to the survey repository or read a submission, and it cannot reach the curation host over
-the tailnet (the tailnet policy grants the serving tag no inbound path anywhere,
-`deploy/nectar/acl-policy.hujson`). The instances also share the project's private network,
-`qld-data`, which the tailnet policy does not govern; that path is closed by the security groups. An
+cannot push to the survey repository or read a submission, and over the tailnet it reaches only the
+curation host's reader listener on port 8445, whose wall 2 admits the same public subset the internet
+reaches through the front door (D12; `deploy/nectar/acl-policy.hujson`). The instances also share
+the project's private network, `qld-data`, which the tailnet policy does not govern; that path is closed by the security groups. An
 OpenStack `default` group normally admits all ingress from its own members, so neither host carries
 `default` or any group with a same-group ingress rule (runbook 3.1). The rules of the project's
 `default` group are not in the D1 facts and are to be read in the dashboard. The curation host has no
@@ -61,7 +61,8 @@ never start the gateway profile (`deploy/tests/test_cloud_init_serve.py` pins bo
 
 ## D3. Quota and SU arithmetic
 
-All figures below are the D1 facts added up; nothing is estimated.
+All figures below are the D1 facts added up, and the build memory read from two build reports;
+nothing is estimated.
 
 | Stage | Instances | vCPU | RAM | SU per year |
 |---|---|---|---|---|
@@ -86,10 +87,19 @@ Readings:
   (2.2G) stays on the curation host.
 * **m3.medium for both roles** spends the whole 8 vCPU / 16 GB quota and the whole 2,000 SU budget in
   one year, and it only fits once ausmt-test is deleted.
-* **A curation host larger than m3.medium** (m3.large) does not fit the 8 vCPU / 16 GB quota beside
-  any serving host: that is the RAM and vCPU amendment. At 2,500 SU a year it spends the 2,000 SU
-  budget in at most 9.6 months counted from a full budget; ausmt-test has drawn SU since 21 Jul 2026
-  and the serve-first stage draws more before the lift, so the real runway is shorter. That is when
+* **Build memory (measured).** A cold and a warm build of the 15,265-station corpus, run on a macOS
+  host with 4 workers (`build_report.json` of each, engine `b362918`, surveys `7a1d756c`), recorded a
+  parent peak (`peak_rss_mib`) of 865.8 and 901.0 MiB and a largest single worker
+  (`peak_rss_child_max_mib`) of 403.2 and 224.5 MiB. The engine reads the footprint as the parent plus
+  the worker count times the largest worker: 865.8 + 4 × 403.2 = 2,478.6 MiB cold and
+  901.0 + 4 × 224.5 = 1,799.0 MiB warm, under a third of m3.medium's 8 GB. **An m3.medium holds the
+  build.** These are macOS figures; the same three fields in the box's own `build_report.json` give
+  the Linux figure. They cover the build alone: the curation host's other containers (the gateway,
+  clamd, gw-runner) are not in them.
+* **A curation host larger than m3.medium** (m3.large), for more build workers than the build needs,
+  does not fit the 8 vCPU / 16 GB quota beside any serving host: that is the RAM and vCPU amendment.
+  At 2,500 SU a year it spends the 2,000 SU budget in at most 9.6 months counted from a full budget;
+  ausmt-test has drawn SU since 21 Jul 2026 and the serve-first stage draws more before the lift, so the real runway is shorter. That is when
   the SU top-up in D9 applies.
 * **Idle is not free.** A shut-down instance still consumes SU; only deletion stops it. ausmt-test
   costs its 125 SU a year until it is deleted after the quiet period (D6).
@@ -182,7 +192,10 @@ Pins: `deploy/tests/test_publish_sh.py`, `test_receive_build_sh.py`, `test_publi
 (idempotent, root) build it: packages, Docker and compose, Tailscale, unattended upgrades, the volume
 mounted by label at `/srv/ausmt` with `nofail`, the tree and its ownership from `deploy/README.md`, the
 receiver and both gates, the two `.env` files (the reader upstream forced to loopback), the basemap,
-`make up`, then `install-frontdoor.sh`. The front-door doctor skips its two tailnet-peer legs on a
+`make up`, then `install-frontdoor.sh`. Provisioning also carries `AUSMT_GATEWAY_UPSTREAM` from
+`deploy/.env` into the front door's `.env` (D12). The GHCR images are public (an anonymous token got
+HTTP 200 on the `ghcr.io/bvkay/ausmt-portal` tags list, checked 2026-09-30), so the serving host holds
+no registry credential. The front-door doctor skips its two tailnet-peer legs on a
 loopback upstream; `deploy/nectar/doctor-serve.sh` reports the whole serve role in the doctor-box shape.
 
 The masked front-door log keeps flowing to the analytics fold on the curation host: the log account
@@ -197,14 +210,19 @@ The public name already resolves to 203.101.226.191, so the cutover moves the ad
 
 1. Copy the `caddy_data` volume from ausmt-test to ausmt-serve BEFORE the serving front door first
    starts, so the certificate travels and no ACME order is attempted for a name that does not yet
-   point at the new host. Then finish provisioning.
-2. Seed: the first publish from the box over the tailnet; `doctor-serve.sh` green except the gateway
-   WARN (D11, question 3).
+   point at the new host. Then finish provisioning, with `AUSMT_GATEWAY_UPSTREAM` naming the box's
+   reader listener (D12).
+2. Seed: the first publish from the box over the tailnet; `doctor-serve.sh` green, its gateway line
+   included.
 3. Check the serving host end to end on itself with `curl --resolve <name>:443:127.0.0.1`: the
-   certificate, the reader, `/data`, and the wall refusals.
+   certificate, the reader, `/data`, the wall refusals, and `GET /gateway/healthz` (a probe that
+   submits nothing) answering through to the box.
 4. Move the floating IP from ausmt-test to ausmt-serve in the dashboard (disassociate, associate).
 5. Repoint the box's log pull at the serving host, after a last pull from ausmt-test whose live file
    is set aside under a name the stats fold still reads (both front doors write the same file name).
+
+The four public gateway routes stay live through the move: before it ausmt-test sends them to the
+box's reader listener, and after it ausmt-serve sends them to the same listener (D12).
 
 **Rollback is moving the floating IP back.** ausmt-test is left running and untouched through a quiet
 period, still proxying to the box's reader listener, which keeps serving the box's own current. Its
@@ -218,9 +236,12 @@ Two more curators join with no new code in the gateway:
 
 1. **Tailnet invite**, signed in with a passkey or institutional single sign-on at the Tailscale login
    (the first factor, and the only way to the curation host at all).
-2. **`group:curators`** in the tailnet policy reaching the curation host's port 8444 only
-   (`deploy/nectar/acl-policy.hujson`). What answers there is D11 question 4; until it is decided a
-   curator reaches nothing.
+2. **`group:curators`** in the tailnet policy reaching the curation host's tailnet name on port 443
+   only (`deploy/nectar/acl-policy.hujson`). That is how curators reach the workbench today:
+   `tailscale serve --bg https / http://127.0.0.1:8443` on the curation host publishes the portal
+   listener under its MagicDNS name on 443 (`deploy/README.md`), and the portal listener proxies
+   `/gateway/*` to the gateway. No new port and no new listener; 8444 is the gateway's loopback debug
+   bind and is never granted.
 3. **A named entry in `AUSMT_CURATOR_KEYS`**, the key held in the shared vault, so every action is
    attributable.
 4. **TOTP enrolment** on the gateway (the second factor it already enforces).
@@ -242,8 +263,9 @@ Accepted by the owner, not built here:
 ## D9. The amendment to file
 
 * **Volume storage: 100 GB in QRIScloud.** Blocks the serving host (D3).
-* **RAM 16 to 32 GB and vCPU 8 to 16**, justified by the separate curation instance running the corpus
-  build (D3: m3.medium for both roles already fills the quota).
+* **RAM 16 to 32 GB and vCPU 8 to 16**, headroom for a curation instance larger than m3.medium
+  running the corpus build with more workers. The build fits m3.medium (D3, build memory), and
+  m3.medium for both roles already fills the quota (D3).
 * **An SU top-up only if the allocation runs past 12 months.**
 * **A second project member.**
 
@@ -256,42 +278,25 @@ build and its cache, the reconcile timer (now publishing), backups and the resto
 fold and the front-door log pull, the alert and actions timers, and the box's own portal (the curator
 workbench over the tailnet, and ausmt-test's upstream through the quiet period).
 
-**The lift, in order:** file the RAM amendment; create ausmt-curate (no floating IP, no security group
-that admits inbound traffic, `default` included; `tag:ausmt-curate`) and provision it with the full `deploy/README.md` checklist (gateway profile and
-the 10002 tree included); restore the sqlite from the newest backup through the restore-drill path;
-stop the box's reconcile, actions and backup timers so there is one writer and one publisher; enable
-them on ausmt-curate with `AUSMT_PUBLISH_TARGET` set; watch one publish land; retire the box. The
-curation host has no public address, so its outbound traffic (GitHub, GHCR, ClamAV updates, Tailscale)
-must leave through the project router. The D1 facts give one router but not its external gateway: check
-Network → Routers that it has an external gateway set and `qld-data` attached before the lift.
+**The lift, in order:** create ausmt-curate (m3.medium, D3; no floating IP, no security group that
+admits inbound traffic, `default` included; `tag:ausmt-curate`) and provision it with the full
+`deploy/README.md` checklist (gateway profile and the 10002 tree included, and the two `tailscale
+serve` publications: the reader port for the serving host's gateway routes, 443 for curators); restore
+the sqlite from the newest backup through the restore-drill path; stop the box's reconcile, actions and
+backup timers so there is one writer and one publisher; enable them on ausmt-curate with
+`AUSMT_PUBLISH_TARGET` set; watch one publish land; set `AUSMT_GATEWAY_UPSTREAM` in the serving host's
+`deploy/.env` to ausmt-curate's reader listener and re-run its provisioning; retire the box. The curation host has no
+public address, so its outbound traffic (GitHub, GHCR, ClamAV updates, Tailscale) must leave through
+the project router. The D1 facts give one router but not its external gateway: check Network → Routers
+that it has an external gateway set and `qld-data` attached before the lift.
 
 ## D11. Open questions
 
-1. **Build peak RSS at 15,000 stations.** m3.medium has 8 GB in total. `build_report.json` records
-   `peak_rss_mib` and `peak_rss_child_max_mib`; read them on the next box build before choosing the
-   curation flavour.
-2. **Per-file byte determinism.** How much `--link-dest` saves depends on how many files a rebuild
+1. **Per-file byte determinism.** How much `--link-dest` saves depends on how many files a rebuild
    writes byte-identical. A separate change makes the MTH5 tiers cache-reused, so unchanged station
    files keep their bytes across builds; after two publishes, `find builds/<ts> -type f -links +1 |
    wc -l` on the serving host counts the files the second build shares with the first.
-3. **The public submission routes have no upstream on the serving host.** The Add Survey flow is
-   public (C47 D3): `POST /gateway/submit`, `POST /gateway/request-key`, `GET /gateway/healthz` and
-   `GET /gateway/status/*` are proxied by the reader listener to the gateway container, and the serving
-   host runs no gateway, so after the IP move they answer 502 at the public name. `doctor-serve.sh`
-   WARNs on it every run. The structural option that keeps the rulings is a second front-door upstream
-   for exactly those four routes, over the tailnet to the curation host's reader listener (which
-   already proxies exactly those four to its gateway), with one ACL grant `tag:ausmt-serve` to
-   curate:8445. That changes wall 1 and its pins and needs a decision **before the floating IP moves**,
-   or the public contribution flow is down from cutover to the decision.
-4. **What curate:8444 serves.** On the box 8444 is the gateway's loopback debug bind; the workbench UI
-   is the portal's full listener (127.0.0.1:8443, `tailscale serve` on 443 today). If curators are to
-   reach the workbench UI on tailnet port 8444, the curation host fronts the full listener there
-   (`tailscale serve --bg --https=8444 http://127.0.0.1:8443`); if 8444 means the gateway alone they
-   get the API without the UI. The same holds in phase one: the policy grants curators `ausmt-box:8444`,
-   and on the box 8444 is bound to `127.0.0.1` only (`deploy/compose.yaml`), so an invited curator
-   reaches nothing until the owner runs that `tailscale serve` on the box or onboarding waits for the
-   lift (runbook 15).
-5. **Tailscale SSH and the gates.** The gates rely on Tailscale SSH running the login shell with `-c`.
+2. **Tailscale SSH and the gates.** The gates rely on Tailscale SSH running the login shell with `-c`.
    The runbook's first publish test from the box proves it on the real host (`receive-build.sh
    --current` answers, `sh` is refused). Two channels never start the login shell: the sftp subsystem
    and a port-forwarding channel. The `restrict` on the OpenSSH key does not apply on the Tailscale
@@ -300,16 +305,41 @@ Network → Routers that it has an external gateway set and `qld-data` attached 
    publish. If either succeeds, the two service accounts move to OpenSSH bound to the tailnet address,
    with `Match User publish,caddylog` setting `ForceCommand` to the gate, `AllowTcpForwarding no`,
    `X11Forwarding no`, `PermitTTY no` and no sftp subsystem, and leave the Tailscale `ssh` rules.
-6. **GHCR visibility.** If the images are private, the serving host needs a read-only registry
-   credential, the one credential it would hold; public images need none.
-7. **The box's reconcile prune.** `reconcile.sh` prunes stale builds on entry as the operator, and the
+3. **The box's reconcile prune.** `reconcile.sh` prunes stale builds on entry as the operator, and the
    build directories belong to uid 10001 with no group write, so on the box that prune can only remove
    what the operator owns. Not verified on the box; the Makefile's in-container prune is unaffected.
+
+## D12. Decision: the public gateway routes follow the curation host
+
+The Add Survey flow is public (C47 D3): `POST /gateway/submit`, `POST /gateway/request-key`,
+`GET /gateway/healthz` and `GET /gateway/status/*`. The serving host runs no gateway, so the front door
+gives exactly those four routes their own upstream, `AUSMT_GATEWAY_UPSTREAM`. On the serving host it
+names the curation host's reader listener over the tailnet: while the box curates, the box's MagicDNS
+name and tailscale-serve reader port, the value ausmt-test's front door uses as its reader upstream.
+That listener's wall 2 already proxies exactly those four routes to its gateway and refuses every other
+`/gateway` path, so the curation host keeps its own allowlist. Wall 1 allows exactly what it allowed
+before; only the destination of the four routes changes.
+
+* **Default.** Unset or empty, `install-frontdoor.sh` renders the variable as the reader upstream, so
+  the box's front-door deployment adapts to the identical config.
+  `deploy/tests/test_install_frontdoor_reload_sh.py` pins that identity with `caddy adapt`, and pins
+  that a set value changes the upstream of exactly four routes and nothing else;
+  `deploy/tests/test_frontdoor_bridge.py` drives the split against a real Caddy.
+* **Reach.** The tailnet policy grants `tag:ausmt-serve` the curation host's port 8445 and no other
+  port (`deploy/nectar/acl-policy.hujson`).
+* **Cutover.** The routes stay live through the floating-IP move (D6).
+* **Failure.** With the curation host unreachable the four routes answer an error at the public name
+  and readers are unaffected. `doctor-serve.sh` probes `GET /gateway/healthz` through the front door
+  and reports WARN, never FAIL, when it does not answer 200.
+* **The lift** moves the variable to ausmt-curate's reader listener (D10).
 
 ## Provenance
 
 Owner rulings 2026-09-30 (two roles and their contents, flavours, sequence, tailnet as identity layer,
-curator layering, floating-IP cutover and rollback, the amendment, the continuity items). Facts from
+curator layering, floating-IP cutover and rollback, the amendment, the continuity items). Architect
+rulings 2026-09-30 (the public gateway routes' upstream, curator access on 443, GHCR visibility, the
+build memory reading). Build memory from the cold and warm `build_report.json` of a 2026-09-30 macOS
+build. Facts from
 the owner's Nectar dashboard and the ARDC support pages, checked 2026-09-30; box measurements by the
 owner 2026-09-30 and 2026-09-14. Deliverables: the sender and receiver, the two gates, `make publish`,
 the reconcile publish step and status field, the publish alert, `deploy/nectar/` (cloud-init,

@@ -1354,10 +1354,13 @@ the receiver and an rsync that receives into `site-data/builds`, and nothing els
 reads). `deploy/nectar/acl-policy.hujson` holds the tailnet policy entries to merge, and
 `sh deploy/nectar/doctor-serve.sh` is the serve role's one-screen doctor.
 
-**Known gap.** The four public gateway routes of the Add Survey flow are proxied by the reader
-listener to a gateway container, and ausmt-serve runs none, so they answer 502 there;
-`doctor-serve.sh` WARNs on every run. C48 (open questions) sets out the options; decide before the
-public address moves.
+**The public gateway routes.** The four public gateway routes of the Add Survey flow need a gateway,
+and ausmt-serve runs none, so its front door sends them to the curation host's reader listener over
+the tailnet (`AUSMT_GATEWAY_UPSTREAM`, set in ausmt-serve's `deploy/.env` and copied into
+`deploy/frontdoor/.env` by provisioning), whose own wall 2 proxies exactly those four to its gateway.
+Left empty, as on the box, the installer renders the reader upstream in its place and the front door
+config is unchanged. `doctor-serve.sh` probes `GET /gateway/healthz` through the front door and WARNs
+when the curation host does not answer; readers are unaffected (C48 D12).
 
 ---
 
