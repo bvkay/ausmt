@@ -32,7 +32,14 @@ publish a download route under an identifier nothing assigned. Without the flag 
 and the output is byte-identical to a build from before the flag existed.
 
 1. Parse arguments; create the output directories; resolve the survey validator (`AUSMT_VALIDATOR_PATH`
-   or the documented search path). An unresolvable validator aborts the build.
+   or the documented search path). An unresolvable validator aborts the build. The validator is
+   `AUSMT_VALIDATOR_PATH` when set (a directory holding `validate_survey.py`, or the file itself;
+   unresolvable is a hard error, never a fall-through), else the first
+   `ausmt-surveys/_validation/validate_survey.py` under `engine/extract/` or one of its five nearest
+   parent directories, and the log line `survey validator: ...` names the one chosen; the container
+   pins `/srv/surveys/_validation`, and a host build must pin the variable to the validator of the
+   surveys checkout it builds, because the walk adopts whatever `ausmt-surveys` clone sits above the
+   engine and a stale one skips packages the current validator accepts.
 2. Discover survey packages: one folder per survey containing `survey.yaml` and
    `transfer_functions/edi|emtfxml|mth5/`. Folders prefixed `_` are skipped; a package that fails
    validation is skipped and reported.
