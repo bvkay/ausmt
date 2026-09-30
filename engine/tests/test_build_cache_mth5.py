@@ -735,6 +735,31 @@ def test_compose_default_cap_matches_the_engine_default():
     assert int(m.group(1)) == cache_mod.CACHE_MAX_MB_DEFAULT
 
 
+CAP_COPIES = (
+    ("deploy/compose.yaml", r"CACHE_MAX_MB_DEFAULT=(\d+)"),
+    ("deploy/.env.example", r"Default (\d+): the cache holds"),
+    ("deploy/.env.example", r"# AUSMT_CACHE_MAX_MB=(\d+)"),
+    ("deploy/README.md", r"`AUSMT_CACHE_MAX_MB` \(default (\d+)\)"),
+    ("docs/docs/developer/build-lifecycle.md", r"`AUSMT_CACHE_MAX_MB` \(default (\d+)\)"),
+    ("maintainer/C33-OperatorDocsDesign.md", r"`AUSMT_CACHE_MAX_MB`: C18 build-cache cap \(default (\d+)"),
+    ("maintainer/C18-BuildCacheDesign.md", r"`CACHE_MAX_MB_DEFAULT = (\d+)`"),
+)
+
+
+@pytest.mark.parametrize("rel,pattern", CAP_COPIES)
+def test_every_written_copy_of_the_default_cap_matches_the_engine_default(rel, pattern):
+    """FAILS IF: an operator page, the env template or the design states a default cap other than
+    cache.py's. The operator sizes the data volume from these pages, so a stale copy understates
+    what the cache may hold on disk."""
+    path = REPO.parent / rel
+    if not (REPO.parent / "deploy").is_dir():
+        pytest.skip("deploy/ is not shipped in this tree")
+    assert path.is_file(), f"{rel} is gone; update CAP_COPIES"
+    found = [int(v) for v in re.findall(pattern, path.read_text(encoding="utf-8"))]
+    assert found, f"{rel} no longer states the default cap as /{pattern}/"
+    assert set(found) == {cache_mod.CACHE_MAX_MB_DEFAULT}, (rel, found)
+
+
 # ---- hardlink discipline, replayed diagnostics, inputs that are deliberately not key parts --------
 
 FILE_KINDS = ("station_h5", "survey_h5")

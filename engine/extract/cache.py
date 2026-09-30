@@ -60,7 +60,7 @@ from pathlib import Path
 # Prune policy defaults - operator-tunable, single-sourced here. Adjudicated v1 policy:
 # an mtime-age window + a size cap, oldest-first. The design's "20 builds" window is
 # NOT implemented (the cache keeps no per-build ledger); age is the operator-meaningful bound.
-CACHE_MAX_MB_DEFAULT = 8192          # AUSMT_CACHE_MAX_MB overrides (size cap, oldest-first eviction)
+CACHE_MAX_MB_DEFAULT = 16384         # AUSMT_CACHE_MAX_MB overrides (size cap, oldest-first eviction)
 PRUNE_MAX_AGE_DAYS = 90              # drop entries untouched for this many days
 
 CACHE_MODES = ("rw", "ro", "refresh")
