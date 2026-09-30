@@ -145,6 +145,34 @@ def test_mth5_unit_releases_metadata_classes(tmp_path):
         f"(after first unit: {classes_after_first}; per unit: {classes_after})")
 
 
+def test_mth5_units_leave_the_library_field_tree_memo_alone(tmp_path, monkeypatch):
+    """The pinned mt_metadata bounds its own field-tree memo: kujaku11/mt_metadata#289 holds the memo's
+    class keys weakly (97c09616) and reuses the class built for an added field (6a361343), so the
+    classes mth5 creates per group do not accumulate. An engine that empties the memo after every
+    MTH5 unit only forces every static class back through mt_metadata's on-disk field cache.
+    Runs a tier-1 unit, a tier-2 bundle and the MTH5-input reader over the sample EDIs with
+    clear_field_caches counted, and FAILS if the engine called it at all."""
+    from mt_metadata.base import pydantic_helpers as ph  # noqa: PLC0415
+    import _mth5 as m5  # noqa: PLC0415
+    calls = []
+    real_clear = ph.clear_field_caches
+
+    def counted_clear():
+        calls.append(1)
+        real_clear()
+
+    monkeypatch.setattr(ph, "clear_field_caches", counted_clear)
+    out = tmp_path / "h5"
+    out.mkdir()
+    units = [(p, {"id": p.stem}) for p in SAMPLE_EDIS]
+    assert bp._write_tf_mth5(units[:1], "memo-survey", "Memo Survey", out / "one.h5") == 1
+    assert bp._write_tf_mth5(units, "memo-survey", "Memo Survey", out / "bundle-tf.h5") == len(units)
+    assert sum(1 for _ in m5.records_and_components(out / "bundle-tf.h5")) == len(units)
+    assert not calls, (
+        f"the engine emptied mt_metadata's field-tree memo {len(calls)} times over one station unit, "
+        f"one bundle and one read; the pinned library bounds that memo itself")
+
+
 # --------------------------------------------------------------------------- the end-to-end bound
 
 def _run_build_measured(surveys: Path, out: Path, log: Path, workers: str | None = None) -> tuple[int, float]:
