@@ -796,3 +796,27 @@ def test_acpi_unknown_when_the_interrupts_file_is_absent(tmp_path):
     assert kernel["acpi_interrupts"] is None and kernel["acpi_per_min"] is None, kernel
     assert not (tree["state"] / "acpi-sample.json").exists(), "no reading must write no sample"
     assert "storming" not in _body(tree), _body(tree)
+
+
+def test_a_failed_publish_to_the_serving_replica_pings_fail(tmp_path):
+    """reconcile-status.json with publish=failed: the box serves the right build and the public
+    replica does not. The dead-man ping must say so with the sender's own words, whatever the
+    action was. FAILS IF a noop pass that failed to publish reads as healthy."""
+    tree = _make_tree(tmp_path)
+    (tree["state"] / "reconcile-status.json").write_text(
+        '{"last_run":"%s","action":"noop","publish":"failed",'
+        '"publish_detail":"publish: FAILED at step rsync-build: connection refused"}'
+        % _now_iso(), encoding="utf-8")
+    r = _run(tree)
+    _assert_fail_ping(tree, r, "publish=failed")
+    assert "rsync-build" in _curl_calls(tree)[0]
+
+
+def test_a_skipped_or_ok_publish_does_not_ping_fail(tmp_path):
+    for state in ("ok", "skipped"):
+        tree = _make_tree(tmp_path / state)
+        (tree["state"] / "reconcile-status.json").write_text(
+            '{"last_run":"%s","action":"noop","publish":"%s"}' % (_now_iso(), state),
+            encoding="utf-8")
+        r = _run(tree)
+        assert "publish=" not in " ".join(_curl_calls(tree)), (state, _curl_calls(tree))

@@ -618,3 +618,21 @@ def test_tailnet_path_direct_passes_and_derp_fails(tmp_path):
     assert "DERP" in line[0] and "restart tailscaled" in line[0], \
         f"the FAIL must name the relay and the remediation: {line[0]}"
     assert r2.returncode != 0, "a relayed path must make the doctor exit non-zero"
+
+
+def test_a_loopback_upstream_skips_the_tailnet_peer_legs(tmp_path):
+    """On the serving replica the front door and the reader share a host, so the upstream is
+    http://127.0.0.1:8445 and there is no box peer on the tailnet to find or to ping. Both tailnet
+    legs report that they were skipped and why; the run stays green. FAILS IF either leg FAILs or
+    WARNs on a loopback upstream, or the skip does not say loopback."""
+    cf = _caddyfile(tmp_path)
+    env = _hash_env(tmp_path, cf)
+    envf = Path(env["AUSMT_DOCTOR_ENV"])
+    envf.write_text(envf.read_text(encoding="utf-8").replace(
+        "http://ausmt-box:8445", "http://127.0.0.1:8445"), encoding="utf-8")
+    r = _run(env, "report")
+    lines = [ln for ln in r.stdout.splitlines() if ln.split(" ", 1)[-1].startswith(("tailscale:", "tailnet-path:"))]
+    assert len(lines) == 2, r.stdout
+    for ln in lines:
+        assert ln.startswith("PASS ") and "loopback" in ln, ln
+    assert r.returncode == 0, r.stdout
