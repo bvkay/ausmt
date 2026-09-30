@@ -249,15 +249,55 @@ def test_a_failing_receiver_exits_non_zero_naming_the_step(tmp_path):
     assert "receive" in r.stderr and "step" in r.stderr, r.stderr
 
 
-def test_a_build_the_receiver_already_serves_is_a_no_op_success(tmp_path):
-    """Idempotent: when the receiver's current already is <ts> nothing is hashed or sent. FAILS IF
-    rsync runs, the receiver is asked to swap, or the sidecar is rewritten."""
+def test_a_build_the_receiver_already_serves_is_confirmed_not_resent(tmp_path):
+    """When the receiver's current already is <ts> nothing is hashed or sent, but the receiver is
+    still asked to receive <ts>: that is a no-op when published.json agrees, and the repair when a
+    receive was cut off between its swap and its record. FAILS IF rsync runs, the sidecar is
+    rewritten, or the receive step is skipped."""
     tree = _tree(tmp_path)
     r = _run(tree, REMOTE_CURRENT=TS)
     assert r.returncode == 0, r.stderr
     calls = _calls(tree)
-    assert [c[0] for c in calls] == ["ssh"], calls
+    assert [c[0] for c in calls] == ["ssh", "ssh"], calls
+    assert calls[-1][1:] == [TARGET, "receive-build.sh", "--keep", "5", TS], calls
     assert not (tree["builds"] / f"{TS}.sha256").exists()
+
+
+def test_a_failed_confirm_of_a_build_already_served_is_a_failure(tmp_path):
+    tree = _tree(tmp_path)
+    r = _run(tree, REMOTE_CURRENT=TS, RECEIVE_FAIL="1")
+    assert r.returncode != 0
+    assert "receive" in r.stderr and "step" in r.stderr, r.stderr
+    assert [c[0] for c in _calls(tree)] == ["ssh", "ssh"]
+
+
+def test_a_failed_receive_does_not_claim_the_replica_is_unchanged(tmp_path):
+    """A receive cut off after its swap has moved current. FAILS IF the sender says current is
+    unchanged, or does not say how to ask the replica what it serves."""
+    tree = _tree(tmp_path)
+    r = _run(tree, RECEIVE_FAIL="1")
+    assert r.returncode != 0
+    assert "unchanged" not in r.stderr, r.stderr
+    assert "receive-build.sh --current" in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize("keep", ["00", "007", "1000", "99999999999999999999"])
+def test_a_keep_depth_outside_1_to_999_is_refused(tmp_path, keep):
+    tree = _tree(tmp_path)
+    r = _run(tree, AUSMT_PUBLISH_KEEP=keep)
+    assert r.returncode != 0, keep
+    assert "AUSMT_PUBLISH_KEEP" in r.stderr
+    assert _calls(tree) == []
+
+
+def test_the_default_ssh_gives_up_on_a_silent_replica():
+    """The default ssh (also rsync's -e) is the only bound on a replica that stops answering
+    mid-publish, and reconcile holds its lock for as long as the publish runs. FAILS IF the default
+    command loses batch mode, the connect timeout or the keepalive that ends a dead session."""
+    text = _SCRIPT.read_text(encoding="utf-8")
+    line = next(ln for ln in text.splitlines() if ln.startswith('SSH="${AUSMT_PUBLISH_SSH:-'))
+    for opt in ("BatchMode=yes", "ConnectTimeout=", "ServerAliveInterval=", "ServerAliveCountMax="):
+        assert opt in line, (opt, line)
 
 
 def test_an_unexpected_answer_from_the_receiver_is_refused(tmp_path):

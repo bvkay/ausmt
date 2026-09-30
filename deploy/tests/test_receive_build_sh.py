@@ -263,3 +263,159 @@ def test_a_refused_receive_prunes_nothing(tmp_path):
     r = _run(tree, "--keep", "1", NEW)
     _assert_untouched(tree, r)
     assert sorted(p.name for p in tree["builds"].iterdir()) == before
+
+
+def _shim_dir(tmp_path: Path) -> Path:
+    d = tmp_path / "shim-bin"
+    d.mkdir(exist_ok=True)
+    return d
+
+
+def _install(shim_dir: Path, name: str, body: str) -> None:
+    p = shim_dir / name
+    p.write_text(body, encoding="utf-8")
+    p.chmod(0o755)
+
+
+def _with_shims(tree: dict, shim_dir: Path) -> None:
+    tree["env"]["PATH"] = str(shim_dir) + os.pathsep + tree["env"]["PATH"]
+
+
+def test_the_prune_keeps_the_build_current_names_when_the_prune_runs(tmp_path):
+    """A second writer repoints current at an old build between this receive's swap and its prune
+    (the `date` of the record step stands in for it). FAILS IF the prune deletes the build current
+    names at that moment, which leaves the public site serving a dangling link."""
+    tree = _tree(tmp_path)
+    stamps = _stamps(4)
+    for ts in stamps:
+        _add_build(tree["builds"], ts)
+    shims = _shim_dir(tmp_path)
+    _install(shims, "date",
+             "#!/bin/sh\n"
+             'rm -f "$SHIM_SITE/current"\n'
+             'ln -s "builds/$SHIM_REPOINT" "$SHIM_SITE/current"\n'
+             f'exec {shutil.which("date")} "$@"\n')
+    _with_shims(tree, shims)
+    r = _run(tree, "--keep", "2", NEW, SHIM_SITE=str(tree["site"]), SHIM_REPOINT=stamps[0])
+    assert _current(tree) == f"builds/{stamps[0]}"
+    assert (tree["builds"] / stamps[0]).is_dir(), r.stdout + r.stderr
+    assert (tree["builds"] / f"{stamps[0]}.sha256").is_file()
+    assert not (tree["builds"] / stamps[1]).exists(), "the prune must still age out the rest"
+
+
+def test_current_names_nothing_when_its_build_is_gone(tmp_path):
+    """A current whose build directory is missing serves nothing. FAILS IF --current still names it,
+    which tells the sender the replica already serves that build and nothing is ever re-sent."""
+    tree = _tree(tmp_path)
+    shutil.rmtree(tree["builds"] / OLD)
+    r = _run(tree, "--current")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == ""
+
+
+def test_a_dangling_current_is_replaced_by_a_good_build(tmp_path):
+    tree = _tree(tmp_path)
+    shutil.rmtree(tree["builds"] / OLD)
+    r = _run(tree, NEW)
+    assert r.returncode == 0, r.stderr
+    assert _current(tree) == f"builds/{NEW}"
+
+
+@pytest.mark.parametrize("keep", ["00", "007", "1000", "99999999999999999999"])
+def test_a_keep_depth_outside_1_to_999_is_refused(tmp_path, keep):
+    """A leading zero or a depth the shell cannot compare turns the prune's keep test into an error,
+    and every complete build but the received one is deleted. FAILS IF such a depth is accepted from
+    the flag or from the environment."""
+    tree = _tree(tmp_path)
+    for ts in _stamps(3):
+        _add_build(tree["builds"], ts)
+    before = sorted(p.name for p in tree["builds"].iterdir())
+    for r in (_run(tree, "--keep", keep, NEW), _run(tree, NEW, AUSMT_PUBLISH_KEEP=keep)):
+        assert r.returncode == 2, (keep, r.returncode, r.stderr)
+        assert _current(tree) == f"builds/{OLD}"
+        assert sorted(p.name for p in tree["builds"].iterdir()) == before
+
+
+_FLOCK_SHIM = """#!%s
+import fcntl, sys, time
+args = sys.argv[1:]
+wait = None
+if args[:1] == ["-w"]:
+    wait, args = float(args[1]), args[2:]
+fd = int(args[0])
+deadline = None if wait is None else time.monotonic() + wait
+while True:
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        break
+    except BlockingIOError:
+        if deadline is not None and time.monotonic() > deadline:
+            sys.exit(1)
+        time.sleep(0.05)
+"""
+
+
+def test_a_receive_waits_for_the_receive_lock(tmp_path):
+    """Two receives never overlap: a second one waits on site-data/.receive.lock before it verifies,
+    swaps or prunes. flock(1) is a shim on fcntl.flock so the test runs where util-linux does not.
+    FAILS IF a receive swaps current while another holds the lock."""
+    import fcntl
+    import time
+    tree = _tree(tmp_path)
+    shims = _shim_dir(tmp_path)
+    _install(shims, "flock", _FLOCK_SHIM % sys.executable)
+    _with_shims(tree, shims)
+    with open(tree["site"] / ".receive.lock", "a") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        proc = subprocess.Popen([_SH, str(_SCRIPT), NEW], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, env=tree["env"])
+        try:
+            time.sleep(1.5)
+            assert proc.poll() is None, "the receive must wait while the lock is held"
+            assert _current(tree) == f"builds/{OLD}"
+        finally:
+            fcntl.flock(held, fcntl.LOCK_UN)
+        out, err = proc.communicate(timeout=60)
+    assert proc.returncode == 0, err
+    assert _current(tree) == f"builds/{NEW}"
+
+
+def test_current_is_never_replaced_by_ln_force(tmp_path):
+    """ln -sfn unlinks current before it links the new target, a window in which Caddy serves 404s.
+    ln is a shim that records its argv. FAILS IF ln is ever run with -f or -n, or ever aimed at
+    current itself rather than at a temporary name that is then renamed over it."""
+    tree = _tree(tmp_path)
+    shims = _shim_dir(tmp_path)
+    log = tmp_path / "ln.log"
+    _install(shims, "ln",
+             "#!/bin/sh\n"
+             '{ for a in "$@"; do printf \'%s\\037\' "$a"; done; printf \'\\n\'; } >> "$SHIM_LN_LOG"\n'
+             f'exec {shutil.which("ln")} "$@"\n')
+    _with_shims(tree, shims)
+    r = _run(tree, NEW, SHIM_LN_LOG=str(log))
+    assert r.returncode == 0, r.stderr
+    assert _current(tree) == f"builds/{NEW}"
+    calls = [line.rstrip("\x1f").split("\x1f") for line in log.read_text().splitlines()]
+    assert calls, "the swap must create its temporary link with ln"
+    current = str(tree["site"] / "current")
+    for argv in calls:
+        flags = "".join(a[1:] for a in argv if a.startswith("-") and not a.startswith("--"))
+        assert "f" not in flags and "n" not in flags, argv
+        assert argv[-1] != current, argv
+
+
+def test_a_failed_record_rename_is_a_failure(tmp_path):
+    """FAILS IF the receiver reports published.json recorded, and exits 0, when the rename that
+    puts it in place failed."""
+    tree = _tree(tmp_path)
+    shims = _shim_dir(tmp_path)
+    _install(shims, "mv",
+             "#!/bin/sh\n"
+             'for a in "$@"; do last="$a"; done\n'
+             'case "$last" in */published.json) echo "mv: cannot move" >&2; exit 1 ;; esac\n'
+             f'exec {shutil.which("mv")} "$@"\n')
+    _with_shims(tree, shims)
+    r = _run(tree, NEW)
+    assert r.returncode != 0
+    assert "published.json recorded" not in r.stdout
+    assert _published(tree) is None

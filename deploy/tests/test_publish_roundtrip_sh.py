@@ -122,8 +122,24 @@ def test_two_publishes_swap_the_replica_and_link_what_did_not_change(tmp_path):
     r = _publish(t)
     assert r.returncode == 0, r.stdout + r.stderr
     calls = t["log"].read_text(encoding="utf-8").splitlines()
-    assert len(calls) == 1 and "receive-build.sh --current" in calls[0], calls
+    assert len(calls) == 2 and "receive-build.sh --current" in calls[0], calls
+    assert f"receive-build.sh --keep 5 {SECOND}" in calls[1], calls
     assert "nothing to send" in r.stdout
+
+
+def test_a_receive_cut_off_after_its_swap_is_repaired_by_the_next_publish(tmp_path):
+    """The replica swapped current and then lost the session before recording published.json. FAILS
+    IF the next publish sees current and stops there, which leaves published.json stale for good."""
+    t = _setup(tmp_path)
+    b1 = t["local"] / "site-data" / "builds" / FIRST
+    _write(b1, {"build.json": b'{"build_id": "bid-1"}\n', "index.html": b"one\n"})
+    _serve(t, FIRST)
+    assert _publish(t).returncode == 0
+    rsite = t["replica"] / "site-data"
+    (rsite / "published.json").unlink()
+    r = _publish(t)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert json.loads((rsite / "published.json").read_text())["ts"] == FIRST
 
 
 def test_a_build_altered_on_the_replica_after_transfer_is_never_served(tmp_path):
