@@ -52,7 +52,9 @@ gives. Two consequences:
 **When PyPI carries it.** Replace the commit with `mt_metadata==1.0.11` (or the first release
 carrying #289) in `../requirements-mtmetadata.txt`, `requirements-mtmetadata-lock.txt`,
 `environment.yml` and `environment-lock.yml` together, and check that the release reports the
-version it is named for. Then re-read mt_metadata's `information.py` and `define_measurement.py` and
+version it is named for. `pip freeze`, `mt_metadata.__version__` and the served
+`mt_metadata_version` keys then read what that release declares, so they tell it apart from PyPI's
+1.0.10 again. Then re-read mt_metadata's `information.py` and `define_measurement.py` and
 move `extract/edi_preflight.py`'s `MIRRORED_MT_METADATA` to the new version
 (`tests/test_edi_preflight.py` fails until it matches), and update the version comment above
 `requires-python` in `../pyproject.toml`.
@@ -65,9 +67,10 @@ move `extract/edi_preflight.py`'s `MIRRORED_MT_METADATA` to the new version
   (kujaku11/mt_metadata#289, commits 97c09616 and 6a361343), so the MTH5 arm of a build stays flat
   without the engine emptying the memo. A mt_metadata without those commits leaks about 7.6 MiB per
   served station. The engine reads the memo's type rather than the version string
-  (`extract/_mth5.py`, `field_tree_memo_mode`): on a strong-keyed memo it prints a `[mth5] WARN`
-  line at build start and empties the memo after every station-sized MTH5 unit, which bounds the
-  build again. `tests/test_build_memory.py` pins both arms, and
+  (`extract/_mth5.py`, `field_tree_memo_mode`): on the plain class-keyed dict such a library keeps
+  it prints a `[mth5] WARN` line at build start and empties the memo after every station-sized MTH5
+  unit, which bounds the build again. On the pinned weak-keyed memo, and on a memo of any other type,
+  it does neither. `tests/test_build_memory.py` pins both arms, and
   `test_pinned_library_holds_the_field_tree_memo_weakly` fails on an env that got PyPI's 1.0.10.
 
 ## ABI history (the important correction)

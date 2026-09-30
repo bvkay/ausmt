@@ -51,10 +51,11 @@ def field_tree_memo_mode() -> str:
 
     mth5 builds a pydantic model class per group it opens and to_dict memoises a field tree per class.
     "library": the memo holds its class keys weakly (kujaku11/mt_metadata#289), so it stays bounded
-    without the engine. "engine": a strong-keyed memo that pins every per-group class, about 7.6 MiB
-    per served station, so the engine must empty it after every station-sized MTH5 unit. "absent": a
-    layout with no such memo or no clear_field_caches. Read from the memo itself, never the version
-    string: PyPI's 1.0.10 and the pinned v1.0.11 commit both report 1.0.10."""
+    without the engine. "engine": the pre-#289 plain class-keyed dict, which pins every per-group
+    class, about 7.6 MiB per served station, so the engine must empty it after every station-sized
+    MTH5 unit. "absent": no such memo, no clear_field_caches, or a memo of any other type, which is
+    the library's own design and is left alone. Read from the memo itself, never the version string:
+    PyPI's 1.0.10 and the pinned v1.0.11 commit both report 1.0.10."""
     try:
         from mt_metadata.base import pydantic_helpers as ph  # noqa: PLC0415
     except Exception:  # noqa: BLE001  (a different mt_metadata layout: no memo)
@@ -62,7 +63,7 @@ def field_tree_memo_mode() -> str:
     memo = getattr(ph, "_FIELDS_TREE_CACHE", None)
     if isinstance(memo, weakref.WeakKeyDictionary):
         return "library"
-    if memo is not None and callable(getattr(ph, "clear_field_caches", None)):
+    if type(memo) is dict and callable(getattr(ph, "clear_field_caches", None)):
         return "engine"
     return "absent"
 
