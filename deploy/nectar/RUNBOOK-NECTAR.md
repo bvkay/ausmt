@@ -400,13 +400,34 @@ timer fail-pings on it.
 ## 12. Move the floating IP
 
 Only after steps 9 to 11 are green. The four public gateway routes stay live through the move: both
-front doors send them to the box's reader listener.
+front doors send them to the box's reader listener. **The move has a gap:** between 12.2 and 12.3 the
+public name answers nothing, for about a minute, and an Add Survey upload in flight is cut. Pick a
+quiet hour.
 
-12.1  Network → Floating IPs → the row for **203.101.226.191** (mapped to ausmt-test) → Actions →
+12.1  Before the move, the log account. The box's pull reads ausmt-test's log as `caddylog`, and
+      Caddy creates its log files mode 0600 unless told otherwise, which masks a `caddylog` ACL out.
+      On ausmt-test (`ssh ubuntu@ausmt-vps`):
+```sh
+sudo getfacl -p /var/log/caddy/access-frontdoor.json
+```
+      Expect a `user:caddylog:r--` line with no `#effective:---` beside it. If the line is missing or
+      its effective right is `---`, the box's pull has been reading nothing from ausmt-test: note the
+      gap (the box's `ausmt-frontdoor-logs` journal shows when it began), then grant the read on the
+      files as they stand, which also recomputes the mask, so the remaining pulls carry the log:
+```sh
+sudo setfacl -m u:caddylog:r /var/log/caddy/access-frontdoor*.json
+```
+      ausmt-serve's front door writes its log files mode 0640, so the default ACL provisioning sets
+      is effective there, and its doctor checks that `caddylog` can read the live log. Then, on the
+      box, pull from ausmt-test now, while its tailnet path is certain:
+```sh
+sudo systemctl start ausmt-frontdoor-logs.service
+```
+12.2  Network → Floating IPs → the row for **203.101.226.191** (mapped to ausmt-test) → Actions →
       **Disassociate** → confirm.
-12.2  Same row → Actions → **Associate** → Port to be associated: the `ausmt-serve` port
+12.3  Same row → Actions → **Associate** → Port to be associated: the `ausmt-serve` port
       (10.255.x.x on qld-data) → **Associate**.
-12.3  From any machine off the tailnet, send a request only this check makes:
+12.4  From any machine off the tailnet, send a request only this check makes:
 ```sh
 M=cutover-$(date +%s); echo $M
 curl -sSI "https://ausmt.auscope.org.au/?check=$M" | head -1        # HTTP/2 200
@@ -419,7 +440,7 @@ sudo grep -c "check=<the M printed above>" /var/log/caddy/access-frontdoor.json 
       current build under the same certificate), so only this log line proves the address moved. Then
       run the public checks of `deploy/frontdoor/RUNBOOK.md` step 9, and `sudo ausmt-doctor-serve` on
       ausmt-serve.
-12.4  Repoint the masked-log pull on the box. Both front doors write `access-frontdoor.json`, and the
+12.5  Repoint the masked-log pull on the box. Both front doors write `access-frontdoor.json`, and the
       box keeps one copy of each name, so the first pull from ausmt-serve would overwrite what
       ausmt-test logged since the last pull, before the daily stats fold has read it. On the box:
 ```sh
@@ -427,6 +448,9 @@ sudo systemctl start ausmt-frontdoor-logs.service      # a last pull from ausmt-
 cd "$AUSMT_DATA_DIR/logs/caddy"
 mv access-frontdoor.json access-frontdoor-ausmt-test.json   # still read by the fold, never overwritten
 ```
+      That last pull collects what ausmt-test logged between 12.1 and the move. ausmt-test now reaches
+      the tailnet through the router's SNAT (3.0); if the pull fails, only those minutes are missing,
+      because 12.1 already pulled the rest.
       Then set `AUSMT_FRONTDOOR_LOG_REMOTE=caddylog@ausmt-serve:` in `deploy/.env`, pull once, and
       check that `access-frontdoor.json` is back (it can only have come from ausmt-serve):
 ```sh
@@ -449,7 +473,7 @@ sudo docker compose -f <the checkout holding deploy/frontdoor>/deploy/frontdoor/
       While the address was away ausmt-test could not renew (the challenge reached ausmt-serve), and
       Caddy backs off between failed attempts; the restart makes it renew at once, now that the
       challenge reaches it, if its certificate is inside the window.
-13.2  Keep what ausmt-serve logged, as in 12.4 the other way round: pull once more, move
+13.2  Keep what ausmt-serve logged, as in 12.5 the other way round: pull once more, move
       `access-frontdoor.json` aside as `access-frontdoor-ausmt-serve.json`, then put the box's
       `AUSMT_FRONTDOOR_LOG_REMOTE` back to its ausmt-test value.
 13.3  Optional: comment out `AUSMT_PUBLISH_TARGET` on the box to stop feeding the replica.

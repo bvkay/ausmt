@@ -246,7 +246,10 @@ The masked front-door log keeps flowing to the analytics fold on the curation ho
 (`rrsync -ro /var/log/caddy`, the forced command of `deploy/frontdoor/RUNBOOK.md` 5.2, applied at the
 shell because Tailscale SSH never reads the key), and the box's `AUSMT_FRONTDOOR_LOG_REMOTE` moves to it
 at cutover. Over SFTP, outside its gate as for the publish account (D4), it can read world-readable
-files only.
+files only. Its read of the log rests on a default ACL on `/var/log/caddy`, which is effective only
+because the front-door Caddyfile writes its log files mode 0640: Caddy's default 0600 sets the ACL
+mask to nothing. The serve doctor checks that `caddylog` can read the live log, and the runbook
+checks ausmt-test's log the same way before the cutover (12.1), since it uses the same recipe.
 
 ## D6. Cutover and rollback
 
@@ -267,6 +270,8 @@ The public name already resolves to 203.101.226.191, so the cutover moves the ad
 4. Move the floating IP from ausmt-test to ausmt-serve in the dashboard (disassociate, associate).
 5. Repoint the box's log pull at the serving host, after a last pull from ausmt-test whose live file
    is set aside under a name the stats fold still reads (both front doors write the same file name).
+   A pull from ausmt-test just before the move, while its tailnet path is certain, leaves that last
+   pull only the minutes around the move to collect.
 
 The four public gateway routes stay live through the move: before it ausmt-test sends them to the
 box's reader listener, and after it ausmt-serve sends them to the same listener (D12).
