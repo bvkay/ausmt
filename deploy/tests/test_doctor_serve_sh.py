@@ -265,6 +265,31 @@ def test_a_build_directory_without_a_sidecar_warns(tmp_path):
     assert any("20260801T000000Z" in ln and "sidecar" in ln for ln in _lines(r, "WARN")), r.stdout
 
 
+_SHELLS = [s for s in (_SH, shutil.which("dash")) if s]
+
+
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root reads a mode-000 file, so unreadability cannot be staged")
+@pytest.mark.parametrize("shell", _SHELLS, ids=lambda s: Path(s).name)
+@pytest.mark.parametrize("which", ["AUSMT_DOCTOR_ENV", "AUSMT_DOCTOR_FRONTDOOR_ENV"])
+def test_an_unreadable_env_file_fails_by_name_and_points_at_sudo(tmp_path, shell, which):
+    """Provisioning writes both .env files root-only, and dash dies on the `.` of a file it cannot
+    read, so a doctor run without sudo must report that rather than abort before its first check.
+    FAILS IF the run stops short of its summary, exits zero, or the FAIL line names neither the
+    file nor sudo."""
+    data = _tree(tmp_path)
+    env = _env(tmp_path, data)
+    target = Path(env[which])
+    target.chmod(0)
+    try:
+        r = subprocess.run([shell, str(_DOCTOR)], capture_output=True, text=True, env=env)
+    finally:
+        target.chmod(0o600)
+    assert "RESULT: FAIL" in r.stdout, r.stdout + r.stderr
+    assert r.returncode != 0
+    assert any(str(target) in ln and "sudo" in ln for ln in _lines(r, "FAIL")), r.stdout
+
+
 def test_the_published_line_reports_age_and_lag(tmp_path):
     """published.json carries the receive time and the build's own timestamp names when it was
     built, so the line states how long ago the replica swapped and how long the publish took."""
