@@ -132,8 +132,8 @@ Steps 1 to 3 run while it is pending. Step 4 needs the volume, or the proof serv
      at the bootstrap address. You release both in step 5.4; the bootstrap address is never the
      public name's.
 3.3  Check first boot finished: `cloud-init status --wait` then `tailscale version`, `docker compose
-     version`. The last line of `/var/log/cloud-init-output.log` says the volume is not mounted yet;
-     that is expected.
+     version`. Near the end of `/var/log/cloud-init-output.log`, just before cloud-init's own
+     finished line, a line says the volume is not mounted yet; that is expected.
 
 ---
 
@@ -302,8 +302,8 @@ is in it with `sudo docker compose -f /srv/ausmt/code/deploy/frontdoor/compose.y
   tailscale-serve reader port). Provisioning copies it into `deploy/frontdoor/.env`.
 - `/srv/ausmt/code/deploy/frontdoor/.env`: `AUSMT_PUBLIC_NAME=ausmt.auscope.org.au`,
   `AUSMT_LEGACY_REDIRECT_NAME` exactly as ausmt-test has it, `AUSMT_ACME_EMAIL`, and
-  `AUSMT_DOCTOR_EXPECT_IP=203.101.226.191`. Leave `AUSMT_BOX_READER_UPSTREAM` as provisioning set it
-  (`http://127.0.0.1:8445`).
+  `AUSMT_DOCTOR_EXPECT_IP=203.101.226.191` (listed in `deploy/frontdoor/.env.example`). Leave
+  `AUSMT_BOX_READER_UPSTREAM` as provisioning set it (`http://127.0.0.1:8445`).
 
 ```sh
 sudo sh /srv/ausmt/code/deploy/nectar/provision-serve.sh     # now runs to the end

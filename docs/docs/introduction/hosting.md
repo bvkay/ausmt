@@ -9,7 +9,9 @@ the step-by-step procedure is
 ## Two roles
 
 AusMT is moving onto the Nectar Research Cloud as two instances with separate jobs. The serving host
-comes first; until the curation host exists, the home box holds the curation role.
+comes first; until the curation host exists, the home box holds the curation role, and until the
+serving host takes the public address, a small front-door instance passes public traffic through to
+the home box. What follows describes the two roles as they stand once the move is made.
 
 **The serving host** (`ausmt-serve`) is the only machine with a public address, and it opens only
 the web ports. It runs the public front door (TLS, the masked access log, the allowlist of public

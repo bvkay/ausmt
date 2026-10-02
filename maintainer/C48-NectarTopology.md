@@ -411,6 +411,11 @@ and no submission accepted on a host whose state is about to be copied.
    to the whole 8 GB host and the compose file's own rule (the two ceilings sum below the host) is not
    met. Settle before the lift: a lower gw-runner ceiling on the curation host (a compose change), or
    a larger curation flavour.
+5. **Releases on the replica.** The publish contract carries `site-data/builds/` only, and
+   `make cut-release` writes `site-data/releases/`, a sibling of `builds/`, so a release never reaches
+   the serving host. The public site serves no release today (`/data/releases/releases.json` answers
+   404), so nothing is lost yet. Decide before the first release cut after the cutover whether
+   releases are served, and if so how they reach the replica.
 
 ## D12. Decision: the public gateway routes follow the curation host
 
@@ -439,7 +444,10 @@ before; only the destination of the four routes changes.
 ## Provenance
 
 Owner rulings 2026-09-30 (two roles and their contents, flavours, sequence, tailnet as identity layer,
-curator layering, floating-IP cutover and rollback, the amendment, the continuity items). Architect
+curator layering, floating-IP cutover and rollback, the amendment, the continuity items). Owner ruling
+2026-10-02 (the service accounts' SFTP path over Tailscale SSH accepted for phase one, D4 and D11).
+Measured 2026-10-02: the size of one build, the MTH5 cache generation, the box's Linux build memory
+and the live certificate dates (D1). Architect
 rulings 2026-09-30 (the public gateway routes' upstream, curator access on 443, GHCR visibility, the
 build memory reading). Build memory from the cold and warm `build_report.json` of a 2026-09-30 macOS
 build. Facts from
