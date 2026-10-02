@@ -21,12 +21,23 @@ internet ──▶ 203.101.226.191 ──▶ ausmt-serve: front door (Caddy, TLS
 
 ## 0. Before you start
 
+- **The publish code is on `main` and the box runs it.** Step 6 clones `main` and runs
+  `deploy/nectar/provision-serve.sh`, and step 9 runs `make publish` on the box; neither exists until
+  the publish branch is merged. So, before step 1: the branch is merged into `main` and pushed; the
+  GHCR images have been built from that commit; the box has been updated to that commit and its
+  `TAG` by the usual pass (`deploy/README.md`, "Update to a new image tag"); and one green box build
+  of that code has been served through ausmt-test for at least a day (`make doctor` clean, the public
+  `/data/build.json` naming that build).
+- **Hold engine and library changes from step 9 until step 12 is done.** A change that re-keys the
+  MTH5 tier makes the next publish resend every h5 file, 2.89 GB of the 7.5 GB tree, in the middle of
+  the cutover.
+- **The amendment is filed in step 1 and its volume must be approved before step 4.** Steps 1 to 3 run
+  while it is pending. If it is still pending at step 4, take the proof serve on the root disk (4A)
+  instead, and move to the volume when it is granted; the address never moves onto the root disk.
 - **The public submission routes stay live through the address move** (C48 D12). The serving host
   runs no gateway, so its front door sends `POST /gateway/submit`, `POST /gateway/request-key`,
   `GET /gateway/healthz` and `GET /gateway/status/*` to the box's reader listener over the tailnet
   (`AUSMT_GATEWAY_UPSTREAM`, step 8), exactly where ausmt-test sends them today.
-- The amendment in step 1 is approved: the allocation has no volume storage, and the tree does not fit
-  the 30 GB m3 root disk (C48 D3).
 - You have Tailscale admin access and the Nectar dashboard for the project.
 - The box runs the stack per `deploy/README.md`, with the reconcile timer installed.
 
@@ -50,7 +61,7 @@ In the Nectar dashboard: Allocations → My Requests → the project → Amend/E
 >
 > **A second project member**, for continuity of operation.
 
-Wait for approval before step 4 (the volume).
+Steps 1 to 3 run while it is pending. Step 4 needs the volume, or the proof serve of 4A.
 
 ---
 
@@ -118,6 +129,36 @@ mountpoint /srv/ausmt                     # expect: /srv/ausmt is a mountpoint
 echo 'LABEL=ausmt-data /srv/ausmt ext4 defaults,nofail,x-systemd.device-timeout=30s 0 2' | sudo tee -a /etc/fstab
 sudo mkdir -p /srv/ausmt && sudo systemctl daemon-reload && sudo mount /srv/ausmt
 ```
+
+4A.  **While the amendment is pending: a proof serve on the root disk.** The m3 root disk is 30 GB.
+     At `AUSMT_PUBLISH_KEEP=1` the replica holds one build and the basemap, 9.9 GB (7.5 + 2.4), plus
+     a second build while a receive is in flight, at most another 7.5 GB, which leaves about 12.6 GB
+     (30 - 17.4) for Ubuntu, the Docker images and the logs. Add `AUSMT_PUBLISH_KEEP=1` to the box's
+     `deploy/.env` before step 9 (`make publish` and the reconcile unit both read it). Provisioning
+     refuses a data root that is not a mount point, so the tree lives in a directory on the root disk,
+     bind-mounted at `/srv/ausmt` in place of the volume line cloud-init wrote:
+```sh
+sudo mkdir -p /var/lib/ausmt-proof /srv/ausmt
+sudo sed -i 's|^LABEL=ausmt-data |#&|' /etc/fstab                  # park the volume line
+echo '/var/lib/ausmt-proof /srv/ausmt none bind 0 0' | sudo tee -a /etc/fstab
+sudo systemctl daemon-reload && sudo mount /srv/ausmt && mountpoint /srv/ausmt
+```
+     Run steps 5 to 11 on it. Move it to the volume before step 12, once the volume is granted: create
+     and label the volume as in 4.1 and 4.2 (stop before its `mount`), then, with Docker stopped so
+     neither stack writes during the copy:
+```sh
+sudo systemctl stop docker.socket docker.service          # both stacks down
+sudo mkdir -p /mnt/ausmt-new && sudo mount LABEL=ausmt-data /mnt/ausmt-new
+sudo rsync -aH /var/lib/ausmt-proof/ /mnt/ausmt-new/      # -H keeps the links between builds
+sudo umount /mnt/ausmt-new /srv/ausmt
+sudo sed -i -e '\|^/var/lib/ausmt-proof |d' -e 's|^#\(LABEL=ausmt-data \)|\1|' /etc/fstab
+sudo systemctl daemon-reload && sudo mount /srv/ausmt && mountpoint /srv/ausmt
+sudo systemctl start docker                               # both stacks up
+sudo ausmt-doctor-serve
+```
+     Once the doctor is clean, remove `AUSMT_PUBLISH_KEEP=1` from the box's `deploy/.env` (the
+     default keeps 5) and `sudo rm -r /var/lib/ausmt-proof`. The certificate is not on the data tree
+     (it is in Docker's `frontdoor_caddy_data` volume on the root disk), so the move does not touch it.
 
 ---
 
