@@ -66,6 +66,9 @@ echo "RESULT: PASS"
 exit 0
 """
 _MOUNTPOINT_STUB = '#!/bin/sh\nexit "${MOUNT_RC:-0}"\n'
+# Runs its arguments as the log account would: CADDYLOG_DENIED stands for a file the account's ACL
+# does not reach.
+_AS_CADDYLOG_STUB = '#!/bin/sh\n[ -z "${CADDYLOG_DENIED:-}" ] || exit 1\nexec "$@"\n'
 
 
 def _tree(tmp_path: Path, *, published_ts: str | None = TS) -> Path:
@@ -90,7 +93,8 @@ def _env(tmp_path: Path, data: Path, *, gateway: str | None = _GATEWAY, **extra:
     b = tmp_path / "bin"
     b.mkdir(exist_ok=True)
     for name, body in (("docker", _DOCKER_STUB), ("curl", _CURL_STUB),
-                       ("frontdoor-doctor", _FRONTDOOR_STUB), ("mountpoint", _MOUNTPOINT_STUB)):
+                       ("frontdoor-doctor", _FRONTDOOR_STUB), ("mountpoint", _MOUNTPOINT_STUB),
+                       ("as-caddylog", _AS_CADDYLOG_STUB)):
         p = b / name
         p.write_text(body, encoding="utf-8")
         p.chmod(0o755)
@@ -102,9 +106,13 @@ def _env(tmp_path: Path, data: Path, *, gateway: str | None = _GATEWAY, **extra:
     if gateway is not None:
         fd_lines.append(f"AUSMT_GATEWAY_UPSTREAM={gateway}")
     fdenv.write_text("\n".join(fd_lines) + "\n", encoding="utf-8")
+    caddy_log = tmp_path / "access-frontdoor.json"
+    caddy_log.write_text("", encoding="utf-8")
     env = dict(os.environ)
     env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
     env.update({
+        "AUSMT_DOCTOR_CADDY_LOG": str(caddy_log),
+        "AUSMT_DOCTOR_AS_CADDYLOG": str(b / "as-caddylog"),
         "AUSMT_DOCTOR_ENV": str(envf),
         "AUSMT_DOCTOR_FRONTDOOR_ENV": str(fdenv),
         "CURL_LOG": str(tmp_path / "curl.log"),
@@ -359,3 +367,24 @@ def test_the_running_images_are_named_by_digest(tmp_path):
     (tmp_path / "down").mkdir()
     r = _run(_env(tmp_path / "down", data, PORTAL_DOWN="1"))
     assert not any("image" in ln for ln in _lines(r, "FAIL")), r.stdout
+
+
+def test_the_log_account_can_read_the_live_access_log(tmp_path):
+    """The curation host pulls the masked access log as caddylog, whose read rests on a default
+    ACL that a 0600 log file masks to nothing. FAILS IF a readable log is not a PASS, an unreadable
+    one is anything but a FAIL naming the file and the fix, or a log Caddy has not created yet
+    fails the run."""
+    data = _tree(tmp_path)
+    r = _run(_env(tmp_path, data))
+    assert any(ln.startswith("PASS caddylog") for ln in r.stdout.splitlines()), r.stdout
+    (tmp_path / "denied").mkdir()
+    r = _run(_env(tmp_path / "denied", data, CADDYLOG_DENIED="1"))
+    assert r.returncode != 0, r.stdout
+    line = [ln for ln in _lines(r, "FAIL") if ln.startswith("FAIL caddylog")]
+    assert line and "access-frontdoor.json" in line[0] and "0640" in line[0], r.stdout
+    (tmp_path / "absent").mkdir()
+    env = _env(tmp_path / "absent", data)
+    Path(env["AUSMT_DOCTOR_CADDY_LOG"]).unlink()
+    r = _run(env)
+    assert r.returncode == 0, r.stdout
+    assert any(ln.startswith("WARN caddylog") for ln in r.stdout.splitlines()), r.stdout
