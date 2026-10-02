@@ -26,7 +26,9 @@
 #      AUSMT_GATEWAY_UPSTREAM from deploy/.env into deploy/frontdoor/.env on every run; stops with
 #      exit 3 while either still has a value to fill
 #   7. fetches the self-hosted basemap when compose mounts one and it is not there yet
-#   8. starts the portal (make up) and then the front door (install-frontdoor.sh)
+#   8. pulls the portal and front-door images, then starts the portal (make up) and the front door
+#      (install-frontdoor.sh); both pull only a missing image themselves, so without the pull a
+#      re-run would keep the SPA and the reader wall of the host's first provisioning
 #
 # WHAT IT NEVER DOES: install a timer or unit of the curation role, start the gateway profile, or
 # write a secret. The serve role receives builds; it does not build, back up or curate.
@@ -167,6 +169,12 @@ if grep -q '/basemap:/srv/basemap' "$DEPLOY/compose.yaml" && [ "${AUSMT_SKIP_BAS
 fi
 
 # ----- 8. the portal, then the front door ---------------------------------------------------------
+# The tags move (main, latest), so a re-run pulls first and the stack picks up the image the
+# curation host now runs. This is the serve step of every deploy, run before the curation host's.
+log "pulling the portal and front-door images"
+(cd "$DEPLOY" && docker compose -f compose.yaml pull portal) \
+  || die "pulling the portal image failed (the GHCR images are public: check OWNER and TAG in $DEPLOY/.env)"
+(cd "$DEPLOY/frontdoor" && docker compose -f compose.yaml pull frontdoor) || die "pulling the front door's image failed"
 log "starting the portal (make up)"
 (cd "$DEPLOY" && make up) || die "make up failed (the GHCR images are public: check OWNER and TAG in $DEPLOY/.env)"
 log "starting the front door (install-frontdoor.sh, reader upstream AUSMT_BOX_READER_UPSTREAM=http://127.0.0.1:8445)"

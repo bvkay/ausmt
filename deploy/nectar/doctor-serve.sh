@@ -11,11 +11,14 @@
 # absent it FAILs the config line and still checks the volume at that data root.
 #
 # Prints ONE labelled PASS / WARN / FAIL line per check and a final summary, and EXITS NON-ZERO if any
-# check FAILs, so it can gate a script or an alert; a WARN alone does not fail the exit. No check aborts
-# the run: every probe reports and the script always reaches the summary.
+# check FAILs, so it can gate a script or an alert; a WARN alone does not fail the exit. INFO lines
+# name what is running and never count either way. No check aborts the run: every probe reports and
+# the script always reaches the summary.
 #
 # CHECKS
-#   1. containers: the portal (deploy/compose.yaml) and the front door (deploy/frontdoor/compose.yaml)
+#   1. containers: the portal (deploy/compose.yaml) and the front door (deploy/frontdoor/compose.yaml),
+#      each running image named by its RepoDigest on an INFO line (the tags move, so the digest is
+#      what tells this host's SPA from the curation host's)
 #   2. listeners: the portal answers on 127.0.0.1:8443 and the reader on 127.0.0.1:8445
 #   3. wall: the reader listener refuses the curator workbench (404), wall 2 proving itself here
 #   4. gateway: this host runs no gateway; the front door sends the four public submission routes to
@@ -73,6 +76,7 @@ WARNS=0
 pass() { printf 'PASS %s\n' "$*"; }
 warn() { printf 'WARN %s\n' "$*"; WARNS=$((WARNS + 1)); }
 fail() { printf 'FAIL %s\n' "$*"; FAILS=$((FAILS + 1)); }
+info() { printf 'INFO %s\n' "$*"; }
 
 # Both .env files are root-only on a provisioned host, and dash exits on the `.` of a file it cannot
 # read, so readability is tested first and reported as a check rather than left to kill the run.
@@ -124,6 +128,20 @@ check_containers() {
 	else
 		fail "containers: frontdoor is NOT running (./install-frontdoor.sh in deploy/frontdoor/)"
 	fi
+	_image_line portal "$COMPOSE_FILE"
+	_image_line frontdoor "$FD_COMPOSE_FILE"
+}
+
+_image_line() {
+	# The running container's image by RepoDigest; a container that is down is already a FAIL above.
+	# shellcheck disable=SC2086 # DOCKER may be a word-split override.
+	cid="$($DOCKER compose -f "$2" ps -q "$1" 2>/dev/null | head -n 1)"
+	[ -n "$cid" ] || return 0
+	# shellcheck disable=SC2086
+	img="$($DOCKER inspect -f '{{.Image}}' "$cid" 2>/dev/null)"
+	# shellcheck disable=SC2086
+	digest="$($DOCKER image inspect -f '{{join .RepoDigests " "}}' "$img" 2>/dev/null)"
+	info "image: $1 runs ${digest:-an image with no registry digest ($img), built or loaded on this host}"
 }
 
 check_listeners() {
