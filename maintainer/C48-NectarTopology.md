@@ -167,9 +167,9 @@ beside `current` (`ts`, `build_id` and `source_commit` from the build's `build.j
 and `sender`, the address the receive arrived from: the first word of `SSH_CLIENT`, else
 `SSH_CONNECTION`, else `local`), then prunes: the `--keep` newest builds that carry a sidecar
 survive (1 to 999, no leading zero), the build received and the build `current` points at when the
-prune runs always survive, and a directory without a sidecar is never touched. Verify, swap, record and prune run under `flock` on
-`site-data/.receive.lock`, so two receives (a reconcile publish and a manual `make publish`) never
-overlap. `--current` names a build only while its directory exists, so a dangling `current` makes
+prune runs always survive, and a directory without a sidecar is never touched. Verify, swap, record
+and prune run under `flock` on `site-data/.receive.lock`, so two receives (a reconcile publish and a
+manual `make publish`) never overlap. `--current` names a build only while its directory exists, so a dangling `current` makes
 the sender send again. A refused build leaves `current`, `published.json` and every other build as
 they were. A re-run for the current build changes nothing but the prune, which runs on that path
 too, so a keep lowered on the sender takes effect at the next tick while the replica already serves
@@ -235,8 +235,9 @@ a pull of the portal image and the front door's caddy image, `make up`, then `in
 The pull is what moves the public SPA and wall 2, which are baked into the portal image: `make up`
 alone pulls only a missing image, and GHCR carries only the moving tags `main` and `latest`. So the
 deploy pass re-runs provisioning on the serving host before the box's pass (`deploy/README.md`,
-"Update to a new image tag"), and the serve doctor prints the running portal image's RepoDigest. Provisioning also carries `AUSMT_GATEWAY_UPSTREAM` from
-`deploy/.env` into the front door's `.env` (D12). The GHCR images are public (an anonymous token got
+"Update to a new image tag"), and the serve doctor prints the running portal image's RepoDigest.
+Provisioning also carries `AUSMT_GATEWAY_UPSTREAM` from `deploy/.env` into the front door's `.env`
+(D12). The GHCR images are public (an anonymous token got
 HTTP 200 on the `ghcr.io/bvkay/ausmt-portal` tags list, checked 2026-09-30), so the serving host holds
 no registry credential. Until its tailnet join the serving host is reached at the project's second
 floating IP (D1 gives a quota of 2), associated at launch and released once the join is proved; from
