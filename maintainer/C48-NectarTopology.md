@@ -221,7 +221,11 @@ Pins: `deploy/tests/test_publish_sh.py`, `test_receive_build_sh.py`, `test_publi
 (idempotent, root) build it: packages, Docker and compose, Tailscale, unattended upgrades, the volume
 mounted by label at `/srv/ausmt` with `nofail`, the tree and its ownership from `deploy/README.md`, the
 receiver and both gates, the two `.env` files (the reader upstream forced to loopback), the basemap,
-`make up`, then `install-frontdoor.sh`. Provisioning also carries `AUSMT_GATEWAY_UPSTREAM` from
+a pull of the portal image and the front door's caddy image, `make up`, then `install-frontdoor.sh`.
+The pull is what moves the public SPA and wall 2, which are baked into the portal image: `make up`
+alone pulls only a missing image, and GHCR carries only the moving tags `main` and `latest`. So the
+deploy pass re-runs provisioning on the serving host before the box's pass (`deploy/README.md`,
+"Update to a new image tag"), and the serve doctor prints the running portal image's RepoDigest. Provisioning also carries `AUSMT_GATEWAY_UPSTREAM` from
 `deploy/.env` into the front door's `.env` (D12). The GHCR images are public (an anonymous token got
 HTTP 200 on the `ghcr.io/bvkay/ausmt-portal` tags list, checked 2026-09-30), so the serving host holds
 no registry credential. Until its tailnet join the serving host is reached at the project's second

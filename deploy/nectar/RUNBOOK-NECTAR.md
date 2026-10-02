@@ -233,9 +233,9 @@ sudo sh /srv/ausmt/code/deploy/nectar/provision-serve.sh
 The first run stops with exit 3 and names the two `.env` files to fill. **Do step 7 before filling
 them**, so the front door never starts without the certificate.
 
-The GHCR images are public: anonymous pulls of `ghcr.io/bvkay/ausmt-portal` succeeded on 2026-09-30
-(HTTP 200 on the tags list with an anonymous token). This host holds no registry credential and needs
-no `docker login`.
+The GHCR images are public: an anonymous token read the tags list of `ghcr.io/bvkay/ausmt-portal`
+(HTTP 200) on 2026-09-30, and provisioning's own pull in step 8 is the first anonymous pull on this
+host. This host holds no registry credential and needs no `docker login`.
 
 ---
 
@@ -289,8 +289,9 @@ is in it with `sudo docker compose -f /srv/ausmt/code/deploy/frontdoor/compose.y
 sudo sh /srv/ausmt/code/deploy/nectar/provision-serve.sh     # now runs to the end
 ```
 It fetches the basemap (a large download; set `AUSMT_SKIP_BASEMAP=1` and copy
-`/srv/ausmt/basemap/*.pmtiles` from the box instead if you prefer), starts the portal with `make up`,
-then the front door with `install-frontdoor.sh`. It also installs, on every run, two things that live
+`/srv/ausmt/basemap/*.pmtiles` from the box instead if you prefer), pulls the portal image and the
+front door's caddy image, starts the portal with `make up`, then the front door with
+`install-frontdoor.sh`. It also installs, on every run, two things that live
 off the data volume: the serve doctor at `/usr/local/bin/ausmt-doctor-serve` (a copy of
 `deploy/nectar/doctor-serve.sh`, run as `sudo ausmt-doctor-serve` because both `.env` files are
 root-only), and the Docker boot ordering `/etc/systemd/system/docker.service.d/ausmt-serve.conf`
@@ -448,11 +449,19 @@ apart from the known WARNs. ausmt-test costs 125 SU a year until it is deleted, 
 - **Health:** `sudo ausmt-doctor-serve` on ausmt-serve. Provisioning installs it outside the data
   volume, so it still runs, and FAILs its volume line, when the volume is missing. The box's
   `reconcile-status.json` `publish` field and the alert timer cover the publish path.
-- **Updates to the repo:** `sudo sh /srv/ausmt/code/deploy/nectar/provision-serve.sh` again. It
-  fast-forwards the checkout, reinstalls the receiver and the gates, re-runs `make up` and
-  `install-frontdoor.sh` (which reloads the running edge in place).
-- **Image tag:** keep `TAG` in ausmt-serve's `deploy/.env` equal to the box's, then re-run
-  provisioning.
+- **Updates (the deploy pass):** `sudo sh /srv/ausmt/code/deploy/nectar/provision-serve.sh` on
+  ausmt-serve, BEFORE the box's usual pass, so the public edge never lags what the box publishes (the
+  table-before-data rule of the time-series routes). Both halves are written out in
+  `deploy/README.md`, "Update to a new image tag". Provisioning fast-forwards the checkout,
+  reinstalls the receiver, the gates, the doctor and the Docker drop-in, pulls the portal and caddy
+  images, re-runs `make up` and `install-frontdoor.sh` (which reloads the running edge in place).
+- **Image tag:** GHCR carries only the moving tags `main` and `latest`, so `TAG` names a tag, not an
+  image, and keeping it equal to the box's does not by itself make the two hosts run the same portal.
+  Pulling on both in the same deploy pass does: provisioning pulls before it starts anything, and
+  `sudo ausmt-doctor-serve` prints the running portal image's RepoDigest. Compare it with the box's,
+  `docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/<OWNER>/ausmt-portal:<TAG>`.
+  A serve host whose portal image is older than the box's serves new builds through an old SPA and
+  an old wall 2.
 - **Host upgrades:** unattended upgrades apply security updates; a kernel update needs a reboot you
   schedule. The volume mounts by label (`nofail`), and Docker starts only after it is mounted and
   after `tailscaled` (the drop-in of step 8), so the containers come back with the tree under them and

@@ -179,6 +179,7 @@ before its record stops naming it, never after.
 ```sh
 python deploy/scripts/gen_ts_routes.py --check   # in the repo, from the ausmt-surveys registers
 # then: git pull + ./install-frontdoor.sh + ./doctor.sh on the VPS   (frontdoor/RUNBOOK.md step 6.3)
+#       (after the Nectar cutover: the serve step of "Update to a new image tag" on ausmt-serve)
 # then: make rebuild-data here          (its recipe passes --ts-index; without it the box would
 #                                        publish no ts_access.json while the table kept resolving)
 make doctor                                       # the ts-parity leg: table and served data agree
@@ -233,6 +234,28 @@ docker compose --profile jobs --profile gateway pull    # refresh ALL images (se
 docker compose -f compose.yaml up -d                    # recreate only what changed
 make sync-surveys && make rebuild-data                  # if surveys moved / to serve the new engine
 ```
+
+**After the Nectar cutover the pass starts on ausmt-serve.** The public edge and the portal image
+the public sees then run on ausmt-serve, so the front-door step becomes the serve step, and it still
+runs BEFORE the box pass: a route the table withdraws leaves the public edge before the data that
+stops naming it is published (the time-series rule above). The serve step pulls the portal and
+caddy images itself; `make up` alone would pull only a missing image.
+
+```sh
+# 1. on ausmt-serve: fast-forward, pull both images, restart the portal, reload the front door
+sudo sh /srv/ausmt/code/deploy/nectar/provision-serve.sh && sudo ausmt-doctor-serve
+# 2. on the box: the usual pass
+cd "$AUSMT_CODE_DIR" && git pull --ff-only && cd deploy && export AUSMT_DATA_DIR=/srv/ausmt \
+  && docker compose --profile jobs --profile gateway pull && docker compose -f compose.yaml up -d \
+  && docker compose -f compose.yaml --profile gateway up -d && make sync-surveys && make rebuild-data \
+  && make doctor && make doctor PROFILE=gateway
+# 3. optional, on the box: send the new build now rather than at the next reconcile pass
+make publish
+```
+
+The serve doctor prints the running portal image's RepoDigest; the box's is
+`docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/<OWNER>/ausmt-portal:<TAG>`, and
+the two match after a pass.
 
 ---
 
