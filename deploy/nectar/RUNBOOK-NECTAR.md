@@ -564,7 +564,7 @@ a fresh certificate.
 sudo systemctl stop docker.socket docker.service              # both stacks down
 mountpoint /srv/ausmt                                         # expect: is not a mountpoint
 sudo find /srv/ausmt -mindepth 1 -maxdepth 3 -ls              # the stubs, if any
-mountpoint -q /srv/ausmt || sudo find /srv/ausmt -mindepth 1 -delete
+mountpoint -q /srv/ausmt || sudo rm -r /srv/ausmt/*           # only while unmounted
 sudo mount /srv/ausmt && mountpoint /srv/ausmt                # if not: lsblk -f, and the volume's attachment
 sudo systemctl start docker                                   # both stacks up
 sudo ausmt-doctor-serve
