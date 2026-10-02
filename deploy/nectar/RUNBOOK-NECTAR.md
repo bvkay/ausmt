@@ -84,11 +84,11 @@ Steps 1 to 3 run while it is pending. Step 4 needs the volume, or the proof serv
      Merge its `tests` and `sshTests` stanzas too, placeholders filled the same way: they pin what
      `tag:ausmt-serve` may and may not reach, and the console runs them on every save and refuses a
      policy that breaks them. Before saving, preview the rules for `tag:ausmt-serve` in the console and
-     confirm it reaches the box on 8445 and nothing else; the stock policy's allow-all rule, if it is
-     still there, shows up here.
+     confirm it reaches the curation host's port 8445 and nothing else; the stock policy's allow-all
+     rule, if it is still there, shows up here.
 2.2  Settings → Keys → Generate auth key, tagged `tag:ausmt-serve` (you will type it in step 5; do not
      paste it anywhere else).
-2.3  A temporary admin path to ausmt-test, for steps 7 and 14.1. ausmt-test joined the tailnet as
+2.3  A temporary admin path to ausmt-test, for steps 7, 12.1, 13.1 and 14.1. ausmt-test joined the tailnet as
      `ausmt-vps` without Tailscale SSH, and the front-door stanza admits only the box to its port 22,
      so add this rule to `acls` (you remove it in step 14.3):
 ```
@@ -620,7 +620,8 @@ state is about to be copied.
       QRIScloud, network `qld-data`, no security group that admits inbound traffic (`default`
       included), and no floating IP once it has joined. Bootstrap it as ausmt-serve was (3.2 to 5.4:
       the second floating IP and a temporary 22/tcp rule from your own address, both released after
-      the join), joining with `--advertise-tags=tag:ausmt-curate --hostname ausmt-curate`. Its
+      the join), joining with an auth key tagged `tag:ausmt-curate` (as in 2.2) and
+      `--advertise-tags=tag:ausmt-curate --hostname ausmt-curate`. Its
       outbound traffic (GitHub, GHCR, ClamAV updates, Tailscale) leaves through the router's SNAT (3.0).
 16.2  **The volume.** Volumes → Create Volume: `ausmt-curate-data`, 100 GB (the curation half of the
       grant), QRIScloud, attached to ausmt-curate. Label it and mount it at `/srv/ausmt` as in 4.2,
@@ -646,10 +647,15 @@ sudo systemctl start ausmt-backup.service                        # the final sna
       With the gateway stopped, the Add Survey page's healthz probe fails and it hides its Submit
       button. `disable --now`, not `stop`: a stopped timer starts again at the box's next boot, and
       two senders would switch the public build every tick while each pass reports `publish=ok`.
+      From here until 16.7 the box's alert timer reports the stopped gateway and the idle reconcile;
+      that is expected.
 16.5  **Move the state**: the snapshot's sqlite (the only home of submitter PII) and the gateway's
       `incoming`, `jobs` and `quarantine`, box → ausmt-curate directly over the tailnet, which
       encrypts it in transit. Never route it through ausmt-serve or any other public host; if it has to
       rest anywhere between the two, encrypt it first (`gpg --symmetric`) and delete every copy after.
+      The policy's administrator rule admits the box's owner to ausmt-curate for the `scp`, with
+      Tailscale SSH's sign-in check; if the box's node is not owned by an administrator, relay the
+      archive through your own tailnet device, encrypted first.
 ```sh
 # on the box
 umask 077
@@ -668,8 +674,9 @@ sudo chown -R 10002:10002 /srv/ausmt/gateway/state /srv/ausmt/gateway/incoming \
 sudo rm -r /tmp/backups /tmp/gateway
 ```
 16.6  **Publish from ausmt-curate, then reopen.** On ausmt-curate, as the `User=` of its reconcile
-      unit, accept ausmt-serve's host key once (`ssh publish@ausmt-serve receive-build.sh --current`,
-      as in 9.2), add `AUSMT_PUBLISH_TARGET=publish@ausmt-serve` to `deploy/.env`, and enable the timers
+      unit, make the one-time sidecar grant of 9.1, accept ausmt-serve's host key once
+      (`ssh publish@ausmt-serve receive-build.sh --current`, as in 9.2), add
+      `AUSMT_PUBLISH_TARGET=publish@ausmt-serve` to `deploy/.env`, and enable the timers
       (`sudo systemctl enable --now ausmt-reconcile.timer ausmt-actions.timer ausmt-backup.timer`). The
       first pass builds cold, with an empty cache, and then publishes; watch `publish` read `ok` in its
       `reconcile-status.json` and, on ausmt-serve, `published.json` name ausmt-curate's tailnet address
