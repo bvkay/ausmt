@@ -50,13 +50,16 @@ is_ts() {
 
 # A short-option word as rsync writes it for its server: letters, optionally followed by the
 # e<capabilities> tail. The letters before that tail may not name an option that takes a value
-# (B, M, T, f) or s, which moves the real arguments off the command line and out of this gate's view.
+# (B, M, T, f) or s, which moves the real arguments off the command line and out of this gate's view;
+# nor K, k or L, which make the receiver follow a symlink rather than treat it as a link, so a planted
+# link would carry a write past the pinned destination; nor b, which leaves backup files beside the
+# tree that no sidecar lists. The publish sends none of them.
 flag_ok() {
   case "$1" in --*|-) return 1 ;; -*) ;; *) return 1 ;; esac
   _body=${1#-}
   _pre=${_body%%e*}
   _rest=${_body#"$_pre"}
-  case "$_pre" in *[!A-Za-z]*|*[BMTfs]*) return 1 ;; esac
+  case "$_pre" in *[!A-Za-z]*|*[BKLMTbfks]*) return 1 ;; esac
   case "$_rest" in
     '') return 0 ;;
     e*) case "${_rest#e}" in *[!.A-Za-z]*) return 1 ;; esac; return 0 ;;
