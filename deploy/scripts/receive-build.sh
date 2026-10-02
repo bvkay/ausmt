@@ -23,7 +23,12 @@
 #     unlinks first and leaves readers a window with no current. Caddy follows current per request.
 #   * The prune keeps the KEEP newest builds that carry a sidecar, always keeps the build received
 #     and the build current points at when the prune runs, and never touches a directory without a
-#     sidecar.
+#     sidecar. It runs on every accepted receive, the confirmation of an already-current build
+#     included, so a keep depth lowered on the sender takes effect on the next publish and a full
+#     disk is recovered without waiting for a new build.
+#   * published.json records ts, build_id, source_commit, received_at and sender, the address the
+#     receive arrived from (the first word of SSH_CLIENT, else of SSH_CONNECTION, else local), so a
+#     replica fed by two hosts can be told apart.
 #   * One receive at a time: verify, swap, record and prune run under flock(1) on
 #     site-data/.receive.lock, so a second receive waits instead of pruning under the first.
 #   * A build name reaches the filesystem only after it has matched the timestamp shape, and a keep
@@ -144,8 +149,29 @@ except Exception:
 PYEOF
 }
 
+# prune_builds <served>: delete every complete build (one that carries a sidecar) past the KEEP
+# newest, except the build just received or confirmed and the build current names when the prune
+# runs. A directory without a sidecar is a transfer in flight and is never touched.
+prune_builds() {
+  _live=$(current_name) || die "current changed shape; nothing pruned"
+  ls -1 "$BUILDS" 2>/dev/null | LC_ALL=C sort -r | { n=0; while IFS= read -r side; do
+    case "$side" in *.sha256) ;; *) continue ;; esac
+    name=${side%.sha256}
+    if ! is_ts "$name" || [ ! -d "$BUILDS/$name" ]; then
+      continue
+    fi
+    n=$((n + 1))
+    [ "$n" -le "$KEEP" ] && continue
+    [ "$name" = "$1" ] && continue
+    [ "$name" = "$_live" ] && continue
+    printf 'receive-build: pruning builds/%s\n' "$name"
+    rm -rf -- "${BUILDS:?}/$name" "${BUILDS:?}/$side"
+  done; }
+}
+
 if [ "$CUR" = "$TS" ] && [ "$(published_ts)" = "$TS" ]; then
-  printf 'receive-build: builds/%s is already current and recorded; nothing to do\n' "$TS"
+  printf 'receive-build: builds/%s is already current and recorded; nothing to swap\n' "$TS"
+  prune_builds "$TS"
   exit 0
 fi
 
@@ -201,7 +227,11 @@ fi
 # ----- record -------------------------------------------------------------------------------------
 rec=$(mktemp "$SITE/.published.json.XXXXXX") || die "current -> builds/$TS but published.json could not be written"
 chmod 0644 "$rec"
-if ! AUSMT_RB_TS="$TS" AUSMT_RB_BUILD_JSON="$BUILD/build.json" \
+# The sender is the address the SSH session arrived from; a receive run on the host itself is local.
+sender=${SSH_CLIENT:-${SSH_CONNECTION:-}}
+sender=${sender%% *}
+[ -n "$sender" ] || sender=local
+if ! AUSMT_RB_TS="$TS" AUSMT_RB_BUILD_JSON="$BUILD/build.json" AUSMT_RB_SENDER="$sender" \
      AUSMT_RB_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PY" - > "$rec" <<'PYEOF'
 import json, os
 with open(os.environ["AUSMT_RB_BUILD_JSON"], encoding="utf-8") as fh:
@@ -214,6 +244,7 @@ print(json.dumps({
     "build_id": text("build_id"),
     "source_commit": text("source_commit"),
     "received_at": os.environ["AUSMT_RB_AT"],
+    "sender": os.environ["AUSMT_RB_SENDER"],
 }, indent=1))
 PYEOF
 then
@@ -227,18 +258,5 @@ fi
 printf 'receive-build: current -> builds/%s (published.json recorded)\n' "$TS"
 
 # ----- prune --------------------------------------------------------------------------------------
-LIVE=$(current_name) || die "current changed shape after the swap; nothing pruned"
-ls -1 "$BUILDS" 2>/dev/null | LC_ALL=C sort -r | { n=0; while IFS= read -r side; do
-  case "$side" in *.sha256) ;; *) continue ;; esac
-  name=${side%.sha256}
-  if ! is_ts "$name" || [ ! -d "$BUILDS/$name" ]; then
-    continue
-  fi
-  n=$((n + 1))
-  [ "$n" -le "$KEEP" ] && continue
-  [ "$name" = "$TS" ] && continue
-  [ "$name" = "$LIVE" ] && continue
-  printf 'receive-build: pruning builds/%s\n' "$name"
-  rm -rf -- "${BUILDS:?}/$name" "${BUILDS:?}/$side"
-done; }
+prune_builds "$TS"
 exit 0
