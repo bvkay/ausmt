@@ -35,6 +35,12 @@ _DOCKER_STUB = """#!/bin/sh
 case "$*" in
   *frontdoor*"ps --status running --services") [ -n "${FRONTDOOR_DOWN:-}" ] || echo frontdoor ;;
   *"ps --status running --services") [ -n "${PORTAL_DOWN:-}" ] || echo portal ;;
+  *"ps -q portal") [ -n "${PORTAL_DOWN:-}" ] || echo cid-portal ;;
+  *"ps -q frontdoor") [ -n "${FRONTDOOR_DOWN:-}" ] || echo cid-frontdoor ;;
+  "image inspect"*"sha256:img-portal") echo "ghcr.io/example/ausmt-portal@sha256:${PORTAL_DIGEST:-1111}" ;;
+  "image inspect"*"sha256:img-frontdoor") echo "caddy@sha256:2222" ;;
+  "inspect"*"cid-portal") echo sha256:img-portal ;;
+  "inspect"*"cid-frontdoor") echo sha256:img-frontdoor ;;
 esac
 exit 0
 """
@@ -129,7 +135,7 @@ def test_a_healthy_replica_is_labelled_and_exits_zero(tmp_path):
     body = [ln for ln in r.stdout.splitlines()
             if ln and not ln.startswith(("=", "AusMT", "RESULT"))]
     for ln in body:
-        assert ln.split(" ", 1)[0] in ("PASS", "WARN", "FAIL"), f"unlabelled line: {ln!r}"
+        assert ln.split(" ", 1)[0] in ("PASS", "WARN", "FAIL", "INFO"), f"unlabelled line: {ln!r}"
     out = r.stdout
     assert f"current -> builds/{TS}" in out
     assert any("published" in ln for ln in _lines(r, "PASS")), out
@@ -338,3 +344,18 @@ def test_with_the_volume_absent_the_installed_copy_fails_its_volume_line(tmp_pat
     assert "RESULT: FAIL" in r.stdout, r.stdout + r.stderr
     assert any(ln.startswith("FAIL volume") and "/srv/ausmt" in ln
                for ln in r.stdout.splitlines()), r.stdout
+
+
+def test_the_running_images_are_named_by_digest(tmp_path):
+    """A replica that stopped pulling serves new builds through an old SPA, and only the image
+    digest tells the two hosts apart, since the tags move. The line is information, never a
+    verdict. FAILS IF the portal's RepoDigest is not printed as an INFO line, or a stopped
+    portal makes the image line a FAIL of its own."""
+    data = _tree(tmp_path)
+    r = _run(_env(tmp_path, data, PORTAL_DIGEST="abcd"))
+    info = [ln for ln in _lines(r, "INFO") if "ghcr.io/example/ausmt-portal@sha256:abcd" in ln]
+    assert info, r.stdout
+    assert any("caddy@sha256:2222" in ln for ln in _lines(r, "INFO")), r.stdout
+    (tmp_path / "down").mkdir()
+    r = _run(_env(tmp_path / "down", data, PORTAL_DOWN="1"))
+    assert not any("image" in ln for ln in _lines(r, "FAIL")), r.stdout

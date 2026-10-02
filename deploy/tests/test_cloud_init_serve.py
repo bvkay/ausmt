@@ -203,3 +203,17 @@ def test_provisioning_installs_the_doctor_outside_the_volume():
     assert re.search(r'install\b[^\n]*deploy/nectar/doctor-serve\.sh"? /usr/local/bin/ausmt-doctor-serve\b',
                      prov), prov
     assert "sudo ausmt-doctor-serve" in prov
+
+
+def test_provisioning_pulls_both_images_before_it_starts_them():
+    """`make up` and install-frontdoor.sh pull only a missing image, and the SPA and the reader
+    wall are baked into the portal image, so without an explicit pull the public site would stay
+    at the image of its first provisioning. FAILS IF either image is not pulled, or is pulled
+    after the stack that runs it starts."""
+    code = _code_lines(_text(_PROVISION))
+    portal = re.search(r"docker compose -f compose\.yaml pull portal", code)
+    edge = re.search(r"docker compose -f compose\.yaml pull frontdoor", code)
+    assert portal and edge, code
+    assert portal.start() < code.index("make up"), "pull the portal before make up"
+    assert edge.start() < code.index("sh ./install-frontdoor.sh"), \
+        "pull the front door's image before install-frontdoor.sh"
