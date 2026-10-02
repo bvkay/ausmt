@@ -62,14 +62,23 @@ pass() { printf 'PASS %s\n' "$*"; }
 warn() { printf 'WARN %s\n' "$*"; WARNS=$((WARNS + 1)); }
 fail() { printf 'FAIL %s\n' "$*"; FAILS=$((FAILS + 1)); }
 
-if [ -f "$ENV_FILE" ]; then
-	set -a
-	# shellcheck disable=SC1090
-	. "$ENV_FILE"
-	set +a
-fi
-DATA_DIR="${AUSMT_DATA_DIR:-}"
-SITE="$DATA_DIR/site-data"
+# Both .env files are root-only on a provisioned host, and dash exits on the `.` of a file it cannot
+# read, so readability is tested first and reported as a check rather than left to kill the run.
+ENV_READ=1
+load_env() {
+	if [ -f "$ENV_FILE" ] && [ ! -r "$ENV_FILE" ]; then
+		fail "config: $ENV_FILE is not readable by this user, so the data checks cannot run; run the doctor as root (sudo ausmt-doctor-serve)"
+		ENV_READ=0
+	elif [ -f "$ENV_FILE" ]; then
+		set -a
+		# shellcheck disable=SC1090
+		. "$ENV_FILE"
+		set +a
+	fi
+	if [ -f "$FD_ENV_FILE" ] && [ ! -r "$FD_ENV_FILE" ]; then
+		fail "config: $FD_ENV_FILE is not readable by this user, so the public name and the gateway upstream are unknown; run the doctor as root (sudo ausmt-doctor-serve)"
+	fi
+}
 
 is_ts() {
 	case "$1" in
@@ -126,7 +135,7 @@ check_wall() {
 _fd_var() {
 	# The last value of $1 in the front-door .env, empty when absent. Read rather than sourced, so no
 	# front-door setting leaks into this run or the front-door doctor it starts.
-	[ -f "$FD_ENV_FILE" ] || return 0
+	[ -r "$FD_ENV_FILE" ] || return 0
 	sed -n "s/^$1=//p" "$FD_ENV_FILE" | tail -n 1
 }
 
@@ -281,11 +290,16 @@ EOF
 
 printf 'AusMT serve doctor (serving replica) - %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '=====================================================\n'
+load_env
+DATA_DIR="${AUSMT_DATA_DIR:-}"
+SITE="$DATA_DIR/site-data"
 check_containers
 check_listeners
 check_wall
 check_gateway
-if [ -z "$DATA_DIR" ]; then
+if [ "$ENV_READ" -eq 0 ]; then
+	:
+elif [ -z "$DATA_DIR" ]; then
 	fail "config: AUSMT_DATA_DIR is not set in $ENV_FILE, so the data checks cannot run"
 else
 	check_volume

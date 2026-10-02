@@ -107,7 +107,12 @@ _sha256() {
 
 # Load AUSMT_PUBLIC_NAME + AUSMT_BOX_READER_UPSTREAM from the front-door .env if present (best effort;
 # the checks that need them WARN honestly when a value is missing rather than dying).
-if [ -f "$ENV_FILE" ]; then
+# A root-only .env read without sudo is reported by the report's config line: dash exits on the `.`
+# of a file it cannot read, which would end the run before its first check.
+ENV_UNREADABLE=""
+if [ -f "$ENV_FILE" ] && [ ! -r "$ENV_FILE" ]; then
+	ENV_UNREADABLE=1
+elif [ -f "$ENV_FILE" ]; then
 	set -a
 	# shellcheck disable=SC1090
 	. "$ENV_FILE"
@@ -558,6 +563,9 @@ check_dns() {
 run_report() {
 	printf 'AusMT front-door doctor (VPS edge) - %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	printf '=====================================================\n'
+	if [ -n "$ENV_UNREADABLE" ]; then
+		fail "config: $ENV_FILE is not readable by this user, so the public name and the upstreams are unknown; run the doctor as root (sudo)"
+	fi
 	check_container_up
 	check_running_config
 	check_upstream
