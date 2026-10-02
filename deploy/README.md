@@ -239,7 +239,11 @@ make sync-surveys && make rebuild-data                  # if surveys moved / to 
 the public sees then run on ausmt-serve, so the front-door step becomes the serve step, and it still
 runs BEFORE the box pass: a route the table withdraws leaves the public edge before the data that
 stops naming it is published (the time-series rule above). The serve step pulls the portal and
-caddy images itself; `make up` alone would pull only a missing image.
+caddy images itself; `make up` alone would pull only a missing image. The one exception is a
+release whose portal reads a field the published data does not yet carry: its release note says
+so, and for that release the box pass runs first and the serve step after the publish has landed,
+because an edge that withdraws a route early is harmless and a page that asks for data that is not
+there yet is not.
 
 ```sh
 # 1. on ausmt-serve: fast-forward, pull both images, restart the portal, reload the front door
