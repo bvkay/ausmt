@@ -297,3 +297,44 @@ def test_the_published_line_reports_age_and_lag(tmp_path):
     r = _run(_env(tmp_path, data))
     line = [ln for ln in _lines(r, "PASS") if ln.startswith("PASS published")]
     assert line and "age" in line[0] and "lag" in line[0], r.stdout
+
+
+def _installed(tmp_path: Path) -> Path:
+    """The doctor as provisioning installs it: a lone copy under /usr/local/bin, outside the
+    checkout and outside the data volume."""
+    b = tmp_path / "usr" / "local" / "bin"
+    b.mkdir(parents=True)
+    copy = b / "ausmt-doctor-serve"
+    shutil.copy(_DOCTOR, copy)
+    return copy
+
+
+def test_the_installed_copy_finds_the_checkout_on_the_data_volume(tmp_path):
+    """FAILS IF the copy outside the checkout cannot find deploy/.env and deploy/frontdoor/.env
+    under the data root's checkout, and so reports a healthy replica as unconfigured."""
+    data = _tree(tmp_path)
+    env = _env(tmp_path, data)
+    deploy = data / "code" / "deploy"
+    (deploy / "frontdoor").mkdir(parents=True)
+    shutil.copy(env.pop("AUSMT_DOCTOR_ENV"), deploy / ".env")
+    shutil.copy(env.pop("AUSMT_DOCTOR_FRONTDOOR_ENV"), deploy / "frontdoor" / ".env")
+    env["AUSMT_DATA_DIR"] = str(data)
+    r = subprocess.run([_SH, str(_installed(tmp_path))], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"current -> builds/{TS}" in r.stdout, r.stdout
+    assert any(ln.startswith("PASS gateway") for ln in r.stdout.splitlines()), r.stdout
+
+
+def test_with_the_volume_absent_the_installed_copy_fails_its_volume_line(tmp_path):
+    """The checkout and both .env files live on the volume, so a boot without it leaves the
+    installed copy with nothing to read and nothing in its environment. It must still name the
+    default data root's volume. FAILS IF it stops at the missing configuration without a volume
+    line, or exits zero."""
+    env = _env(tmp_path, tmp_path / "unused", MOUNT_RC="1")
+    for name in ("AUSMT_DOCTOR_ENV", "AUSMT_DOCTOR_FRONTDOOR_ENV", "AUSMT_DATA_DIR", "AUSMT_CODE_DIR"):
+        env.pop(name, None)
+    r = subprocess.run([_SH, str(_installed(tmp_path))], capture_output=True, text=True, env=env)
+    assert r.returncode != 0, r.stdout
+    assert "RESULT: FAIL" in r.stdout, r.stdout + r.stderr
+    assert any(ln.startswith("FAIL volume") and "/srv/ausmt" in ln
+               for ln in r.stdout.splitlines()), r.stdout

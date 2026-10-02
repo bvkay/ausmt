@@ -151,3 +151,49 @@ def test_the_gateway_upstream_is_asked_for_and_carried_to_the_front_door():
         "provisioning must write the gateway upstream into deploy/frontdoor/.env"
     assert "grep -q 'REPLACE_WITH' \"$DEPLOY/.env\"" in prov, \
         "an unfilled placeholder must stop provisioning"
+
+
+# Docker on this host serves a tree that lives on the data volume and dials the curation host by
+# MagicDNS name, so it starts only after both. With the volume absent there is then no edge at all,
+# never an empty site behind a valid certificate.
+_DROPIN = "/etc/systemd/system/docker.service.d/ausmt-serve.conf"
+
+
+def _unit_lines(text: str) -> list[str]:
+    return [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+
+
+def test_first_boot_orders_docker_after_the_volume_and_tailscaled():
+    """FAILS IF first boot leaves Docker free to start before the volume mounts or before
+    tailscaled, or writes the drop-in without systemd re-reading its units."""
+    rows = [f for f in (_doc().get("write_files") or []) if f.get("path") == _DROPIN]
+    assert rows, f"first boot must write {_DROPIN}"
+    lines = _unit_lines(rows[0]["content"])
+    assert lines[0] == "[Unit]", lines
+    assert "RequiresMountsFor=/srv/ausmt" in lines, lines
+    assert "After=tailscaled.service" in lines, lines
+    runcmd = "\n".join(str(c) for c in (_doc().get("runcmd") or []))
+    assert "daemon-reload" in runcmd, "systemd must re-read its units once the drop-in is written"
+
+
+def test_provisioning_installs_the_same_boot_ordering_before_the_stack_starts():
+    """Provisioning converges a host whatever its first boot did. FAILS IF it does not write the
+    drop-in, omits either ordering line, or starts the stack before systemd has re-read it."""
+    prov = _text(_PROVISION)
+    assert _DROPIN in prov or ("docker.service.d" in prov and "ausmt-serve.conf" in prov), prov
+    assert re.search(r"^RequiresMountsFor=(?:/srv/ausmt|\$DATA_DIR|\$\{DATA_DIR\})$", prov, re.M), \
+        "the drop-in must require the data volume's mount"
+    assert re.search(r"^After=tailscaled\.service$", prov, re.M)
+    i_conf = prov.index("ausmt-serve.conf")
+    i_reload = prov.index("systemctl daemon-reload")
+    assert i_conf < i_reload < prov.index("make up"), "write, reload, then start the stack"
+
+
+def test_provisioning_installs_the_doctor_outside_the_volume():
+    """The doctor must answer when the volume did not mount, so it cannot live only on it.
+    FAILS IF provisioning does not refresh /usr/local/bin/ausmt-doctor-serve from the checkout or
+    points the operator at another path."""
+    prov = _text(_PROVISION)
+    assert re.search(r'install\b[^\n]*deploy/nectar/doctor-serve\.sh"? /usr/local/bin/ausmt-doctor-serve\b',
+                     prov), prov
+    assert "sudo ausmt-doctor-serve" in prov
