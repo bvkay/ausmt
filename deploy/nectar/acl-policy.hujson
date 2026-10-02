@@ -97,4 +97,38 @@
       "users":  ["autogroup:nonroot", "root"],
     },
   ],
+
+  // The fence, checked by Tailscale itself. Merge these into the policy's own "tests" and
+  // "sshTests" arrays: Tailscale evaluates them against the whole merged policy on every save and
+  // refuses a save that breaks one, so a wider rule elsewhere (the stock allow-all included) stops
+  // the save instead of quietly widening what the internet-facing host can reach. A save refused
+  // here names the rule to remove; never delete a test to get the save through. The curation host
+  // is ausmt-box while the box curates; once it is lifted, repeat each ausmt-box entry for
+  // tag:ausmt-curate and drop the box's.
+  "tests": [
+    // The serving host reaches the curation host's reader listener, and neither its SSH nor its
+    // workbench.
+    {
+      "src":    "tag:ausmt-serve",
+      "accept": ["ausmt-box:8445"],
+      "deny":   ["ausmt-box:22", "ausmt-box:443"],
+    },
+    // Curators reach the workbench on 443, never the gateway's loopback debug port.
+    {
+      "src":    "group:curators",
+      "accept": ["ausmt-box:443"],
+      "deny":   ["ausmt-box:8444"],
+    },
+  ],
+
+  "sshTests": [
+    // The box's node login reaches the serving host as the two gated accounts without a sign-in
+    // check, which the unattended publish depends on. Its other accounts are left untested: that
+    // login is normally an administrator's, whose root and personal sessions take the check above.
+    {
+      "src":    "<BOX_NODE_USER>",
+      "dst":    ["tag:ausmt-serve"],
+      "accept": ["publish", "caddylog"],
+    },
+  ],
 }

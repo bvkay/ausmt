@@ -6,7 +6,7 @@ The policy's own `tests` and `sshTests` stanzas are what Tailscale checks on eve
 merged policy, and a save that breaks one is refused. These pins hold that the stanzas exist and
 name the fence: the serving host reaches the curation host's reader port and is refused its SSH and
 its workbench; curators reach the workbench on 443 and never the gateway's debug port 8444; the
-publish and log accounts admit the box's node login and refuse root.
+publish and log accounts admit the box's node login without a sign-in check.
 
 Read, never applied: the file is parsed as HuJSON (comments and trailing commas stripped) and the
 stanzas are inspected as data.
@@ -78,13 +78,12 @@ def test_curators_reach_the_workbench_and_never_the_gateway_debug_port():
     assert "ausmt-box:8444" in deny, deny
 
 
-def test_the_box_login_reaches_only_the_two_service_accounts():
+def test_the_box_login_reaches_the_two_service_accounts_unattended():
     """FAILS IF no sshTests entry pins the phase-one publish rule: the box's node login admitted as
-    publish and caddylog on the serving host without a sign-in check, and refused as root."""
+    publish and caddylog on the serving host without a sign-in check. Root is not pinned: that login
+    is normally an administrator's, whose root sessions take the sign-in check rather than a deny."""
     rows = [t for t in (_policy().get("sshTests") or [])
             if t.get("src") == "<BOX_NODE_USER>" and "tag:ausmt-serve" in (t.get("dst") or [])]
     assert rows, "an sshTests entry must take the box's node login to tag:ausmt-serve"
     accept = [u for t in rows for u in t.get("accept", [])]
-    deny = [u for t in rows for u in t.get("deny", [])]
     assert {"publish", "caddylog"} <= set(accept), accept
-    assert "root" in deny, deny
