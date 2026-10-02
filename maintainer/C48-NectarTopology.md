@@ -350,17 +350,40 @@ build and its cache, the reconcile timer (now publishing), backups and the resto
 fold and the front-door log pull, the alert and actions timers, and the box's own portal (the curator
 workbench over the tailnet, and ausmt-test's upstream through the quiet period).
 
-**The lift, in order:** create ausmt-curate (m3.medium, D3; no floating IP, no security group that
-admits inbound traffic, `default` included; `tag:ausmt-curate`) and provision it with the full
-`deploy/README.md` checklist (gateway profile and the 10002 tree included, and the two `tailscale
-serve` publications: the reader port for the serving host's gateway routes, 443 for curators); restore
-the sqlite from the newest backup through the restore-drill path; stop the box's reconcile, actions and
-backup timers so there is one writer and one publisher; enable them on ausmt-curate with
-`AUSMT_PUBLISH_TARGET` set; watch one publish land; set `AUSMT_GATEWAY_UPSTREAM` in the serving host's
-`deploy/.env` to ausmt-curate's reader listener and re-run its provisioning; retire the box. The curation host has no
-public address, so its outbound traffic (GitHub, GHCR, ClamAV updates, Tailscale) must leave through
-the project router, whose external gateway, SNAT and `qld-data` interface are checked before the
-serving host's launch (runbook 3.0).
+**The lift, in order** (commands in runbook 16). Two rules govern it: one sender at every moment,
+and no submission accepted on a host whose state is about to be copied.
+
+1. **Create ausmt-curate** (m3.medium, D3; no floating IP once joined, no security group that admits
+   inbound traffic, `default` included; `tag:ausmt-curate`), bootstrapped like the serving host on the
+   second floating IP (D5). It has no public address, so its outbound traffic (GitHub, GHCR, ClamAV
+   updates, Tailscale) leaves through the project router, whose external gateway, SNAT and `qld-data`
+   interface are checked before the serving host's launch (runbook 3.0).
+2. **Its volume**: 100 GB (D9), labelled and mounted at `/srv/ausmt`, holding the whole tree, so that
+   `site-data/builds` and `site-data/cache` share one filesystem (D1, D3).
+3. **Provision** with the full `deploy/README.md` checklist (gateway profile and the 10002 tree
+   included, and the two `tailscale serve` publications: the reader port for the serving host's
+   gateway routes, 443 for curators), `AUSMT_BUILD_MEM_LIMIT=4g` in its `deploy/.env` (D3), timers
+   installed but disabled and the gateway profile down.
+4. **Freeze submissions on the box, then take the final backup.** Stop the box's gateway (the four
+   public routes answer an error, and the Add Survey page hides its Submit button), let gw-runner
+   finish what it holds, stop the gateway profile, then
+   `sudo systemctl disable --now ausmt-reconcile.timer ausmt-actions.timer ausmt-backup.timer`,
+   remove `AUSMT_PUBLISH_TARGET` from the box's `deploy/.env`, and run `ausmt-backup.service` once.
+   Disabled, not stopped: a stopped timer starts again at the box's next boot, and a second sender
+   switches the public build every tick while each pass reports `publish=ok` (D4, one sender).
+5. **Move the state**: the final snapshot's sqlite (the only home of submitter PII) and
+   `gateway/{incoming,jobs,quarantine}`, box to ausmt-curate directly over the tailnet, never through
+   the serving host or any public host; encrypted first (`gpg --symmetric`) if it rests anywhere in
+   between. Restore it through the restore-drill path.
+6. **Publish from ausmt-curate, then reopen**: enable its timers with `AUSMT_PUBLISH_TARGET` set; watch
+   one publish land, with `published.json` naming ausmt-curate as `sender`; set
+   `AUSMT_PUBLISH_SENDER` and `AUSMT_GATEWAY_UPSTREAM` in the serving host's `deploy/.env` to
+   ausmt-curate's address and reader listener and re-run its provisioning; bring ausmt-curate's
+   gateway profile up, which reopens submissions there.
+7. **Retire the box**: drop its phase-one rules from the tailnet policy (the `<BOX_NODE_USER>` ssh rule
+   for `publish` and `caddylog`, and `ausmt-box` from the other three rules), prove the fence again
+   from the serving host against ausmt-curate (runbook 5.5), disable the box's remaining timers and
+   take its stacks down.
 
 ## D11. Open questions
 

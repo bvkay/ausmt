@@ -609,10 +609,81 @@ sudo rm -r builds/<ts>                                 # every directory without
 
 ## 16. Lifting curate
 
-The curation role moves to **ausmt-curate** (m3.medium, which holds the build, C48 D3; no floating
-IP, no security group that admits inbound traffic, `default` included; `tag:ausmt-curate`) and the box
-retires. The order and what moves are in
+The curation role moves to **ausmt-curate** and the box retires. The design is
 `maintainer/C48-NectarTopology.md` D10; the publish contract does not change, only the sender's host
-and `AUSMT_PUBLISH_TARGET` moving with it. The public gateway routes move with the curation role: set
-`AUSMT_GATEWAY_UPSTREAM` in ausmt-serve's `deploy/.env` to ausmt-curate's reader listener and re-run
-`provision-serve.sh`.
+and `AUSMT_PUBLISH_TARGET` moving with it. Settle C48 D11 question 4 (gw-runner's ceiling) first,
+and revisit the access ruling of question 2, which names the lift as its review point. Two rules
+govern the order: there is one sender at every moment, and no submission is accepted on a host whose
+state is about to be copied.
+
+16.1  **Launch** ausmt-curate as in step 3: m3.medium (it holds the build, C48 D3), availability zone
+      QRIScloud, network `qld-data`, no security group that admits inbound traffic (`default`
+      included), and no floating IP once it has joined. Bootstrap it as ausmt-serve was (3.2 to 5.4:
+      the second floating IP and a temporary 22/tcp rule from your own address, both released after
+      the join), joining with `--advertise-tags=tag:ausmt-curate --hostname ausmt-curate`. Its
+      outbound traffic (GitHub, GHCR, ClamAV updates, Tailscale) leaves through the router's SNAT (3.0).
+16.2  **The volume.** Volumes → Create Volume: `ausmt-curate-data`, 100 GB (the curation half of the
+      grant), QRIScloud, attached to ausmt-curate. Label it and mount it at `/srv/ausmt` as in 4.2,
+      with the same fstab line. Everything under `/srv/ausmt` lives on it, `site-data/builds` and
+      `site-data/cache` included: builds hardlink into the cache, and across filesystems every cache
+      hit becomes a copy. It holds about 28 GB of site-data today (31 GB with a build in progress),
+      about 48 GB with the cache at its 16 GiB cap, before Ubuntu and the images.
+16.3  **Provision** by the full `deploy/README.md` checklist (the gateway profile, the 10002 tree,
+      both `tailscale serve` publications: the reader port 8445 for ausmt-serve's gateway routes and
+      443 for curators), with `AUSMT_BUILD_MEM_LIMIT=4g` in its `deploy/.env` (C48 D3) and its secrets
+      typed from your password manager. Install the timers but leave them disabled, and leave the
+      gateway profile down, until 16.6.
+16.4  **Freeze submissions and take the final backup**, on the box:
+```sh
+cd "$AUSMT_CODE_DIR/deploy"
+docker compose -f compose.yaml --profile gateway stop gateway    # the four public routes now answer an error
+docker compose -f compose.yaml --profile gateway logs --tail 20 gw-runner   # repeat until it is idle
+docker compose -f compose.yaml --profile gateway stop
+sudo systemctl disable --now ausmt-reconcile.timer ausmt-actions.timer ausmt-backup.timer
+sed -i '/^AUSMT_PUBLISH_TARGET=/d' .env                          # this host can never publish again
+sudo systemctl start ausmt-backup.service                        # the final snapshot, after the freeze
+```
+      With the gateway stopped, the Add Survey page's healthz probe fails and it hides its Submit
+      button. `disable --now`, not `stop`: a stopped timer starts again at the box's next boot, and
+      two senders would switch the public build every tick while each pass reports `publish=ok`.
+16.5  **Move the state**: the snapshot's sqlite (the only home of submitter PII) and the gateway's
+      `incoming`, `jobs` and `quarantine`, box → ausmt-curate directly over the tailnet, which
+      encrypts it in transit. Never route it through ausmt-serve or any other public host; if it has to
+      rest anywhere between the two, encrypt it first (`gpg --symmetric`) and delete every copy after.
+```sh
+# on the box
+umask 077
+sudo tar -C "$AUSMT_DATA_DIR" -czf /tmp/ausmt-lift.tgz \
+     backups/latest/gateway.sqlite gateway/incoming gateway/jobs gateway/quarantine
+sudo chown "$USER": /tmp/ausmt-lift.tgz
+scp /tmp/ausmt-lift.tgz ubuntu@ausmt-curate:/tmp/ && rm /tmp/ausmt-lift.tgz
+# on ausmt-curate, the gateway profile still down (the restore of deploy/README.md, "Real RESTORE procedure")
+sudo tar -C /tmp -xzf /tmp/ausmt-lift.tgz && sudo rm /tmp/ausmt-lift.tgz
+sudo sh "$AUSMT_CODE_DIR/deploy/scripts/restore-drill.sh" /tmp/backups/latest   # the copy is restorable
+sudo rm -f /srv/ausmt/gateway/state/gateway.sqlite-wal /srv/ausmt/gateway/state/gateway.sqlite-shm
+sudo cp /tmp/backups/latest/gateway.sqlite /srv/ausmt/gateway/state/gateway.sqlite
+sudo cp -a /tmp/gateway/incoming /tmp/gateway/jobs /tmp/gateway/quarantine /srv/ausmt/gateway/
+sudo chown -R 10002:10002 /srv/ausmt/gateway/state /srv/ausmt/gateway/incoming \
+     /srv/ausmt/gateway/jobs /srv/ausmt/gateway/quarantine
+sudo rm -r /tmp/backups /tmp/gateway
+```
+16.6  **Publish from ausmt-curate, then reopen.** On ausmt-curate, as the `User=` of its reconcile
+      unit, accept ausmt-serve's host key once (`ssh publish@ausmt-serve receive-build.sh --current`,
+      as in 9.2), add `AUSMT_PUBLISH_TARGET=publish@ausmt-serve` to `deploy/.env`, and enable the timers
+      (`sudo systemctl enable --now ausmt-reconcile.timer ausmt-actions.timer ausmt-backup.timer`). The
+      first pass builds cold, with an empty cache, and then publishes; watch `publish` read `ok` in its
+      `reconcile-status.json` and, on ausmt-serve, `published.json` name ausmt-curate's tailnet address
+      as `sender`. Then on ausmt-serve set `AUSMT_PUBLISH_SENDER` to that address and
+      `AUSMT_GATEWAY_UPSTREAM` to ausmt-curate's reader listener in `deploy/.env`, and re-run
+      `sudo sh /srv/ausmt/code/deploy/nectar/provision-serve.sh`. Bring ausmt-curate's gateway profile
+      up (`make doctor PROFILE=gateway` clean) and, from off the tailnet,
+      `curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/gateway/healthz` answers
+      200: submissions are open again, on ausmt-curate. Point its `AUSMT_FRONTDOOR_LOG_REMOTE` at
+      `caddylog@ausmt-serve:` and enable its stats, log-pull, alert and drill timers.
+16.7  **Retire the box.** In the tailnet policy, drop the box's phase-one rules: the `<BOX_NODE_USER>`
+      ssh rule for `publish` and `caddylog`, and `ausmt-box` from the curation-to-serve, serve-to-reader
+      and curator rules (`deploy/nectar/acl-policy.hujson` marks each). Run 5.5 again from ausmt-serve
+      with ausmt-curate's MagicDNS name for `B`. On the box, disable what is left
+      (`sudo systemctl disable --now ausmt-alert.timer ausmt-stats.timer ausmt-drill.timer
+      ausmt-frontdoor-logs.timer`) and take its stacks down. Curators now reach the workbench at
+      ausmt-curate's MagicDNS name.
