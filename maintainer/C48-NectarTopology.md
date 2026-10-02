@@ -112,11 +112,13 @@ Readings:
   901.0 + 4 × 224.5 = 1,799.0 MiB. **An m3.medium (8 GB) holds the build.** These figures cover the
   build alone: the curation host's other containers (the gateway, clamd, gw-runner) are not in them.
 * **Container ceilings on the curation host.** `deploy/compose.yaml` caps the build at
-  `AUSMT_BUILD_MEM_LIMIT` (default 8g, sized for the box) and gw-runner at a fixed 4g, and requires
-  the two ceilings to sum below the host. On ausmt-curate `deploy/.env` sets
-  `AUSMT_BUILD_MEM_LIMIT=4g`: 4,096 MiB holds the measured 3,663 MiB with 433 MiB to spare. With
-  gw-runner's 4g the two ceilings then sum to 8 GiB, the whole of an m3.medium, not below it; the
-  rule holds on m3.medium only with gw-runner's ceiling lowered as well (D11, question 4).
+  `AUSMT_BUILD_MEM_LIMIT` (default 8g) and gw-runner at `AUSMT_GW_MEM_LIMIT` (default 4g), both
+  sized for the box, and requires the two ceilings to sum below the host. On ausmt-curate
+  `deploy/.env` sets `AUSMT_BUILD_MEM_LIMIT=4g`, which holds the measured 3,663 MiB with 433 MiB to
+  spare, and `AUSMT_GW_MEM_LIMIT=2g`: 6 GiB of ceilings on an 8 GB host, leaving 2 GiB for the OS,
+  the portal, the gateway and clamd. That is tight; a cold build and a large submission at the same
+  moment can still press on it, and an m3.large removes the squeeze, which is the optional RAM
+  line's other use.
 * **A curation host larger than m3.medium** (m3.large), for more build workers than the build needs,
   does not fit the 8 vCPU / 16 GB quota beside any serving host: that is the optional RAM and vCPU
   line of the amendment. Serve m3.small plus curate m3.large is (0.057 + 0.228) × 8,760 = 2,497 SU a
@@ -407,11 +409,11 @@ and no submission accepted on a host whose state is about to be copied.
 3. **The box's reconcile prune.** `reconcile.sh` prunes stale builds on entry as the operator, and the
    build directories belong to uid 10001 with no group write, so on the box that prune can only remove
    what the operator owns. Not verified on the box; the Makefile's in-container prune is unaffected.
-4. **gw-runner's ceiling on an m3.medium curation host.** `AUSMT_BUILD_MEM_LIMIT=4g` holds the
-   measured build (D3), but gw-runner's ceiling is a fixed 4g in `deploy/compose.yaml`, so the two sum
-   to the whole 8 GB host and the compose file's own rule (the two ceilings sum below the host) is not
-   met. Settle before the lift: a lower gw-runner ceiling on the curation host (a compose change), or
-   a larger curation flavour.
+4. **Headroom on an m3.medium curation host.** Both container ceilings are knobs
+   (`AUSMT_BUILD_MEM_LIMIT`, `AUSMT_GW_MEM_LIMIT`), and ausmt-curate sets 4g and 2g (D3), so the
+   compose rule holds. What remains open is whether 2 GiB of headroom beside a cold build and a
+   submission in flight is enough in practice; the first weeks of curate's own build reports and
+   gw-runner logs answer it, and a larger flavour is the remedy.
 5. **Releases on the replica.** The publish contract carries `site-data/builds/` only, and
    `make cut-release` writes `site-data/releases/`, a sibling of `builds/`, so a release never reaches
    the serving host. The public site serves no release today (`/data/releases/releases.json` answers

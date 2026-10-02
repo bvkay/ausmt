@@ -190,11 +190,13 @@ sudo ausmt-doctor-serve
 
 ## 5. Join the tailnet
 
-5.1  Join with the tagged auth key from step 2.2, typed on the command line, then clear the shell
-     history:
+5.1  Join with the tagged auth key from step 2.2. The key goes into a root-only file and `tailscale
+     up` reads it from there (`--authkey file:<path>`), so it never sits on a command line, in the
+     shell history or in the sudo log; the file is destroyed straight after:
 ```sh
-sudo tailscale up --ssh --advertise-tags=tag:ausmt-serve --hostname ausmt-serve --authkey <the key from 2.2>
-history -c
+sudo sh -c 'umask 077; cat > /root/ts-authkey'      # paste the key, Enter, then Ctrl-D
+sudo tailscale up --ssh --advertise-tags=tag:ausmt-serve --hostname ausmt-serve --authkey file:/root/ts-authkey
+sudo shred -u /root/ts-authkey
 ```
      `tailscale up` never asks for a key. Without `--authkey` it prints a login URL instead; do not
      sign in there (the node would join as your own user). If you did, or the key went unused, revoke
@@ -611,8 +613,8 @@ sudo rm -r builds/<ts>                                 # every directory without
 
 The curation role moves to **ausmt-curate** and the box retires. The design is
 `maintainer/C48-NectarTopology.md` D10; the publish contract does not change, only the sender's host
-and `AUSMT_PUBLISH_TARGET` moving with it. Settle C48 D11 question 4 (gw-runner's ceiling) first,
-and revisit the access ruling of question 2, which names the lift as its review point. Two rules
+and `AUSMT_PUBLISH_TARGET` moving with it. Set both container ceilings in 16.3 (C48 D3), and
+revisit the access ruling of C48 D11 question 2, which names the lift as its review point. Two rules
 govern the order: there is one sender at every moment, and no submission is accepted on a host whose
 state is about to be copied.
 
@@ -631,7 +633,8 @@ state is about to be copied.
       about 48 GB with the cache at its 16 GiB cap, before Ubuntu and the images.
 16.3  **Provision** by the full `deploy/README.md` checklist (the gateway profile, the 10002 tree,
       both `tailscale serve` publications: the reader port 8445 for ausmt-serve's gateway routes and
-      443 for curators), with `AUSMT_BUILD_MEM_LIMIT=4g` in its `deploy/.env` (C48 D3) and its secrets
+      443 for curators), with `AUSMT_BUILD_MEM_LIMIT=4g` and `AUSMT_GW_MEM_LIMIT=2g` in its
+      `deploy/.env` (C48 D3) and its secrets
       typed from your password manager. Install the timers but leave them disabled, and leave the
       gateway profile down, until 16.6.
 16.4  **Freeze submissions and take the final backup**, on the box:
