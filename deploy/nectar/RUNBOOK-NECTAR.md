@@ -242,8 +242,28 @@ host. This host holds no registry credential and needs no `docker login`.
 ## 7. Copy the certificate volume from ausmt-test
 
 The certificate for the public name lives in the front door's `caddy_data` volume on ausmt-test.
-Copying it first means the new front door starts with a valid certificate and never places an ACME
-order for a name that still points at ausmt-test.
+Copying it first means the new front door starts with a valid certificate and, while that certificate
+has more than 30 days left, places no ACME order for a name that still points at ausmt-test. Caddy
+renews in the last third of a certificate's life, the last 30 days of a 90-day Let's Encrypt
+certificate. The live certificate for ausmt.auscope.org.au runs 2026-08-17 to 2026-11-15, so its
+renewal window opens about 2026-10-16; ausmt.au's runs 2026-09-19 to 2026-12-18. Inside the window
+the serving host's Caddy tries to renew at start, the challenge reaches ausmt-test and fails, and the
+failures count against the ACME account both hosts then share (its key travels in `caddy_data`).
+
+**Steps 7 to 12 run back to back**, so the copied certificate never reaches its window on a host
+that does not hold the address. Before copying, check the time left (30 days = 30 × 86,400 =
+2,592,000 s):
+```sh
+for n in ausmt.auscope.org.au ausmt.au; do     # ausmt.au only if AUSMT_LEGACY_REDIRECT_NAME is set
+  echo | openssl s_client -connect $n:443 -servername $n 2>/dev/null \
+    | openssl x509 -noout -enddate -checkend 2592000
+done
+```
+`Certificate will not expire` for each name: copy now. `Certificate will expire`: the window is open;
+wait until ausmt-test has renewed (the end date moves about 90 days out) and copy after that. If
+step 12 slips after the copy and the 30-day mark comes first, stop the front door on ausmt-serve
+before that date (`sudo docker compose -f /srv/ausmt/code/deploy/frontdoor/compose.yaml down`), wait
+for ausmt-test to renew, then repeat this step, `install-frontdoor.sh` as in step 8, and steps 10 to 12.
 
 The archive holds the TLS private key, so it is readable by `ubuntu` alone at every hop and every copy
 is deleted at the end. ausmt-test is reached by the temporary rule of step 2.3.
@@ -422,7 +442,13 @@ Move the address back; nothing else is needed while ausmt-test is left running.
 
 13.1  Network → Floating IPs → 203.101.226.191 → Disassociate, then Associate with the `ausmt-test`
       port. ausmt-test's front door still proxies to the box's reader listener, which still serves the
-      box's own current.
+      box's own current. Then, on ausmt-test (`ssh ubuntu@ausmt-vps`, by the rule of step 2.3):
+```sh
+sudo docker compose -f <the checkout holding deploy/frontdoor>/deploy/frontdoor/compose.yaml restart frontdoor
+```
+      While the address was away ausmt-test could not renew (the challenge reached ausmt-serve), and
+      Caddy backs off between failed attempts; the restart makes it renew at once, now that the
+      challenge reaches it, if its certificate is inside the window.
 13.2  Keep what ausmt-serve logged, as in 12.4 the other way round: pull once more, move
       `access-frontdoor.json` aside as `access-frontdoor-ausmt-serve.json`, then put the box's
       `AUSMT_FRONTDOOR_LOG_REMOTE` back to its ausmt-test value.
@@ -435,6 +461,17 @@ Move the address back; nothing else is needed while ausmt-test is left running.
 Leave ausmt-test running and untouched until you are satisfied; at the least, one new build has gone
 box → reconcile → publish → ausmt-serve with `publish` = `ok`, and `sudo ausmt-doctor-serve` is clean
 apart from the known WARNs. ausmt-test costs 125 SU a year until it is deleted, shut down or not.
+
+**End the quiet period before ausmt-test's certificate expires**, 2026-11-15 for the certificate it
+holds today. ausmt-test cannot renew while the address is on ausmt-serve, so a rollback after that
+date serves an expired certificate until 13.1's renewal succeeds. From about 2026-10-16 its Caddy
+tries to renew and fails, and those failures count against the shared ACME account; serving is
+unaffected, and deleting ausmt-test ends them.
+
+**Rollback ends at 14.2.** Once ausmt-test is deleted there is no host to move the address back to.
+The front door's `caddy_data` lives in Docker's volume on ausmt-serve's root disk, not on the data
+volume, so a lost ausmt-serve after that point means a new instance by this runbook from step 3 and
+a fresh certificate.
 
 14.1  On ausmt-test (`ssh ubuntu@ausmt-vps`, by the rule of step 2.3):
       `cd <the checkout holding deploy/frontdoor> && sudo docker compose -f deploy/frontdoor/compose.yaml down`.

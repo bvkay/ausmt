@@ -253,9 +253,12 @@ files only.
 The public name already resolves to 203.101.226.191, so the cutover moves the address, not DNS:
 
 1. Copy the `caddy_data` volume from ausmt-test to ausmt-serve BEFORE the serving front door first
-   starts, so the certificate travels and no ACME order is attempted for a name that does not yet
-   point at the new host. Then finish provisioning, with `AUSMT_GATEWAY_UPSTREAM` naming the box's
-   reader listener (D12).
+   starts, so the certificate travels, and do it while the certificate has more than 30 days left, so
+   no ACME order is attempted for a name that does not yet point at the new host. Caddy renews in the
+   last third of a certificate's life; the live certificate for the public name runs 2026-08-17 to
+   2026-11-15, so its window opens about 2026-10-16 (ausmt.au: 2026-09-19 to 2026-12-18). Inside the
+   window the copy waits until ausmt-test has renewed. Steps 1 to 4 run back to back. Then finish
+   provisioning, with `AUSMT_GATEWAY_UPSTREAM` naming the box's reader listener (D12).
 2. Seed: the first publish from the box over the tailnet; `sudo ausmt-doctor-serve` green, its
    gateway line included.
 3. Check the serving host end to end on itself with `curl --resolve <name>:443:127.0.0.1`: the
@@ -269,10 +272,14 @@ The four public gateway routes stay live through the move: before it ausmt-test 
 box's reader listener, and after it ausmt-serve sends them to the same listener (D12).
 
 **Rollback is moving the floating IP back.** ausmt-test is left running and untouched through a quiet
-period, still proxying to the box's reader listener, which keeps serving the box's own current. Its
-certificate may be older than the serving host's by then; it is still valid within its own renewal
-window and Caddy renews it once the address is back. **ausmt-test is deleted only after the quiet
-period**; its tailnet tag and ACL entries go with it. Procedure: `deploy/nectar/RUNBOOK-NECTAR.md`.
+period, still proxying to the box's reader listener, which keeps serving the box's own current. It
+cannot renew while the address is away (the challenge reaches the serving host), so its certificate
+is good only until its own expiry, 2026-11-15 for the current one: the quiet period ends before that
+date, and a rollback restarts ausmt-test's front door so that it renews at once. **ausmt-test is
+deleted only after the quiet period**, and the rollback ends with it: the serving host's `caddy_data`
+is in Docker's volume on its root disk, so a lost serving host after that means a new instance and a
+fresh certificate. ausmt-test's tailnet tag and ACL entries go when it does. Procedure:
+`deploy/nectar/RUNBOOK-NECTAR.md`.
 
 ## D7. Curator access layering
 
