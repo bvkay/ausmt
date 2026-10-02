@@ -17,13 +17,16 @@
 #      site-data/builds owned by uid 10001 (the only writer here is the publish account, which is
 #      uid 10001), basemap and logs/caddy owned by root
 #   4. installs the receiver and the two account gates, and makes each gate its account's login
-#      shell: publish (uid 10001, receives builds) and caddylog (reads the masked front-door log)
-#   5. renders deploy/.env from deploy/nectar/serve.env.example and deploy/frontdoor/.env from
+#      shell: publish (uid 10001, receives builds) and caddylog (reads the masked front-door log);
+#      installs the serve doctor at /usr/local/bin/ausmt-doctor-serve, outside the data volume
+#   5. orders Docker after the data volume's mount and tailscaled (a docker.service drop-in, the
+#      same one first boot writes), reloads systemd and enables Docker
+#   6. renders deploy/.env from deploy/nectar/serve.env.example and deploy/frontdoor/.env from
 #      deploy/frontdoor/.env.example with the reader upstream on loopback, the first time; carries
 #      AUSMT_GATEWAY_UPSTREAM from deploy/.env into deploy/frontdoor/.env on every run; stops with
 #      exit 3 while either still has a value to fill
-#   6. fetches the self-hosted basemap when compose mounts one and it is not there yet
-#   7. starts the portal (make up) and then the front door (install-frontdoor.sh)
+#   7. fetches the self-hosted basemap when compose mounts one and it is not there yet
+#   8. starts the portal (make up) and then the front door (install-frontdoor.sh)
 #
 # WHAT IT NEVER DOES: install a timer or unit of the curation role, start the gateway profile, or
 # write a secret. The serve role receives builds; it does not build, back up or curate.
@@ -90,7 +93,27 @@ mkdir -p /var/log/caddy
 setfacl -R -m u:caddylog:rX /var/log/caddy
 setfacl -d -m u:caddylog:rX /var/log/caddy
 
-# ----- 5. the two .env files ----------------------------------------------------------------------
+# The doctor has to answer when the volume did not mount, so it is copied onto the root disk.
+install -o root -g root -m 0755 "$CODE_DIR/deploy/nectar/doctor-serve.sh" /usr/local/bin/ausmt-doctor-serve
+
+# ----- 5. boot ordering ---------------------------------------------------------------------------
+# Docker starts only once the data volume is mounted, so a boot without it leaves no edge at all
+# rather than containers serving empty stubs on the root disk behind a valid certificate; and only
+# after tailscaled, so the front door never dials the curation host before the tailnet resolves it.
+# Unmounting the volume stops Docker with it. cloud-init-serve.yaml writes the same drop-in.
+log "ordering Docker after the $DATA_DIR mount and tailscaled"
+install -d -o root -g root -m 0755 /etc/systemd/system/docker.service.d
+cat > /etc/systemd/system/docker.service.d/ausmt-serve.conf <<UNIT
+[Unit]
+RequiresMountsFor=$DATA_DIR
+Wants=tailscaled.service
+After=tailscaled.service
+UNIT
+chmod 0644 /etc/systemd/system/docker.service.d/ausmt-serve.conf
+systemctl daemon-reload
+systemctl enable --now docker || die "Docker did not start (systemctl status docker; is $DATA_DIR mounted?)"
+
+# ----- 6. the two .env files ----------------------------------------------------------------------
 if [ ! -f "$DEPLOY/.env" ]; then
   install -m 0600 "$DEPLOY/nectar/serve.env.example" "$DEPLOY/.env"
   log "wrote $DEPLOY/.env from deploy/nectar/serve.env.example"
@@ -133,7 +156,7 @@ if [ -n "$todo" ]; then
   exit 3
 fi
 
-# ----- 6. the basemap -----------------------------------------------------------------------------
+# ----- 7. the basemap -----------------------------------------------------------------------------
 if grep -q '/basemap:/srv/basemap' "$DEPLOY/compose.yaml" && [ "${AUSMT_SKIP_BASEMAP:-0}" != 1 ]; then
   if [ -f "$DATA_DIR/basemap/world.pmtiles" ] && [ -f "$DATA_DIR/basemap/region.pmtiles" ]; then
     log "basemap already present under $DATA_DIR/basemap"
@@ -143,11 +166,11 @@ if grep -q '/basemap:/srv/basemap' "$DEPLOY/compose.yaml" && [ "${AUSMT_SKIP_BAS
   fi
 fi
 
-# ----- 7. the portal, then the front door ---------------------------------------------------------
+# ----- 8. the portal, then the front door ---------------------------------------------------------
 log "starting the portal (make up)"
 (cd "$DEPLOY" && make up) || die "make up failed (the GHCR images are public: check OWNER and TAG in $DEPLOY/.env)"
 log "starting the front door (install-frontdoor.sh, reader upstream AUSMT_BOX_READER_UPSTREAM=http://127.0.0.1:8445)"
 (cd "$DEPLOY/frontdoor" && sh ./install-frontdoor.sh) || die "install-frontdoor.sh failed"
 
-log "done. Check the host with: sh $DEPLOY/nectar/doctor-serve.sh"
+log "done. Check the host with: sudo ausmt-doctor-serve"
 log "the replica serves once the first publish arrives (RUNBOOK-NECTAR.md, seeding)"

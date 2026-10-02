@@ -159,6 +159,11 @@ def test_the_gateway_upstream_is_asked_for_and_carried_to_the_front_door():
 _DROPIN = "/etc/systemd/system/docker.service.d/ausmt-serve.conf"
 
 
+def _code_lines(text: str) -> str:
+    """The script without its comment lines, so an order pin reads commands, not the header."""
+    return "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+
+
 def _unit_lines(text: str) -> list[str]:
     return [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
 
@@ -184,9 +189,10 @@ def test_provisioning_installs_the_same_boot_ordering_before_the_stack_starts():
     assert re.search(r"^RequiresMountsFor=(?:/srv/ausmt|\$DATA_DIR|\$\{DATA_DIR\})$", prov, re.M), \
         "the drop-in must require the data volume's mount"
     assert re.search(r"^After=tailscaled\.service$", prov, re.M)
-    i_conf = prov.index("ausmt-serve.conf")
-    i_reload = prov.index("systemctl daemon-reload")
-    assert i_conf < i_reload < prov.index("make up"), "write, reload, then start the stack"
+    code = _code_lines(prov)
+    i_conf = code.index("ausmt-serve.conf")
+    i_reload = code.index("systemctl daemon-reload")
+    assert i_conf < i_reload < code.index("make up"), "write, reload, then start the stack"
 
 
 def test_provisioning_installs_the_doctor_outside_the_volume():

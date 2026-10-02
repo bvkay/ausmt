@@ -1,7 +1,14 @@
 #!/bin/sh
 # AusMT serve doctor - one-screen health of the serving replica (ausmt-serve), the host that runs the
-# front door and the portal container over a tree it receives by publish. Run it on that host from the
-# checkout: `sh deploy/nectar/doctor-serve.sh`. Read-only; it never mutates anything.
+# front door and the portal container over a tree it receives by publish. Read-only; it never mutates
+# anything. Run it as root: `sudo ausmt-doctor-serve`.
+#
+# WHERE IT RUNS FROM. provision-serve.sh installs a copy at /usr/local/bin/ausmt-doctor-serve, on the
+# root disk, and refreshes it on every provisioning run, because the checkout and both .env files
+# live on the data volume and the doctor has to answer when that volume did not mount. Run from the
+# checkout (deploy/nectar/), it reads that checkout; installed, it reads the checkout under the data
+# root ($AUSMT_CODE_DIR, default $AUSMT_DATA_DIR/code, default /srv/ausmt/code). With deploy/.env
+# absent it FAILs the config line and still checks the volume at that data root.
 #
 # Prints ONE labelled PASS / WARN / FAIL line per check and a final summary, and EXITS NON-ZERO if any
 # check FAILs, so it can gate a script or an alert; a WARN alone does not fail the exit. No check aborts
@@ -27,7 +34,7 @@
 #  11. frontdoor: deploy/frontdoor/doctor.sh, its FAIL and WARN lines relayed under this label
 #
 # CONFIG (env; every command and path is overridable so the checks are testable)
-#   AUSMT_DOCTOR_ENV                deploy/.env (default: ../.env relative to this script); sources
+#   AUSMT_DOCTOR_ENV                deploy/.env (default: .env in the checkout found above); sources
 #                                   AUSMT_DATA_DIR
 #   AUSMT_DOCTOR_COMPOSE            the portal compose file (default: deploy/compose.yaml)
 #   AUSMT_DOCTOR_FRONTDOOR_COMPOSE  the front-door compose file (default: deploy/frontdoor/compose.yaml)
@@ -43,7 +50,12 @@
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-DEPLOY_DIR="$(cd "$HERE/.." && pwd)"
+DEFAULT_DATA_DIR="${AUSMT_DATA_DIR:-/srv/ausmt}"
+if [ -f "$HERE/../compose.yaml" ]; then
+	DEPLOY_DIR="$(cd "$HERE/.." && pwd)"
+else
+	DEPLOY_DIR="${AUSMT_CODE_DIR:-$DEFAULT_DATA_DIR/code}/deploy"
+fi
 
 ENV_FILE="${AUSMT_DOCTOR_ENV:-$DEPLOY_DIR/.env}"
 COMPOSE_FILE="${AUSMT_DOCTOR_COMPOSE:-$DEPLOY_DIR/compose.yaml}"
@@ -65,11 +77,15 @@ fail() { printf 'FAIL %s\n' "$*"; FAILS=$((FAILS + 1)); }
 # Both .env files are root-only on a provisioned host, and dash exits on the `.` of a file it cannot
 # read, so readability is tested first and reported as a check rather than left to kill the run.
 ENV_READ=1
+ENV_MISSING=0
 load_env() {
-	if [ -f "$ENV_FILE" ] && [ ! -r "$ENV_FILE" ]; then
+	if [ ! -e "$ENV_FILE" ]; then
+		fail "config: $ENV_FILE does not exist; the checkout lives on the data volume, so read the volume line below"
+		ENV_MISSING=1
+	elif [ ! -r "$ENV_FILE" ]; then
 		fail "config: $ENV_FILE is not readable by this user, so the data checks cannot run; run the doctor as root (sudo ausmt-doctor-serve)"
 		ENV_READ=0
-	elif [ -f "$ENV_FILE" ]; then
+	else
 		set -a
 		# shellcheck disable=SC1090
 		. "$ENV_FILE"
@@ -291,7 +307,11 @@ EOF
 printf 'AusMT serve doctor (serving replica) - %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '=====================================================\n'
 load_env
-DATA_DIR="${AUSMT_DATA_DIR:-}"
+if [ "$ENV_MISSING" -eq 1 ]; then
+	DATA_DIR="$DEFAULT_DATA_DIR"
+else
+	DATA_DIR="${AUSMT_DATA_DIR:-}"
+fi
 SITE="$DATA_DIR/site-data"
 check_containers
 check_listeners
