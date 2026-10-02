@@ -8,7 +8,7 @@ record fixes the roles, the arithmetic that sizes them, the publish contract bet
 cutover and its rollback, and what is still open. It extends C47 (the public bridge), whose two walls
 and masked edge log carry over unchanged.
 
-## D1. Current state (facts checked 2026-09-30)
+## D1. Current state (facts checked 2026-09-30; sizes, build memory and certificates 2026-10-02)
 
 * **The Nectar project** (custom bundle, from the owner's dashboard): 8 vCPU, 16 GB RAM, 3 instances,
   1 router, 2 floating IPs, 5 security groups, 200 GB object store, 2,000 SU budget. **There is no
@@ -26,9 +26,18 @@ and masked edge log carry over unchanged.
   p3.medium (preemptible) 4 vCPU 8 GB 0.029 SU/h; p3.xxlarge 16 vCPU 32 GB 0.114 SU/h. Flavour root
   disk: t3 10 GB, m3 30 GB. Volume storage is a separate per-availability-zone quota.
 * **Measured on the box** (owner, 2026-09-30): `site-data/builds` 33G (five kept builds),
-  `site-data/cache` 2.2G (the current 2048 MB cap), `basemap` 2.4G. Measured 2026-09-14: one build
-  was about 2.9 GB at 4,961 station h5 files (h5 996M, edi 670M, bundles 543M, xml 424M, products
-  105M, pages 93M). The corpus is now past 15,000 stations.
+  `site-data/cache` 2.2G (the 2048 MB cap main ships), `basemap` 2.4G.
+* **One built tree, measured** (2026-10-02, 15,265 stations, from the live products manifest and an
+  acceptance build of the same corpus): **7.5 GB (7.0 GiB)**, of which h5 2.89 GB, bundles 1.50,
+  xml 1.47, edi 1.18, pages and products 0.48. About 3.6 GB of it is non-MTH5 and is rewritten by
+  every build. The 2026-09-14 figure, about 2.9 GB at 4,961 station h5 files (a count of files, not
+  of stations), scaled linearly gives 2.9 × 15,265 / 4,961 = 8.9 GB, 19 per cent above the
+  measurement; it is superseded.
+* **The MTH5 build cache** (C18 A6): one cache generation measured 5.5 GB; the cap is ruled 16 GiB.
+  Builds hardlink into the cache, so `site-data/cache` and `site-data/builds` must share one
+  filesystem; across filesystems a hit falls back to a copy and every build carries its own MTH5.
+* **Build memory on the box** (its own Linux `build_report.json`, the live build of 2026-09-28):
+  parent peak 1,035 MiB, largest worker 438 MiB, 6 workers.
 
 [flav]: https://support.ehelp.edu.au/support/solutions/articles/6000205341-nectar-flavors
 [su]: https://support.ehelp.edu.au/support/solutions/articles/6000257054-service-units
@@ -40,9 +49,9 @@ and masked edge log carry over unchanged.
 | Public address | floating IP (the one ausmt-test holds today) | none |
 | Security group | 80/tcp and 443/tcp from anywhere, nothing else | nothing inbound from the internet |
 | Runs | the front-door Caddy (`deploy/frontdoor`) and the portal container, on one host, reader upstream `http://127.0.0.1:8445`, gateway upstream the curation host's reader listener (D12) | gateway, clamd, gw-runner, surveys-live, git-creds, the sqlite, reconcile and the build |
-| Holds | the built tree on a Cinder volume at `/srv/ausmt` | everything the build and the curator workbench need |
+| Holds | the built tree on a Cinder volume at `/srv/ausmt` | everything the build and the curator workbench need, on its own Cinder volume at `/srv/ausmt` |
 | Never holds | a git write credential, the gateway, the sqlite, the build cache | a public listener |
-| Flavour | m3.small first, m3.medium if serving needs it | m3.medium, or larger after a RAM amendment |
+| Flavour | m3.small first, m3.medium if serving needs it | m3.medium with the build capped at 4g (D3), or larger after a RAM amendment |
 | Gets data by | publish from the curation host (D4) | curator publishes to surveys-live |
 
 The serving host is the only machine on the internet and it holds nothing that is not already public
@@ -61,8 +70,8 @@ never start the gateway profile (`deploy/tests/test_cloud_init_serve.py` pins bo
 
 ## D3. Quota and SU arithmetic
 
-All figures below are the D1 facts added up, and the build memory read from two build reports;
-nothing is estimated.
+All figures below are the D1 facts added up, and the build memory read from build reports; nothing
+is estimated.
 
 | Stage | Instances | vCPU | RAM | SU per year |
 |---|---|---|---|---|
@@ -76,31 +85,42 @@ nothing is estimated.
 
 Readings:
 
-* **The volume is the first blocker.** The allocation has no volume storage, and the m3 root disk is
-  30 GB while the box's five kept builds alone measure 33G. The serving host cannot hold the tree until
-  the amendment (D9) grants volume storage in QRIScloud, the availability zone ausmt-test and its
-  floating IP live in.
-* **Sizing the volume.** At the box's measured 33G for five builds (6.6 GB each on average; the size
-  of any one build is not in the facts, so the runbook reads it with `du` before the first publish) plus
-  the 2.4G basemap, the serving tree needs about 35 GB (33 + 2.4) before any hard-linking between builds (D4).
-  The 100 GB request leaves room for the corpus to keep growing at five kept builds. The build cache
-  (2.2G) stays on the curation host.
+* **The volume is the first blocker, for both hosts.** The allocation has no volume storage, and the
+  m3 root disk is 30 GB. Neither host's data fits it at five kept builds, so the amendment (D9) asks
+  for volume storage in QRIScloud, the availability zone ausmt-test and its floating IP live in: one
+  100 GB volume per host.
+* **Sizing the serving volume.** One build is 7.5 GB (D1). Five kept builds take between 21.9 GB
+  (7.5 + 4 × 3.6, when each later build links its h5 files to the one before and stores its 3.6 GB of
+  non-MTH5 afresh) and 37.5 GB (5 × 7.5, when nothing links), plus the 2.4 GB basemap: at most
+  39.9 GB. The 100 GB volume leaves room for the corpus to keep growing at five kept builds. The first
+  publish sends the whole 7.5 GB (runbook 9.3).
+* **Sizing the curation volume.** The curation host holds the kept builds plus one in progress, the
+  MTH5 build cache, surveys-live, the basemap, the gateway state and the ClamAV database. Its
+  site-data floor today is about 28 GB (31 GB with a build in progress) before Ubuntu and the images,
+  and about 48 GB with the cache at its 16 GiB cap (D1). The cache and the builds share one
+  filesystem, the volume mounted at `/srv/ausmt`, because builds hardlink into the cache. The 100 GB
+  curation volume holds that with room to grow; the 30 GB root disk does not.
 * **m3.medium for both roles** spends the whole 8 vCPU / 16 GB quota and the whole 2,000 SU budget in
   one year, and it only fits once ausmt-test is deleted.
-* **Build memory (measured).** A cold and a warm build of the 15,265-station corpus, run on a macOS
-  host with 4 workers (`build_report.json` of each, engine `b362918`, surveys `7a1d756c`), recorded a
-  parent peak (`peak_rss_mib`) of 865.8 and 901.0 MiB and a largest single worker
-  (`peak_rss_child_max_mib`) of 403.2 and 224.5 MiB. The engine reads the footprint as the parent plus
-  the worker count times the largest worker: 865.8 + 4 × 403.2 = 2,478.6 MiB cold and
-  901.0 + 4 × 224.5 = 1,799.0 MiB warm, under a third of m3.medium's 8 GB. **An m3.medium holds the
-  build.** These are macOS figures; the same three fields in the box's own `build_report.json` give
-  the Linux figure. They cover the build alone: the curation host's other containers (the gateway,
-  clamd, gw-runner) are not in them.
+* **Build memory (measured).** The engine reads the footprint as the parent plus the worker count
+  times the largest worker. The box's own Linux report (D1) gives 1,035 + 6 × 438 = 3,663 MiB at 6
+  workers. A cold and a warm build of the 15,265-station corpus on a macOS host with 4 workers
+  (engine `b362918`, surveys `7a1d756c`) gave 865.8 + 4 × 403.2 = 2,478.6 MiB and
+  901.0 + 4 × 224.5 = 1,799.0 MiB. **An m3.medium (8 GB) holds the build.** These figures cover the
+  build alone: the curation host's other containers (the gateway, clamd, gw-runner) are not in them.
+* **Container ceilings on the curation host.** `deploy/compose.yaml` caps the build at
+  `AUSMT_BUILD_MEM_LIMIT` (default 8g, sized for the box) and gw-runner at a fixed 4g, and requires
+  the two ceilings to sum below the host. On ausmt-curate `deploy/.env` sets
+  `AUSMT_BUILD_MEM_LIMIT=4g`: 4,096 MiB holds the measured 3,663 MiB with 433 MiB to spare. With
+  gw-runner's 4g the two ceilings then sum to 8 GiB, the whole of an m3.medium, not below it; the
+  rule holds on m3.medium only with gw-runner's ceiling lowered as well (D11, question 4).
 * **A curation host larger than m3.medium** (m3.large), for more build workers than the build needs,
-  does not fit the 8 vCPU / 16 GB quota beside any serving host: that is the RAM and vCPU amendment.
-  At 2,500 SU a year it spends the 2,000 SU budget in at most 9.6 months counted from a full budget;
-  ausmt-test has drawn SU since 21 Jul 2026 and the serve-first stage draws more before the lift, so the real runway is shorter. That is when
-  the SU top-up in D9 applies.
+  does not fit the 8 vCPU / 16 GB quota beside any serving host: that is the optional RAM and vCPU
+  line of the amendment. Serve m3.small plus curate m3.large is (0.057 + 0.228) × 8,760 = 2,497 SU a
+  year, about 2,500, which spends the 2,000 SU budget in at most 9.6 months counted from a full
+  budget; ausmt-test has drawn SU since 21 Jul 2026 and the serve-first stage draws more before the
+  lift, so the real runway is shorter. That line needs an SU top-up of at least 500 a year beside it
+  (D9).
 * **Idle is not free.** A shut-down instance still consumes SU; only deletion stops it. ausmt-test
   costs its 125 SU a year until it is deleted after the quiet period (D6).
 
@@ -262,11 +282,17 @@ Accepted by the owner, not built here:
 
 ## D9. The amendment to file
 
-* **Volume storage: 100 GB in QRIScloud.** Blocks the serving host (D3).
-* **RAM 16 to 32 GB and vCPU 8 to 16**, headroom for a curation instance larger than m3.medium
-  running the corpus build with more workers. The build fits m3.medium (D3, build memory), and
-  m3.medium for both roles already fills the quota (D3).
-* **An SU top-up only if the allocation runs past 12 months.**
+* **Volume storage: 200 GB in QRIScloud**, 100 GB for the serving host and 100 GB for the curation
+  host. Blocks the serving host's volume (D3; the runbook's proof serve on the root disk can run
+  first) and the lift (D10).
+* **RAM 16 to 32 GB and vCPU 8 to 16, optional**, headroom for a curation instance larger than
+  m3.medium running the corpus build with more workers. The build fits m3.medium (D3, build memory),
+  and m3.medium for both roles already fills the quota (D3). Serve m3.small plus curate m3.large costs
+  about 2,500 SU a year against the 2,000 budget, so the line goes in only with a top-up of at least
+  500 SU a year beside it; the owner includes or drops it when filing, and the volume line alone may
+  be approved sooner.
+* **An SU top-up only if the allocation runs past 12 months**, or at least 500 SU a year with the
+  RAM line.
 * **A second project member.**
 
 The paste-ready text is in `deploy/nectar/RUNBOOK-NECTAR.md`.
@@ -308,6 +334,11 @@ that it has an external gateway set and `qld-data` attached before the lift.
 3. **The box's reconcile prune.** `reconcile.sh` prunes stale builds on entry as the operator, and the
    build directories belong to uid 10001 with no group write, so on the box that prune can only remove
    what the operator owns. Not verified on the box; the Makefile's in-container prune is unaffected.
+4. **gw-runner's ceiling on an m3.medium curation host.** `AUSMT_BUILD_MEM_LIMIT=4g` holds the
+   measured build (D3), but gw-runner's ceiling is a fixed 4g in `deploy/compose.yaml`, so the two sum
+   to the whole 8 GB host and the compose file's own rule (the two ceilings sum below the host) is not
+   met. Settle before the lift: a lower gw-runner ceiling on the curation host (a compose change), or
+   a larger curation flavour.
 
 ## D12. Decision: the public gateway routes follow the curation host
 

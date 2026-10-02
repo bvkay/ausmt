@@ -47,19 +47,29 @@ internet ──▶ 203.101.226.191 ──▶ ausmt-serve: front door (Caddy, TLS
 
 In the Nectar dashboard: Allocations → My Requests → the project → Amend/Extend. Paste and adjust:
 
-> **Volume storage: 100 GB in QRIScloud.** The project serves the AusMT magnetotelluric data portal
-> (ausmt.auscope.org.au). We are moving the public serving role from a test instance onto a
-> dedicated instance whose built data tree lives on a Cinder volume: five retained builds currently
-> measure 33 GB and the self-hosted basemap 2.4 GB, which does not fit the 30 GB m3 root disk.
+> **Volume storage: 200 GB in QRIScloud, as two 100 GB volumes.** The project serves the AusMT
+> magnetotelluric data portal (ausmt.auscope.org.au). We are moving it from a test instance onto two
+> instances, a public serving instance and a non-public curation instance, and neither one's data fits
+> the 30 GB m3 root disk. One built data tree of the current corpus (15,265 stations) measures
+> 7.5 GB. The serving instance keeps five builds, up to 37.5 GB, plus a 2.4 GB self-hosted basemap.
+> The curation instance holds the builds, a build cache capped at 16 GiB that must share their
+> filesystem, the survey repository and the submission state: about 28 GB today and 48 GB with the
+> cache at its cap, before the operating system and container images. 100 GB each leaves room for the
+> corpus to grow.
 >
-> **RAM 16 to 32 GB and vCPU 8 to 16.** The curation role (submission gateway, antivirus, the survey
-> repository and the corpus build) moves to a separate, non-public instance. The corpus build fits an
-> m3.medium; the increase is headroom to run it with more workers on a larger instance, which the
-> current 8 vCPU / 16 GB leaves no room for beside the serving instance.
+> **RAM 16 to 32 GB and vCPU 8 to 16.** Headroom to run the corpus build on a curation instance
+> larger than m3.medium, with more workers, which the current 8 vCPU / 16 GB leaves no room for beside
+> the serving instance.
 >
 > **Service units:** a top-up only if the allocation runs past 12 months.
 >
 > **A second project member**, for continuity of operation.
+
+**The RAM and vCPU line is optional; include it or drop it when filing.** The build fits an m3.medium
+(C48 D3), so the line buys only more build workers, and it buys a shape the SU line does not fund:
+serve m3.small plus curate m3.large is (0.057 + 0.228) SU/h × 8,760 h = 2,497 SU a year, about 2,500
+against the 2,000 budget. Kept, it needs the SU line changed to a top-up of at least 500 SU a year.
+Dropped, curate runs on m3.medium and the volume line may be approved sooner on its own.
 
 Steps 1 to 3 run while it is pending. Step 4 needs the volume, or the proof serve of 4A.
 
@@ -114,8 +124,9 @@ Steps 1 to 3 run while it is pending. Step 4 needs the volume, or the proof serv
 
 ## 4. The data volume
 
-4.1  Volumes → Volumes → Create Volume: name `ausmt-serve-data`, 100 GB, availability zone
-     **QRIScloud**, no source. Then Actions → Manage Attachments → attach to `ausmt-serve`.
+4.1  Volumes → Volumes → Create Volume: name `ausmt-serve-data`, 100 GB (half the grant; the other
+     half is ausmt-curate's, section 16), availability zone **QRIScloud**, no source. Then Actions →
+     Manage Attachments → attach to `ausmt-serve`.
 4.2  On the host, find the new disk and label it. **Only ever on the new, empty volume:**
 ```sh
 lsblk -f                                  # the new 100G disk with no FSTYPE, usually vdb
