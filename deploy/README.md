@@ -179,6 +179,7 @@ before its record stops naming it, never after.
 ```sh
 python deploy/scripts/gen_ts_routes.py --check   # in the repo, from the ausmt-surveys registers
 # then: git pull + ./install-frontdoor.sh + ./doctor.sh on the VPS   (frontdoor/RUNBOOK.md step 6.3)
+#       (after the Nectar cutover: the serve step of "Update to a new image tag" on ausmt-serve)
 # then: make rebuild-data here          (its recipe passes --ts-index; without it the box would
 #                                        publish no ts_access.json while the table kept resolving)
 make doctor                                       # the ts-parity leg: table and served data agree
@@ -233,6 +234,28 @@ docker compose --profile jobs --profile gateway pull    # refresh ALL images (se
 docker compose -f compose.yaml up -d                    # recreate only what changed
 make sync-surveys && make rebuild-data                  # if surveys moved / to serve the new engine
 ```
+
+**After the Nectar cutover the pass starts on ausmt-serve.** The public edge and the portal image
+the public sees then run on ausmt-serve, so the front-door step becomes the serve step, and it still
+runs BEFORE the box pass: a route the table withdraws leaves the public edge before the data that
+stops naming it is published (the time-series rule above). The serve step pulls the portal and
+caddy images itself; `make up` alone would pull only a missing image.
+
+```sh
+# 1. on ausmt-serve: fast-forward, pull both images, restart the portal, reload the front door
+sudo sh /srv/ausmt/code/deploy/nectar/provision-serve.sh && sudo ausmt-doctor-serve
+# 2. on the box: the usual pass
+cd "$AUSMT_CODE_DIR" && git pull --ff-only && cd deploy && export AUSMT_DATA_DIR=/srv/ausmt \
+  && docker compose --profile jobs --profile gateway pull && docker compose -f compose.yaml up -d \
+  && docker compose -f compose.yaml --profile gateway up -d && make sync-surveys && make rebuild-data \
+  && make doctor && make doctor PROFILE=gateway
+# 3. optional, on the box: send the new build now rather than at the next reconcile pass
+make publish
+```
+
+The serve doctor prints the running portal image's RepoDigest; the box's is
+`docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/<OWNER>/ausmt-portal:<TAG>`, and
+the two match after a pass.
 
 ---
 
@@ -1313,8 +1336,11 @@ file is hard-linked rather than stored again), sends the sidecar after it, then 
 `receive-build.sh <ts>`. The receiver refuses the build unless the files on disk are exactly the
 listed files with exactly the listed hashes, swaps `current` by renaming a temporary symlink (as
 `rebuild-data` does), writes `site-data/published.json` (`ts`, `build_id`, `source_commit`,
-`received_at`) and prunes to the keep depth, never the current build and never a directory whose
-sidecar has not arrived. Receives run one at a time under `flock` on `site-data/.receive.lock`, and a
+`received_at`, and `sender`: the address the receive arrived from, the first word of `SSH_CLIENT`,
+else `SSH_CONNECTION`, else `local`) and prunes to the keep depth, never the current build and never
+a directory whose sidecar has not arrived. The prune runs on every receive, the confirmation of a
+build already served included, so a keep depth lowered on the sender takes effect at the next pass.
+Receives run one at a time under `flock` on `site-data/.receive.lock`, and a
 `current` whose build directory is gone names no build, so the sender sends it again. A build the
 replica already serves is not sent again: the sender only asks the receiver to confirm it, which is a
 no-op when `published.json` agrees and re-records it when a receive was cut off after its swap. The
@@ -1328,7 +1354,9 @@ operator, so grant the operator write on that one directory, then name the repli
 sudo setfacl -m u:"$USER":rwx "$AUSMT_DATA_DIR/site-data/builds"
 # deploy/.env
 AUSMT_PUBLISH_TARGET=publish@ausmt-serve      # the replica's publish account (MagicDNS name)
-# optional: AUSMT_PUBLISH_DATA_DIR (default /srv/ausmt), AUSMT_PUBLISH_KEEP (default 5, 1 to 999)
+# optional: AUSMT_PUBLISH_KEEP (default 5, 1 to 999)
+# AUSMT_PUBLISH_DATA_DIR must stay at its default, /srv/ausmt: the replica's gate and receiver pin
+# that root, because SSH carries no environment, and refuse any other
 ```
 
 ```sh
@@ -1349,10 +1377,22 @@ and `alert.sh` fail-pings on it; the box keeps serving its own build either way.
 the tree with the ownership above (`site-data` 10001:10001), the receiver at
 `/usr/local/bin/receive-build.sh`, and two accounts reached only over Tailscale SSH whose login shells
 are gates: `publish` (uid 10001, the uid that owns `site-data`; `deploy/nectar/publish-gate.sh` admits
-the receiver and an rsync that receives into `site-data/builds`, and nothing else) and `caddylog`
-(`deploy/nectar/caddylog-gate.sh`, the read-only pull of the masked front-door log the stats fold
-reads). `deploy/nectar/acl-policy.hujson` holds the tailnet policy entries to merge, and
-`sh deploy/nectar/doctor-serve.sh` is the serve role's one-screen doctor.
+the receiver and an rsync that receives into `site-data/builds`, and refuses every other command) and
+`caddylog` (`deploy/nectar/caddylog-gate.sh`, the read-only pull of the masked front-door log the
+stats fold reads). The gates confine command sessions; Tailscale SSH serves SFTP to both accounts
+in-process, outside the gates, which owner ruling 2026-10-02 accepts for phase one (C48 D4 and D11,
+question 2). `deploy/nectar/acl-policy.hujson` holds the tailnet policy entries to merge, and
+`sudo ausmt-doctor-serve` is the serve role's one-screen doctor: provisioning installs
+`deploy/nectar/doctor-serve.sh` at `/usr/local/bin/ausmt-doctor-serve`, outside the data volume, so
+it runs when the volume is missing. Provisioning also orders Docker after the volume's mount and
+after `tailscaled` (`/etc/systemd/system/docker.service.d/ausmt-serve.conf`), so a boot without the
+volume leaves no edge at all rather than an empty site.
+
+**The sender, checked on ausmt-serve.** `AUSMT_PUBLISH_SENDER` in ausmt-serve's `deploy/.env`
+(optional, from `deploy/nectar/serve.env.example`) names the curation host's tailnet address
+(`tailscale ip -4` there). When it is set, the serve doctor WARNs if `published.json` names another
+sender: two hosts publishing to one replica would switch the public build every pass while each
+reports `publish=ok`. It changes with the curation host at the lift (C48 D10).
 
 **The public gateway routes.** The four public gateway routes of the Add Survey flow need a gateway,
 and ausmt-serve runs none, so its front door sends them to the curation host's reader listener over

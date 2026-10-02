@@ -196,8 +196,14 @@ Wall 2's fence is not standing until this leg is blocked.
 ```sh
 sudo useradd -m -s /bin/sh caddylog
 sudo mkdir -p /var/log/caddy
-sudo setfacl -R -m u:caddylog:rX /var/log/caddy    # read-only for the puller (or use group perms)
+sudo setfacl -R -m u:caddylog:rX /var/log/caddy    # read-only for the puller, on what exists now
+sudo setfacl -d -m u:caddylog:rX /var/log/caddy    # and on every file Caddy creates or rolls later
 ```
+     The front-door Caddyfile writes its log files `mode 0640`. Caddy's own default is 0600, and a
+     file created 0600 gets an ACL mask of nothing, which leaves the `caddylog` entry ineffective and
+     the pull reading nothing. Once the front door has written a line (step 9.4),
+     `sudo getfacl -p /var/log/caddy/access-frontdoor.json` must show `user:caddylog:r--` with no
+     `#effective:---` beside it.
 5.2  Put the **box's** SSH public key into `caddylog@ausmt-vps:~/.ssh/authorized_keys` as a
      **forced-command, read-only** entry - NOT a bare key. The box only ever runs a read-only `rsync`
      of the log dir, so bind the key to exactly that:
@@ -420,6 +426,8 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/curator/queue
 ```sh
 # on the VPS: a masked line landed (client address truncated, no full IP)
 sudo tail -n1 /var/log/caddy/access-frontdoor.json
+# on the VPS: the log account can read it (user:caddylog:r--, and no #effective:--- beside it)
+sudo getfacl -p /var/log/caddy/access-frontdoor.json
 # on the box: ship once now, then confirm the file arrived where the aggregator reads it
 sudo systemctl start ausmt-frontdoor-logs.service
 ls -l "$AUSMT_DATA_DIR/logs/caddy/"            # access-frontdoor*.json present
@@ -552,6 +560,10 @@ systemctl show docker.service -p After | tr ' ' '\n' | grep tailscaled
 The last line should print `tailscaled.service`, confirming the ordering. This removes the boot RACE at
 its root. It does not make tailscaled a hard requirement (a box with no tailnet still boots), and a very
 fast boot can still catch a brief resolve window, which is what the manual recovery below covers.
+
+On the Nectar serving host (ausmt-serve) this file is not used: `deploy/nectar/provision-serve.sh`
+installs its own drop-in, `ausmt-serve.conf`, which carries the same `After=tailscaled.service` and
+also `RequiresMountsFor=/srv/ausmt` (`deploy/nectar/RUNBOOK-NECTAR.md`, Day 2).
 
 **Manual recovery (any time the edge is stuck on 502 from a dead upstream resolve):**
 ```sh

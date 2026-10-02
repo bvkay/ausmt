@@ -8,7 +8,7 @@ record fixes the roles, the arithmetic that sizes them, the publish contract bet
 cutover and its rollback, and what is still open. It extends C47 (the public bridge), whose two walls
 and masked edge log carry over unchanged.
 
-## D1. Current state (facts checked 2026-09-30)
+## D1. Current state (facts checked 2026-09-30; sizes, build memory and certificates 2026-10-02)
 
 * **The Nectar project** (custom bundle, from the owner's dashboard): 8 vCPU, 16 GB RAM, 3 instances,
   1 router, 2 floating IPs, 5 security groups, 200 GB object store, 2,000 SU budget. **There is no
@@ -26,9 +26,18 @@ and masked edge log carry over unchanged.
   p3.medium (preemptible) 4 vCPU 8 GB 0.029 SU/h; p3.xxlarge 16 vCPU 32 GB 0.114 SU/h. Flavour root
   disk: t3 10 GB, m3 30 GB. Volume storage is a separate per-availability-zone quota.
 * **Measured on the box** (owner, 2026-09-30): `site-data/builds` 33G (five kept builds),
-  `site-data/cache` 2.2G (the current 2048 MB cap), `basemap` 2.4G. Measured 2026-09-14: one build
-  was about 2.9 GB at 4,961 station h5 files (h5 996M, edi 670M, bundles 543M, xml 424M, products
-  105M, pages 93M). The corpus is now past 15,000 stations.
+  `site-data/cache` 2.2G (the 2048 MB cap main ships), `basemap` 2.4G.
+* **One built tree, measured** (2026-10-02, 15,265 stations, from the live products manifest and an
+  acceptance build of the same corpus): **7.5 GB (7.0 GiB)**, of which h5 2.89 GB, bundles 1.50,
+  xml 1.47, edi 1.18, pages and products 0.48. About 3.6 GB of it is non-MTH5 and is rewritten by
+  every build. The 2026-09-14 figure, about 2.9 GB at 4,961 station h5 files (a count of files, not
+  of stations), scaled linearly gives 2.9 × 15,265 / 4,961 = 8.9 GB, 19 per cent above the
+  measurement; it is superseded.
+* **The MTH5 build cache** (C18 A6): one cache generation measured 5.5 GB; the cap is ruled 16 GiB.
+  Builds hardlink into the cache, so `site-data/cache` and `site-data/builds` must share one
+  filesystem; across filesystems a hit falls back to a copy and every build carries its own MTH5.
+* **Build memory on the box** (its own Linux `build_report.json`, the live build of 2026-09-28):
+  parent peak 1,035 MiB, largest worker 438 MiB, 6 workers.
 
 [flav]: https://support.ehelp.edu.au/support/solutions/articles/6000205341-nectar-flavors
 [su]: https://support.ehelp.edu.au/support/solutions/articles/6000257054-service-units
@@ -40,18 +49,21 @@ and masked edge log carry over unchanged.
 | Public address | floating IP (the one ausmt-test holds today) | none |
 | Security group | 80/tcp and 443/tcp from anywhere, nothing else | nothing inbound from the internet |
 | Runs | the front-door Caddy (`deploy/frontdoor`) and the portal container, on one host, reader upstream `http://127.0.0.1:8445`, gateway upstream the curation host's reader listener (D12) | gateway, clamd, gw-runner, surveys-live, git-creds, the sqlite, reconcile and the build |
-| Holds | the built tree on a Cinder volume at `/srv/ausmt` | everything the build and the curator workbench need |
+| Holds | the built tree on a Cinder volume at `/srv/ausmt` | everything the build and the curator workbench need, on its own Cinder volume at `/srv/ausmt` |
 | Never holds | a git write credential, the gateway, the sqlite, the build cache | a public listener |
-| Flavour | m3.small first, m3.medium if serving needs it | m3.medium, or larger after a RAM amendment |
+| Flavour | m3.small first, m3.medium if serving needs it | m3.medium with the build capped at 4g (D3), or larger after a RAM amendment |
 | Gets data by | publish from the curation host (D4) | curator publishes to surveys-live |
 
 The serving host is the only machine on the internet and it holds nothing that is not already public
 (the served tree) plus the TLS key. A compromise of it yields the public tree and the certificate; it
 cannot push to the survey repository or read a submission, and over the tailnet it reaches only the
 curation host's reader listener on port 8445, whose wall 2 admits the same public subset the internet
-reaches through the front door (D12; `deploy/nectar/acl-policy.hujson`). The instances also share
-the project's private network, `qld-data`, which the tailnet policy does not govern; that path is closed by the security groups. An
-OpenStack `default` group normally admits all ingress from its own members, so neither host carries
+reaches through the front door (D12; `deploy/nectar/acl-policy.hujson`, whose `tests` and `sshTests`
+stanzas pin that grant and its refusals at every policy save; runbook 5.5 proves it from the serving
+host after the join, because the entries are merged into a live policy the repository cannot see).
+The instances also share the project's private network, `qld-data`, which the tailnet policy does
+not govern; that path is closed by the security groups. An OpenStack `default` group normally admits
+all ingress from its own members, so neither host carries
 `default` or any group with a same-group ingress rule (runbook 3.1). The rules of the project's
 `default` group are not in the D1 facts and are to be read in the dashboard. The curation host has no
 public address and is reached only over the tailnet.
@@ -61,8 +73,8 @@ never start the gateway profile (`deploy/tests/test_cloud_init_serve.py` pins bo
 
 ## D3. Quota and SU arithmetic
 
-All figures below are the D1 facts added up, and the build memory read from two build reports;
-nothing is estimated.
+All figures below are the D1 facts added up, and the build memory read from build reports; nothing
+is estimated.
 
 | Stage | Instances | vCPU | RAM | SU per year |
 |---|---|---|---|---|
@@ -76,31 +88,42 @@ nothing is estimated.
 
 Readings:
 
-* **The volume is the first blocker.** The allocation has no volume storage, and the m3 root disk is
-  30 GB while the box's five kept builds alone measure 33G. The serving host cannot hold the tree until
-  the amendment (D9) grants volume storage in QRIScloud, the availability zone ausmt-test and its
-  floating IP live in.
-* **Sizing the volume.** At the box's measured 33G for five builds (6.6 GB each on average; the size
-  of any one build is not in the facts, so the runbook reads it with `du` before the first publish) plus
-  the 2.4G basemap, the serving tree needs about 35 GB (33 + 2.4) before any hard-linking between builds (D4).
-  The 100 GB request leaves room for the corpus to keep growing at five kept builds. The build cache
-  (2.2G) stays on the curation host.
+* **The volume is the first blocker, for both hosts.** The allocation has no volume storage, and the
+  m3 root disk is 30 GB. Neither host's data fits it at five kept builds, so the amendment (D9) asks
+  for volume storage in QRIScloud, the availability zone ausmt-test and its floating IP live in: one
+  100 GB volume per host.
+* **Sizing the serving volume.** One build is 7.5 GB (D1). Five kept builds take between 21.9 GB
+  (7.5 + 4 × 3.6, when each later build links its h5 files to the one before and stores its 3.6 GB of
+  non-MTH5 afresh) and 37.5 GB (5 × 7.5, when nothing links), plus the 2.4 GB basemap: at most
+  39.9 GB. The 100 GB volume leaves room for the corpus to keep growing at five kept builds. The first
+  publish sends the whole 7.5 GB (runbook 9.3).
+* **Sizing the curation volume.** The curation host holds the kept builds plus one in progress, the
+  MTH5 build cache, surveys-live, the basemap, the gateway state and the ClamAV database. Its
+  site-data floor today is about 28 GB (31 GB with a build in progress) before Ubuntu and the images,
+  and about 48 GB with the cache at its 16 GiB cap (D1). The cache and the builds share one
+  filesystem, the volume mounted at `/srv/ausmt`, because builds hardlink into the cache. The 100 GB
+  curation volume holds that with room to grow; the 30 GB root disk does not.
 * **m3.medium for both roles** spends the whole 8 vCPU / 16 GB quota and the whole 2,000 SU budget in
   one year, and it only fits once ausmt-test is deleted.
-* **Build memory (measured).** A cold and a warm build of the 15,265-station corpus, run on a macOS
-  host with 4 workers (`build_report.json` of each, engine `b362918`, surveys `7a1d756c`), recorded a
-  parent peak (`peak_rss_mib`) of 865.8 and 901.0 MiB and a largest single worker
-  (`peak_rss_child_max_mib`) of 403.2 and 224.5 MiB. The engine reads the footprint as the parent plus
-  the worker count times the largest worker: 865.8 + 4 × 403.2 = 2,478.6 MiB cold and
-  901.0 + 4 × 224.5 = 1,799.0 MiB warm, under a third of m3.medium's 8 GB. **An m3.medium holds the
-  build.** These are macOS figures; the same three fields in the box's own `build_report.json` give
-  the Linux figure. They cover the build alone: the curation host's other containers (the gateway,
-  clamd, gw-runner) are not in them.
+* **Build memory (measured).** The engine reads the footprint as the parent plus the worker count
+  times the largest worker. The box's own Linux report (D1) gives 1,035 + 6 × 438 = 3,663 MiB at 6
+  workers. A cold and a warm build of the 15,265-station corpus on a macOS host with 4 workers
+  (engine `b362918`, surveys `7a1d756c`) gave 865.8 + 4 × 403.2 = 2,478.6 MiB and
+  901.0 + 4 × 224.5 = 1,799.0 MiB. **An m3.medium (8 GB) holds the build.** These figures cover the
+  build alone: the curation host's other containers (the gateway, clamd, gw-runner) are not in them.
+* **Container ceilings on the curation host.** `deploy/compose.yaml` caps the build at
+  `AUSMT_BUILD_MEM_LIMIT` (default 8g, sized for the box) and gw-runner at a fixed 4g, and requires
+  the two ceilings to sum below the host. On ausmt-curate `deploy/.env` sets
+  `AUSMT_BUILD_MEM_LIMIT=4g`: 4,096 MiB holds the measured 3,663 MiB with 433 MiB to spare. With
+  gw-runner's 4g the two ceilings then sum to 8 GiB, the whole of an m3.medium, not below it; the
+  rule holds on m3.medium only with gw-runner's ceiling lowered as well (D11, question 4).
 * **A curation host larger than m3.medium** (m3.large), for more build workers than the build needs,
-  does not fit the 8 vCPU / 16 GB quota beside any serving host: that is the RAM and vCPU amendment.
-  At 2,500 SU a year it spends the 2,000 SU budget in at most 9.6 months counted from a full budget;
-  ausmt-test has drawn SU since 21 Jul 2026 and the serve-first stage draws more before the lift, so the real runway is shorter. That is when
-  the SU top-up in D9 applies.
+  does not fit the 8 vCPU / 16 GB quota beside any serving host: that is the optional RAM and vCPU
+  line of the amendment. Serve m3.small plus curate m3.large is (0.057 + 0.228) × 8,760 = 2,497 SU a
+  year, about 2,500, which spends the 2,000 SU budget in at most 9.6 months counted from a full
+  budget; ausmt-test has drawn SU since 21 Jul 2026 and the serve-first stage draws more before the
+  lift, so the real runway is shorter. That line needs an SU top-up of at least 500 a year beside it
+  (D9).
 * **Idle is not free.** A shut-down instance still consumes SU; only deletion stops it. ausmt-test
   costs its 125 SU a year until it is deleted after the quiet period (D6).
 
@@ -140,14 +163,24 @@ and names an existing directory, then refuses the build unless the files on disk
 listed files with exactly the listed hashes (no missing, unlisted, altered or non-regular entry). It
 swaps `current` the Makefile's way, a temporary symlink renamed over it (`mv -T`, or the same
 `rename(2)` through Python where `mv -T` does not exist), never `ln -sfn`. It writes `published.json`
-beside `current` (`ts`, `build_id` and `source_commit` from the build's `build.json`, `received_at`),
-then prunes: the `--keep` newest builds that carry a sidecar survive (1 to 999, no leading zero),
-the build received and the build `current` points at when the prune runs always survive, and a
-directory without a sidecar is never touched. Verify, swap, record and prune run under `flock` on
-`site-data/.receive.lock`, so two receives (a reconcile publish and a manual `make publish`) never
-overlap. `--current` names a build only while its directory exists, so a dangling `current` makes
+beside `current` (`ts`, `build_id` and `source_commit` from the build's `build.json`, `received_at`,
+and `sender`, the address the receive arrived from: the first word of `SSH_CLIENT`, else
+`SSH_CONNECTION`, else `local`), then prunes: the `--keep` newest builds that carry a sidecar
+survive (1 to 999, no leading zero), the build received and the build `current` points at when the
+prune runs always survive, and a directory without a sidecar is never touched. Verify, swap, record
+and prune run under `flock` on `site-data/.receive.lock`, so two receives (a reconcile publish and a
+manual `make publish`) never overlap. `--current` names a build only while its directory exists, so a dangling `current` makes
 the sender send again. A refused build leaves `current`, `published.json` and every other build as
-they were. A re-run for the current build is a no-op.
+they were. A re-run for the current build changes nothing but the prune, which runs on that path
+too, so a keep lowered on the sender takes effect at the next tick while the replica already serves
+the sender's current. A full volume is the one case no tick repairs: a new build's transfer fails
+before any receive, so space is made by hand (runbook 15).
+
+**One sender.** The receiver accepts any timestamp, older or newer, because a curator rollback
+depends on it, so two hosts publishing to one replica would switch the public build every tick while
+each reports `publish=ok`. `published.json` therefore names the sender, and with
+`AUSMT_PUBLISH_SENDER` set in the serving host's `deploy/.env` the serve doctor WARNs when it names
+any other. At the lift the old sender is disabled, not stopped, and its policy rule is dropped (D10).
 
 **Which uid receives.** `site-data` on the serving host is written by one uid only, 10001, exactly as
 on the box (`deploy/README.md`, ownership split). The two candidates were a publish account in the
@@ -165,7 +198,13 @@ admits `receive-build.sh --current`, `receive-build.sh [--keep N] <ts>` and an r
 receives into `site-data/builds/<ts>/` or `<ts>.sha256`, and refuses everything else (an rsync
 `--sender`, any other destination or option, a second command, an interactive login). The gate is the
 login shell because the tailnet carries SSH as Tailscale SSH, which runs `<login shell> -c <command>`
-and never reads `authorized_keys`. What the gate does not police is the file names an rsync client
+and never reads `authorized_keys`. Those three are what the account can run over a command session.
+Tailscale SSH also serves SFTP, in-process: it probes the login shell with `su -l <user> -c true`,
+the gate refuses `true`, and tailscaled then serves SFTP itself as the account's uid without running
+the gate. Over SFTP the account reads and writes what uid 10001 can, which on this host is
+`site-data` and world-readable files. Owner ruling 2026-10-02 accepts that for phase one, while the
+box is the sender: the writable tree is the one the account exists to replace and the serving host
+holds no secret (D11, question 2). What the gate does not police is the file names an rsync client
 streams once a receive is running; the account's own write set is the boundary there, and on this host
 that is `site-data`, the tree the account exists to replace. The receiver's verification decides what
 is served. No container writes `site-data` on the serving host, so uid 10001 has no other writer to
@@ -192,43 +231,71 @@ Pins: `deploy/tests/test_publish_sh.py`, `test_receive_build_sh.py`, `test_publi
 (idempotent, root) build it: packages, Docker and compose, Tailscale, unattended upgrades, the volume
 mounted by label at `/srv/ausmt` with `nofail`, the tree and its ownership from `deploy/README.md`, the
 receiver and both gates, the two `.env` files (the reader upstream forced to loopback), the basemap,
-`make up`, then `install-frontdoor.sh`. Provisioning also carries `AUSMT_GATEWAY_UPSTREAM` from
-`deploy/.env` into the front door's `.env` (D12). The GHCR images are public (an anonymous token got
+a pull of the portal image and the front door's caddy image, `make up`, then `install-frontdoor.sh`.
+The pull is what moves the public SPA and wall 2, which are baked into the portal image: `make up`
+alone pulls only a missing image, and GHCR carries only the moving tags `main` and `latest`. So the
+deploy pass re-runs provisioning on the serving host before the box's pass (`deploy/README.md`,
+"Update to a new image tag"), and the serve doctor prints the running portal image's RepoDigest.
+Provisioning also carries `AUSMT_GATEWAY_UPSTREAM` from `deploy/.env` into the front door's `.env`
+(D12). The GHCR images are public (an anonymous token got
 HTTP 200 on the `ghcr.io/bvkay/ausmt-portal` tags list, checked 2026-09-30), so the serving host holds
-no registry credential. The front-door doctor skips its two tailnet-peer legs on a
-loopback upstream; `deploy/nectar/doctor-serve.sh` reports the whole serve role in the doctor-box shape.
+no registry credential. Until its tailnet join the serving host is reached at the project's second
+floating IP (D1 gives a quota of 2), associated at launch and released once the join is proved; from
+then until the cutover it has no internet address and reaches the internet through the project
+router's SNAT, checked before launch (runbook 3.0). The front-door doctor skips its two
+tailnet-peer legs on a loopback upstream; `deploy/nectar/doctor-serve.sh` reports the whole serve
+role in the doctor-box shape. Provisioning installs that doctor at `/usr/local/bin/ausmt-doctor-serve`,
+outside the data volume, and refreshes it on every run; operators run `sudo ausmt-doctor-serve`
+(both `.env` files are root-only). It also installs a `docker.service` drop-in,
+`/etc/systemd/system/docker.service.d/ausmt-serve.conf`, with `RequiresMountsFor=/srv/ausmt` and
+`After=tailscaled.service`: Docker never starts the stacks over empty bind sources on the root disk
+or before the tailnet resolver the gateway upstream needs. With the volume absent there is therefore
+no edge at all rather than an empty site behind a valid certificate.
 
 The masked front-door log keeps flowing to the analytics fold on the curation host: the log account
 `caddylog` exists on the serving host with `deploy/nectar/caddylog-gate.sh` as its login shell
 (`rrsync -ro /var/log/caddy`, the forced command of `deploy/frontdoor/RUNBOOK.md` 5.2, applied at the
 shell because Tailscale SSH never reads the key), and the box's `AUSMT_FRONTDOOR_LOG_REMOTE` moves to it
-at cutover.
+at cutover. Over SFTP, outside its gate as for the publish account (D4), it can read world-readable
+files only. Its read of the log rests on a default ACL on `/var/log/caddy`, which is effective only
+because the front-door Caddyfile writes its log files mode 0640: Caddy's default 0600 sets the ACL
+mask to nothing. The serve doctor checks that `caddylog` can read the live log, and the runbook
+checks ausmt-test's log the same way before the cutover (12.1), since it uses the same recipe.
 
 ## D6. Cutover and rollback
 
 The public name already resolves to 203.101.226.191, so the cutover moves the address, not DNS:
 
 1. Copy the `caddy_data` volume from ausmt-test to ausmt-serve BEFORE the serving front door first
-   starts, so the certificate travels and no ACME order is attempted for a name that does not yet
-   point at the new host. Then finish provisioning, with `AUSMT_GATEWAY_UPSTREAM` naming the box's
-   reader listener (D12).
-2. Seed: the first publish from the box over the tailnet; `doctor-serve.sh` green, its gateway line
-   included.
+   starts, so the certificate travels, and do it while the certificate has more than 30 days left, so
+   no ACME order is attempted for a name that does not yet point at the new host. Caddy renews in the
+   last third of a certificate's life; the live certificate for the public name runs 2026-08-17 to
+   2026-11-15, so its window opens about 2026-10-16 (ausmt.au: 2026-09-19 to 2026-12-18). Inside the
+   window the copy waits until ausmt-test has renewed. Steps 1 to 4 run back to back. Then finish
+   provisioning, with `AUSMT_GATEWAY_UPSTREAM` naming the box's reader listener (D12).
+2. Seed: the first publish from the box over the tailnet; `sudo ausmt-doctor-serve` green, its
+   gateway line included.
 3. Check the serving host end to end on itself with `curl --resolve <name>:443:127.0.0.1`: the
    certificate, the reader, `/data`, the wall refusals, and `GET /gateway/healthz` (a probe that
    submits nothing) answering through to the box.
 4. Move the floating IP from ausmt-test to ausmt-serve in the dashboard (disassociate, associate).
 5. Repoint the box's log pull at the serving host, after a last pull from ausmt-test whose live file
    is set aside under a name the stats fold still reads (both front doors write the same file name).
+   A pull from ausmt-test just before the move, while its tailnet path is certain, leaves that last
+   pull only the minutes around the move to collect.
 
 The four public gateway routes stay live through the move: before it ausmt-test sends them to the
 box's reader listener, and after it ausmt-serve sends them to the same listener (D12).
 
 **Rollback is moving the floating IP back.** ausmt-test is left running and untouched through a quiet
-period, still proxying to the box's reader listener, which keeps serving the box's own current. Its
-certificate may be older than the serving host's by then; it is still valid within its own renewal
-window and Caddy renews it once the address is back. **ausmt-test is deleted only after the quiet
-period**; its tailnet tag and ACL entries go with it. Procedure: `deploy/nectar/RUNBOOK-NECTAR.md`.
+period, still proxying to the box's reader listener, which keeps serving the box's own current. It
+cannot renew while the address is away (the challenge reaches the serving host), so its certificate
+is good only until its own expiry, 2026-11-15 for the current one: the quiet period ends before that
+date, and a rollback restarts ausmt-test's front door so that it renews at once. **ausmt-test is
+deleted only after the quiet period**, and the rollback ends with it: the serving host's `caddy_data`
+is in Docker's volume on its root disk, so a lost serving host after that means a new instance and a
+fresh certificate. ausmt-test's tailnet tag and ACL entries go when it does. Procedure:
+`deploy/nectar/RUNBOOK-NECTAR.md`.
 
 ## D7. Curator access layering
 
@@ -262,11 +329,17 @@ Accepted by the owner, not built here:
 
 ## D9. The amendment to file
 
-* **Volume storage: 100 GB in QRIScloud.** Blocks the serving host (D3).
-* **RAM 16 to 32 GB and vCPU 8 to 16**, headroom for a curation instance larger than m3.medium
-  running the corpus build with more workers. The build fits m3.medium (D3, build memory), and
-  m3.medium for both roles already fills the quota (D3).
-* **An SU top-up only if the allocation runs past 12 months.**
+* **Volume storage: 200 GB in QRIScloud**, 100 GB for the serving host and 100 GB for the curation
+  host. Blocks the serving host's volume (D3; the runbook's proof serve on the root disk can run
+  first) and the lift (D10).
+* **RAM 16 to 32 GB and vCPU 8 to 16, optional**, headroom for a curation instance larger than
+  m3.medium running the corpus build with more workers. The build fits m3.medium (D3, build memory),
+  and m3.medium for both roles already fills the quota (D3). Serve m3.small plus curate m3.large costs
+  about 2,500 SU a year against the 2,000 budget, so the line goes in only with a top-up of at least
+  500 SU a year beside it; the owner includes or drops it when filing, and the volume line alone may
+  be approved sooner.
+* **An SU top-up only if the allocation runs past 12 months**, or at least 500 SU a year with the
+  RAM line.
 * **A second project member.**
 
 The paste-ready text is in `deploy/nectar/RUNBOOK-NECTAR.md`.
@@ -278,17 +351,40 @@ build and its cache, the reconcile timer (now publishing), backups and the resto
 fold and the front-door log pull, the alert and actions timers, and the box's own portal (the curator
 workbench over the tailnet, and ausmt-test's upstream through the quiet period).
 
-**The lift, in order:** create ausmt-curate (m3.medium, D3; no floating IP, no security group that
-admits inbound traffic, `default` included; `tag:ausmt-curate`) and provision it with the full
-`deploy/README.md` checklist (gateway profile and the 10002 tree included, and the two `tailscale
-serve` publications: the reader port for the serving host's gateway routes, 443 for curators); restore
-the sqlite from the newest backup through the restore-drill path; stop the box's reconcile, actions and
-backup timers so there is one writer and one publisher; enable them on ausmt-curate with
-`AUSMT_PUBLISH_TARGET` set; watch one publish land; set `AUSMT_GATEWAY_UPSTREAM` in the serving host's
-`deploy/.env` to ausmt-curate's reader listener and re-run its provisioning; retire the box. The curation host has no
-public address, so its outbound traffic (GitHub, GHCR, ClamAV updates, Tailscale) must leave through
-the project router. The D1 facts give one router but not its external gateway: check Network → Routers
-that it has an external gateway set and `qld-data` attached before the lift.
+**The lift, in order** (commands in runbook 16). Two rules govern it: one sender at every moment,
+and no submission accepted on a host whose state is about to be copied.
+
+1. **Create ausmt-curate** (m3.medium, D3; no floating IP once joined, no security group that admits
+   inbound traffic, `default` included; `tag:ausmt-curate`), bootstrapped like the serving host on the
+   second floating IP (D5). It has no public address, so its outbound traffic (GitHub, GHCR, ClamAV
+   updates, Tailscale) leaves through the project router, whose external gateway, SNAT and `qld-data`
+   interface are checked before the serving host's launch (runbook 3.0).
+2. **Its volume**: 100 GB (D9), labelled and mounted at `/srv/ausmt`, holding the whole tree, so that
+   `site-data/builds` and `site-data/cache` share one filesystem (D1, D3).
+3. **Provision** with the full `deploy/README.md` checklist (gateway profile and the 10002 tree
+   included, and the two `tailscale serve` publications: the reader port for the serving host's
+   gateway routes, 443 for curators), `AUSMT_BUILD_MEM_LIMIT=4g` in its `deploy/.env` (D3), timers
+   installed but disabled and the gateway profile down.
+4. **Freeze submissions on the box, then take the final backup.** Stop the box's gateway (the four
+   public routes answer an error, and the Add Survey page hides its Submit button), let gw-runner
+   finish what it holds, stop the gateway profile, then
+   `sudo systemctl disable --now ausmt-reconcile.timer ausmt-actions.timer ausmt-backup.timer`,
+   remove `AUSMT_PUBLISH_TARGET` from the box's `deploy/.env`, and run `ausmt-backup.service` once.
+   Disabled, not stopped: a stopped timer starts again at the box's next boot, and a second sender
+   switches the public build every tick while each pass reports `publish=ok` (D4, one sender).
+5. **Move the state**: the final snapshot's sqlite (the only home of submitter PII) and
+   `gateway/{incoming,jobs,quarantine}`, box to ausmt-curate directly over the tailnet, never through
+   the serving host or any public host; encrypted first (`gpg --symmetric`) if it rests anywhere in
+   between. Restore it through the restore-drill path.
+6. **Publish from ausmt-curate, then reopen**: enable its timers with `AUSMT_PUBLISH_TARGET` set; watch
+   one publish land, with `published.json` naming ausmt-curate as `sender`; set
+   `AUSMT_PUBLISH_SENDER` and `AUSMT_GATEWAY_UPSTREAM` in the serving host's `deploy/.env` to
+   ausmt-curate's address and reader listener and re-run its provisioning; bring ausmt-curate's
+   gateway profile up, which reopens submissions there.
+7. **Retire the box**: drop its phase-one rules from the tailnet policy (the `<BOX_NODE_USER>` ssh rule
+   for `publish` and `caddylog`, and `ausmt-box` from the other three rules), prove the fence again
+   from the serving host against ausmt-curate (runbook 5.5), disable the box's remaining timers and
+   take its stacks down.
 
 ## D11. Open questions
 
@@ -296,18 +392,31 @@ that it has an external gateway set and `qld-data` attached before the lift.
    writes byte-identical. A separate change makes the MTH5 tiers cache-reused, so unchanged station
    files keep their bytes across builds; after two publishes, `find builds/<ts> -type f -links +1 |
    wc -l` on the serving host counts the files the second build shares with the first.
-2. **Tailscale SSH and the gates.** The gates rely on Tailscale SSH running the login shell with `-c`.
-   The runbook's first publish test from the box proves it on the real host (`receive-build.sh
-   --current` answers, `sh` is refused). Two channels never start the login shell: the sftp subsystem
-   and a port-forwarding channel. The `restrict` on the OpenSSH key does not apply on the Tailscale
-   path, and whether Tailscale SSH serves either channel to a gated account is not verified here. The
-   runbook (9.2) requires an `sftp` session and an `ssh -N -L` forward to both fail before the first
-   publish. If either succeeds, the two service accounts move to OpenSSH bound to the tailnet address,
-   with `Match User publish,caddylog` setting `ForceCommand` to the gate, `AllowTcpForwarding no`,
-   `X11Forwarding no`, `PermitTTY no` and no sftp subsystem, and leave the Tailscale `ssh` rules.
+2. **Tailscale SSH and the gates: closed for phase one by owner ruling 2026-10-02.** The gates rely
+   on Tailscale SSH running the login shell with `-c`, and runbook 9.2 proves that on the real host
+   (`receive-build.sh --current` answers, `sh` is refused). Tailscale SSH serves SFTP in-process,
+   outside the gate (D4), and OpenSSH bound to the tailnet address cannot run beside
+   `tailscale up --ssh`, which owns tailnet port 22. The ruling accepts SFTP for phase one, while the
+   box is the sender: the publish account's writable tree is `site-data`, the tree it exists to
+   replace, the serving host holds no secret, and the `caddylog` account can read world-readable
+   files only. The runbook's SFTP and port-forwarding probes are withdrawn; its `--current` and `sh`
+   probes stay. **Revisit at the curate lift**, when the sender is a Nectar host on the private
+   network and OpenSSH can bind there for the two service accounts (`Match User publish,caddylog`
+   with `ForceCommand` to the gate, no forwarding, no TTY, no sftp subsystem). Tailscale stays for
+   now; whether to run without it is a later question the owner has deferred.
 3. **The box's reconcile prune.** `reconcile.sh` prunes stale builds on entry as the operator, and the
    build directories belong to uid 10001 with no group write, so on the box that prune can only remove
    what the operator owns. Not verified on the box; the Makefile's in-container prune is unaffected.
+4. **gw-runner's ceiling on an m3.medium curation host.** `AUSMT_BUILD_MEM_LIMIT=4g` holds the
+   measured build (D3), but gw-runner's ceiling is a fixed 4g in `deploy/compose.yaml`, so the two sum
+   to the whole 8 GB host and the compose file's own rule (the two ceilings sum below the host) is not
+   met. Settle before the lift: a lower gw-runner ceiling on the curation host (a compose change), or
+   a larger curation flavour.
+5. **Releases on the replica.** The publish contract carries `site-data/builds/` only, and
+   `make cut-release` writes `site-data/releases/`, a sibling of `builds/`, so a release never reaches
+   the serving host. The public site serves no release today (`/data/releases/releases.json` answers
+   404), so nothing is lost yet. Decide before the first release cut after the cutover whether
+   releases are served, and if so how they reach the replica.
 
 ## D12. Decision: the public gateway routes follow the curation host
 
@@ -336,7 +445,10 @@ before; only the destination of the four routes changes.
 ## Provenance
 
 Owner rulings 2026-09-30 (two roles and their contents, flavours, sequence, tailnet as identity layer,
-curator layering, floating-IP cutover and rollback, the amendment, the continuity items). Architect
+curator layering, floating-IP cutover and rollback, the amendment, the continuity items). Owner ruling
+2026-10-02 (the service accounts' SFTP path over Tailscale SSH accepted for phase one, D4 and D11).
+Measured 2026-10-02: the size of one build, the MTH5 cache generation, the box's Linux build memory
+and the live certificate dates (D1). Architect
 rulings 2026-09-30 (the public gateway routes' upstream, curator access on 443, GHCR visibility, the
 build memory reading). Build memory from the cold and warm `build_report.json` of a 2026-09-30 macOS
 build. Facts from
