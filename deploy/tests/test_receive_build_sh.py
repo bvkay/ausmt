@@ -242,6 +242,43 @@ def test_the_prune_never_deletes_the_build_current_points_at(tmp_path):
     assert dirs == sorted([stamps[0], "20260930T010203Z", "20260929T000000Z"]), dirs
 
 
+def test_a_lowered_keep_prunes_on_the_already_current_path(tmp_path):
+    """A replica whose disk has filled cannot wait for a new build to arrive: confirming the build
+    already served with a lower keep depth must prune the rest, under the same lock. FAILS IF the
+    already-current path skips the prune, moves current, or rewrites published.json."""
+    tree = _tree(tmp_path)
+    for ts in _stamps(4):
+        _add_build(tree["builds"], ts)
+    assert _run(tree, NEW).returncode == 0
+    first = (tree["site"] / "published.json").read_bytes()
+    r = _run(tree, "--keep", "1", NEW)
+    assert r.returncode == 0, r.stderr
+    assert _current(tree) == f"builds/{NEW}"
+    assert (tree["site"] / "published.json").read_bytes() == first
+    dirs = sorted(p.name for p in tree["builds"].iterdir() if p.is_dir())
+    assert dirs == [NEW], dirs
+    sidecars = sorted(p.name for p in tree["builds"].iterdir() if p.suffix == ".sha256")
+    assert sidecars == [f"{NEW}.sha256"], sidecars
+
+
+def test_the_record_names_the_sender(tmp_path):
+    """published.json names the address the receive arrived from, so a replica fed by two hosts can
+    be told apart: the first word of SSH_CLIENT, else of SSH_CONNECTION, else local. FAILS IF any of
+    the three is not recorded as stated."""
+    tree = _tree(tmp_path / "a")
+    r = _run(tree, NEW, SSH_CLIENT="100.64.0.5 51234 22", SSH_CONNECTION="")
+    assert r.returncode == 0, r.stderr
+    assert _published(tree)["sender"] == "100.64.0.5"
+    tree = _tree(tmp_path / "b")
+    r = _run(tree, NEW, SSH_CLIENT="", SSH_CONNECTION="100.64.0.6 51234 100.64.0.9 22")
+    assert r.returncode == 0, r.stderr
+    assert _published(tree)["sender"] == "100.64.0.6"
+    tree = _tree(tmp_path / "c")
+    r = _run(tree, NEW, SSH_CLIENT="", SSH_CONNECTION="")
+    assert r.returncode == 0, r.stderr
+    assert _published(tree)["sender"] == "local"
+
+
 def test_a_timestamp_with_no_build_directory_is_refused(tmp_path):
     """A well-formed name that names nothing under builds/ is refused before any swap. FAILS IF
     current moves or published.json is written."""
