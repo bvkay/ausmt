@@ -71,7 +71,7 @@ _MOUNTPOINT_STUB = '#!/bin/sh\nexit "${MOUNT_RC:-0}"\n'
 _AS_CADDYLOG_STUB = '#!/bin/sh\n[ -z "${CADDYLOG_DENIED:-}" ] || exit 1\nexec "$@"\n'
 
 
-def _tree(tmp_path: Path, *, published_ts: str | None = TS) -> Path:
+def _tree(tmp_path: Path, *, published_ts: str | None = TS, sender: str | None = None) -> Path:
     data = tmp_path / "data"
     site = data / "site-data"
     build = site / "builds" / TS
@@ -80,9 +80,11 @@ def _tree(tmp_path: Path, *, published_ts: str | None = TS) -> Path:
         {"build_id": "bid-1", "source_commit": "abc1234"}), encoding="utf-8")
     os.symlink(f"builds/{TS}", site / "current")
     if published_ts is not None:
-        (site / "published.json").write_text(json.dumps(
-            {"ts": published_ts, "source_commit": "abc1234", "build_id": "bid-1",
-             "received_at": "2026-09-30T01:20:00Z"}), encoding="utf-8")
+        record = {"ts": published_ts, "source_commit": "abc1234", "build_id": "bid-1",
+                  "received_at": "2026-09-30T01:20:00Z"}
+        if sender is not None:
+            record["sender"] = sender
+        (site / "published.json").write_text(json.dumps(record), encoding="utf-8")
     return data
 
 
@@ -388,3 +390,49 @@ def test_the_log_account_can_read_the_live_access_log(tmp_path):
     r = _run(env)
     assert r.returncode == 0, r.stdout
     assert any(ln.startswith("WARN caddylog") for ln in r.stdout.splitlines()), r.stdout
+
+
+def _expect_sender(env: dict, sender: str) -> dict:
+    with open(env["AUSMT_DOCTOR_ENV"], "a", encoding="utf-8") as fh:
+        fh.write(f"AUSMT_PUBLISH_SENDER={sender}\n")
+    return env
+
+
+def test_a_record_without_a_sender_is_information_not_a_warning(tmp_path):
+    """published.json carries no sender until the receiver records one, so its absence says
+    nothing about a second publisher. FAILS IF it WARNs, even with an expected sender set, or goes
+    unmentioned."""
+    data = _tree(tmp_path)
+    r = _run(_expect_sender(_env(tmp_path, data), "100.64.0.7"))
+    assert r.returncode == 0, r.stdout
+    assert any("sender" in ln for ln in _lines(r, "INFO")), r.stdout
+    assert not any("sender" in ln for ln in _lines(r, "WARN")), r.stdout
+
+
+def test_the_recorded_sender_is_named_and_matched_against_the_expected_one(tmp_path):
+    """Two hosts publishing to one replica swap the public build every tick and each pass reports
+    publish=ok, so only the replica can see it: the sender recorded on the last receive differs
+    from the one this host expects. FAILS IF the sender goes unnamed, a match is not a PASS, or a
+    mismatch is anything but a WARN naming both addresses."""
+    data = _tree(tmp_path, sender="100.64.0.7")
+    r = _run(_env(tmp_path, data))
+    assert "100.64.0.7" in r.stdout, r.stdout
+    assert not any("sender" in ln for ln in _lines(r, "WARN")), r.stdout
+    (tmp_path / "same").mkdir()
+    r = _run(_expect_sender(_env(tmp_path / "same", data), "100.64.0.7"))
+    assert any(ln.startswith("PASS sender") for ln in r.stdout.splitlines()), r.stdout
+    (tmp_path / "other").mkdir()
+    r = _run(_expect_sender(_env(tmp_path / "other", data), "100.64.0.9"))
+    assert r.returncode == 0, r.stdout
+    warn = [ln for ln in _lines(r, "WARN") if ln.startswith("WARN sender")]
+    assert warn and "100.64.0.7" in warn[0] and "100.64.0.9" in warn[0], r.stdout
+
+
+def test_the_serve_env_template_offers_the_expected_sender_as_optional():
+    """FAILS IF the template omits AUSMT_PUBLISH_SENDER or gives it a value that provisioning
+    would stop on."""
+    example = (_REPO / "deploy" / "nectar" / "serve.env.example").read_text(encoding="utf-8")
+    lines = [ln for ln in example.splitlines() if ln.startswith("AUSMT_PUBLISH_SENDER=")]
+    assert lines == ["AUSMT_PUBLISH_SENDER="], lines
+    para = example.split("\nAUSMT_PUBLISH_SENDER=")[0].rsplit("\n\n", 1)[-1]
+    assert "published.json" in para and "optional" in para.lower(), para
