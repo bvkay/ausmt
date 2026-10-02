@@ -202,7 +202,7 @@ sudo setfacl -d -m u:caddylog:rX /var/log/caddy    # and on every file Caddy cre
      The front-door Caddyfile writes its log files `mode 0640`. Caddy's own default is 0600, and a
      file created 0600 gets an ACL mask of nothing, which leaves the `caddylog` entry ineffective and
      the pull reading nothing. Once the front door has written a line (step 9.4),
-     `sudo getfacl -p /var/log/caddy/access-frontdoor.json` must show `user:caddylog:r--` with no
+     `sudo getfacl -p /var/log/caddy/access-frontdoor.json` must show a `user:caddylog:` entry with no
      `#effective:---` beside it.
 5.2  Put the **box's** SSH public key into `caddylog@ausmt-vps:~/.ssh/authorized_keys` as a
      **forced-command, read-only** entry - NOT a bare key. The box only ever runs a read-only `rsync`
@@ -426,7 +426,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/curator/queue
 ```sh
 # on the VPS: a masked line landed (client address truncated, no full IP)
 sudo tail -n1 /var/log/caddy/access-frontdoor.json
-# on the VPS: the log account can read it (user:caddylog:r--, and no #effective:--- beside it)
+# on the VPS: the log account can read it (a user:caddylog entry, and no #effective:--- beside it)
 sudo getfacl -p /var/log/caddy/access-frontdoor.json
 # on the box: ship once now, then confirm the file arrived where the aggregator reads it
 sudo systemctl start ausmt-frontdoor-logs.service

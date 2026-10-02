@@ -26,7 +26,8 @@
 # ENV (deploy/.env.example documents each)
 #   AUSMT_DATA_DIR          (required) local data root holding site-data/
 #   AUSMT_PUBLISH_TARGET    (required) ssh destination of the receiver, e.g. publish@ausmt-serve
-#   AUSMT_PUBLISH_DATA_DIR  data root on the receiver (default /srv/ausmt)
+#   AUSMT_PUBLISH_DATA_DIR  data root on the receiver (default /srv/ausmt; the receiver's gate pins that
+#                           path, so any other value is refused there)
 #   AUSMT_PUBLISH_KEEP      builds the receiver keeps, 1 to 999 (default 5)
 #   AUSMT_PUBLISH_RSYNC     the rsync command (default rsync); a test shim in the suite
 #   AUSMT_PUBLISH_SSH       the ssh command, also handed to rsync -e (default ssh in batch mode, with

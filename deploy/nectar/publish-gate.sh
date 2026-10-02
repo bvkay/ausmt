@@ -17,7 +17,8 @@
 # this gate refuses, and then serves the SFTP session without ever running the gate. Over SFTP the
 # account reads what uid 10001 can read and writes what uid 10001 can write. That holds while the
 # box is the sender, because the account's only writable tree on this host is site-data, the tree it
-# exists to replace, and the serving host holds no secret to read. The boundary is therefore the
+# exists to replace, and the serving host holds no secret the account can read (the TLS key sits in
+# a root-only Docker volume). The boundary is therefore the
 # account itself, uid 10001, and its write set: a path outside site-data made writable by uid 10001
 # is a path every publish login reaches. A sender on the private network can be held to an OpenSSH
 # listener whose forced command confines SFTP too; Tailscale SSH owns the tailnet's port 22.

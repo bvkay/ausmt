@@ -27,10 +27,10 @@ and masked edge log carry over unchanged.
   disk: t3 10 GB, m3 30 GB. Volume storage is a separate per-availability-zone quota.
 * **Measured on the box** (owner, 2026-09-30): `site-data/builds` 33G (five kept builds),
   `site-data/cache` 2.2G (the 2048 MB cap main ships), `basemap` 2.4G.
-* **One built tree, measured** (2026-10-02, 15,265 stations, from the live products manifest and an
-  acceptance build of the same corpus): **7.5 GB (7.0 GiB)**, of which h5 2.89 GB, bundles 1.50,
-  xml 1.47, edi 1.18, pages and products 0.48. About 3.6 GB of it is non-MTH5 and is rewritten by
-  every build. The 2026-09-14 figure, about 2.9 GB at 4,961 station h5 files (a count of files, not
+* **One built tree, measured** (2026-10-02, 15,265 stations, an acceptance build of the live corpus
+  summed file by file): **7.5 GB (7.0 GiB)**, of which MTH5 3.87 GB (station and survey files), xml
+  1.47, edi 1.18, bundles 0.51, pages and products 0.47. About 3.6 GB of it is not MTH5 and is
+  rewritten by every build. The 2026-09-14 figure, about 2.9 GB at 4,961 station h5 files (a count of files, not
   of stations), scaled linearly gives 2.9 × 15,265 / 4,961 = 8.9 GB, 19 per cent above the
   measurement; it is superseded.
 * **The MTH5 build cache** (C18 A6): one cache generation measured 5.5 GB; the cap is ruled 16 GiB.
@@ -99,7 +99,7 @@ Readings:
   publish sends the whole 7.5 GB (runbook 9.3).
 * **Sizing the curation volume.** The curation host holds the kept builds plus one in progress, the
   MTH5 build cache, surveys-live, the basemap, the gateway state and the ClamAV database. Its
-  site-data floor today is about 28 GB (31 GB with a build in progress) before Ubuntu and the images,
+  site-data floor at 15,265 stations is about 28 GB (31 GB with a build in progress) before Ubuntu and the images,
   and about 48 GB with the cache at its 16 GiB cap (D1). The cache and the builds share one
   filesystem, the volume mounted at `/srv/ausmt`, because builds hardlink into the cache. The 100 GB
   curation volume holds that with room to grow; the 30 GB root disk does not.
@@ -206,7 +206,8 @@ the gate refuses `true`, and tailscaled then serves SFTP itself as the account's
 the gate. Over SFTP the account reads and writes what uid 10001 can, which on this host is
 `site-data` and world-readable files. Owner ruling 2026-10-02 accepts that for phase one, while the
 box is the sender: the writable tree is the one the account exists to replace and the serving host
-holds no secret (D11, question 2). What the gate does not police is the file names an rsync client
+holds no secret the account can reach, the TLS key sitting in a root-only Docker volume (D11,
+question 2). What the gate does not police is the file names an rsync client
 streams once a receive is running; the account's own write set is the boundary there, and on this host
 that is `site-data`, the tree the account exists to replace. The receiver's verification decides what
 is served. No container writes `site-data` on the serving host, so uid 10001 has no other writer to
@@ -365,7 +366,8 @@ and no submission accepted on a host whose state is about to be copied.
    `site-data/builds` and `site-data/cache` share one filesystem (D1, D3).
 3. **Provision** with the full `deploy/README.md` checklist (gateway profile and the 10002 tree
    included, and the two `tailscale serve` publications: the reader port for the serving host's
-   gateway routes, 443 for curators), `AUSMT_BUILD_MEM_LIMIT=4g` in its `deploy/.env` (D3), timers
+   gateway routes, 443 for curators), `AUSMT_BUILD_MEM_LIMIT=4g` and `AUSMT_GW_MEM_LIMIT=2g` in its
+   `deploy/.env` (D3), timers
    installed but disabled and the gateway profile down.
 4. **Freeze submissions on the box, then take the final backup.** Stop the box's gateway (the four
    public routes answer an error, and the Add Survey page hides its Submit button), let gw-runner
@@ -375,7 +377,8 @@ and no submission accepted on a host whose state is about to be copied.
    Disabled, not stopped: a stopped timer starts again at the box's next boot, and a second sender
    switches the public build every tick while each pass reports `publish=ok` (D4, one sender).
 5. **Move the state**: the final snapshot's sqlite (the only home of submitter PII) and
-   `gateway/{incoming,jobs,quarantine}`, box to ausmt-curate directly over the tailnet, never through
+   `gateway/{incoming,jobs,quarantine}` and the usage-statistics history
+   (`gateway/state/{stats.json,daily_archive.jsonl}`), box to ausmt-curate directly over the tailnet, never through
    the serving host or any public host; encrypted first (`gpg --symmetric`) if it rests anywhere in
    between. Restore it through the restore-drill path.
 6. **Publish from ausmt-curate, then reopen**: enable its timers with `AUSMT_PUBLISH_TARGET` set; watch
@@ -384,7 +387,8 @@ and no submission accepted on a host whose state is about to be copied.
    ausmt-curate's address and reader listener and re-run its provisioning; bring ausmt-curate's
    gateway profile up, which reopens submissions there.
 7. **Retire the box**: drop its phase-one rules from the tailnet policy (the `<BOX_NODE_USER>` ssh rule
-   for `publish` and `caddylog`, and `ausmt-box` from the other three rules), prove the fence again
+   for `publish` and `caddylog`, and `ausmt-box` from the other three rules, and the box's entries in
+   the `tests` and `sshTests` stanzas, which the console checks on every save), prove the fence again
    from the serving host against ausmt-curate (runbook 5.5), disable the box's remaining timers and
    take its stacks down.
 
@@ -400,7 +404,8 @@ and no submission accepted on a host whose state is about to be copied.
    outside the gate (D4), and OpenSSH bound to the tailnet address cannot run beside
    `tailscale up --ssh`, which owns tailnet port 22. The ruling accepts SFTP for phase one, while the
    box is the sender: the publish account's writable tree is `site-data`, the tree it exists to
-   replace, the serving host holds no secret, and the `caddylog` account can read world-readable
+   replace, the serving host holds no secret the account can reach, and the `caddylog` account can
+   read world-readable
    files only. The runbook's SFTP and port-forwarding probes are withdrawn; its `--current` and `sh`
    probes stay. **Revisit at the curate lift**, when the sender is a Nectar host on the private
    network and OpenSSH can bind there for the two service accounts (`Match User publish,caddylog`
