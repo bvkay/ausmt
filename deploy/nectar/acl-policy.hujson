@@ -73,7 +73,9 @@
   "ssh": [
     // The two service accounts, non-interactively (accept, no browser check), and no other account.
     // Their login shells are the gates in deploy/nectar/, which admit the publish commands and the
-    // read-only log pull and refuse a shell.
+    // read-only log pull and refuse a shell. The gates confine command sessions only: Tailscale SSH
+    // serves SFTP itself as the account, so each account's file permissions are its SFTP boundary
+    // (the gates' headers state what that leaves each account).
     {
       "action": "accept",
       "src":    ["tag:ausmt-curate"],
