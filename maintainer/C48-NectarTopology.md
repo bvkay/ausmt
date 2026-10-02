@@ -228,7 +228,14 @@ no registry credential. Until its tailnet join the serving host is reached at th
 floating IP (D1 gives a quota of 2), associated at launch and released once the join is proved; from
 then until the cutover it has no internet address and reaches the internet through the project
 router's SNAT, checked before launch (runbook 3.0). The front-door doctor skips its two
-tailnet-peer legs on a loopback upstream; `deploy/nectar/doctor-serve.sh` reports the whole serve role in the doctor-box shape.
+tailnet-peer legs on a loopback upstream; `deploy/nectar/doctor-serve.sh` reports the whole serve
+role in the doctor-box shape. Provisioning installs that doctor at `/usr/local/bin/ausmt-doctor-serve`,
+outside the data volume, and refreshes it on every run; operators run `sudo ausmt-doctor-serve`
+(both `.env` files are root-only). It also installs a `docker.service` drop-in,
+`/etc/systemd/system/docker.service.d/ausmt-serve.conf`, with `RequiresMountsFor=/srv/ausmt` and
+`After=tailscaled.service`: Docker never starts the stacks over empty bind sources on the root disk
+or before the tailnet resolver the gateway upstream needs. With the volume absent there is therefore
+no edge at all rather than an empty site behind a valid certificate.
 
 The masked front-door log keeps flowing to the analytics fold on the curation host: the log account
 `caddylog` exists on the serving host with `deploy/nectar/caddylog-gate.sh` as its login shell
@@ -245,8 +252,8 @@ The public name already resolves to 203.101.226.191, so the cutover moves the ad
    starts, so the certificate travels and no ACME order is attempted for a name that does not yet
    point at the new host. Then finish provisioning, with `AUSMT_GATEWAY_UPSTREAM` naming the box's
    reader listener (D12).
-2. Seed: the first publish from the box over the tailnet; `doctor-serve.sh` green, its gateway line
-   included.
+2. Seed: the first publish from the box over the tailnet; `sudo ausmt-doctor-serve` green, its
+   gateway line included.
 3. Check the serving host end to end on itself with `curl --resolve <name>:443:127.0.0.1`: the
    certificate, the reader, `/data`, the wall refusals, and `GET /gateway/healthz` (a probe that
    submits nothing) answering through to the box.

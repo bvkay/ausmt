@@ -553,6 +553,10 @@ The last line should print `tailscaled.service`, confirming the ordering. This r
 its root. It does not make tailscaled a hard requirement (a box with no tailnet still boots), and a very
 fast boot can still catch a brief resolve window, which is what the manual recovery below covers.
 
+On the Nectar serving host (ausmt-serve) this file is not used: `deploy/nectar/provision-serve.sh`
+installs its own drop-in, `ausmt-serve.conf`, which carries the same `After=tailscaled.service` and
+also `RequiresMountsFor=/srv/ausmt` (`deploy/nectar/RUNBOOK-NECTAR.md`, Day 2).
+
 **Manual recovery (any time the edge is stuck on 502 from a dead upstream resolve):**
 ```sh
 docker compose -f deploy/frontdoor/compose.yaml restart frontdoor

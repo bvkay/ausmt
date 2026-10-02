@@ -290,7 +290,11 @@ sudo sh /srv/ausmt/code/deploy/nectar/provision-serve.sh     # now runs to the e
 ```
 It fetches the basemap (a large download; set `AUSMT_SKIP_BASEMAP=1` and copy
 `/srv/ausmt/basemap/*.pmtiles` from the box instead if you prefer), starts the portal with `make up`,
-then the front door with `install-frontdoor.sh`.
+then the front door with `install-frontdoor.sh`. It also installs, on every run, two things that live
+off the data volume: the serve doctor at `/usr/local/bin/ausmt-doctor-serve` (a copy of
+`deploy/nectar/doctor-serve.sh`, run as `sudo ausmt-doctor-serve` because both `.env` files are
+root-only), and the Docker boot ordering `/etc/systemd/system/docker.service.d/ausmt-serve.conf`
+(`RequiresMountsFor=/srv/ausmt`, `After=tailscaled.service`; step 15, "The volume did not mount").
 
 ---
 
@@ -326,7 +330,7 @@ cd "$AUSMT_CODE_DIR/deploy"
 AUSMT_PUBLISH_TARGET=publish@ausmt-serve make publish ARGS=--dry-run
 AUSMT_PUBLISH_TARGET=publish@ausmt-serve make publish
 ```
-9.4  On ausmt-serve: `sh /srv/ausmt/code/deploy/nectar/doctor-serve.sh`. Expect PASS everywhere,
+9.4  On ausmt-serve: `sudo ausmt-doctor-serve`. Expect PASS everywhere,
      the `gateway` line included: it asks this host's front door for `/gateway/healthz`, which the
      box answers. A `gateway` WARN means this host cannot reach the box's reader port: check the
      `tag:ausmt-serve` rule of step 2.1 and `AUSMT_GATEWAY_UPSTREAM`. The DNS and TLS lines pass
@@ -392,7 +396,7 @@ sudo grep -c "check=<the M printed above>" /var/log/caddy/access-frontdoor.json 
 ```
       The DNS and `build.json` checks pass before and after the move alike (both hosts serve the box's
       current build under the same certificate), so only this log line proves the address moved. Then
-      run the public checks of `deploy/frontdoor/RUNBOOK.md` step 9, and `doctor-serve.sh` on
+      run the public checks of `deploy/frontdoor/RUNBOOK.md` step 9, and `sudo ausmt-doctor-serve` on
       ausmt-serve.
 12.4  Repoint the masked-log pull on the box. Both front doors write `access-frontdoor.json`, and the
       box keeps one copy of each name, so the first pull from ausmt-serve would overwrite what
@@ -428,8 +432,8 @@ Move the address back; nothing else is needed while ausmt-test is left running.
 ## 14. The quiet period, then delete ausmt-test
 
 Leave ausmt-test running and untouched until you are satisfied; at the least, one new build has gone
-box → reconcile → publish → ausmt-serve with `publish` = `ok`, and `doctor-serve.sh` is clean apart from
-the known WARNs. ausmt-test costs 125 SU a year until it is deleted, shut down or not.
+box → reconcile → publish → ausmt-serve with `publish` = `ok`, and `sudo ausmt-doctor-serve` is clean
+apart from the known WARNs. ausmt-test costs 125 SU a year until it is deleted, shut down or not.
 
 14.1  On ausmt-test (`ssh ubuntu@ausmt-vps`, by the rule of step 2.3):
       `cd <the checkout holding deploy/frontdoor> && sudo docker compose -f deploy/frontdoor/compose.yaml down`.
@@ -441,7 +445,8 @@ the known WARNs. ausmt-test costs 125 SU a year until it is deleted, shut down o
 
 ## 15. Day 2
 
-- **Health:** `sh /srv/ausmt/code/deploy/nectar/doctor-serve.sh` on ausmt-serve; the box's
+- **Health:** `sudo ausmt-doctor-serve` on ausmt-serve. Provisioning installs it outside the data
+  volume, so it still runs, and FAILs its volume line, when the volume is missing. The box's
   `reconcile-status.json` `publish` field and the alert timer cover the publish path.
 - **Updates to the repo:** `sudo sh /srv/ausmt/code/deploy/nectar/provision-serve.sh` again. It
   fast-forwards the checkout, reinstalls the receiver and the gates, re-runs `make up` and
@@ -449,14 +454,31 @@ the known WARNs. ausmt-test costs 125 SU a year until it is deleted, shut down o
 - **Image tag:** keep `TAG` in ausmt-serve's `deploy/.env` equal to the box's, then re-run
   provisioning.
 - **Host upgrades:** unattended upgrades apply security updates; a kernel update needs a reboot you
-  schedule. The containers restart on boot and the volume mounts by label (`nofail`: if it does not,
-  `doctor-serve.sh` FAILs its volume line).
+  schedule. The volume mounts by label (`nofail`), and Docker starts only after it is mounted and
+  after `tailscaled` (the drop-in of step 8), so the containers come back with the tree under them and
+  the tailnet resolver in place for the gateway upstream.
+- **The volume did not mount.** With the volume absent Docker does not start, so there is no edge at
+  all (the public name refuses connections) rather than an empty site behind a valid certificate.
+  `sudo ausmt-doctor-serve` FAILs its volume line, and the box's next publish fails and fail-pings. If
+  Docker was started by hand meanwhile, it laid empty root-owned stubs for its bind mounts under
+  `/srv/ausmt` on the root disk. Recover:
+```sh
+sudo systemctl stop docker.socket docker.service              # both stacks down
+mountpoint /srv/ausmt                                         # expect: is not a mountpoint
+sudo find /srv/ausmt -mindepth 1 -maxdepth 3 -ls              # the stubs, if any
+mountpoint -q /srv/ausmt || sudo find /srv/ausmt -mindepth 1 -delete
+sudo mount /srv/ausmt && mountpoint /srv/ausmt                # if not: lsblk -f, and the volume's attachment
+sudo systemctl start docker                                   # both stacks up
+sudo ausmt-doctor-serve
+```
+  The stubs are removed while the volume is unmounted, because they sit on the root disk beneath the
+  mount point; once the volume is mounted the same paths are the real tree.
 - **Rolling the public site back to an older build:** do it on the box as a curator rollback. The
   pinned reconcile pass publishes the rolled-back build to the replica. A replica-only `make publish
   ARGS="--build <ts>"` is overwritten by the next reconcile pass, which publishes the box's current.
 - **Retention:** the replica keeps the `AUSMT_PUBLISH_KEEP` newest complete builds (default 5, 1 to
   999, set on the sender), with current always among them. A build directory without a sidecar is an
-  interrupted transfer; `doctor-serve.sh` names it and you delete it once no publish is running.
+  interrupted transfer; the doctor names it and you delete it once no publish is running.
 - **Curators:** the tailnet policy grants `group:curators` port 443 on the curation host's tailnet
   name (the box in phase one) and nothing else. That is how curators reach the workbench today:
   `tailscale serve --bg https / http://127.0.0.1:8443` on the curation host publishes the portal

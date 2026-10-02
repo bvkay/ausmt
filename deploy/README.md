@@ -1354,7 +1354,11 @@ the receiver and an rsync that receives into `site-data/builds`, and refuses eve
 stats fold reads). The gates confine command sessions; Tailscale SSH serves SFTP to both accounts
 in-process, outside the gates, which owner ruling 2026-10-02 accepts for phase one (C48 D4 and D11,
 question 2). `deploy/nectar/acl-policy.hujson` holds the tailnet policy entries to merge, and
-`sh deploy/nectar/doctor-serve.sh` is the serve role's one-screen doctor.
+`sudo ausmt-doctor-serve` is the serve role's one-screen doctor: provisioning installs
+`deploy/nectar/doctor-serve.sh` at `/usr/local/bin/ausmt-doctor-serve`, outside the data volume, so
+it runs when the volume is missing. Provisioning also orders Docker after the volume's mount and
+after `tailscaled` (`/etc/systemd/system/docker.service.d/ausmt-serve.conf`), so a boot without the
+volume leaves no edge at all rather than an empty site.
 
 **The public gateway routes.** The four public gateway routes of the Add Survey flow need a gateway,
 and ausmt-serve runs none, so its front door sends them to the curation host's reader listener over
