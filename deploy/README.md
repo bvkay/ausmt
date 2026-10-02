@@ -1336,8 +1336,11 @@ file is hard-linked rather than stored again), sends the sidecar after it, then 
 `receive-build.sh <ts>`. The receiver refuses the build unless the files on disk are exactly the
 listed files with exactly the listed hashes, swaps `current` by renaming a temporary symlink (as
 `rebuild-data` does), writes `site-data/published.json` (`ts`, `build_id`, `source_commit`,
-`received_at`) and prunes to the keep depth, never the current build and never a directory whose
-sidecar has not arrived. Receives run one at a time under `flock` on `site-data/.receive.lock`, and a
+`received_at`, and `sender`: the address the receive arrived from, the first word of `SSH_CLIENT`,
+else `SSH_CONNECTION`, else `local`) and prunes to the keep depth, never the current build and never
+a directory whose sidecar has not arrived. The prune runs on every receive, the confirmation of a
+build already served included, so a keep depth lowered on the sender takes effect at the next pass.
+Receives run one at a time under `flock` on `site-data/.receive.lock`, and a
 `current` whose build directory is gone names no build, so the sender sends it again. A build the
 replica already serves is not sent again: the sender only asks the receiver to confirm it, which is a
 no-op when `published.json` agrees and re-records it when a receive was cut off after its swap. The
@@ -1351,7 +1354,9 @@ operator, so grant the operator write on that one directory, then name the repli
 sudo setfacl -m u:"$USER":rwx "$AUSMT_DATA_DIR/site-data/builds"
 # deploy/.env
 AUSMT_PUBLISH_TARGET=publish@ausmt-serve      # the replica's publish account (MagicDNS name)
-# optional: AUSMT_PUBLISH_DATA_DIR (default /srv/ausmt), AUSMT_PUBLISH_KEEP (default 5, 1 to 999)
+# optional: AUSMT_PUBLISH_KEEP (default 5, 1 to 999)
+# AUSMT_PUBLISH_DATA_DIR must stay at its default, /srv/ausmt: the replica's gate and receiver pin
+# that root, because SSH carries no environment, and refuse any other
 ```
 
 ```sh
@@ -1382,6 +1387,12 @@ question 2). `deploy/nectar/acl-policy.hujson` holds the tailnet policy entries 
 it runs when the volume is missing. Provisioning also orders Docker after the volume's mount and
 after `tailscaled` (`/etc/systemd/system/docker.service.d/ausmt-serve.conf`), so a boot without the
 volume leaves no edge at all rather than an empty site.
+
+**The sender, checked on ausmt-serve.** `AUSMT_PUBLISH_SENDER` in ausmt-serve's `deploy/.env`
+(optional, from `deploy/nectar/serve.env.example`) names the curation host's tailnet address
+(`tailscale ip -4` there). When it is set, the serve doctor WARNs if `published.json` names another
+sender: two hosts publishing to one replica would switch the public build every pass while each
+reports `publish=ok`. It changes with the curation host at the lift (C48 D10).
 
 **The public gateway routes.** The four public gateway routes of the Add Survey flow need a gateway,
 and ausmt-serve runs none, so its front door sends them to the curation host's reader listener over

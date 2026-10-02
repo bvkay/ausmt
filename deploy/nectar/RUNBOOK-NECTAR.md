@@ -321,11 +321,16 @@ root-only), and the Docker boot ordering `/etc/systemd/system/docker.service.d/a
 
 ## 9. Seed: the first publish from the box
 
-Every step here runs on the box as the operator account (the `User=` of the reconcile unit), in a shell
-with the two paths `deploy/README.md` exports:
+Every step here runs on the box as the Unix user named by `User=` in `ausmt-reconcile.service`
+(`systemctl show -p User ausmt-reconcile.service`), in a shell with the two paths `deploy/README.md`
+exports:
 ```sh
 export AUSMT_DATA_DIR=/srv/ausmt AUSMT_CODE_DIR=~/ausmt-code
 ```
+`publish.sh` runs ssh with `BatchMode=yes`, which fails rather than asks on an unknown host key, so
+the reconcile unit can publish only if that user's `known_hosts` already holds ausmt-serve's key.
+The first command of 9.2, run as that user, is where you accept it; run as anyone else, step 11 shows
+`publish=failed` at `ask-receiver`.
 
 9.1  Once: let the operator write the sidecar beside the builds.
 ```sh
@@ -343,20 +348,43 @@ ssh publish@ausmt-serve sh                              # expect: publish-gate: 
      serving host holds no secret, and the `caddylog` account can read world-readable files only. So
      this step has no SFTP or port-forwarding probe. The ruling is revisited at the curate lift
      (C48 D11, question 2).
-9.3  Publish by hand. The first run sends the whole build; read its size first, so you know what the
-     upload will take:
+9.3  Publish by hand. First the path: the seed must not ride a relay.
+```sh
+tailscale ping ausmt-serve     # expect the last line: pong from ausmt-serve (100.x.y.z) via <ip>:<port> in N ms
+```
+     A reply `via DERP(<region>)` on every attempt means the two hosts reach each other only through a
+     Tailscale relay, which caps throughput: run `tailscale netcheck` on both and settle it before
+     seeding. Nothing else reports this; the front-door doctor's direct-path leg is skipped on
+     ausmt-serve, whose reader upstream is loopback.
+
+     The first run sends the whole build, uncompressed: about 7.5 GB (`du -sh` prints about 7.0G, in
+     GiB). 7.5 GB is 60 Gbit, so at the home uplink rate the seed takes at least:
+
+| uplink | 60 Gbit at that rate |
+|---|---|
+| 10 Mbit/s | 6,000 s, 1 h 40 min |
+| 20 Mbit/s | 3,000 s, 50 min |
+| 50 Mbit/s | 1,200 s, 20 min |
+| 100 Mbit/s | 600 s, 10 min |
+
 ```sh
 du -sh "$AUSMT_DATA_DIR/site-data/current/"
 cd "$AUSMT_CODE_DIR/deploy"
 AUSMT_PUBLISH_TARGET=publish@ausmt-serve make publish ARGS=--dry-run
 AUSMT_PUBLISH_TARGET=publish@ausmt-serve make publish
 ```
-9.4  On ausmt-serve: `sudo ausmt-doctor-serve`. Expect PASS everywhere,
-     the `gateway` line included: it asks this host's front door for `/gateway/healthz`, which the
-     box answers. A `gateway` WARN means this host cannot reach the box's reader port: check the
-     `tag:ausmt-serve` rule of step 2.1 and `AUSMT_GATEWAY_UPSTREAM`. The DNS and TLS lines pass
-     already: the public name resolves to the address step 8 set as expected, and it still reaches
-     ausmt-test, which presents the same certificate. Neither line tells the two hosts apart.
+     **An interrupted publish resumes.** Run the same `make publish` again: the files that arrived
+     stay in `builds/<ts>/` on the replica, `--checksum` skips them, and only the file in flight is
+     sent again. If a newer box build has become current meanwhile, the re-run sends that one instead,
+     and the interrupted directory, which has no sidecar, is left for you to delete (step 15,
+     Retention).
+9.4  On ausmt-serve: `sudo ausmt-doctor-serve`. Expect PASS everywhere, the `gateway` line included:
+     it asks this host's front door for `/gateway/healthz`, which the box answers. A `gateway` WARN
+     means this host cannot reach the box's reader port: check the `tag:ausmt-serve` rule of step 2.1
+     and `AUSMT_GATEWAY_UPSTREAM`. The `published` line names the box's tailnet address as the
+     sender (step 15). The DNS and TLS lines pass already: the public name resolves to the address
+     step 8 set as expected, and it still reaches ausmt-test, which presents the same certificate.
+     Neither line tells the two hosts apart.
 
 ---
 
@@ -547,8 +575,29 @@ sudo ausmt-doctor-serve
   pinned reconcile pass publishes the rolled-back build to the replica. A replica-only `make publish
   ARGS="--build <ts>"` is overwritten by the next reconcile pass, which publishes the box's current.
 - **Retention:** the replica keeps the `AUSMT_PUBLISH_KEEP` newest complete builds (default 5, 1 to
-  999, set on the sender), with current always among them. A build directory without a sidecar is an
-  interrupted transfer; the doctor names it and you delete it once no publish is running.
+  999, set on the sender), with current always among them. It prunes on every receive, the
+  confirmation a `noop` pass sends for the build it already serves included, so a keep lowered on
+  the sender takes effect at the next reconcile tick. A build directory without a sidecar is an
+  interrupted transfer; the doctor names it, no prune removes it, and you delete it once no publish
+  is running.
+- **A full data volume:** a new build's publish fails at `rsync-build`, before any receive or prune,
+  and every tick retries into the same full disk and fail-pings; the public site keeps serving its
+  current build. On ausmt-serve, make room by hand, then wait one tick:
+```sh
+cd /srv/ausmt/site-data
+readlink current                                       # the build that must stay
+ls -1d builds/*/ && ls -1 builds/*.sha256              # the builds, and which have a sidecar
+sudo rm -r builds/<oldest ts> builds/<oldest ts>.sha256   # oldest non-current first, each with its sidecar
+sudo rm -r builds/<ts>                                 # every directory without a sidecar
+```
+  If the volume is too small for the keep depth, lower `AUSMT_PUBLISH_KEEP` on the box as well.
+- **The sender:** `published.json` records `sender`, the address the receive arrived from (the first
+  word of `SSH_CLIENT`, else `SSH_CONNECTION`, else `local`). Set `AUSMT_PUBLISH_SENDER` in
+  ausmt-serve's `deploy/.env` to the curation host's tailnet address (`tailscale ip -4` on the box in
+  phase one) and the doctor WARNs whenever `published.json` names another sender. Two hosts
+  publishing to one replica would otherwise switch the public build every tick while every pass
+  reports `publish=ok`. It is optional; unset, nothing is compared. At the lift it changes to
+  ausmt-curate's address (section 16).
 - **Curators:** the tailnet policy grants `group:curators` port 443 on the curation host's tailnet
   name (the box in phase one) and nothing else. That is how curators reach the workbench today:
   `tailscale serve --bg https / http://127.0.0.1:8443` on the curation host publishes the portal

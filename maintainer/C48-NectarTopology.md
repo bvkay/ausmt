@@ -163,14 +163,24 @@ and names an existing directory, then refuses the build unless the files on disk
 listed files with exactly the listed hashes (no missing, unlisted, altered or non-regular entry). It
 swaps `current` the Makefile's way, a temporary symlink renamed over it (`mv -T`, or the same
 `rename(2)` through Python where `mv -T` does not exist), never `ln -sfn`. It writes `published.json`
-beside `current` (`ts`, `build_id` and `source_commit` from the build's `build.json`, `received_at`),
-then prunes: the `--keep` newest builds that carry a sidecar survive (1 to 999, no leading zero),
-the build received and the build `current` points at when the prune runs always survive, and a
-directory without a sidecar is never touched. Verify, swap, record and prune run under `flock` on
+beside `current` (`ts`, `build_id` and `source_commit` from the build's `build.json`, `received_at`,
+and `sender`, the address the receive arrived from: the first word of `SSH_CLIENT`, else
+`SSH_CONNECTION`, else `local`), then prunes: the `--keep` newest builds that carry a sidecar
+survive (1 to 999, no leading zero), the build received and the build `current` points at when the
+prune runs always survive, and a directory without a sidecar is never touched. Verify, swap, record and prune run under `flock` on
 `site-data/.receive.lock`, so two receives (a reconcile publish and a manual `make publish`) never
 overlap. `--current` names a build only while its directory exists, so a dangling `current` makes
 the sender send again. A refused build leaves `current`, `published.json` and every other build as
-they were. A re-run for the current build is a no-op.
+they were. A re-run for the current build changes nothing but the prune, which runs on that path
+too, so a keep lowered on the sender takes effect at the next tick while the replica already serves
+the sender's current. A full volume is the one case no tick repairs: a new build's transfer fails
+before any receive, so space is made by hand (runbook 15).
+
+**One sender.** The receiver accepts any timestamp, older or newer, because a curator rollback
+depends on it, so two hosts publishing to one replica would switch the public build every tick while
+each reports `publish=ok`. `published.json` therefore names the sender, and with
+`AUSMT_PUBLISH_SENDER` set in the serving host's `deploy/.env` the serve doctor WARNs when it names
+any other. At the lift the old sender is disabled, not stopped, and its policy rule is dropped (D10).
 
 **Which uid receives.** `site-data` on the serving host is written by one uid only, 10001, exactly as
 on the box (`deploy/README.md`, ownership split). The two candidates were a publish account in the
