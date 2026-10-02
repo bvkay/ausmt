@@ -405,8 +405,8 @@ def test_a_record_without_a_sender_is_information_not_a_warning(tmp_path):
     data = _tree(tmp_path)
     r = _run(_expect_sender(_env(tmp_path, data), "100.64.0.7"))
     assert r.returncode == 0, r.stdout
-    assert any("sender" in ln for ln in _lines(r, "INFO")), r.stdout
-    assert not any("sender" in ln for ln in _lines(r, "WARN")), r.stdout
+    assert any(ln.startswith("INFO sender") for ln in r.stdout.splitlines()), r.stdout
+    assert not any(ln.startswith("WARN sender") for ln in r.stdout.splitlines()), r.stdout
 
 
 def test_the_recorded_sender_is_named_and_matched_against_the_expected_one(tmp_path):
@@ -417,7 +417,7 @@ def test_the_recorded_sender_is_named_and_matched_against_the_expected_one(tmp_p
     data = _tree(tmp_path, sender="100.64.0.7")
     r = _run(_env(tmp_path, data))
     assert "100.64.0.7" in r.stdout, r.stdout
-    assert not any("sender" in ln for ln in _lines(r, "WARN")), r.stdout
+    assert not any(ln.startswith("WARN sender") for ln in r.stdout.splitlines()), r.stdout
     (tmp_path / "same").mkdir()
     r = _run(_expect_sender(_env(tmp_path / "same", data), "100.64.0.7"))
     assert any(ln.startswith("PASS sender") for ln in r.stdout.splitlines()), r.stdout

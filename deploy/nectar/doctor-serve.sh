@@ -31,7 +31,10 @@
 #   8. build.json: the served build's identity parses
 #   9. published: published.json names the build current points at, with its age and its lag (how
 #      long after the build was made the replica swapped to it); absent or disagreeing is a WARN,
-#      because the tree still serves but did not arrive by the publish path
+#      because the tree still serves but did not arrive by the publish path. The sender it records
+#      is named, and WARNs when AUSMT_PUBLISH_SENDER (deploy/.env) is set and differs: two hosts
+#      publishing to one replica swap the public build every tick while each reports publish=ok.
+#      A record with no sender is INFO, since a receiver that does not record one says nothing
 #  10. builds: a build directory with no sidecar is a transfer that never completed and that no prune
 #      removes; each one is named
 #  11. frontdoor: deploy/frontdoor/doctor.sh, its FAIL and WARN lines relayed under this label
@@ -261,6 +264,7 @@ with open(sys.argv[1], encoding="utf-8") as fh:
     doc = json.load(fh)
 ts = doc.get("ts") or ""
 at = doc.get("received_at") or ""
+sender = str(doc.get("sender") or "").replace("|", " ")
 utc = datetime.timezone.utc
 def span(seconds):
     m = int(seconds // 60)
@@ -269,10 +273,11 @@ try:
     got = datetime.datetime.strptime(at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=utc)
     built = datetime.datetime.strptime(ts, "%Y%m%dT%H%M%SZ").replace(tzinfo=utc)
     now = datetime.datetime.now(utc)
-    print("%s|%s|age %s, lag %s after the build" % (ts, at, span((now - got).total_seconds()),
-                                                    span((got - built).total_seconds())))
+    print("%s|%s|%s|age %s, lag %s after the build" % (ts, at, sender,
+                                                       span((now - got).total_seconds()),
+                                                       span((got - built).total_seconds())))
 except ValueError:
-    print("%s|%s|age and lag unreadable" % (ts, at))
+    print("%s|%s|%s|age and lag unreadable" % (ts, at, sender))
 PYEOF
 )"
 	if [ -z "$read_out" ]; then
@@ -282,11 +287,23 @@ PYEOF
 	pts=${read_out%%|*}
 	rest=${read_out#*|}
 	at=${rest%%|*}
+	rest=${rest#*|}
+	sender=${rest%%|*}
 	span=${rest#*|}
 	if [ "$pts" != "$CUR_TS" ]; then
 		warn "published: published.json names builds/$pts but current is builds/$CUR_TS, so current was swapped outside the publish path"
 	else
 		pass "published: builds/$pts received $at ($span)"
+	fi
+	expect="${AUSMT_PUBLISH_SENDER:-}"
+	if [ -z "$sender" ]; then
+		info "sender: published.json records no sender, so a second publishing host cannot be told from the expected one (a receiver that records it names it on its next receive)"
+	elif [ -z "$expect" ]; then
+		info "sender: the last publish came from $sender (set AUSMT_PUBLISH_SENDER in $ENV_FILE to WARN on any other)"
+	elif [ "$sender" = "$expect" ]; then
+		pass "sender: the last publish came from $sender, the expected sender"
+	else
+		warn "sender: the last publish came from $sender, not the expected sender $expect; a second host publishing to this replica swaps the public build every tick, so stop and disable that host's timers and remove its AUSMT_PUBLISH_TARGET"
 	fi
 }
 
