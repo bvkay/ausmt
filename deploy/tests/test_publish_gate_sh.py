@@ -117,6 +117,13 @@ REFUSED = [
     f"rsync --server -logDtpre.iLsfxCIvu --log-file=x . {BUILDS}/{TS}/",
     f"rsync --server -logDtpre.iLsfxCIvu . {BUILDS}/{TS}/; sh",
     f"rsync -logDtpre.iLsfxCIvu . {BUILDS}/{TS}/",
+    # Flags the publish never sends: -K, -k and -L make rsync follow a symlink rather than treat it
+    # as a link, so a planted link would carry a write past the pinned destination, and -b leaves
+    # backup files beside the tree that no sidecar lists.
+    f"rsync --server -Klogre.iLsfxCIvu . {BUILDS}/{TS}/",
+    f"rsync --server -Llogre.iLsfxCIvu . {BUILDS}/{TS}/",
+    f"rsync --server -kHlogDpre.iLsfxCIvu . {BUILDS}/{TS}/",
+    f"rsync --server -bre.x . {BUILDS}/{TS}/",
     "receive-build.sh ../../etc",
     f"receive-build.sh {TS} extra",
     "receive-build.sh --keep x " + TS,
