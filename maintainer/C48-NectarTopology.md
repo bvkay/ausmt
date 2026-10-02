@@ -58,9 +58,12 @@ The serving host is the only machine on the internet and it holds nothing that i
 (the served tree) plus the TLS key. A compromise of it yields the public tree and the certificate; it
 cannot push to the survey repository or read a submission, and over the tailnet it reaches only the
 curation host's reader listener on port 8445, whose wall 2 admits the same public subset the internet
-reaches through the front door (D12; `deploy/nectar/acl-policy.hujson`). The instances also share
-the project's private network, `qld-data`, which the tailnet policy does not govern; that path is closed by the security groups. An
-OpenStack `default` group normally admits all ingress from its own members, so neither host carries
+reaches through the front door (D12; `deploy/nectar/acl-policy.hujson`, whose `tests` and `sshTests`
+stanzas pin that grant and its refusals at every policy save; runbook 5.5 proves it from the serving
+host after the join, because the entries are merged into a live policy the repository cannot see).
+The instances also share the project's private network, `qld-data`, which the tailnet policy does
+not govern; that path is closed by the security groups. An OpenStack `default` group normally admits
+all ingress from its own members, so neither host carries
 `default` or any group with a same-group ingress rule (runbook 3.1). The rules of the project's
 `default` group are not in the D1 facts and are to be read in the dashboard. The curation host has no
 public address and is reached only over the tailnet.
@@ -215,8 +218,11 @@ receiver and both gates, the two `.env` files (the reader upstream forced to loo
 `make up`, then `install-frontdoor.sh`. Provisioning also carries `AUSMT_GATEWAY_UPSTREAM` from
 `deploy/.env` into the front door's `.env` (D12). The GHCR images are public (an anonymous token got
 HTTP 200 on the `ghcr.io/bvkay/ausmt-portal` tags list, checked 2026-09-30), so the serving host holds
-no registry credential. The front-door doctor skips its two tailnet-peer legs on a
-loopback upstream; `deploy/nectar/doctor-serve.sh` reports the whole serve role in the doctor-box shape.
+no registry credential. Until its tailnet join the serving host is reached at the project's second
+floating IP (D1 gives a quota of 2), associated at launch and released once the join is proved; from
+then until the cutover it has no internet address and reaches the internet through the project
+router's SNAT, checked before launch (runbook 3.0). The front-door doctor skips its two
+tailnet-peer legs on a loopback upstream; `deploy/nectar/doctor-serve.sh` reports the whole serve role in the doctor-box shape.
 
 The masked front-door log keeps flowing to the analytics fold on the curation host: the log account
 `caddylog` exists on the serving host with `deploy/nectar/caddylog-gate.sh` as its login shell
@@ -313,8 +319,8 @@ backup timers so there is one writer and one publisher; enable them on ausmt-cur
 `AUSMT_PUBLISH_TARGET` set; watch one publish land; set `AUSMT_GATEWAY_UPSTREAM` in the serving host's
 `deploy/.env` to ausmt-curate's reader listener and re-run its provisioning; retire the box. The curation host has no
 public address, so its outbound traffic (GitHub, GHCR, ClamAV updates, Tailscale) must leave through
-the project router. The D1 facts give one router but not its external gateway: check Network → Routers
-that it has an external gateway set and `qld-data` attached before the lift.
+the project router, whose external gateway, SNAT and `qld-data` interface are checked before the
+serving host's launch (runbook 3.0).
 
 ## D11. Open questions
 

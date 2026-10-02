@@ -81,6 +81,11 @@ Steps 1 to 3 run while it is pending. Step 4 needs the volume, or the proof serv
      `deploy/nectar/acl-policy.hujson` into the policy (never replace the policy). Fill the
      placeholders in the console: the tag administrator, each curator's login, the login that owns the
      box's node, the box's tailnet address (the `ausmt-box` alias the front-door stanza already has).
+     Merge its `tests` and `sshTests` stanzas too, placeholders filled the same way: they pin what
+     `tag:ausmt-serve` may and may not reach, and the console runs them on every save and refuses a
+     policy that breaks them. Before saving, preview the rules for `tag:ausmt-serve` in the console and
+     confirm it reaches the box on 8445 and nothing else; the stock policy's allow-all rule, if it is
+     still there, shows up here.
 2.2  Settings → Keys → Generate auth key, tagged `tag:ausmt-serve` (you will type it in step 5; do not
      paste it anywhere else).
 2.3  A temporary admin path to ausmt-test, for steps 7 and 14.1. ausmt-test joined the tailnet as
@@ -96,6 +101,11 @@ Steps 1 to 3 run while it is pending. Step 4 needs the volume, or the proof serv
 
 ## 3. Launch ausmt-serve
 
+3.0  Network → Routers → the project's router: an **External Network** set with **SNAT** enabled, and
+     an interface on `qld-data`. ausmt-serve has no internet address of its own except the bootstrap
+     one (3.2 to 5.4) and the public one (from step 12), so apt, GitHub, GHCR and Tailscale traffic
+     leaves through this router's SNAT; so does ausmt-test's tailnet traffic once step 12 takes its
+     address. If any of the three is missing, fix it in the dashboard before launching.
 3.1  Compute → Instances → Launch Instance:
      - **Details:** name `ausmt-serve`, availability zone **QRIScloud** (where ausmt-test and its
        floating IP live).
@@ -114,8 +124,13 @@ Steps 1 to 3 run while it is pending. Step 4 needs the volume, or the proof serv
      - **Configuration → Customisation script:** paste `deploy/nectar/cloud-init-serve.yaml`. Its one
        placeholder takes the PUBLIC key of an OpenSSH publish key on the box; Tailscale SSH does not use
        it, so leave the placeholder as it is unless you publish over plain OpenSSH.
-3.2  Bootstrap access: add a TEMPORARY rule to a new security group allowing 22/tcp from **your own
-     address only**, attach it, and log in as `ubuntu`. You remove it in step 5.4.
+3.2  Bootstrap access. The public floating IP stays on ausmt-test until step 12, so ausmt-serve has
+     only its private `qld-data` address. Give it the project's SECOND floating IP (the quota is 2,
+     C48 D1) for the bootstrap: Network → Floating IPs → **Allocate IP to Project** (pool `qld`), then
+     that row's Actions → **Associate** → the `ausmt-serve` port. Add a TEMPORARY rule to a new
+     security group allowing 22/tcp from **your own address only**, attach it, and log in as `ubuntu`
+     at the bootstrap address. You release both in step 5.4; the bootstrap address is never the
+     public name's.
 3.3  Check first boot finished: `cloud-init status --wait` then `tailscale version`, `docker compose
      version`. The last line of `/var/log/cloud-init-output.log` says the volume is not mounted yet;
      that is expected.
@@ -186,8 +201,26 @@ history -c
      the key under Settings → Keys.
 5.2  `tailscale status` shows the node with `tag:ausmt-serve`.
 5.3  From your own tailnet device: `ssh ubuntu@ausmt-serve` (Tailscale SSH, with its sign-in check).
-5.4  Remove the temporary SSH security group from the instance. From here on the host has 80 and 443
-     open to the internet and nothing else.
+5.4  From the tailnet session of 5.3, remove the temporary SSH security group from the instance, then
+     Network → Floating IPs → the bootstrap address → Actions → **Disassociate**, and **Release
+     Floating IP** on the same row. From here until step 12 the host has no internet address: you reach
+     it over the tailnet, and it reaches the internet through the router's SNAT (3.0). From step 12 it
+     has 80 and 443 open to the internet and nothing else.
+5.5  Prove the tailnet fence from the serving host's side. The policy is merged into a live policy
+     this repository cannot see, so these are the evidence that nothing broader admits the serving
+     host. On ausmt-serve:
+```sh
+B=<the box's MagicDNS name: the host in ausmt-test's AUSMT_BOX_READER_UPSTREAM>
+nc -z -v -w 5 "$B" 22                                              # expect: timed out or refused, never "succeeded"
+curl -sS -k -m 5 -o /dev/null -w '%{http_code}\n' "https://$B/gateway/curator/queue"
+                                                                   # expect: 000 and a curl error (no connection)
+curl -sS -m 5 -o /dev/null -w '%{http_code}\n' "http://$B:8445/"   # expect: 200 (the reader listener)
+```
+     If the box's port 22 connects or the queue path answers with any HTTP status, stop: a broader
+     rule in the live policy admits the serving host. Find it in the console's rule preview for
+     `tag:ausmt-serve` (2.1) and remove it, then run 5.5 again. If 8445 does not answer 200, check the
+     `tag:ausmt-serve` rule of 2.1 and the box's `tailscale serve` reader port. Run 5.5 again after
+     every policy change that touches these tags.
 
 ---
 
