@@ -48,8 +48,9 @@ A curator's rollback to an earlier build travels the same path, so the public si
   exactly those four over the tailnet to the curation host's public-subset listener, which checks them
   against its own allowlist. The curator workbench is never on the public name.
 - The serving host reaches the curation host over the tailnet on that one listener port only.
-- The curation host reaches the serving host over the tailnet as two restricted accounts: one that
-  can only receive builds, and one that can only read the masked access log for the usage statistics.
+- The curation host reaches the serving host over the tailnet as two accounts without a shell: one
+  that receives builds, and one that pulls the masked access log for the usage statistics. Neither
+  can reach a secret on the serving host.
 - Curators join the tailnet by invitation (a passkey or institutional sign-in), reach only the
   workbench, served over HTTPS on the curation host's tailnet name, and then sign in to it with a
   named key and a second factor.

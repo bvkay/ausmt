@@ -311,15 +311,13 @@ sudo setfacl -m u:"$USER":rwx "$AUSMT_DATA_DIR/site-data/builds"
 ssh publish@ausmt-serve receive-build.sh --current     # expect: nothing (no build yet), exit 0
 ssh publish@ausmt-serve sh                              # expect: publish-gate: refused ..., exit 1
 ```
-     Then the two channels that do not start a login shell, so the gate never sees them. **Both must
-     fail:**
-```sh
-sftp -b /dev/null publish@ausmt-serve                   # expect: a failure, no sftp session
-ssh -N -o ExitOnForwardFailure=yes -L 18445:127.0.0.1:8445 publish@ausmt-serve &
-sleep 3; curl -sS -m 5 http://127.0.0.1:18445/ ; kill %1 # expect: the ssh exited, curl cannot connect
-```
-     If either succeeds, the publish account is not confined to the gate over Tailscale SSH. Stop and
-     settle C48 D11 question 2 before going on.
+     The gate confines command sessions, and these two prove it. Tailscale SSH serves SFTP itself,
+     in-process as the account, after the gate refuses its login-shell probe, so an SFTP session never
+     reaches the gate. That is accepted for phase one by owner ruling 2026-10-02, while the box is the
+     sender: the publish account's writable tree is `site-data`, the tree it exists to replace, the
+     serving host holds no secret, and the `caddylog` account can read world-readable files only. So
+     this step has no SFTP or port-forwarding probe. The ruling is revisited at the curate lift
+     (C48 D11, question 2).
 9.3  Publish by hand. The first run sends the whole build; read its size first, so you know what the
      upload will take:
 ```sh

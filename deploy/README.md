@@ -1349,9 +1349,11 @@ and `alert.sh` fail-pings on it; the box keeps serving its own build either way.
 the tree with the ownership above (`site-data` 10001:10001), the receiver at
 `/usr/local/bin/receive-build.sh`, and two accounts reached only over Tailscale SSH whose login shells
 are gates: `publish` (uid 10001, the uid that owns `site-data`; `deploy/nectar/publish-gate.sh` admits
-the receiver and an rsync that receives into `site-data/builds`, and nothing else) and `caddylog`
-(`deploy/nectar/caddylog-gate.sh`, the read-only pull of the masked front-door log the stats fold
-reads). `deploy/nectar/acl-policy.hujson` holds the tailnet policy entries to merge, and
+the receiver and an rsync that receives into `site-data/builds`, and refuses every other command) and
+`caddylog` (`deploy/nectar/caddylog-gate.sh`, the read-only pull of the masked front-door log the
+stats fold reads). The gates confine command sessions; Tailscale SSH serves SFTP to both accounts
+in-process, outside the gates, which owner ruling 2026-10-02 accepts for phase one (C48 D4 and D11,
+question 2). `deploy/nectar/acl-policy.hujson` holds the tailnet policy entries to merge, and
 `sh deploy/nectar/doctor-serve.sh` is the serve role's one-screen doctor.
 
 **The public gateway routes.** The four public gateway routes of the Add Survey flow need a gateway,

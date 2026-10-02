@@ -188,7 +188,13 @@ admits `receive-build.sh --current`, `receive-build.sh [--keep N] <ts>` and an r
 receives into `site-data/builds/<ts>/` or `<ts>.sha256`, and refuses everything else (an rsync
 `--sender`, any other destination or option, a second command, an interactive login). The gate is the
 login shell because the tailnet carries SSH as Tailscale SSH, which runs `<login shell> -c <command>`
-and never reads `authorized_keys`. What the gate does not police is the file names an rsync client
+and never reads `authorized_keys`. Those three are what the account can run over a command session.
+Tailscale SSH also serves SFTP, in-process: it probes the login shell with `su -l <user> -c true`,
+the gate refuses `true`, and tailscaled then serves SFTP itself as the account's uid without running
+the gate. Over SFTP the account reads and writes what uid 10001 can, which on this host is
+`site-data` and world-readable files. Owner ruling 2026-10-02 accepts that for phase one, while the
+box is the sender: the writable tree is the one the account exists to replace and the serving host
+holds no secret (D11, question 2). What the gate does not police is the file names an rsync client
 streams once a receive is running; the account's own write set is the boundary there, and on this host
 that is `site-data`, the tree the account exists to replace. The receiver's verification decides what
 is served. No container writes `site-data` on the serving host, so uid 10001 has no other writer to
@@ -228,7 +234,8 @@ The masked front-door log keeps flowing to the analytics fold on the curation ho
 `caddylog` exists on the serving host with `deploy/nectar/caddylog-gate.sh` as its login shell
 (`rrsync -ro /var/log/caddy`, the forced command of `deploy/frontdoor/RUNBOOK.md` 5.2, applied at the
 shell because Tailscale SSH never reads the key), and the box's `AUSMT_FRONTDOOR_LOG_REMOTE` moves to it
-at cutover.
+at cutover. Over SFTP, outside its gate as for the publish account (D4), it can read world-readable
+files only.
 
 ## D6. Cutover and rollback
 
@@ -328,15 +335,18 @@ serving host's launch (runbook 3.0).
    writes byte-identical. A separate change makes the MTH5 tiers cache-reused, so unchanged station
    files keep their bytes across builds; after two publishes, `find builds/<ts> -type f -links +1 |
    wc -l` on the serving host counts the files the second build shares with the first.
-2. **Tailscale SSH and the gates.** The gates rely on Tailscale SSH running the login shell with `-c`.
-   The runbook's first publish test from the box proves it on the real host (`receive-build.sh
-   --current` answers, `sh` is refused). Two channels never start the login shell: the sftp subsystem
-   and a port-forwarding channel. The `restrict` on the OpenSSH key does not apply on the Tailscale
-   path, and whether Tailscale SSH serves either channel to a gated account is not verified here. The
-   runbook (9.2) requires an `sftp` session and an `ssh -N -L` forward to both fail before the first
-   publish. If either succeeds, the two service accounts move to OpenSSH bound to the tailnet address,
-   with `Match User publish,caddylog` setting `ForceCommand` to the gate, `AllowTcpForwarding no`,
-   `X11Forwarding no`, `PermitTTY no` and no sftp subsystem, and leave the Tailscale `ssh` rules.
+2. **Tailscale SSH and the gates: closed for phase one by owner ruling 2026-10-02.** The gates rely
+   on Tailscale SSH running the login shell with `-c`, and runbook 9.2 proves that on the real host
+   (`receive-build.sh --current` answers, `sh` is refused). Tailscale SSH serves SFTP in-process,
+   outside the gate (D4), and OpenSSH bound to the tailnet address cannot run beside
+   `tailscale up --ssh`, which owns tailnet port 22. The ruling accepts SFTP for phase one, while the
+   box is the sender: the publish account's writable tree is `site-data`, the tree it exists to
+   replace, the serving host holds no secret, and the `caddylog` account can read world-readable
+   files only. The runbook's SFTP and port-forwarding probes are withdrawn; its `--current` and `sh`
+   probes stay. **Revisit at the curate lift**, when the sender is a Nectar host on the private
+   network and OpenSSH can bind there for the two service accounts (`Match User publish,caddylog`
+   with `ForceCommand` to the gate, no forwarding, no TTY, no sftp subsystem). Tailscale stays for
+   now; whether to run without it is a later question the owner has deferred.
 3. **The box's reconcile prune.** `reconcile.sh` prunes stale builds on entry as the operator, and the
    build directories belong to uid 10001 with no group write, so on the box that prune can only remove
    what the operator owns. Not verified on the box; the Makefile's in-container prune is unaffected.
