@@ -100,8 +100,14 @@
 	# the ship filter and the box's fold glob key on the plain `.json` name, so a compressed roll would
 	# never be shipped and never be folded. Every line that rolled before the daily 03:25 pull would be
 	# deleted by this listener's own 7-day retention having reached the box's aggregate nowhere.
+	#
+	# THE FILE IS CREATED GROUP-READABLE (mode 0640). Caddy creates a log file 0600 by default, and the
+	# caddylog account the pull runs as reads it through a default ACL on /var/log/caddy, whose mask a
+	# 0600 file sets to nothing. 0640 keeps the mask at read; the group is root, so no one else gains a
+	# read. A file created before the mode was set keeps its own mode until it rolls.
 	log {
 		output file /var/log/caddy/access-frontdoor.json {
+			mode 0640
 			roll_size 10mb
 			roll_keep 5
 			roll_keep_for 168h

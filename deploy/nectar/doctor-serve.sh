@@ -35,6 +35,8 @@
 #  10. builds: a build directory with no sidecar is a transfer that never completed and that no prune
 #      removes; each one is named
 #  11. frontdoor: deploy/frontdoor/doctor.sh, its FAIL and WARN lines relayed under this label
+#  12. caddylog: the log account can read the live access log, which the curation host pulls as
+#      that account; a file Caddy created 0600 masks the account's ACL to nothing
 #
 # CONFIG (env; every command and path is overridable so the checks are testable)
 #   AUSMT_DOCTOR_ENV                deploy/.env (default: .env in the checkout found above); sources
@@ -49,6 +51,8 @@
 #   AUSMT_DOCTOR_MOUNTPOINT         mountpoint command (default: mountpoint)
 #   AUSMT_DOCTOR_PYTHON             python command (default: python3)
 #   AUSMT_DOCTOR_DISK_WARN_PCT      disk use percent that trips a WARN (default: 85)
+#   AUSMT_DOCTOR_CADDY_LOG          the live access log (default: /var/log/caddy/access-frontdoor.json)
+#   AUSMT_DOCTOR_AS_CADDYLOG        runs a command as the log account (default: sudo -n -u caddylog)
 
 set -u
 
@@ -70,6 +74,8 @@ CURL="${AUSMT_DOCTOR_CURL:-curl}"
 MOUNTPOINT="${AUSMT_DOCTOR_MOUNTPOINT:-mountpoint}"
 PYTHON="${AUSMT_DOCTOR_PYTHON:-python3}"
 DISK_WARN_PCT="${AUSMT_DOCTOR_DISK_WARN_PCT:-85}"
+CADDY_LOG="${AUSMT_DOCTOR_CADDY_LOG:-/var/log/caddy/access-frontdoor.json}"
+AS_CADDYLOG="${AUSMT_DOCTOR_AS_CADDYLOG:-sudo -n -u caddylog}"
 
 FAILS=0
 WARNS=0
@@ -300,6 +306,19 @@ check_inflight() {
 	[ "$found" -eq 1 ] || pass "builds: every retained build carries its sidecar"
 }
 
+check_caddylog() {
+	if [ ! -e "$CADDY_LOG" ]; then
+		warn "caddylog: $CADDY_LOG does not exist yet, so the log pull has nothing to read (the front door creates it when it starts)"
+		return
+	fi
+	# shellcheck disable=SC2086 # AS_CADDYLOG is a word-split command prefix.
+	if $AS_CADDYLOG test -r "$CADDY_LOG" 2>/dev/null; then
+		pass "caddylog: the log account can read $CADDY_LOG"
+	else
+		fail "caddylog: the log account cannot read $CADDY_LOG, so the curation host's log pull fails; the Caddyfile's log output must create it mode 0640 (re-run install-frontdoor.sh, chmod 0640 a file created before that, then getfacl $CADDY_LOG shows caddylog's effective r)"
+	fi
+}
+
 check_frontdoor() {
 	# The front-door doctor reads AUSMT_DOCTOR_ENV and AUSMT_DOCTOR_COMPOSE under the same names with
 	# its own meaning (its .env, its compose file), so neither may leak into it from this run.
@@ -347,6 +366,7 @@ else
 	check_inflight
 fi
 check_frontdoor
+check_caddylog
 printf '=====================================================\n'
 if [ "$FAILS" -gt 0 ]; then
 	printf 'RESULT: FAIL (%s failed, %s warned) - see deploy/nectar/RUNBOOK-NECTAR.md.\n' "$FAILS" "$WARNS"
