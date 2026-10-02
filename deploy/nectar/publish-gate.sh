@@ -2,8 +2,8 @@
 # AusMT publish-account gate. POSIX sh, shellcheck-clean. Installed on the serving replica as
 # /usr/local/bin/ausmt-publish-gate, and it is BOTH the login shell of the publish account (a
 # Tailscale SSH session runs `<login shell> -c <command>`) and the forced command on that account's
-# OpenSSH key (OpenSSH hands the client's words over in SSH_ORIGINAL_COMMAND). Either way the
-# account can do exactly three things:
+# OpenSSH key (OpenSSH hands the client's words over in SSH_ORIGINAL_COMMAND). Either way a
+# COMMAND SESSION on the account runs one of three commands:
 #
 #   receive-build.sh --current                  ask which build current names
 #   receive-build.sh [--keep N] <ts>            verify, swap in, record and prune a sent build
@@ -12,12 +12,20 @@
 # where <builds> is $AUSMT_DATA_DIR/site-data/builds and <ts> is a build timestamp. Anything else,
 # an interactive login included, is refused before any program runs.
 #
-# WHAT THIS BOUNDS AND WHAT IT DOES NOT. The gate gives the account no shell and no read path (an
-# rsync --sender is refused), and it pins where a transfer is aimed. It does not police the file
-# names an rsync client streams once the transfer runs: the rsync receiver trusts its client, as it
-# does over any SSH login. The filesystem boundary is therefore the account itself, uid 10001, whose
-# only writable tree on this host is site-data, the tree it exists to replace. The receiver's
-# verification against the sidecar decides what is served.
+# WHAT THIS BOUNDS AND WHAT IT DOES NOT. The gate confines command sessions only. Tailscale SSH
+# serves SFTP itself, in-process and as the account: it probes the login shell with `true`, which
+# this gate refuses, and then serves the SFTP session without ever running the gate. Over SFTP the
+# account reads what uid 10001 can read and writes what uid 10001 can write. That holds while the
+# box is the sender, because the account's only writable tree on this host is site-data, the tree it
+# exists to replace, and the serving host holds no secret to read. The boundary is therefore the
+# account itself, uid 10001, and its write set: a path outside site-data made writable by uid 10001
+# is a path every publish login reaches. A sender on the private network can be held to an OpenSSH
+# listener whose forced command confines SFTP too; Tailscale SSH owns the tailnet's port 22.
+#
+# Within a command session the gate gives the account no shell and no read path (an rsync --sender
+# is refused), and it pins where a transfer is aimed. It does not police the file names an rsync
+# client streams once the transfer runs: the rsync receiver trusts its client, as it does over any
+# SSH login. The receiver's verification against the sidecar decides what is served.
 #
 # ENV
 #   AUSMT_DATA_DIR       data root (default /srv/ausmt)
@@ -42,13 +50,16 @@ is_ts() {
 
 # A short-option word as rsync writes it for its server: letters, optionally followed by the
 # e<capabilities> tail. The letters before that tail may not name an option that takes a value
-# (B, M, T, f) or s, which moves the real arguments off the command line and out of this gate's view.
+# (B, M, T, f) or s, which moves the real arguments off the command line and out of this gate's view;
+# nor K, k or L, which make the receiver follow a symlink rather than treat it as a link, so a planted
+# link would carry a write past the pinned destination; nor b, which leaves backup files beside the
+# tree that no sidecar lists. The publish sends none of them.
 flag_ok() {
   case "$1" in --*|-) return 1 ;; -*) ;; *) return 1 ;; esac
   _body=${1#-}
   _pre=${_body%%e*}
   _rest=${_body#"$_pre"}
-  case "$_pre" in *[!A-Za-z]*|*[BMTfs]*) return 1 ;; esac
+  case "$_pre" in *[!A-Za-z]*|*[BKLMTbfks]*) return 1 ;; esac
   case "$_rest" in
     '') return 0 ;;
     e*) case "${_rest#e}" in *[!.A-Za-z]*) return 1 ;; esac; return 0 ;;

@@ -1,14 +1,24 @@
 #!/bin/sh
 # AusMT serve doctor - one-screen health of the serving replica (ausmt-serve), the host that runs the
-# front door and the portal container over a tree it receives by publish. Run it on that host from the
-# checkout: `sh deploy/nectar/doctor-serve.sh`. Read-only; it never mutates anything.
+# front door and the portal container over a tree it receives by publish. Read-only; it never mutates
+# anything. Run it as root: `sudo ausmt-doctor-serve`.
+#
+# WHERE IT RUNS FROM. provision-serve.sh installs a copy at /usr/local/bin/ausmt-doctor-serve, on the
+# root disk, and refreshes it on every provisioning run, because the checkout and both .env files
+# live on the data volume and the doctor has to answer when that volume did not mount. Run from the
+# checkout (deploy/nectar/), it reads that checkout; installed, it reads the checkout under the data
+# root ($AUSMT_CODE_DIR, default $AUSMT_DATA_DIR/code, default /srv/ausmt/code). With deploy/.env
+# absent it FAILs the config line and still checks the volume at that data root.
 #
 # Prints ONE labelled PASS / WARN / FAIL line per check and a final summary, and EXITS NON-ZERO if any
-# check FAILs, so it can gate a script or an alert; a WARN alone does not fail the exit. No check aborts
-# the run: every probe reports and the script always reaches the summary.
+# check FAILs, so it can gate a script or an alert; a WARN alone does not fail the exit. INFO lines
+# name what is running and never count either way. No check aborts the run: every probe reports and
+# the script always reaches the summary.
 #
 # CHECKS
-#   1. containers: the portal (deploy/compose.yaml) and the front door (deploy/frontdoor/compose.yaml)
+#   1. containers: the portal (deploy/compose.yaml) and the front door (deploy/frontdoor/compose.yaml),
+#      each running image named by its RepoDigest on an INFO line (the tags move, so the digest is
+#      what tells this host's SPA from the curation host's)
 #   2. listeners: the portal answers on 127.0.0.1:8443 and the reader on 127.0.0.1:8445
 #   3. wall: the reader listener refuses the curator workbench (404), wall 2 proving itself here
 #   4. gateway: this host runs no gateway; the front door sends the four public submission routes to
@@ -21,13 +31,18 @@
 #   8. build.json: the served build's identity parses
 #   9. published: published.json names the build current points at, with its age and its lag (how
 #      long after the build was made the replica swapped to it); absent or disagreeing is a WARN,
-#      because the tree still serves but did not arrive by the publish path
+#      because the tree still serves but did not arrive by the publish path. The sender it records
+#      is named, and WARNs when AUSMT_PUBLISH_SENDER (deploy/.env) is set and differs: two hosts
+#      publishing to one replica swap the public build every tick while each reports publish=ok.
+#      A record with no sender is INFO, since a receiver that does not record one says nothing
 #  10. builds: a build directory with no sidecar is a transfer that never completed and that no prune
 #      removes; each one is named
 #  11. frontdoor: deploy/frontdoor/doctor.sh, its FAIL and WARN lines relayed under this label
+#  12. caddylog: the log account can read the live access log, which the curation host pulls as
+#      that account; a file Caddy created 0600 masks the account's ACL to nothing
 #
 # CONFIG (env; every command and path is overridable so the checks are testable)
-#   AUSMT_DOCTOR_ENV                deploy/.env (default: ../.env relative to this script); sources
+#   AUSMT_DOCTOR_ENV                deploy/.env (default: .env in the checkout found above); sources
 #                                   AUSMT_DATA_DIR
 #   AUSMT_DOCTOR_COMPOSE            the portal compose file (default: deploy/compose.yaml)
 #   AUSMT_DOCTOR_FRONTDOOR_COMPOSE  the front-door compose file (default: deploy/frontdoor/compose.yaml)
@@ -39,11 +54,18 @@
 #   AUSMT_DOCTOR_MOUNTPOINT         mountpoint command (default: mountpoint)
 #   AUSMT_DOCTOR_PYTHON             python command (default: python3)
 #   AUSMT_DOCTOR_DISK_WARN_PCT      disk use percent that trips a WARN (default: 85)
+#   AUSMT_DOCTOR_CADDY_LOG          the live access log (default: /var/log/caddy/access-frontdoor.json)
+#   AUSMT_DOCTOR_AS_CADDYLOG        runs a command as the log account (default: sudo -n -u caddylog)
 
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-DEPLOY_DIR="$(cd "$HERE/.." && pwd)"
+DEFAULT_DATA_DIR="${AUSMT_DATA_DIR:-/srv/ausmt}"
+if [ -f "$HERE/../compose.yaml" ]; then
+	DEPLOY_DIR="$(cd "$HERE/.." && pwd)"
+else
+	DEPLOY_DIR="${AUSMT_CODE_DIR:-$DEFAULT_DATA_DIR/code}/deploy"
+fi
 
 ENV_FILE="${AUSMT_DOCTOR_ENV:-$DEPLOY_DIR/.env}"
 COMPOSE_FILE="${AUSMT_DOCTOR_COMPOSE:-$DEPLOY_DIR/compose.yaml}"
@@ -55,21 +77,37 @@ CURL="${AUSMT_DOCTOR_CURL:-curl}"
 MOUNTPOINT="${AUSMT_DOCTOR_MOUNTPOINT:-mountpoint}"
 PYTHON="${AUSMT_DOCTOR_PYTHON:-python3}"
 DISK_WARN_PCT="${AUSMT_DOCTOR_DISK_WARN_PCT:-85}"
+CADDY_LOG="${AUSMT_DOCTOR_CADDY_LOG:-/var/log/caddy/access-frontdoor.json}"
+AS_CADDYLOG="${AUSMT_DOCTOR_AS_CADDYLOG:-sudo -n -u caddylog}"
 
 FAILS=0
 WARNS=0
 pass() { printf 'PASS %s\n' "$*"; }
 warn() { printf 'WARN %s\n' "$*"; WARNS=$((WARNS + 1)); }
 fail() { printf 'FAIL %s\n' "$*"; FAILS=$((FAILS + 1)); }
+info() { printf 'INFO %s\n' "$*"; }
 
-if [ -f "$ENV_FILE" ]; then
-	set -a
-	# shellcheck disable=SC1090
-	. "$ENV_FILE"
-	set +a
-fi
-DATA_DIR="${AUSMT_DATA_DIR:-}"
-SITE="$DATA_DIR/site-data"
+# Both .env files are root-only on a provisioned host, and dash exits on the `.` of a file it cannot
+# read, so readability is tested first and reported as a check rather than left to kill the run.
+ENV_READ=1
+ENV_MISSING=0
+load_env() {
+	if [ ! -e "$ENV_FILE" ]; then
+		fail "config: $ENV_FILE does not exist; the checkout lives on the data volume, so read the volume line below"
+		ENV_MISSING=1
+	elif [ ! -r "$ENV_FILE" ]; then
+		fail "config: $ENV_FILE is not readable by this user, so the data checks cannot run; run the doctor as root (sudo ausmt-doctor-serve)"
+		ENV_READ=0
+	else
+		set -a
+		# shellcheck disable=SC1090
+		. "$ENV_FILE"
+		set +a
+	fi
+	if [ -f "$FD_ENV_FILE" ] && [ ! -r "$FD_ENV_FILE" ]; then
+		fail "config: $FD_ENV_FILE is not readable by this user, so the public name and the gateway upstream are unknown; run the doctor as root (sudo ausmt-doctor-serve)"
+	fi
+}
 
 is_ts() {
 	case "$1" in
@@ -99,6 +137,20 @@ check_containers() {
 	else
 		fail "containers: frontdoor is NOT running (./install-frontdoor.sh in deploy/frontdoor/)"
 	fi
+	_image_line portal "$COMPOSE_FILE"
+	_image_line frontdoor "$FD_COMPOSE_FILE"
+}
+
+_image_line() {
+	# The running container's image by RepoDigest; a container that is down is already a FAIL above.
+	# shellcheck disable=SC2086 # DOCKER may be a word-split override.
+	cid="$($DOCKER compose -f "$2" ps -q "$1" 2>/dev/null | head -n 1)"
+	[ -n "$cid" ] || return 0
+	# shellcheck disable=SC2086
+	img="$($DOCKER inspect -f '{{.Image}}' "$cid" 2>/dev/null)"
+	# shellcheck disable=SC2086
+	digest="$($DOCKER image inspect -f '{{join .RepoDigests " "}}' "$img" 2>/dev/null)"
+	info "image: $1 runs ${digest:-an image with no registry digest ($img), built or loaded on this host}"
 }
 
 check_listeners() {
@@ -126,7 +178,7 @@ check_wall() {
 _fd_var() {
 	# The last value of $1 in the front-door .env, empty when absent. Read rather than sourced, so no
 	# front-door setting leaks into this run or the front-door doctor it starts.
-	[ -f "$FD_ENV_FILE" ] || return 0
+	[ -r "$FD_ENV_FILE" ] || return 0
 	sed -n "s/^$1=//p" "$FD_ENV_FILE" | tail -n 1
 }
 
@@ -212,6 +264,7 @@ with open(sys.argv[1], encoding="utf-8") as fh:
     doc = json.load(fh)
 ts = doc.get("ts") or ""
 at = doc.get("received_at") or ""
+sender = str(doc.get("sender") or "").replace("|", " ")
 utc = datetime.timezone.utc
 def span(seconds):
     m = int(seconds // 60)
@@ -220,10 +273,11 @@ try:
     got = datetime.datetime.strptime(at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=utc)
     built = datetime.datetime.strptime(ts, "%Y%m%dT%H%M%SZ").replace(tzinfo=utc)
     now = datetime.datetime.now(utc)
-    print("%s|%s|age %s, lag %s after the build" % (ts, at, span((now - got).total_seconds()),
-                                                    span((got - built).total_seconds())))
+    print("%s|%s|%s|age %s, lag %s after the build" % (ts, at, sender,
+                                                       span((now - got).total_seconds()),
+                                                       span((got - built).total_seconds())))
 except ValueError:
-    print("%s|%s|age and lag unreadable" % (ts, at))
+    print("%s|%s|%s|age and lag unreadable" % (ts, at, sender))
 PYEOF
 )"
 	if [ -z "$read_out" ]; then
@@ -233,11 +287,23 @@ PYEOF
 	pts=${read_out%%|*}
 	rest=${read_out#*|}
 	at=${rest%%|*}
+	rest=${rest#*|}
+	sender=${rest%%|*}
 	span=${rest#*|}
 	if [ "$pts" != "$CUR_TS" ]; then
 		warn "published: published.json names builds/$pts but current is builds/$CUR_TS, so current was swapped outside the publish path"
 	else
 		pass "published: builds/$pts received $at ($span)"
+	fi
+	expect="${AUSMT_PUBLISH_SENDER:-}"
+	if [ -z "$sender" ]; then
+		info "sender: published.json records no sender, so a second publishing host cannot be told from the expected one (a receiver that records it names it on its next receive)"
+	elif [ -z "$expect" ]; then
+		info "sender: the last publish came from $sender (set AUSMT_PUBLISH_SENDER in $ENV_FILE to WARN on any other)"
+	elif [ "$sender" = "$expect" ]; then
+		pass "sender: the last publish came from $sender, the expected sender"
+	else
+		warn "sender: the last publish came from $sender, not the expected sender $expect; a second host publishing to this replica swaps the public build every tick, so stop and disable that host's timers and remove its AUSMT_PUBLISH_TARGET"
 	fi
 }
 
@@ -255,6 +321,19 @@ check_inflight() {
 		fi
 	done
 	[ "$found" -eq 1 ] || pass "builds: every retained build carries its sidecar"
+}
+
+check_caddylog() {
+	if [ ! -e "$CADDY_LOG" ]; then
+		warn "caddylog: $CADDY_LOG does not exist yet, so the log pull has nothing to read (the front door creates it when it starts)"
+		return
+	fi
+	# shellcheck disable=SC2086 # AS_CADDYLOG is a word-split command prefix.
+	if $AS_CADDYLOG test -r "$CADDY_LOG" 2>/dev/null; then
+		pass "caddylog: the log account can read $CADDY_LOG"
+	else
+		fail "caddylog: the log account cannot read $CADDY_LOG, so the curation host's log pull fails; the Caddyfile's log output must create it mode 0640 (re-run install-frontdoor.sh, chmod 0640 a file created before that, then getfacl $CADDY_LOG shows caddylog's effective r)"
+	fi
 }
 
 check_frontdoor() {
@@ -281,11 +360,20 @@ EOF
 
 printf 'AusMT serve doctor (serving replica) - %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '=====================================================\n'
+load_env
+if [ "$ENV_MISSING" -eq 1 ]; then
+	DATA_DIR="$DEFAULT_DATA_DIR"
+else
+	DATA_DIR="${AUSMT_DATA_DIR:-}"
+fi
+SITE="$DATA_DIR/site-data"
 check_containers
 check_listeners
 check_wall
 check_gateway
-if [ -z "$DATA_DIR" ]; then
+if [ "$ENV_READ" -eq 0 ]; then
+	:
+elif [ -z "$DATA_DIR" ]; then
 	fail "config: AUSMT_DATA_DIR is not set in $ENV_FILE, so the data checks cannot run"
 else
 	check_volume
@@ -295,6 +383,7 @@ else
 	check_inflight
 fi
 check_frontdoor
+check_caddylog
 printf '=====================================================\n'
 if [ "$FAILS" -gt 0 ]; then
 	printf 'RESULT: FAIL (%s failed, %s warned) - see deploy/nectar/RUNBOOK-NECTAR.md.\n' "$FAILS" "$WARNS"

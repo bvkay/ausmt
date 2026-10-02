@@ -83,3 +83,17 @@ def test_the_gateway_upstream_is_optional_and_rendered_the_same_way_everywhere()
     for name in ("install-frontdoor.sh", "doctor.sh"):
         src = (_FD / name).read_text(encoding="utf-8")
         assert _GW_SED in src, f"{name} must default the gateway upstream with the shared sed"
+
+
+def test_the_access_log_is_created_group_readable_so_the_log_account_acl_holds():
+    """Caddy creates a log file mode 0600 unless told otherwise, and a 0600 file gives the default
+    ACL that admits the caddylog account an effective mask of nothing, so the log pull fails with
+    permission denied. FAILS IF the front door's log output stops setting mode 0640 or loses its
+    roll settings."""
+    text = _FD_CADDY.read_text(encoding="utf-8")
+    m = re.search(r"output file /var/log/caddy/access-frontdoor\.json \{([^}]*)\}", text)
+    assert m, "the front door's access log output block must exist"
+    block = [ln.strip() for ln in m.group(1).splitlines() if ln.strip()]
+    assert "mode 0640" in block, block
+    for directive in ("roll_size 10mb", "roll_keep 5", "roll_keep_for 168h", "roll_uncompressed"):
+        assert directive in block, (directive, block)

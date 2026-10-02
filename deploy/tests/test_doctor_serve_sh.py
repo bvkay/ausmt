@@ -35,6 +35,12 @@ _DOCKER_STUB = """#!/bin/sh
 case "$*" in
   *frontdoor*"ps --status running --services") [ -n "${FRONTDOOR_DOWN:-}" ] || echo frontdoor ;;
   *"ps --status running --services") [ -n "${PORTAL_DOWN:-}" ] || echo portal ;;
+  *"ps -q portal") [ -n "${PORTAL_DOWN:-}" ] || echo cid-portal ;;
+  *"ps -q frontdoor") [ -n "${FRONTDOOR_DOWN:-}" ] || echo cid-frontdoor ;;
+  "image inspect"*"sha256:img-portal") echo "ghcr.io/example/ausmt-portal@sha256:${PORTAL_DIGEST:-1111}" ;;
+  "image inspect"*"sha256:img-frontdoor") echo "caddy@sha256:2222" ;;
+  "inspect"*"cid-portal") echo sha256:img-portal ;;
+  "inspect"*"cid-frontdoor") echo sha256:img-frontdoor ;;
 esac
 exit 0
 """
@@ -60,9 +66,12 @@ echo "RESULT: PASS"
 exit 0
 """
 _MOUNTPOINT_STUB = '#!/bin/sh\nexit "${MOUNT_RC:-0}"\n'
+# Runs its arguments as the log account would: CADDYLOG_DENIED stands for a file the account's ACL
+# does not reach.
+_AS_CADDYLOG_STUB = '#!/bin/sh\n[ -z "${CADDYLOG_DENIED:-}" ] || exit 1\nexec "$@"\n'
 
 
-def _tree(tmp_path: Path, *, published_ts: str | None = TS) -> Path:
+def _tree(tmp_path: Path, *, published_ts: str | None = TS, sender: str | None = None) -> Path:
     data = tmp_path / "data"
     site = data / "site-data"
     build = site / "builds" / TS
@@ -71,9 +80,11 @@ def _tree(tmp_path: Path, *, published_ts: str | None = TS) -> Path:
         {"build_id": "bid-1", "source_commit": "abc1234"}), encoding="utf-8")
     os.symlink(f"builds/{TS}", site / "current")
     if published_ts is not None:
-        (site / "published.json").write_text(json.dumps(
-            {"ts": published_ts, "source_commit": "abc1234", "build_id": "bid-1",
-             "received_at": "2026-09-30T01:20:00Z"}), encoding="utf-8")
+        record = {"ts": published_ts, "source_commit": "abc1234", "build_id": "bid-1",
+                  "received_at": "2026-09-30T01:20:00Z"}
+        if sender is not None:
+            record["sender"] = sender
+        (site / "published.json").write_text(json.dumps(record), encoding="utf-8")
     return data
 
 
@@ -84,7 +95,8 @@ def _env(tmp_path: Path, data: Path, *, gateway: str | None = _GATEWAY, **extra:
     b = tmp_path / "bin"
     b.mkdir(exist_ok=True)
     for name, body in (("docker", _DOCKER_STUB), ("curl", _CURL_STUB),
-                       ("frontdoor-doctor", _FRONTDOOR_STUB), ("mountpoint", _MOUNTPOINT_STUB)):
+                       ("frontdoor-doctor", _FRONTDOOR_STUB), ("mountpoint", _MOUNTPOINT_STUB),
+                       ("as-caddylog", _AS_CADDYLOG_STUB)):
         p = b / name
         p.write_text(body, encoding="utf-8")
         p.chmod(0o755)
@@ -96,9 +108,13 @@ def _env(tmp_path: Path, data: Path, *, gateway: str | None = _GATEWAY, **extra:
     if gateway is not None:
         fd_lines.append(f"AUSMT_GATEWAY_UPSTREAM={gateway}")
     fdenv.write_text("\n".join(fd_lines) + "\n", encoding="utf-8")
+    caddy_log = tmp_path / "access-frontdoor.json"
+    caddy_log.write_text("", encoding="utf-8")
     env = dict(os.environ)
     env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
     env.update({
+        "AUSMT_DOCTOR_CADDY_LOG": str(caddy_log),
+        "AUSMT_DOCTOR_AS_CADDYLOG": str(b / "as-caddylog"),
         "AUSMT_DOCTOR_ENV": str(envf),
         "AUSMT_DOCTOR_FRONTDOOR_ENV": str(fdenv),
         "CURL_LOG": str(tmp_path / "curl.log"),
@@ -129,7 +145,7 @@ def test_a_healthy_replica_is_labelled_and_exits_zero(tmp_path):
     body = [ln for ln in r.stdout.splitlines()
             if ln and not ln.startswith(("=", "AusMT", "RESULT"))]
     for ln in body:
-        assert ln.split(" ", 1)[0] in ("PASS", "WARN", "FAIL"), f"unlabelled line: {ln!r}"
+        assert ln.split(" ", 1)[0] in ("PASS", "WARN", "FAIL", "INFO"), f"unlabelled line: {ln!r}"
     out = r.stdout
     assert f"current -> builds/{TS}" in out
     assert any("published" in ln for ln in _lines(r, "PASS")), out
@@ -265,6 +281,31 @@ def test_a_build_directory_without_a_sidecar_warns(tmp_path):
     assert any("20260801T000000Z" in ln and "sidecar" in ln for ln in _lines(r, "WARN")), r.stdout
 
 
+_SHELLS = [s for s in (_SH, shutil.which("dash")) if s]
+
+
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root reads a mode-000 file, so unreadability cannot be staged")
+@pytest.mark.parametrize("shell", _SHELLS, ids=lambda s: Path(s).name)
+@pytest.mark.parametrize("which", ["AUSMT_DOCTOR_ENV", "AUSMT_DOCTOR_FRONTDOOR_ENV"])
+def test_an_unreadable_env_file_fails_by_name_and_points_at_sudo(tmp_path, shell, which):
+    """Provisioning writes both .env files root-only, and dash dies on the `.` of a file it cannot
+    read, so a doctor run without sudo must report that rather than abort before its first check.
+    FAILS IF the run stops short of its summary, exits zero, or the FAIL line names neither the
+    file nor sudo."""
+    data = _tree(tmp_path)
+    env = _env(tmp_path, data)
+    target = Path(env[which])
+    target.chmod(0)
+    try:
+        r = subprocess.run([shell, str(_DOCTOR)], capture_output=True, text=True, env=env)
+    finally:
+        target.chmod(0o600)
+    assert "RESULT: FAIL" in r.stdout, r.stdout + r.stderr
+    assert r.returncode != 0
+    assert any(str(target) in ln and "sudo" in ln for ln in _lines(r, "FAIL")), r.stdout
+
+
 def test_the_published_line_reports_age_and_lag(tmp_path):
     """published.json carries the receive time and the build's own timestamp names when it was
     built, so the line states how long ago the replica swapped and how long the publish took."""
@@ -272,3 +313,126 @@ def test_the_published_line_reports_age_and_lag(tmp_path):
     r = _run(_env(tmp_path, data))
     line = [ln for ln in _lines(r, "PASS") if ln.startswith("PASS published")]
     assert line and "age" in line[0] and "lag" in line[0], r.stdout
+
+
+def _installed(tmp_path: Path) -> Path:
+    """The doctor as provisioning installs it: a lone copy under /usr/local/bin, outside the
+    checkout and outside the data volume."""
+    b = tmp_path / "usr" / "local" / "bin"
+    b.mkdir(parents=True)
+    copy = b / "ausmt-doctor-serve"
+    shutil.copy(_DOCTOR, copy)
+    return copy
+
+
+def test_the_installed_copy_finds_the_checkout_on_the_data_volume(tmp_path):
+    """FAILS IF the copy outside the checkout cannot find deploy/.env and deploy/frontdoor/.env
+    under the data root's checkout, and so reports a healthy replica as unconfigured."""
+    data = _tree(tmp_path)
+    env = _env(tmp_path, data)
+    deploy = data / "code" / "deploy"
+    (deploy / "frontdoor").mkdir(parents=True)
+    shutil.copy(env.pop("AUSMT_DOCTOR_ENV"), deploy / ".env")
+    shutil.copy(env.pop("AUSMT_DOCTOR_FRONTDOOR_ENV"), deploy / "frontdoor" / ".env")
+    env["AUSMT_DATA_DIR"] = str(data)
+    r = subprocess.run([_SH, str(_installed(tmp_path))], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"current -> builds/{TS}" in r.stdout, r.stdout
+    assert any(ln.startswith("PASS gateway") for ln in r.stdout.splitlines()), r.stdout
+
+
+def test_with_the_volume_absent_the_installed_copy_fails_its_volume_line(tmp_path):
+    """The checkout and both .env files live on the volume, so a boot without it leaves the
+    installed copy with nothing to read and nothing in its environment. It must still name the
+    default data root's volume. FAILS IF it stops at the missing configuration without a volume
+    line, or exits zero."""
+    env = _env(tmp_path, tmp_path / "unused", MOUNT_RC="1")
+    for name in ("AUSMT_DOCTOR_ENV", "AUSMT_DOCTOR_FRONTDOOR_ENV", "AUSMT_DATA_DIR", "AUSMT_CODE_DIR"):
+        env.pop(name, None)
+    r = subprocess.run([_SH, str(_installed(tmp_path))], capture_output=True, text=True, env=env)
+    assert r.returncode != 0, r.stdout
+    assert "RESULT: FAIL" in r.stdout, r.stdout + r.stderr
+    assert any(ln.startswith("FAIL volume") and "/srv/ausmt" in ln
+               for ln in r.stdout.splitlines()), r.stdout
+
+
+def test_the_running_images_are_named_by_digest(tmp_path):
+    """A replica that stopped pulling serves new builds through an old SPA, and only the image
+    digest tells the two hosts apart, since the tags move. The line is information, never a
+    verdict. FAILS IF the portal's RepoDigest is not printed as an INFO line, or a stopped
+    portal makes the image line a FAIL of its own."""
+    data = _tree(tmp_path)
+    r = _run(_env(tmp_path, data, PORTAL_DIGEST="abcd"))
+    info = [ln for ln in _lines(r, "INFO") if "ghcr.io/example/ausmt-portal@sha256:abcd" in ln]
+    assert info, r.stdout
+    assert any("caddy@sha256:2222" in ln for ln in _lines(r, "INFO")), r.stdout
+    (tmp_path / "down").mkdir()
+    r = _run(_env(tmp_path / "down", data, PORTAL_DOWN="1"))
+    assert not any("image" in ln for ln in _lines(r, "FAIL")), r.stdout
+
+
+def test_the_log_account_can_read_the_live_access_log(tmp_path):
+    """The curation host pulls the masked access log as caddylog, whose read rests on a default
+    ACL that a 0600 log file masks to nothing. FAILS IF a readable log is not a PASS, an unreadable
+    one is anything but a FAIL naming the file and the fix, or a log Caddy has not created yet
+    fails the run."""
+    data = _tree(tmp_path)
+    r = _run(_env(tmp_path, data))
+    assert any(ln.startswith("PASS caddylog") for ln in r.stdout.splitlines()), r.stdout
+    (tmp_path / "denied").mkdir()
+    r = _run(_env(tmp_path / "denied", data, CADDYLOG_DENIED="1"))
+    assert r.returncode != 0, r.stdout
+    line = [ln for ln in _lines(r, "FAIL") if ln.startswith("FAIL caddylog")]
+    assert line and "access-frontdoor.json" in line[0] and "0640" in line[0], r.stdout
+    (tmp_path / "absent").mkdir()
+    env = _env(tmp_path / "absent", data)
+    Path(env["AUSMT_DOCTOR_CADDY_LOG"]).unlink()
+    r = _run(env)
+    assert r.returncode == 0, r.stdout
+    assert any(ln.startswith("WARN caddylog") for ln in r.stdout.splitlines()), r.stdout
+
+
+def _expect_sender(env: dict, sender: str) -> dict:
+    with open(env["AUSMT_DOCTOR_ENV"], "a", encoding="utf-8") as fh:
+        fh.write(f"AUSMT_PUBLISH_SENDER={sender}\n")
+    return env
+
+
+def test_a_record_without_a_sender_is_information_not_a_warning(tmp_path):
+    """published.json carries no sender until the receiver records one, so its absence says
+    nothing about a second publisher. FAILS IF it WARNs, even with an expected sender set, or goes
+    unmentioned."""
+    data = _tree(tmp_path)
+    r = _run(_expect_sender(_env(tmp_path, data), "100.64.0.7"))
+    assert r.returncode == 0, r.stdout
+    assert any(ln.startswith("INFO sender") for ln in r.stdout.splitlines()), r.stdout
+    assert not any(ln.startswith("WARN sender") for ln in r.stdout.splitlines()), r.stdout
+
+
+def test_the_recorded_sender_is_named_and_matched_against_the_expected_one(tmp_path):
+    """Two hosts publishing to one replica swap the public build every tick and each pass reports
+    publish=ok, so only the replica can see it: the sender recorded on the last receive differs
+    from the one this host expects. FAILS IF the sender goes unnamed, a match is not a PASS, or a
+    mismatch is anything but a WARN naming both addresses."""
+    data = _tree(tmp_path, sender="100.64.0.7")
+    r = _run(_env(tmp_path, data))
+    assert "100.64.0.7" in r.stdout, r.stdout
+    assert not any(ln.startswith("WARN sender") for ln in r.stdout.splitlines()), r.stdout
+    (tmp_path / "same").mkdir()
+    r = _run(_expect_sender(_env(tmp_path / "same", data), "100.64.0.7"))
+    assert any(ln.startswith("PASS sender") for ln in r.stdout.splitlines()), r.stdout
+    (tmp_path / "other").mkdir()
+    r = _run(_expect_sender(_env(tmp_path / "other", data), "100.64.0.9"))
+    assert r.returncode == 0, r.stdout
+    warn = [ln for ln in _lines(r, "WARN") if ln.startswith("WARN sender")]
+    assert warn and "100.64.0.7" in warn[0] and "100.64.0.9" in warn[0], r.stdout
+
+
+def test_the_serve_env_template_offers_the_expected_sender_as_optional():
+    """FAILS IF the template omits AUSMT_PUBLISH_SENDER or gives it a value that provisioning
+    would stop on."""
+    example = (_REPO / "deploy" / "nectar" / "serve.env.example").read_text(encoding="utf-8")
+    lines = [ln for ln in example.splitlines() if ln.startswith("AUSMT_PUBLISH_SENDER=")]
+    assert lines == ["AUSMT_PUBLISH_SENDER="], lines
+    para = example.split("\nAUSMT_PUBLISH_SENDER=")[0].rsplit("\n\n", 1)[-1]
+    assert "published.json" in para and "optional" in para.lower(), para

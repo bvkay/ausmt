@@ -3,8 +3,10 @@ deploy/nectar/publish-gate.sh (the publish account) and deploy/nectar/caddylog-g
 account the front-door log pull reads through).
 
 The gate is the login shell of the publish account on the serving replica and the forced command
-on its key, so the one account the curation host reaches can do exactly three things: ask which
-build is current, rsync INTO the builds directory, and run the receiver for a named build. OpenSSH
+on its key, so a command session on the one account the curation host reaches runs exactly three
+things: ask which build is current, rsync INTO the builds directory, and run the receiver for a
+named build. SFTP, which Tailscale SSH serves itself without running the login shell, is outside
+what a gate can confine and outside these pins; the account's file permissions bound it. OpenSSH
 hands a forced command SSH_ORIGINAL_COMMAND; a login shell is invoked as `<shell> -c <command>`,
 which is also how a Tailscale SSH session runs a command. Both entries are driven here.
 
@@ -115,6 +117,13 @@ REFUSED = [
     f"rsync --server -logDtpre.iLsfxCIvu --log-file=x . {BUILDS}/{TS}/",
     f"rsync --server -logDtpre.iLsfxCIvu . {BUILDS}/{TS}/; sh",
     f"rsync -logDtpre.iLsfxCIvu . {BUILDS}/{TS}/",
+    # Flags the publish never sends: -K, -k and -L make rsync follow a symlink rather than treat it
+    # as a link, so a planted link would carry a write past the pinned destination, and -b leaves
+    # backup files beside the tree that no sidecar lists.
+    f"rsync --server -Klogre.iLsfxCIvu . {BUILDS}/{TS}/",
+    f"rsync --server -Llogre.iLsfxCIvu . {BUILDS}/{TS}/",
+    f"rsync --server -kHlogDpre.iLsfxCIvu . {BUILDS}/{TS}/",
+    f"rsync --server -bre.x . {BUILDS}/{TS}/",
     "receive-build.sh ../../etc",
     f"receive-build.sh {TS} extra",
     "receive-build.sh --keep x " + TS,

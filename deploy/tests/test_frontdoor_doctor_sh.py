@@ -645,3 +645,25 @@ def test_a_loopback_upstream_skips_the_tailnet_peer_legs(tmp_path):
     for ln in lines:
         assert ln.startswith("PASS ") and "loopback" in ln, ln
     assert r.returncode == 0, r.stdout
+
+
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root reads a mode-000 file, so unreadability cannot be staged")
+@pytest.mark.parametrize("shell", [s for s in (_SH, shutil.which("dash")) if s],
+                         ids=lambda s: Path(s).name)
+def test_an_unreadable_env_file_fails_by_name_and_points_at_sudo(tmp_path, shell):
+    """The .env is root-only on a provisioned host and dash dies on the `.` of a file it cannot
+    read, so a run without sudo must say so and still reach its summary. FAILS IF the run aborts,
+    exits zero, or the FAIL line names neither the file nor sudo."""
+    cf = _caddyfile(tmp_path)
+    env = _env(tmp_path, cf, FAKE_HASH=hashlib.sha256(cf.read_bytes()).hexdigest())
+    envf = Path(env["AUSMT_DOCTOR_ENV"])
+    envf.chmod(0)
+    try:
+        r = subprocess.run([shell, str(_DOCTOR), "report"], capture_output=True, text=True, env=env)
+    finally:
+        envf.chmod(0o600)
+    assert "RESULT: FAIL" in r.stdout, r.stdout + r.stderr
+    assert r.returncode != 0
+    assert any(ln.startswith("FAIL") and str(envf) in ln and "sudo" in ln
+               for ln in r.stdout.splitlines()), r.stdout

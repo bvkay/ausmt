@@ -4,8 +4,15 @@
 # which the curation host pulls the masked front-door access log (deploy/frontdoor/
 # ship-frontdoor-logs.sh). A Tailscale SSH session runs `<login shell> -c <command>` and never reads
 # authorized_keys, so the forced command the front-door runbook puts on that key cannot be the
-# control here; this gate is. It admits one thing, an rsync that SENDS, and hands it to rrsync -ro
-# rooted at the log directory, which is how the forced command confines it.
+# control here; this gate is. A command session admits one thing, an rsync that SENDS, and the gate
+# hands it to rrsync -ro rooted at the log directory, which is how the forced command confines it.
+#
+# COMMAND SESSIONS ONLY. Tailscale SSH serves SFTP itself, in-process and as the account, after this
+# gate refuses its `true` probe, and never runs the gate for it. Over SFTP the account reads what any
+# unprivileged account can read on this host, plus the log directory its ACL reaches, and writes only
+# where any account may (the world-writable temporary directories). That holds because nothing such
+# a read reaches is a credential: both .env files are root-only, and the certificate's key sits in
+# Docker's root-only volume store.
 #
 # ENV
 #   AUSMT_GATE_RRSYNC   the rrsync program (default rrsync, shipped with rsync); a test shim in the suite
