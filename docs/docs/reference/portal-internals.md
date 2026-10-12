@@ -1706,7 +1706,7 @@ DOI citation-harvest core (window.AusmtDoiHarvest); single source, shared byte-f
 
 the collapsed map attribution control, shared with the portal map (single source)
 
-Without an apple-touch-icon iOS renders a screenshot of the page instead of the mark. Same lattice as the favicon, at 180px.
+Without an apple-touch-icon iOS renders a screenshot of the page instead of an icon. The AuScope mark on opaque white at 180px, from portal/tools/gen_auscope_icons.py.
 
 The one true URL for this page. It is substantive, indexable, linked from the root and advertised in sitemap.xml, so it must say which address it is served at.
 

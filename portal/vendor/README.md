@@ -1,7 +1,7 @@
 # Vendored third-party libraries
 
 Vendored (not loaded from a CDN) so the portal has no runtime dependency on a third-party host at
-page-load time — a CDN outage, MITM, or supply-chain compromise of the CDN cannot silently break or
+page-load time: a CDN outage, MITM, or supply-chain compromise of the CDN cannot silently break or
 tamper with the portal. Each file below is committed verbatim (byte-identical to the upstream release);
 do not hand-edit them. To update a version: download the new release from the same upstream project,
 verify its hash (the project's own release page or npm/cdnjs metadata), replace the file here, update
@@ -20,22 +20,25 @@ changes.
 | `protomaps-leaflet.js` | https://registry.npmjs.org/protomaps-leaflet/-/protomaps-leaflet-5.1.0.tgz (dist/protomaps-leaflet.js) | 5.1.0 | `26af014f7b1af308ec120b791cff76657bb9c3383633b52033e6edf9e5e4cdb5` | 128171 B |
 
 Notes:
-- `MarkerCluster.min.css` is the base plugin stylesheet only — `MarkerCluster.Default.min.css` (the
+- `MarkerCluster.min.css` is the base plugin stylesheet only. `MarkerCluster.Default.min.css` (the
   default pin/sprite icons) is intentionally NOT vendored; the portal ships its own cluster icon styles
   (`.ausmt-cluster` in `index.html`) that replace it.
 - `leaflet.js`/`leaflet.css` and `jszip.min.js` were already vendored before this pass; their hashes above
   were computed from the committed files and cross-checked against cdnjs's own published SRI digests
-  (`https://api.cdnjs.com/libraries/<pkg>/<version>?fields=sri`) — `leaflet.js` matches cdnjs's
+  (`https://api.cdnjs.com/libraries/<pkg>/<version>?fields=sri`): `leaflet.js` matches cdnjs's
   `leaflet.js` (unminified) digest; `leaflet.css` is byte-identical to cdnjs's `leaflet.css` modulo
   CRLF-vs-LF line endings (a pre-existing local normalisation, not a content change).
 - `leaflet.markercluster.min.js`, `MarkerCluster.min.css`, `leaflet.draw.js` and `leaflet.draw.css` were
   downloaded fresh for this pass and verified byte-for-byte against cdnjs's published SRI (sha-512)
   digests before being committed.
+- `protomaps-leaflet.js` (BSD-3-Clause) renders the self-hosted PMTiles basemap inside Leaflet.
+  Upstream keeps it in maintenance mode for Leaflet-based projects (their new-project path is
+  MapLibre); that suits this portal, which is deliberately Leaflet-based and vendors its stack.
 
-## images/ (Leaflet + Leaflet.draw assets) — added 2026-07-05
+## images/ (Leaflet + Leaflet.draw assets), added 2026-07-05
 
 Leaflet's CSS references `images/` RELATIVE to the stylesheet URL (layer-control icons, default
-markers), and Leaflet.draw's CSS references `images/spritesheet.*` the same way — vendoring only
+markers), and Leaflet.draw's CSS references `images/spritesheet.*` the same way, and vendoring only
 the .css/.js files left those requests 404ing in the deployed portal (first live-serve finding).
 All eight assets fetched from the exact cdnjs versions the css files shipped with:
 
@@ -44,22 +47,46 @@ All eight assets fetched from the exact cdnjs versions the css files shipped wit
 | layers.png, layers-2x.png, marker-icon.png, marker-icon-2x.png, marker-shadow.png | cdnjs leaflet/1.9.4/images/ |
 | spritesheet.png, spritesheet-2x.png, spritesheet.svg | cdnjs leaflet.draw/1.0.4/images/ |
 
-## favicon.svg — added 2026-07-05
+## favicon.svg
 
-Local hand-authored SVG favicon (MT sounding curve over a station dot), linked from all three
-pages to stop the browser's automatic /favicon.ico 404.
-- `protomaps-leaflet.js` (BSD-3-Clause) renders the self-hosted PMTiles basemap inside Leaflet.
-  Upstream keeps it in maintenance mode for Leaflet-based projects (their new-project path is
-  MapLibre); that suits this portal, which is deliberately Leaflet-based and vendors its stack.
+The browser-tab icon: the AuScope mark's own paths in a viewBox cropped to the ink, titled AuScope.
+Generated, not hand-edited: `tools/gen_auscope_icons.py` writes it from
+`auscope/auscope-mark.svg`, together with the root `favicon.ico` and the app icons under
+`auscope/`. See `auscope/PROVENANCE.md` for the derivation.
+
+## auscope/
+
+The AuScope identity, as the site chrome draws it. Placeholders cut from the AuScope Style Guide
+until AuScope supplies the official files, which replace them under the same names;
+`auscope/PROVENANCE.md` records where each came from and the guide's rules for using them.
+
+| File | What it is |
+|---|---|
+| `auscope-mark.svg` | The mark in Royal Blue (#282572) with its lighter swoosh. The source of every icon below. |
+| `auscope-mark-white.svg` | The mark in white, for dark grounds only. |
+| `auscope-logo.svg`, `auscope-logo-white.svg` | The mark with the AuScope wordmark, Royal Blue and white. |
+| `auscope-ncris-lockup.svg`, `auscope-ncris-lockup-white.svg` | The AuScope and NCRIS lock-up, Royal Blue and white. |
+| `icon-180.png` | The apple-touch-icon: the mark at 70 percent of the width on opaque white. Generated. |
+| `icon-192.png`, `icon-512.png` | The same at the sizes a web manifest names; no manifest ships. Generated. |
+| `PROVENANCE.md` | Source, normalisation and the icon derivation. |
+
+The three PNG icons, `../favicon.svg` and `../../favicon.ico` are written by
+`tools/gen_auscope_icons.py` (it needs PyMuPDF to rasterise; `--check` compares them byte for byte
+against a fresh render). Regenerate them after replacing `auscope-mark.svg`; never edit them by hand.
+
+`auscope-icon-colour.png`, `auscope-icon-white.png` and `auscope-ncris-white.png`, one level up,
+are the AuScope brand kit's own files: they are kept, verbatim, and no longer drawn by the site
+chrome. The social card tool, the engine's link-preview cards and the documentation sidebar still
+derive their AuScope marks from them, as their own notes below and in the docs state.
 
 ## auscope-ncris-white.png
 
-The AuScope-NCRIS white lockup, the parent-organisation logo the site footer carries on every
-surface. Committed VERBATIM from the AuScope brand kit ("2025 AuScope Logos", file
-`2025 AuScope-NCRIS Logo - White.png`); it is a third-party trademark asset, so it is never
-resized, re-encoded or recoloured here. Display size is CSS alone (`height:30.8px;width:auto`, one
-declaration in portal/index.html's footer rule set and copied from there to every other surface),
-which is why the committed file keeps its full 1919x325 resolution.
+The AuScope-NCRIS white lockup from the AuScope brand kit. The site chrome no longer draws it (the
+header carries `auscope/auscope-ncris-lockup.svg` and its white twin); the engine's link-preview
+cards draw a crop of it, pinned against this file. Committed VERBATIM from the AuScope brand kit
+("2025 AuScope Logos", file `2025 AuScope-NCRIS Logo - White.png`); it is a third-party trademark
+asset, so it is never resized, re-encoded or recoloured here, which is why the committed file keeps
+its full 1919x325 resolution.
 
 | File | Source | Dimensions | SHA-256 | Size |
 |---|---|---|---|---|
@@ -67,18 +94,11 @@ which is why the committed file keeps its full 1919x325 resolution.
 
 ## auscope-icon-colour.png
 
-The AuScope icon in its brand colours, drawn as a watermark in the top-right corner of the SPA's
-Leaflet map (portal/index.html) and nowhere else on the site. The map is the surface people
-screenshot into talks and reports, and a screenshot carries no footer with it, so the mark is the
-attribution that travels with the image. Committed VERBATIM from the AuScope brand kit ("2025
-AuScope Logos", file `2025 AuScope Logo Icon - Colour.png`); it is a third-party trademark asset, so
-it is never resized, re-encoded, recoloured or faded. Display size is CSS alone
-(`height:32px;width:auto`) at full opacity, which is why the committed file keeps its full 281x288
-resolution.
-
-The 32px inset from the map's top and right edges is the style guide's clear space, not a taste
-call: the guide asks for at least the full height of the logo of breathing space on all sides, and
-32px is the mark's own height. It is the reason the mark does not take Leaflet's 10px control inset.
+The AuScope icon in its brand colours, from the AuScope brand kit. The site chrome no longer draws
+it: the map's corner mark is `auscope/auscope-mark.svg` and its white twin. Committed VERBATIM from
+the AuScope brand kit ("2025 AuScope Logos", file `2025 AuScope Logo Icon - Colour.png`); it is a
+third-party trademark asset, so it is never resized, re-encoded, recoloured or faded, which is why
+the committed file keeps its full 281x288 resolution.
 
 | File | Source | Dimensions | SHA-256 | Size |
 |---|---|---|---|---|
