@@ -87,7 +87,7 @@ function inShapes(s){if(!hasPosition(s))return false;
   const rings=layer.getLatLngs();const ring=Array.isArray(rings[0])?rings[0]:rings;let inn=false;
   for(let a=0,b=ring.length-1;a<ring.length;b=a++){const yi=ring[a].lat,xi=ring[a].lng,yj=ring[b].lat,xj=ring[b].lng;
     if(((yi>s.lat)!==(yj>s.lat))&&(s.lon<(xj-xi)*(s.lat-yi)/(yj-yi)+xi))inn=!inn;}if(inn)inside=true;});return inside;}
-// The header counter is ONE shell with a CONTEXTUAL slot. See docs: portal internals, filters.js.
+// The footer counter is ONE shell with a CONTEXTUAL slot. See docs: portal internals, filters.js.
 function _countN(x){return Number(x).toLocaleString("en-AU");}
 function updateCounts(){
   const slot=document.getElementById("countSlot");
@@ -115,7 +115,7 @@ function refresh(){visible=ST.filter(passes);
   if(curView==="surveys")renderCards();
   updateCounts();updateSel();}
 function updateSel(){document.getElementById("selBig").textContent=selected.size;
-  // The selection is half the workspace line, so a selection change repaints the header slot. The
+  // The selection is half the workspace line, so a selection change repaints the footer slot. The
   // map form's #nSel is rebuilt by the same call, which is why it is not set directly here.
   updateCounts();
   // Downloads follow the SCOPE (scopeStations), so the metadata buttons enable whenever the scope is
@@ -230,7 +230,7 @@ document.addEventListener("click",e=>{if(!e.target.closest("#find")&&!e.target.c
 function findOptions(){return [...document.getElementById("findResults").querySelectorAll(".fitem[data-find]")];}
 function findIsOpen(){const fr=document.getElementById("findResults");return fr&&fr.style.display==="block";}
 function findPaint(el,on){if(!el)return;const meta=el.querySelector(".fmeta");
-  if(on){el.style.background="var(--copper)";el.style.color="#16110b";if(meta)meta.style.color="#16110b";el.setAttribute("aria-selected","true");}
+  if(on){el.style.background="var(--accent)";el.style.color="var(--accent-ink)";if(meta)meta.style.color="var(--accent-ink)";el.setAttribute("aria-selected","true");}
   else{el.style.background="";el.style.color="";if(meta)meta.style.color="";el.setAttribute("aria-selected","false");}}
 function setFindActive(idx){const opts=findOptions(),find=document.getElementById("find");
   if(findActive>=0&&findActive<opts.length)findPaint(opts[findActive],false);
