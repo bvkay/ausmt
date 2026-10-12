@@ -683,8 +683,15 @@ _CSS = """
   header.site nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;text-decoration:none}
   header.site nav a:hover{border-color:var(--accent)}
   header.site nav a.active{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
-  .about,.contribute{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
-  .about:hover,.contribute:hover{border-color:var(--accent)}
+  .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
+  .about:hover{border-color:var(--accent)}
+  .orglockup{display:block;line-height:0}
+  .orglockup img{height:34px;width:auto;max-width:100%;display:block}
+  .theme-dark{display:none}
+  :root[data-theme="dark"] .theme-light{display:none}
+  :root[data-theme="dark"] .theme-dark{display:block}
+  /* .orglockup img outranks .theme-dark, so the lock-up states its own light-ground default. */
+  .orglockup .theme-dark{display:none}
   .counts{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
   .counts b{color:var(--text)}
   @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
@@ -697,9 +704,11 @@ _CSS = """
   footer a{color:var(--accent);text-decoration:none}
   .fleft{flex:1 1 0;min-width:0}
   .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
-  .fright{flex:1 1 0;min-width:0;text-align:right}
-  .orglogo{display:inline-block;line-height:0}
-  .orglogo img{height:30.8px;width:auto;max-width:100%;object-fit:contain;display:block}
+  .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
+  .themectl{display:inline-flex;align-items:center;gap:6px;font-size:12.5px}
+  .themectl button{background:none;border:0;padding:0;color:var(--muted);font:inherit;cursor:pointer}
+  .themectl button[aria-pressed="true"]{color:var(--accent);font-weight:700}
+  .themesep{color:var(--line)}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
@@ -764,56 +773,52 @@ _NAV_TABS = (("navMap", "Map", "/"),
              ("navSurveys", "Surveys", "/surveys"),
              ("navCollections", "Collections", "/collections"))
 
-def _site_header(active="", status="") -> str:
-    """The ONE header, everywhere: the SPA header's three-part division rendered as static links.
 
-    Left is the AusMT identity and links the root. The centre carries the three filled application
-    tabs with the CURRENT page's tab in the active state, and beside them the two smaller outlined
-    supporting controls: the three tabs are the application, About and Contribute are functions
-    around it, which is why the two groups look different. The right zone is the status slot, which is
-    CONTEXTUAL (see the callers) while the shell around it is identical.
+def _site_header(active="") -> str:
+    """The ONE header, everywhere: portal/index.html's header with the tabs rendered as links.
 
-    THE FETCHED ASSET, WHICH IS ONE AND NAMED. The identity zone opens with the AusMT mark, the same
-    file and the same markup the SPA header carries, so a reader arriving on a survey page from a
-    search result meets the site's own identity rather than a wordmark alone. It is a SAME-ORIGIN
-    path served by the portal image beside these pages: not a build-time read, not an external fetch,
-    and not 180 circles inlined into 2,655 documents. Everything else in this header stays inline,
-    and the src allow-list in engine/tests/test_index_pages.py names this path and nothing else.
+    Left is the AuScope mark, then the AusMT wordmark linking the root and the tagline. The centre
+    carries the three filled application tabs with the CURRENT page's tab in the active state, and
+    About beside them as the smaller outlined supporting control. The right zone is the AuScope and
+    NCRIS lock-up, linking the parent organisation in a new tab; it is the same on every page, and
+    a page's contextual status rides the footer instead.
 
-    NO AuScope parent mark closes the right zone, on this header or any other on the site: the
-    relationship is stated in words, in the footer this sheet also emits and in About's "Who enables
-    AusMT" section, and a symbol repeated in a corner says nothing either of those does not. The right
-    zone keeps the contextual status slot alone.
+    THE FETCHED ASSETS ARE NAMED. The mark and the lock-up are each a PAIR of same-origin SVGs, one
+    inked for the light ground and one in white for the dark ground; the .theme-light and
+    .theme-dark rules show the one that matches <html data-theme>, and the white files never sit on
+    the light ground. They are served by the portal image beside these pages: not a build-time read
+    and not an external fetch. engine/tests/test_index_pages.py holds the src allow-list to these
+    four files.
 
-    VERSION SKEW, STATED HONESTLY FOR THE FIRST DEPLOY. /vendor/* is served from the portal image and
-    the pages tree from the data volume, so the two can be a deploy apart. Once both carry the mark
-    that shows as a one-deploy-old logo, which is the acceptable failure mode for a logo and for
-    nothing else in this tier. On the FIRST deploy it is worse than that, because the file is new: a
-    pages tree rebuilt from this commit against a portal image that predates it asks for a mark the
-    image does not serve, and every page renders the alt text instead. So the portal image and the
-    data rebuild go out in the same pass, image first, and /vendor/brand/ausmt-mark.svg and the
-    footer's /vendor/auscope-ncris-white.png each answering 200 with an image type is the check
-    before the pages tree is swapped.
+    VERSION SKEW. /vendor/* and /src/* are served from the portal image and the pages tree from the
+    data volume, so the two can be a deploy apart. A pages tree that names a file the running image
+    does not serve renders alt text in place of a mark and loses its appearance script, so the
+    portal image goes out first, and /vendor/auscope/auscope-mark.svg and /src/theme.js each
+    answering 200 is the check before the pages tree is swapped.
 
-    The AusMT mark is a fixed 30x30 box inside the zero-basis .hleft zone, so the identity block
-    cannot move the centre tab group: a zero-basis side hands its leftover space out evenly whatever
-    it holds (tests/test_header_geometry_parity.py)."""
+    The mark is a fixed 30x30 box inside the zero-basis .hleft zone, so the identity block cannot
+    move the centre tab group: a zero-basis side hands its leftover space out evenly whatever it
+    holds (portal/tests/test_header_geometry_parity.py). Each image pair, the About control and the
+    lock-up anchor are one unbroken literal, because that pin reads this file's SOURCE against
+    portal/index.html's header, character for character."""
     tabs = "".join(
-        f'<a id="{i}" href="{h}"' + (' class="active"' if i == active else "") + f">{lbl}</a>"
+        f'      <a id="{i}" href="{h}"' + (' class="active"' if i == active else "") + f">{lbl}</a>\n"
         for i, lbl, h in _NAV_TABS)
     return ('<header class="site">\n'
-            # One unbroken literal on purpose: portal/tests/test_header_geometry_parity.py holds this
-            # markup character-identical against portal/index.html's own, and it reads this file's
-            # SOURCE (the pages sheet cannot be imported without the engine's path set up).
-            '<div class="hzone hleft">'
-            '<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">'
-            '<a class="wordmark" href="/">AusMT</a>'
-            '<span class="tagline">Australia\'s Magnetotelluric Data Portal</span></div>\n'
-            f'<div class="hzone hcenter"><nav>{tabs}</nav>'
-            '<a class="about" href="/about.html">About</a>'
-            f'<a class="contribute" href="/add-survey.html">Contribute a survey {_ARROW_FWD}</a>'
-            "</div>\n"
-            f'<div class="hzone hright">{status}</div>\n'
+            '  <div class="hzone hleft">\n'
+            '    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="30" height="30"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="30" height="30">\n'
+            '    <a class="wordmark" href="/">AusMT</a>\n'
+            '    <div class="tagline">Australia\'s Magnetotelluric Data Portal</div>\n'
+            '  </div>\n'
+            '  <div class="hzone hcenter">\n'
+            '    <nav>\n'
+            f'{tabs}'
+            '    </nav>\n'
+            '    <a class="about" href="/about.html">About</a>\n'
+            '  </div>\n'
+            '  <div class="hzone hright">\n'
+            '    <a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope/auscope-ncris-lockup.svg" alt="AuScope and NCRIS" width="226" height="48"><img class="theme-dark" src="/vendor/auscope/auscope-ncris-lockup-white.svg" alt="AuScope and NCRIS" width="226" height="48"></a>\n'
+            '  </div>\n'
             "</header>\n")
 
 
@@ -822,57 +827,42 @@ def _site_header(active="", status="") -> str:
 _MTCAT_HREF = "/data/mtcat.json"
 
 
-def _site_footer(build=None) -> str:
-    """The site's ONE footer, three regions, identical on every page in this tier and on the SPA.
+def _site_footer(status="") -> str:
+    """The site's ONE footer, three regions, the same on every page in this tier and on the SPA.
 
     The left link is the catalogue itself, not the machine-readable document for the page a reader
     is standing on: a per-page document belongs in the body, and a survey and a station page each
     carry their own record under "Identifiers and provenance". The arrow is the leaves-this-page one,
-    because the link hands over a JSON document rather than another page of the site.
+    because the link hands over a JSON document rather than another page of the site. It takes no
+    target, so a new tab means one thing in this footer: the link leaves AusMT.
 
-    The centre states who enables AusMT and then carries the attribution and the licence note. The
-    URL text is the only link in the line: it is the reader-legible form of the address, so it says
-    where it goes without a title attribute or a rule about link colour. The build identity is not
-    printed here: the commit sha spoke to operators, not to the readers a public footer is for, and
-    build_provenance.json still carries it. The `build` argument is kept so callers do not change
-    and a future /build page has its input.
+    The centre states who enables AusMT and carries the licence note. The URL text is the only link
+    in the line: it is the reader-legible form of the address, so it says where it goes without a
+    title attribute. It opens in a new tab and hands the opened page no handle on this one:
+    target="_blank" grants window.opener, from which the opened document could navigate the tab it
+    came from, and noreferrer keeps a reader's path through the catalogue out of a third party's
+    logs. The build identity is not printed here; build_provenance.json and /about.html carry it.
 
-    The right region is the parent organisation's full AuScope-NCRIS lockup. It links where the
-    centre's URL text links, because a reader who clicks either has asked the same question. The
-    image is SAME-ORIGIN and vendored beside the header's two marks, so this states a relationship
-    without taking a runtime dependency on the organisation's own host. Its display height is CSS;
-    the file ships at the brand kit's own resolution.
-
-    BOTH ANCHORS TO THAT ADDRESS OPEN IN A NEW TAB, and neither hands the opened page a handle on
-    this one: target="_blank" grants window.opener, from which the opened document could navigate
-    the tab it came from, and noreferrer keeps a reader's path through the catalogue out of a third
-    party's logs. The MTCAT link takes no target, so a new tab means one thing here: the link leaves
-    AusMT. The pair is spelt exactly as the portal's six documents spell it.
-
-    Neither Releases nor About this build belongs in this region: /about.html carries the running
-    build's identity, the software licence and the route to the citable releases in its own body.
-
-    The year is a literal, the one the SPA's own footer carries. It is deliberately not a build-time
-    value: a copyright year that moves when a page is rebuilt makes every page in the tree differ
-    from the tree beside it for a reason no reader can see.
+    The right region is the page's contextual `status`, then the appearance control. The status is
+    what the page can actually state (the surveys hub's catalogue counts) and is empty elsewhere,
+    because a counter that cannot count the page it is on is decoration pretending to be data. The
+    appearance control is the SPA's own block, character for character: two buttons that
+    /src/theme.js wires by their data-theme-choice attribute, so the page carries no script or
+    handler of its own for them, and that script keeps aria-pressed in step with the stored choice.
 
     IT IS WRITTEN AFTER </main>, as the page's own bottom edge rather than the reading column's: a
     footer inside main is not a contentinfo landmark, and set in the 840px measure it could not hold
     the bold acknowledgement on one line at any viewport. The rules that keep it on screen are in
     _CSS beside the ones that lay its regions out."""
     return ("\n<footer>\n"
-            f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">Machine-readable record '
-            f'(MTCAT JSON) {_ARROW_OUT}</a></div>\n'
+            f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">MTCAT JSON {_ARROW_OUT}</a></div>\n'
             '<div class="fzone fcenter">AusMT is enabled by AuScope &#183; '
             '<a href="https://www.auscope.org.au" target="_blank" '
             'rel="noopener noreferrer">www.auscope.org.au</a> &#183; '
-            "&#169; 2026 AuScope and the AusMT contributors &#183; "
             "Data licences vary by survey</div>\n"
-            '<div class="fzone fright">'
-            '<a class="orglogo" href="https://www.auscope.org.au" target="_blank" '
-            'rel="noopener noreferrer">'
-            '<img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" '
-            'width="1919" height="325"></a></div>\n'
+            f'<div class="fzone fright">{status}'
+            '<div class="themectl" role="group" aria-label="Appearance"><button type="button" data-theme-choice="light" aria-pressed="true">Light</button><span class="themesep">·</span><button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div>'
+            "</div>\n"
             "</footer>\n")
 
 
@@ -923,27 +913,29 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="UTF-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+        # The appearance script is the FIRST script in the head and runs before the stylesheet is
+        # parsed, so the first paint is already in the reader's chosen theme. It is a same-origin
+        # file because the CSP's script-src is 'self' alone, and nothing on the page calls it.
+        '<script src="/src/theme.js"></script>\n'
         f"{robots}"
         f"<title>{_e(title)}</title>\n"
         f"{desc_meta}"
         f'<link rel="canonical" href="{_e(canonical)}">\n'
         # ICON LINKS. Three same-origin portal paths, absolute because a page served at
         # /surveys/<slug> cannot resolve a relative vendor path, and root-anchored on /favicon.ico
-        # because a browser that reads no SVG icon link asks the site root for that name.
-        # The version query on each href is that file's own content hash, written here by
-        # portal/tools/gen_brand.py: /vendor/* carries a thirty day cache, so a regenerated icon under
-        # an unchanged URL is answered from that cache.
+        # because a browser that reads no SVG icon link asks the site root for that name. The block
+        # is the one every portal document carries, href for href.
         '<link rel="icon" href="/favicon.ico" sizes="any">\n'
         '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">\n'
-        '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">\n'
+        '<link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">\n'
         f"{og}"
         f"{ld}"
         f"<style>{_CSS}{extra_css}</style>\n</head>\n<body>\n"
-        f"{_site_header(nav, status)}"
+        f"{_site_header(nav)}"
         "<main>\n"
         f"{body}"
         "</main>\n"
-        f"{_site_footer(build)}"
+        f"{_site_footer(status)}"
         f"{scripts_html}"
         "</body>\n</html>\n"
     )
@@ -2400,7 +2392,7 @@ def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
     summary = _facts_line([_plural(len(rows), "survey"), _plural(n_stations, "station")])
     desc = (f"Every magnetotelluric survey published on AusMT: {_plural(len(rows), 'survey')} and "
             f"{_plural(n_stations, 'station')}, with coverage, data types, licences and downloads.")
-    # The header's right status slot, in the SPA counter's own grammar (bold figure, muted noun,
+    # The footer's status slot, in the SPA counter's own grammar (bold figure, muted noun,
     # interpunct). The SPA's counter reports LIVE map state, which a static page has none of; this
     # hub does have a count to state, and it is the catalogue's own.
     counts = (f'<div class="counts"><b>{len(rows):,}</b> '
