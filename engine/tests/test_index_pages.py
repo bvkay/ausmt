@@ -146,14 +146,14 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
     assert not (bare / "pages").exists(), "no --sitemap-base must mean no pages tree at all"
 
 
-# The fetched assets a page in this tier may carry, restated (not weakened) per
-# LANE-CONTRACT-BRAND-ASSETS.md. The rule was "no src at all", which was the right rule while the
-# pages had no identity mark: it kept out build-time reads, inlined copies and every external fetch.
-# The marks make an exception worth stating precisely rather than loosening the rule to
-# "images are fine": same-origin files, served by the portal image, cached once for the whole site.
-# What stays forbidden is everything the strict rule was protecting: no http, no https, no
-# protocol-relative and no data URI may ever appear as a src, and no OTHER path may either. The
-# lists below are EXACT and ORDERED, so an extra asset, or the same asset in the wrong slot, fails.
+# The fetched assets a page in this tier may carry, restated (not weakened). The rule was "no src at
+# all", which was the right rule while the pages had no identity mark: it kept out build-time reads,
+# inlined copies and every external fetch. The marks make an exception worth stating precisely
+# rather than loosening the rule to "images are fine": same-origin files, served by the portal
+# image, cached once for the whole site. What stays forbidden is everything the strict rule was
+# protecting: no http, no https, no protocol-relative and no data URI may ever appear as a src, and
+# no OTHER path may either. The lists below are EXACT and ORDERED, so an extra asset, or the same
+# asset in the wrong slot, fails.
 #
 # The header carries two marks, each as a PAIR of files: the AuScope mark opening the left zone and
 # the AuScope and NCRIS lock-up closing the right zone, each inked for the light ground and in white
@@ -1731,7 +1731,6 @@ def test_every_json_ld_block_parses_and_the_entity_node_stays_first(built):
 
 # THE CONSTANT FOOTER, over BUILT pages: the emitted document's own structure and CSS, where the
 # portal half of this pin (portal/tests/test_footer_regions.py) reads _pages.py's source text.
-# The rule and every number the two halves hold it to: LANE-CONTRACT-FOOTER-AUSCOPE.md.
 _FLOW_BELOW = 560
 _FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
 
