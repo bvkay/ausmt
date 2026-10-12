@@ -879,7 +879,7 @@ def _site_footer(status="") -> str:
 
 
 def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
-           og_image=None, base="", extra_css="", nav="", build=None,
+           og_image=None, base="", extra_css="", nav="",
            status="", scripts=()) -> str:
     # `jsonld` is ONE node or a list of nodes, emitted in order as one script element each. Order is
     # load-bearing: the entity node stays first on every page that carries one, so anything reading
@@ -1255,7 +1255,7 @@ def survey_dataset_stub(*, slug, base, title, kind, blurb, smeta):
 
 
 def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_access,
-                base, extent=None, discovery=None, build=None, og_image=None) -> str:
+                base, extent=None, discovery=None, og_image=None) -> str:
     """`og_image` is the absolute URL of the card the EMITTER has already written for this survey,
     or None for the portal's root card. It must never be derived from "is Pillow importable", which is
     a claim about the environment rather than about the file: a card whose write failed would leave the
@@ -1705,7 +1705,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                   description=desc_meta, canonical=url, body=body,
                   jsonld=[ld, _breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys"),
                                                  (title, f"/surveys/{slug}")])],
-                  og_image=og_image, base=base, nav="navSurveys", build=build,
+                  og_image=og_image, base=base, nav="navSurveys",
                   extra_css=(_FETCH_CSS if has_fetch else ""),
                   scripts=(_FETCH_SCRIPTS if has_fetch else ()))
 
@@ -1839,7 +1839,7 @@ def _station_kind(dtype) -> str:
     return "geomagnetic depth sounding" if dtype == "GDS" else "magnetotelluric"
 
 
-def station_page(*, doc, survey_slug, base, ts_levels=None, build=None) -> str:
+def station_page(*, doc, survey_slug, base, ts_levels=None) -> str:
     aid = doc["ausmt_id"]
     st = doc.get("station") or aid
     survey = doc.get("survey") or survey_slug
@@ -1884,7 +1884,7 @@ def station_page(*, doc, survey_slug, base, ts_levels=None, build=None) -> str:
                   description=f"{kind_lead} station {st} from the {survey} survey: "
                               "transfer function data, metadata and downloads on AusMT.",
                   canonical=url, body=body, noindex=True, base=base,
-                  nav="navSurveys", build=build)
+                  nav="navSurveys")
 
 
 def _member_colours(n):
@@ -1992,7 +1992,7 @@ def _prose_of(coll, key) -> str:
 
 
 def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None,
-                    member_facts=None, level_counts=None, formats=None, build=None,
+                    member_facts=None, level_counts=None, formats=None,
                     og_image=None, member_datasets=None) -> str:
     """The collection page as an EXPLORATORY layer, not a catalogue record.
 
@@ -2178,7 +2178,7 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
                   jsonld=[ld, _breadcrumb(base, [(_SITE_NAME, "/"),
                                                  ("collections", "/collections"),
                                                  (title, f"/collections/{cid}")])],
-                  og_image=og_image, nav="navCollections", build=build)
+                  og_image=og_image, nav="navCollections")
 
 
 # --------------------------------------------------------------------------- the two index pages
@@ -2332,7 +2332,7 @@ def _hub_controls(vocab, *, n_rows) -> str:
         '</form>')
 
 
-def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
+def surveys_index_page(*, rows, base, og_image=None) -> str:
     """The /surveys hub: every published survey as one linked row with the facts a reader chooses
     on. Rendered from the catalogue rollups alone (mtcat.json / surveys.json), so it states nothing
     the served documents do not already publish and needs no survey-metadata read.
@@ -2424,11 +2424,11 @@ def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
                   jsonld=[_hub_catalogue(name="AusMT surveys", description=desc, url=url,
                                         base=base),
                           _breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys")])],
-                  extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts,
+                  extra_css=_INDEX_CSS, nav="navSurveys", status=counts,
                   og_image=og_image, scripts=_HUB_SCRIPTS)
 
 
-def collections_index_page(*, rows, base, build=None, og_image=None) -> str:
+def collections_index_page(*, rows, base, og_image=None) -> str:
     """The /collections hub. Rows carry: cid, title, description, n_surveys, n_stations, type,
     status, member_labels, member_points {label: [(lon, lat)]}. ONLY the fields the collections
     rollup actually carries are rendered: a collection whose record declares no type or status
@@ -2472,7 +2472,7 @@ def collections_index_page(*, rows, base, build=None, og_image=None) -> str:
                   jsonld=[_hub_catalogue(name="AusMT collections", description=desc, url=url,
                                         base=base),
                           _breadcrumb(base, [(_SITE_NAME, "/"), ("collections", "/collections")])],
-                  extra_css=_INDEX_CSS, nav="navCollections", build=build, og_image=og_image)
+                  extra_css=_INDEX_CSS, nav="navCollections", og_image=og_image)
 
 
 # --------------------------------------------------------------------------- og cards (Pillow)
@@ -3152,7 +3152,7 @@ def _og_hub_card(path, *, kind, title, lines, counts_line):
 
 def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collections,
                bundle_formats, survey_extent, survey_coll,
-               bundle_rows=None, ts_access=None, mtcat=None, build=None) -> int:
+               bundle_rows=None, ts_access=None, mtcat=None) -> int:
     """Write every entity page under <out>/pages/ (and, when Pillow is importable, the per-survey
     link-preview cards under <out>/pages/og/ and the per-collection cards under
     <out>/pages/og/collections/). Inputs are the served documents and rollups the build already
@@ -3260,7 +3260,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                                smeta=smeta, station_docs=docs,
                                bundle_rows=rows or [], ts_access=ts_access,
                                base=base, extent=(survey_extent or {}).get(label),
-                               build=build, og_image=og_image,
+                               og_image=og_image,
                                discovery={"stations": disc_stations.get(slug),
                                           "survey": disc_survey.get(slug)})
         (sdir / f"{slug}.html").write_text(htmlpage, encoding="utf-8")
@@ -3313,7 +3313,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     stdir.mkdir(parents=True, exist_ok=True)
     for doc in station_docs.values():
         (stdir / f"{doc['ausmt_id']}.html").write_text(
-            station_page(doc=doc, survey_slug=doc.get("survey_id"), base=base, build=build,
+            station_page(doc=doc, survey_slug=doc.get("survey_id"), base=base,
                          ts_levels=(ts_access or {}).get(doc["ausmt_id"])), encoding="utf-8")
         n += 1
 
@@ -3380,7 +3380,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                             level_counts=level_counts, og_image=coll_og,
                             member_datasets={s: member_datasets[s] for _lbl, s in members
                                              if s in member_datasets},
-                            formats=sorted(member_formats), build=build),
+                            formats=sorted(member_formats)),
             encoding="utf-8")
         n += 1
         coll_index_rows.append({
@@ -3412,11 +3412,11 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                                  "advertise a card that does not exist")
             hub_og[name] = f"{base}/data/pages/og/{name}.png"
     (sdir / "index.html").write_text(
-        surveys_index_page(rows=index_rows, base=base, build=build,
+        surveys_index_page(rows=index_rows, base=base,
                            og_image=hub_og.get("surveys")), encoding="utf-8")
     n += 1
     (cdir / "index.html").write_text(
-        collections_index_page(rows=coll_index_rows, base=base, build=build,
+        collections_index_page(rows=coll_index_rows, base=base,
                                og_image=hub_og.get("collections")), encoding="utf-8")
     n += 1
     return n
