@@ -2,7 +2,7 @@
 
 The browser tab and the home-screen icon carry the parent organisation's mark, Royal Blue with its
 lighter swoosh, rendered by portal/tools/gen_auscope_icons.py from vendor/auscope/auscope-mark.svg.
-The AusMT mark stays the product mark of the documentation sidebar and the social card, and its
+The AusMT mark stays the product mark of the brand page and the link-preview cards, and its
 exports are held by tests/test_brand_exports.py. What these pins hold:
 
   * ONE SOURCE. vendor/favicon.svg carries the mark's own path elements character for character, in
@@ -14,14 +14,13 @@ exports are held by tests/test_brand_exports.py. What these pins hold:
     with the mark centred at 70 percent of its width and the mark's two solid colours as its two
     commonest inks.
   * EVERY SURFACE LINKS THEM in one three-line block, root-anchored, with no query on any href.
-  * THE DRIFT GATE. The committed files are a fresh render, byte for byte. The renderer (PyMuPDF) is
-    not in the lock environment, so the pins that render skip there with a reason; every structural
-    pin above runs everywhere, and the favicon.svg text is compared without a renderer.
+  * THE DRIFT GATE. The committed files are a fresh render: favicon.svg byte for byte, each raster
+    as its decoded picture, so a different Pillow encoding the same picture stays green and a
+    one-pixel edit goes red. Pillow is the only renderer, so every pin runs wherever the suite does.
 
 NO WEB MANIFEST: 192 and 512 are rendered so that a manifest can be added later, but an installable
 PWA is its own decision.
 """
-import importlib.util
 import json
 import re
 import subprocess
@@ -61,17 +60,12 @@ BLEND_TOLERANCE = 12
 CHROME_PAGES = ("index.html", "about.html", "add-survey.html", "brand.html", "releases.html")
 SHIPPED_PAGES = CHROME_PAGES + ("404.html",)
 
-RENDERER = importlib.util.find_spec("pymupdf") is not None
-NO_RENDERER = ("PyMuPDF (import pymupdf) is not installed in this Python, and the icons cannot be "
-               "rendered without it; the structural pins in this module still run")
-
 
 def _tool_namespace(tool=TOOL):
     """A generator's constants and functions, read from its CURRENT source.
 
     Compiled and run rather than imported: an import is answered from __pycache__ whenever the
-    stamped source mtime matches to the second. gen_auscope_icons.py imports its renderer only when
-    it draws, so this works without one."""
+    stamped source mtime matches to the second."""
     ns = {"__file__": str(tool), "__name__": "icon_pin"}
     exec(compile(tool.read_text(encoding="utf-8"), str(tool), "exec"), ns)
     return ns
@@ -197,8 +191,8 @@ def test_the_favicon_is_transparent_well_formed_and_carries_no_retired_art():
 
 
 def test_the_favicon_svg_is_the_generators_output():
-    """The text half of the drift gate, which needs no renderer and so runs everywhere. FAILS IF the
-    committed favicon.svg is not what gen_auscope_icons.py writes from the mark today."""
+    """The text half of the drift gate, in process. FAILS IF the committed favicon.svg is not what
+    gen_auscope_icons.py writes from the mark today."""
     ns = _tool_namespace()
     paths = ns["mark_paths"](MARK.read_text(encoding="utf-8"))
     assert FAVICON.read_text(encoding="utf-8") == ns["favicon_svg"](paths), \
@@ -246,6 +240,20 @@ def test_every_root_icon_frame_is_the_mark_in_royal_blue_on_a_transparent_ground
     assert all(abs(m - w) <= BLEND_TOLERANCE for m, w in zip(mean, want)), (
         f"{size} px: the opaque pixels average {[round(m, 1) for m in mean]}, which is not the "
         f"AuScope mark's {[round(w, 1) for w in want]} within {BLEND_TOLERANCE}")
+
+
+@pytest.mark.parametrize("size", ICO_SIZES)
+def test_every_root_icon_frame_is_the_generators_render_at_its_own_size(size):
+    """FAILS IF a frame's decoded pixels differ from the generator's render at that size. Each frame
+    is drawn at its own size, so the 16 px frame is not a resampled copy of the 48 px one."""
+    from PIL import Image
+    ns = _tool_namespace()
+    paths = ns["mark_paths"](MARK.read_text(encoding="utf-8"))
+    with Image.open(FAVICON_ICO) as ico:
+        ico.size = (size, size)
+        frame = ico.convert("RGBA")
+    assert frame.tobytes() == ns["ico_frame"](paths, size).tobytes(), \
+        f"the {size} px frame is not the generator's mark rendered at {size} px"
 
 
 # --------------------------------------------------------------------------------------------------
@@ -298,7 +306,8 @@ def test_the_icon_rules_are_named_constants_of_the_generator():
     assert tuple(ns["APP_ICON_SIZES"]) == tuple(sorted(APP_ICONS.values()))
     assert abs(ns["APP_ICON_MARK_WIDTH"] - APP_ICON_MARK_WIDTH) < 1e-9
     assert tuple(ns["APP_ICON_GROUND"]) == WHITE
-    assert ns["SUPERSAMPLE"] == 4
+    assert ns["SUPERSAMPLE"] == 8
+    assert ns["CUBIC_STEPS"] == 64
 
 
 def test_each_icon_file_has_one_author():
@@ -326,15 +335,14 @@ def _run_tool(*args):
                           text=True, encoding="utf-8", cwd=str(REPO))
 
 
-@pytest.mark.skipif(not RENDERER, reason=NO_RENDERER)
 def test_the_drift_gate_is_green_on_the_committed_icons():
-    """FAILS IF any committed icon differs by a byte from a fresh render of the mark."""
+    """FAILS IF favicon.svg differs by a byte, or any raster by a pixel, its mode or its frame sizes,
+    from a fresh render of the mark."""
     r = _run_tool("--check")
     assert r.returncode == 0, f"gen_auscope_icons.py --check must be green:\n{r.stdout}\n{r.stderr}"
     assert "5 file(s) in sync" in r.stdout, r.stdout
 
 
-@pytest.mark.skipif(not RENDERER, reason=NO_RENDERER)
 def test_the_drift_gate_compares_the_root_icon():
     """FAILS IF the gate lists the root icon without comparing it: a generated file the gate does not
     compare is a file anyone can hand-edit. The perturbation is what tells the two apart."""
@@ -357,30 +365,39 @@ def test_the_drift_gate_compares_the_root_icon():
         FAVICON_ICO.write_bytes(original)
 
 
-@pytest.mark.skipif(not RENDERER, reason=NO_RENDERER)
+def test_the_drift_gate_compares_app_icon_pictures_not_encodings():
+    """FAILS IF the gate compares encoded bytes, which turns red when another Pillow writes the same
+    picture, or stops comparing pixels or the mode. A re-encode at another compression level must stay
+    green; a one-pixel edit and the same pixels saved as RGBA must each go red and name the file."""
+    from PIL import Image
+    path = ICON_DIR / "icon-180.png"
+    original = path.read_bytes()
+    try:
+        with Image.open(path) as im:
+            picture = im.copy()
+        picture.save(path, "PNG", compress_level=1)
+        assert path.read_bytes() != original, "the re-encode must change the bytes for this pin to bite"
+        r = _run_tool("--check")
+        assert r.returncode == 0, f"a re-encode of the same picture must pass:\n{r.stdout}\n{r.stderr}"
+        edited = picture.copy()
+        edited.putpixel((0, 0), (255, 0, 0))
+        for name, im in (("a one-pixel edit", edited), ("an RGBA copy", picture.convert("RGBA"))):
+            im.save(path, "PNG")
+            r = _run_tool("--check")
+            assert r.returncode == 1, f"the gate must fail on {name} of icon-180.png, got {r.returncode}"
+            assert "icon-180.png" in r.stderr, f"the gate must name the file that drifted:\n{r.stderr}"
+    finally:
+        path.write_bytes(original)
+
+
 def test_two_renders_write_the_same_bytes():
     """FAILS IF a render carries a timestamp or any other per-run difference. An icon that differs
-    on identical inputs makes every regeneration a spurious diff and defeats the byte gate."""
+    on identical inputs makes every regeneration a spurious diff."""
     ns = _tool_namespace()
-    renderer = ns["_renderer"]()
     paths = ns["mark_paths"](MARK.read_text(encoding="utf-8"))
-    assert ns["ico_bytes"](renderer, paths) == ns["ico_bytes"](renderer, paths)
+    assert ns["ico_bytes"](paths) == ns["ico_bytes"](paths)
     for size in APP_ICONS.values():
-        assert ns["app_icon_bytes"](renderer, paths, size) == ns["app_icon_bytes"](renderer, paths, size)
-
-
-@pytest.mark.skipif(RENDERER, reason="PyMuPDF is installed here, so the tool renders instead of refusing")
-def test_without_the_renderer_the_tool_writes_nothing_and_the_gate_says_so():
-    """FAILS IF, without its renderer, the tool writes anything, exits other than 2 when asked to
-    write, or turns the CI gate red instead of saying it could not compare."""
-    before = {p: p.read_bytes() for p in [FAVICON, FAVICON_ICO] + [ICON_DIR / n for n in APP_ICONS]}
-    r = _run_tool()
-    assert r.returncode == 2, f"writing without a renderer must exit 2, got {r.returncode}"
-    assert "PyMuPDF" in r.stderr, f"the refusal must name what is missing:\n{r.stderr}"
-    r = _run_tool("--check")
-    assert r.returncode == 0, f"the gate without a renderer must exit 0, got {r.returncode}"
-    assert "not checked" in r.stdout, f"the gate must say it did not compare:\n{r.stdout}"
-    assert {p: p.read_bytes() for p in before} == before, "the tool wrote a file it could not render"
+        assert ns["app_icon_bytes"](paths, size) == ns["app_icon_bytes"](paths, size)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -466,3 +483,4 @@ def test_no_icon_href_carries_a_version_query(name):
     text = (PAGES_PY if name == "_pages.py" else ROOT / name).read_text(encoding="utf-8")
     for href in re.findall(r'<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"', text):
         assert "?" not in href, f"{name}: {href} carries a query; icon URLs are stable by rule"
+
