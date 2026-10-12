@@ -1,7 +1,7 @@
 "use strict";
 // Behavioural driver for the Releases page. Loads the REAL releases.html into jsdom, runs the REAL
 // releases.js against a stubbed fetch, and asserts what the page states in each of the situations a
-// reader can actually land in. Mirrors tools/corpus_stats_test.js (same jsdom + vm idiom).
+// reader can actually land in.
 //
 // The page's whole job is to be citable and honest, so the assertions are split accordingly:
 //

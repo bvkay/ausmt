@@ -461,7 +461,8 @@ ACKNOWLEDGEMENT = (
     "Data Portal (https://ausmt.auscope.org.au), enabled by AuScope and the Australian Government "
     "via the National Collaborative Research Infrastructure Strategy (NCRIS).")
 
-LOCKUP_SRC = "/vendor/auscope-ncris-white.png"
+LOCKUP_LIGHT = "/vendor/auscope/auscope-ncris-lockup.svg"
+LOCKUP_DARK = "/vendor/auscope/auscope-ncris-lockup-white.svg"
 LOCKUP_ALT = "AuScope and NCRIS"
 
 
@@ -593,37 +594,43 @@ def test_no_auscope_anchor_on_this_page_is_left_half_paired():
             f"got {tag!r}")
 
 
-def test_section_two_carries_the_official_lockup_the_footer_already_ships():
-    """The lock-up in the body is the SAME committed file every footer on this site carries, named
-    by the same root-relative path. FAILS if it points at a second copy or at a different artwork
+def test_section_two_carries_the_lockup_pair_the_header_already_ships():
+    """The lock-up in the body is the SAME pair of committed files every header on this site carries,
+    named by the same root-relative paths: Royal Blue for the light theme and white for the dark, of
+    which the theme switch shows one. FAILS if it points at a second copy or at a different artwork
     (two files are two things to keep in step, and the official mark is not ours to redraw), if it
-    loses the alt text, or if it drops the intrinsic size attributes that reserve its box before it
-    loads.
+    falls back to the white PNG, which would sit on the light ground, if a variant loses its alt text,
+    or if either drops the intrinsic size attributes that reserve its box before it loads.
 
-    The width is capped in the page rather than in the file: the committed raster is 1919px wide, so
-    without a cap the mark would be five times the reading column. max-width:100% is what keeps it
-    inside a narrow column once the declared width does not fit."""
+    The width is set in the page: max-width:100% is what keeps it inside a narrow column once the
+    declared width does not fit, and the wrapper takes no line box of its own, so the theme switch can
+    show either variant without a descender gap under it."""
     who = _section("who")
-    m = re.search(r'<img class="orglockup"[^>]*>', who)
+    m = re.search(r'<p class="bodylockup">(.*?)</p>', who, re.S)
     assert m, "section 2 must carry the AuScope-NCRIS lock-up"
-    tag = m.group(0)
-    assert f'src="{LOCKUP_SRC}"' in tag, (
-        f"the body lock-up must name the committed file at {LOCKUP_SRC}, got {tag!r}")
-    assert f'alt="{LOCKUP_ALT}"' in tag, f"the lock-up must carry its alt text, got {tag!r}"
-    assert 'width="1919" height="325"' in tag, (
-        f"the lock-up must declare the committed file's own dimensions, got {tag!r}")
-    assert (ROOT / LOCKUP_SRC.lstrip("/")).is_file(), (
-        f"section 2 names {LOCKUP_SRC}, which the portal does not ship")
-    foot = RAW.split("<footer>", 1)[1].split("</footer>", 1)[0]
-    assert LOCKUP_SRC in foot, (
-        "the body lock-up and the footer's must be the same file; the footer no longer names it")
-    rule = re.search(r"(?m)^\s*\.orglockup\{([^}]*)\}", RAW)
+    imgs = re.findall(r"<img [^>]*>", m.group(1))
+    assert len(imgs) == 2, f"the body lock-up is the light and dark pair, got {imgs!r}"
+    for tag, cls, src in zip(imgs, ("theme-light", "theme-dark"), (LOCKUP_LIGHT, LOCKUP_DARK)):
+        assert f'class="{cls}"' in tag and f'src="{src}"' in tag, (
+            f"the body lock-up's {cls} variant must name {src}, got {tag!r}")
+        assert f'alt="{LOCKUP_ALT}"' in tag, f"the lock-up must carry its alt text, got {tag!r}"
+        assert re.search(r'width="\d+" height="\d+"', tag), (
+            f"the lock-up must declare its intrinsic size, got {tag!r}")
+        assert (ROOT / src.lstrip("/")).is_file(), f"section 2 names {src}, which the portal does not ship"
+    assert "auscope-ncris-white.png" not in who, "the white PNG sits on dark grounds only"
+    header = RAW.split("<header>", 1)[1].split("</header>", 1)[0]
+    assert LOCKUP_LIGHT in header and LOCKUP_DARK in header, (
+        "the body lock-up and the header's must be the same pair; the header no longer names it")
+    wrap = re.search(r"(?m)^\s*\.bodylockup\{([^}]*)\}", RAW)
+    assert wrap and "line-height:0" in wrap.group(1), "the body lock-up's wrapper takes no line box"
+    rule = re.search(r"(?m)^\s*\.bodylockup img\{([^}]*)\}", RAW)
     assert rule, "the body lock-up must carry its own sizing rule"
     body = rule.group(1)
-    assert re.search(r"(?:^|;)width:\d+px", body), (
-        f"the lock-up must declare a body width; the file is 1919px wide, got {body!r}")
+    assert re.search(r"(?:^|;)width:\d+px", body), f"the lock-up must declare a body width, got {body!r}"
     assert "max-width:100%" in body, (
         f"the lock-up must not outgrow a narrow reading column, got {body!r}")
+    assert "display" not in body, (
+        f"a display here would outrank the theme switch and show both variants, got {body!r}")
 
 
 def test_section_two_closes_on_operation_and_governance():

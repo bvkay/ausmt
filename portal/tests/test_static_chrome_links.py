@@ -40,7 +40,7 @@ def _text(name: str) -> str:
     return (ROOT / name).read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("name", ["about.html", "releases.html"])
+@pytest.mark.parametrize("name", ["about.html", "releases.html", "add-survey.html", "brand.html"])
 def test_the_header_nav_points_at_the_real_destinations(name):
     """FAILS IF a primary nav item still points at index.html. Map is the SPA root, Surveys is the
     surveys index page and Collections is the collections index page: three destinations, three
@@ -53,10 +53,15 @@ def test_the_header_nav_points_at_the_real_destinations(name):
         assert m.group(1) == href, f"{name}: {nav_id} must point at {href}, got {m.group(1)}"
 
 
-def test_add_survey_back_link_goes_straight_to_the_portal_root():
-    """FAILS IF the Back to portal control still exercises the /index.html 301."""
-    m = re.search(r'<a class="back" href="([^"]+)"', _text("add-survey.html"))
-    assert m and m.group(1) == "/", f"add-survey back link must be /, got {m and m.group(1)}"
+def test_add_survey_returns_to_the_portal_root_through_the_shared_header():
+    """add-survey.html wears the shared header, so its way back to the portal is the header's own
+    Map tab and identity link rather than a control of its own. FAILS IF either exercises the
+    /index.html 301, or if the retired Back to portal control comes back beside them."""
+    text = _text("add-survey.html")
+    header = text.split("<header>", 1)[1].split("</header>", 1)[0]
+    assert re.findall(r'<a id="navMap" href="([^"]+)"', header) == ["/"], "the Map tab must reach /"
+    assert re.findall(r'<a class="wordmark" href="([^"]+)"', header) == ["/"], "the identity must reach /"
+    assert 'class="back"' not in text, "the page's own Back to portal control is retired"
 
 
 def test_no_static_page_links_the_index_html_alias():

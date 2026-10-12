@@ -1,5 +1,9 @@
 """The AuScope mark on the collection footprint map, on both surfaces that draw one full size.
 
+It is the vector pair every other surface draws, a Royal Blue variant and a white one, and the theme
+switch shows exactly one: the panel behind it is the --map-panel token, light in the light theme and
+navy in the dark.
+
 A collection is drawn twice: as the static collection page's <figure class="collmap"> (the engine,
 engine/extract/_pages.py) and as the SPA's own collScatter in the collection-detail hero
 (portal/src/drawer.js). The mark rides the panel's bottom-left corner on both, so a reader moving
@@ -30,8 +34,12 @@ INDEX = ROOT / "index.html"
 DRAWER = ROOT / "src" / "drawer.js"
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
-MARK_SRC = "/vendor/auscope-icon-white.png"
-MARK_IMG = f'<img class="collmark" src="{MARK_SRC}" alt="AuScope" width="27" height="28">'
+MARK_SRC = "/vendor/auscope/auscope-mark.svg"
+MARK_DARK = "/vendor/auscope/auscope-mark-white.svg"
+MARK_IMG = (f'<img class="collmark theme-light" src="{MARK_SRC}" alt="AuScope" width="42" height="42">'
+            f'<img class="collmark theme-dark" src="{MARK_DARK}" alt="AuScope" width="42" height="42">')
+# The PNG the mark once was. It stays committed for its other consumers and no collection map names it.
+RETIRED_PNG = "auscope-icon-white.png"
 
 # The overlay's own geometry, stated once per surface. Same offsets, same height, same opacity, so
 # the two maps put the mark in the same place; only the selector differs, because the engine's panel
@@ -78,8 +86,11 @@ def test_the_spa_detail_hero_draws_the_same_mark_and_the_list_card_does_not():
     src = _text(DRAWER)
     assert 'class="collscatter-panel" style="max-width:${cap}px"' in src, \
         "the mark's panel must be capped at the same width the map is"
-    assert src.count(MARK_SRC) == 1, \
-        f"drawer.js must name {MARK_SRC} exactly once, got {src.count(MARK_SRC)}"
+    assert src.count(MARK_IMG) == 1, \
+        f"drawer.js must draw the mark pair {MARK_IMG!r} exactly once, got {src.count(MARK_IMG)}"
+    assert src.count(MARK_SRC) == 1 and src.count(MARK_DARK) == 1, \
+        "drawer.js must name each variant exactly once"
+    assert RETIRED_PNG not in src, "the collection map draws the vector pair, not the retired PNG"
     assert "collScatter(ss,720,true)" in src, \
         "the collection-detail hero draws the full-size map and takes the mark"
     assert "collScatter(ss)" in src, \
@@ -115,7 +126,7 @@ def test_the_mark_clears_the_coastline_at_the_panels_narrowest_rendered_width():
     rendered = 343                      # a 375px viewport less the page's own side padding
     scale = rendered / view_w           # viewBox units to rendered pixels
     left, bottom, height = 9, 9, 20     # the narrow-screen step-down, which is what applies at 375px
-    width = height * 281 / 288          # the asset's own aspect ratio
+    width = height                      # the asset's own viewBox is square
     assert bottom + height < clear_units_h * scale, (
         f"the mark reaches {bottom + height:.0f}px up a {clear_units_h * scale:.0f}px clear band; "
         "it would cross into the geography")

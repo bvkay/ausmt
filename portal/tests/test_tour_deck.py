@@ -60,8 +60,8 @@ DECK = [
      "Collections: related surveys grouped, such as AusLAMP and the Australia legacy GDS, each "
      "with its combined coverage."),
     ("#map",
-     "That's it: find, screen, select, download, cite. Contribute your own survey from "
-     "Contribute a survey."),
+     "That's it: find, screen, select, download, cite. To contribute a survey of your own, follow "
+     "the link in About."),
 ]
 
 # A step is {sel, text, ...}. `sel` is static for every step: the element a step spotlights is fixed,
@@ -137,6 +137,17 @@ def test_resolved_copy_carries_placeholders_not_literals():
 # Spelt as escapes so this pin never trips the source sweep it mirrors (test_no_en_dash.py).
 EM_DASH = "\u2014"
 EN_DASH = "\u2013"
+
+
+def test_the_closing_step_names_a_route_the_header_still_carries():
+    """The Contribute control left the header, so the closing step points at About, which the header
+    carries and which links the contribution page from its own body. FAILS IF the step names the
+    retired control again."""
+    closing = _parsed_deck()[-1][1]
+    assert "Contribute a survey" not in closing, "the closing step names the retired header control"
+    assert "About" in closing, "the closing step points at About's contribute link"
+    about = (ROOT / "about.html").read_text(encoding="utf-8")
+    assert 'href="add-survey.html"' in about.split("<main>", 1)[1], "About must carry that link"
 
 
 def test_deck_copy_takes_plain_hyphens_only():
