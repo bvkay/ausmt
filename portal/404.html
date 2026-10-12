@@ -5,27 +5,49 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
 <title>Page not found - AusMT</title>
-<!-- Each icon href's query is that file's content hash. -->
+<script src="/src/theme.js"></script>
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">
+<link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">
 <style>
-  body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:#11182D;color:#C9D4E8;font:16px/1.55 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
+  :root{
+    --bg:#D8D9D7; --surface:#FFFFFF; --surface-2:#F2F3F2; --line:#CED4DA;
+    --text:#333333; --muted:#6C757D; --heading:#282572; --accent:#282572; --accent-ink:#FFFFFF;
+    --lpmt:#3F88C8; --bbmt:#FFC14F; --amt:#9FCB5A; --gds:#CE348A; --dot-edge:#231F20;
+    --ok:#598F39; --part:#9A6B00; --no:#EA1E31; --unk:#6C757D;
+    --map-bg:#DFE6E9; --map-panel:#F4F5F4; --map-line:#CED4DA; --coast-fill:#FFFFFF; --coast-line:#9AA0A6;
+    --shadow:0 1px 3px rgba(35,31,32,.12);
+    --mono:ui-monospace,'SF Mono','Cascadia Mono','Consolas',monospace;
+    --sans:'Libre Franklin',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    color-scheme:light;
+  }
+  :root[data-theme="dark"]{
+    --bg:#11182D; --surface:#18213D; --surface-2:#1E2B4F; --line:#2B3557;
+    --text:#E8EDF1; --muted:#8FA3B0; --heading:#FFFFFF; --accent:#EF7256; --accent-ink:#16110B;
+    --dot-edge:#11182D;
+    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
+    --map-bg:#0F1626; --map-panel:#18213D; --map-line:#222C4E; --coast-fill:#1D3140; --coast-line:#3A5266;
+    --shadow:none;
+    color-scheme:dark;
+  }
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:16px/1.55 var(--sans)}
   main{max-width:760px;width:min(100% - 2.5rem,760px);margin:0 auto;padding:4rem 1.25rem 2.2rem;flex:1 0 auto}
-  a{color:#EF7256}
-  h1{color:#fff;font-size:1.7rem;margin:.2rem 0 .6rem}
+  a{color:var(--accent)}
+  h1{color:var(--heading);font-size:1.7rem;margin:.2rem 0 .6rem}
   .crumb{font-size:.85rem;opacity:.8}
-  /* One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement CENTRE,
-     the AuScope-NCRIS lockup RIGHT. See docs: portal internals, 404.html. */
-  footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid #2B3557;font-size:12.5px;color:#8FA3B0;line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:#11182D;z-index:3}
-  footer a{color:#EF7256;text-decoration:none}
-  .apilink{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:#8FA3B0;text-decoration:none}
-  .apilink:hover{color:#EF7256}
+  /* One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance
+     control RIGHT. See docs: portal internals, 404.html. */
+  footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--surface);z-index:3}
+  footer a{color:var(--accent);text-decoration:none}
+  .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
+  .apilink:hover{color:var(--accent)}
   .fleft{flex:1 1 0;min-width:0}
   .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
-  .fright{flex:1 1 0;min-width:0;text-align:right}
-  .orglogo{display:inline-block;line-height:0}
-  .orglogo img{height:30.8px;width:auto;max-width:100%;object-fit:contain;display:block}
+  .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
+  .themectl{display:inline-flex;align-items:center;gap:6px;font-size:12.5px}
+  .themectl button{background:none;border:0;padding:0;color:var(--muted);font:inherit;cursor:pointer}
+  .themectl button[aria-pressed="true"]{color:var(--accent);font-weight:700}
+  .themesep{color:var(--line)}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
@@ -39,19 +61,15 @@
 stale.</p>
 <p><a href="/">Open the interactive portal</a> to browse every survey and station, or start from
 the <a href="/surveys">survey index</a>.</p>
-<!-- Caddy rewrites ANY unmatched path to this document, so every link here is root-absolute: a
-     relative one would resolve against the address that was not found. Nothing in this footer needs
-     script, which is what makes the identical footer on every surface reachable from here too. -->
+<!-- Caddy rewrites ANY unmatched path to this document, so every link and script here is
+     root-absolute: a relative one would resolve against the address that was not found. -->
 </main>
 <footer>
-  <!-- LEFT. The machine-readable MTCAT link, the same document from every page. -->
-  <div class="fzone fleft"><a class="apilink" href="/data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) &#8599;</a></div>
-  <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. See docs: portal internals,
-       404.html. -->
-  <div class="fzone fcenter">AusMT is enabled by AuScope &middot; <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> &middot; &copy; 2026 AuScope and the AusMT contributors &middot; Data licences vary by survey</div>
-  <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. See docs:
+  <!-- LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. See docs:
        portal internals, 404.html. -->
-  <div class="fzone fright"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
+  <div class="fzone fleft"><a class="apilink" href="/data/mtcat.json" title="MTCAT discovery document (JSON)">MTCAT JSON ↗</a></div>
+  <div class="fzone fcenter">AusMT is enabled by AuScope · <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> · Data licences vary by survey</div>
+  <div class="fzone fright"><div class="themectl" role="group" aria-label="Appearance"><button type="button" data-theme-choice="light" aria-pressed="true">Light</button><span class="themesep">·</span><button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div></div>
 </footer>
 </body>
 </html>
