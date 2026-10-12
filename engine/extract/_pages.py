@@ -698,7 +698,7 @@ _CSS = """
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
   .orglockup{display:block;line-height:0}
-  .orglockup img{height:34px;width:auto;max-width:100%}
+  .orglockup img{height:40px;width:auto;max-width:100%}
   .theme-dark{display:none}
   :root[data-theme="dark"] .theme-light{display:none}
   :root[data-theme="dark"] .theme-dark{display:block}
@@ -793,18 +793,20 @@ def _site_header(active="") -> str:
     NCRIS lock-up, linking the parent organisation in a new tab; it is the same on every page, and
     a page's contextual status rides the footer instead.
 
-    THE FETCHED ASSETS ARE NAMED. The mark and the lock-up are each a PAIR of same-origin SVGs, one
-    inked for the light ground and one in white for the dark ground; the .theme-light and
-    .theme-dark rules show the one that matches <html data-theme>, and the white files never sit on
-    the light ground. They are served by the portal image beside these pages: not a build-time read
-    and not an external fetch. engine/tests/test_index_pages.py holds the src allow-list to these
-    four files.
+    THE FETCHED ASSETS ARE NAMED. The mark and the lock-up are each a PAIR of same-origin files, one
+    inked for the light ground and one in white for the dark ground: the mark as two SVGs, the
+    lock-up as the AuScope brand kit's own colour and white PNGs, drawn 40px tall, the height of the
+    tabs. The .theme-light and .theme-dark rules show the one that matches <html data-theme>, and the
+    white files never sit on the light ground. They are served by the portal image beside these
+    pages: not a build-time read and not an external fetch. engine/tests/test_index_pages.py holds
+    the src allow-list to these four files.
 
     VERSION SKEW. /vendor/* and /src/* are served from the portal image and the pages tree from the
     data volume, so the two can be a deploy apart. A pages tree that names a file the running image
     does not serve renders alt text in place of a mark and loses its appearance script, so the
-    portal image goes out first, and /vendor/auscope/auscope-mark.svg and /src/theme.js each
-    answering 200 is the check before the pages tree is swapped.
+    portal image goes out first, and /vendor/auscope/auscope-mark.svg,
+    /vendor/auscope-ncris-colour.png and /src/theme.js each answering 200 is the check before the
+    pages tree is swapped.
 
     The mark is a fixed 30x30 box inside the zero-basis .hleft zone, so the identity block cannot
     move the centre tab group: a zero-basis side hands its leftover space out evenly whatever it
@@ -827,7 +829,7 @@ def _site_header(active="") -> str:
             '    <a class="about" href="/about.html">About</a>\n'
             '  </div>\n'
             '  <div class="hzone hright">\n'
-            '    <a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope/auscope-ncris-lockup.svg" alt="AuScope and NCRIS" width="226" height="48"><img class="theme-dark" src="/vendor/auscope/auscope-ncris-lockup-white.svg" alt="AuScope and NCRIS" width="226" height="48"></a>\n'
+            '    <a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a>\n'
             '  </div>\n'
             "</header>\n")
 
