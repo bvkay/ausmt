@@ -14,13 +14,15 @@ function themeToken(name){
   return typeof getComputedStyle==="function"?getComputedStyle(document.documentElement).getPropertyValue(name).trim():"";}
 function resolvedTheme(){return document.documentElement.getAttribute("data-theme")==="dark"?"dark":"light";}
 // The two pmtiles layers state the SAME credit and Leaflet prints it once: they are one basemap split at
-// the z7 crossover, drawn in the flavour of the resolved theme and remounted when it changes.
+// the z7 crossover, drawn in the flavour of the resolved theme and remounted when it changes. The new pair
+// is added before the old pair leaves, or the region layer's minZoom alone would snap the view to z7.
 let _basemap=[];
 function mountBasemap(flavor){
-  _basemap.forEach(l=>map.removeLayer(l));
-  _basemap=[
+  const next=[
     protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor,lang:"en",maxZoom:7,maxDataZoom:6,attribution:_PM_CREDIT}).addTo(map),
     protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor,lang:"en",minZoom:7,maxZoom:18,maxDataZoom:15,attribution:_PM_CREDIT}).addTo(map)];
+  _basemap.forEach(l=>map.removeLayer(l));
+  _basemap=next;
 }
 if(_bmCfg.provider==="pmtiles"&&window.protomapsL){
   mountBasemap(resolvedTheme());

@@ -4774,8 +4774,10 @@ headless harness with no stylesheet reads every token empty, which is why the re
 The two pmtiles layers state the SAME credit and Leaflet prints it once: they are one basemap split at
 the z7 crossover. The protomaps renderer paints a named flavour, so the pair is built by one
 function that takes it: "light" when data-theme is light and "dark" when it is dark, mounted at start
-in the resolved theme and remounted on "ausmt:theme" (the old pair is removed first, and the credit
-text is identical, so the attribution control still prints it once). The CARTO fallback is a raster
+in the resolved theme and remounted on "ausmt:theme" (the new pair is added before the old pair is
+removed, because once the world layer is gone the region layer's minZoom of 7 is the map's only floor
+and Leaflet snaps a wider view to it; the credit text is identical, so the attribution control still
+prints it once). The CARTO fallback is a raster
 and keeps its light tiles. Pinned by tests/test_map_theme.py and driven by tools/map_theme_test.js.
 ```
 
