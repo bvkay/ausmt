@@ -85,7 +85,8 @@ handler; the appearance control in the footer is wired by the script through its
 
 The stylesheet opens with the portal's token block: the house style in `:root` and the dark
 appearance in `:root[data-theme="dark"]`, which restates only what differs. Every chrome colour on
-a page is one of these tokens, never a literal.
+a page is one of these tokens; the fetch dialog's scrim and drop shadow are the only colour values
+written outside the block.
 
 | Token | Used for |
 |---|---|
@@ -99,6 +100,8 @@ a page is one of these tokens, never a literal.
 | `--lpmt`, `--bbmt`, `--amt`, `--gds` | the data-type ramp, identical in both appearances |
 | `--map-panel`, `--map-line`, `--coast-fill`, `--coast-line` | the map panels and the coastline |
 | `--dot-edge` | the edge every station mark is stroked with |
+| `--ok` | the time-series availability marks |
+| `--part` | the embargo notice's border |
 
 A card is a `--surface` box with a 1px `--line` border, a 4px corner radius and the `--shadow`
 token, which is a soft shadow in the light appearance and none in the dark. The type stack is
