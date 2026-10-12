@@ -102,8 +102,9 @@ INDEX_STATUS = ('<div class="counts" id="footerCounts"><span id="countSlot" titl
 # A generated page's status, as a probe the engine's footer must carry verbatim before the control.
 ENGINE_STATUS = '<span class="counts">probe status</span>'
 
-# The lock-up that once filled the right region. The file stays committed as its rights holder
-# published it and no footer names it; see portal/vendor/README.md, which records the same facts.
+# The white lock-up that once filled the right region. It is now the header's theme-dark lock-up,
+# committed as its rights holder published it, and no footer names it; portal/vendor/README.md records
+# the same facts.
 LOGO_SRC = "/vendor/auscope-ncris-white.png"
 LOGO_SHA256 = "595a564ece1151d94347331c1521381df987da437aa3080cff47a5280cf818f6"
 LOGO_BYTES = 35628
@@ -356,10 +357,11 @@ def test_the_surfaces_agree_on_where_the_footer_points():
         f"the engine footer's MTCAT link must target {MTCAT}")
 
 
-def test_the_retired_lockup_png_stays_committed_unaltered_and_unreferenced():
-    """The PNG lock-up left the footer for the vector pair in the header, and it STAYS committed as
-    its rights holder published it. FAILS if the file is missing or its bytes change (a resize, a
-    re-encode, a recolour, a metadata strip), or if any footer names it again."""
+def test_the_white_lockup_png_stays_committed_unaltered_and_out_of_every_footer():
+    """The white PNG lock-up left the footer for the header's right zone, where it is the theme-dark
+    variant, and it is committed as its rights holder published it. FAILS if the file is missing or
+    its bytes change (a resize, a re-encode, a recolour, a metadata strip), or if any footer names it
+    again."""
     path = ROOT / LOGO_SRC.lstrip("/")
     assert path.is_file(), f"{LOGO_SRC} stays committed"
     raw = path.read_bytes()
@@ -374,12 +376,12 @@ def test_the_retired_lockup_png_stays_committed_unaltered_and_unreferenced():
         f"{LOGO_SRC}: expected 8-bit RGBA (colour type 6), found bit depth {raw[24]} type {raw[25]}")
     name = LOGO_SRC.rsplit("/", 1)[-1]
     for where in _PORTAL_PAGES:
-        assert name not in _foot(where), f"{where}: the footer names the retired lock-up {name}"
+        assert name not in _foot(where), f"{where}: the footer names the lock-up {name}"
 
 
-def test_the_engine_footer_does_not_name_the_retired_lockup():
+def test_the_engine_footer_does_not_name_the_white_lockup():
     name = LOGO_SRC.rsplit("/", 1)[-1]
-    assert name not in _foot(ENGINE), f"{ENGINE}: the footer names the retired lock-up {name}"
+    assert name not in _foot(ENGINE), f"{ENGINE}: the footer names the lock-up {name}"
 
 
 def _no_external_fetch(where, footer_html, sheet):

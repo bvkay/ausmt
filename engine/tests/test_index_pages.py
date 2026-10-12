@@ -155,14 +155,14 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 # no OTHER path may either. The lists below are EXACT and ORDERED, so an extra asset, or the same
 # asset in the wrong slot, fails.
 #
-# The header carries two marks, each as a PAIR of files: the AuScope mark opening the left zone and
-# the AuScope and NCRIS lock-up closing the right zone, each inked for the light ground and in white
-# for the dark ground (portal/vendor/auscope/PROVENANCE.md: the white files sit on dark grounds
-# only). The theme rules show one file of each pair, but the markup names all four. The footer
-# fetches nothing: its right region is the page's status and the appearance control, both inline.
+# The header carries two marks, each as a PAIR of files: the AuScope mark opening the left zone, as
+# two SVGs, and the AuScope and NCRIS lock-up closing the right zone, as the brand kit's colour and
+# white PNGs. Each pair has a file for the light ground and a white one for the dark ground
+# (portal/vendor/auscope/PROVENANCE.md: the white files sit on dark grounds only). The theme rules
+# show one file of each pair, but the markup names all four. The footer fetches nothing: its right
+# region is the page's status and the appearance control, both inline.
 ALLOWED_HEADER_SRCS = ["/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg",
-                       "/vendor/auscope/auscope-ncris-lockup.svg",
-                       "/vendor/auscope/auscope-ncris-lockup-white.svg"]
+                       "/vendor/auscope-ncris-colour.png", "/vendor/auscope-ncris-white.png"]
 ALLOWED_FOOTER_SRCS = []
 ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
 
@@ -858,10 +858,10 @@ HEADER_MARKS = ('<img class="brandmark theme-light" src="/vendor/auscope/auscope
                 'alt="AuScope" width="30" height="30"><img class="brandmark theme-dark" '
                 'src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="30" height="30">')
 HEADER_LOCKUP = (f'<a class="orglockup" href="{AUSCOPE_URL}" {NEW_TAB}>'
-                 '<img class="theme-light" src="/vendor/auscope/auscope-ncris-lockup.svg" '
-                 'alt="AuScope and NCRIS" width="226" height="48"><img class="theme-dark" '
-                 'src="/vendor/auscope/auscope-ncris-lockup-white.svg" alt="AuScope and NCRIS" '
-                 'width="226" height="48"></a>')
+                 '<img class="theme-light" src="/vendor/auscope-ncris-colour.png" '
+                 'alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" '
+                 'src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" '
+                 'width="1919" height="325"></a>')
 
 # The footer's appearance control, the SPA's own block character for character. Its separator is
 # U+00B7, built from the code point so a mis-decoded read of this file cannot pass a hyphen.
@@ -1230,9 +1230,10 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
 
 
 def test_the_header_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
-    """The lock-up files are 226x48 vectors; what a reader sees is a 34px-high mark, and the width
-    follows from the height. The anchor is a line-height:0 block, so the image box is the zone's
-    content and no line box adds a descender under it.
+    """The lock-up files are the brand kit's 1919x325 PNGs; what a reader sees is a 40px-high mark,
+    the height of the tabs beside it, and the width follows from the height. The anchor is a
+    line-height:0 block, so the image box is the zone's content and no line box adds a descender
+    under it.
 
     FAILS IF the height rule goes (every page would paint the file at its intrinsic size), if the
     width stops following the height, if the max-width cap is lost (it is what holds the lock-up
@@ -1244,7 +1245,7 @@ def test_the_header_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
             f"{rel}: the lock-up anchor must be one line-height:0 block"
         m = re.search(r"\.orglockup img\{([^}]*)\}", css)
         assert m, f"{rel}: the header lock-up carries no sizing rule"
-        assert m.group(1) == "height:34px;width:auto;max-width:100%", \
+        assert m.group(1) == "height:40px;width:auto;max-width:100%", \
             f"{rel}: the lock-up rule must be the SPA's own: {m.group(1)!r}"
         assert ".orglogo" not in css, f"{rel}: the footer lock-up's rules must not come back"
 
@@ -1369,10 +1370,10 @@ def test_no_page_kind_carries_the_auscope_org_mark_in_its_header(built):
             f"{rel}: the right zone stays, holding the lock-up")
 
 
-# The site's raster AuScope files. They stay committed for the consumers that need them (the link
-# preview cards' lock-up is cut from the NCRIS file), and no page in this tier names either of them:
-# the chrome and the collection figure draw the vector pairs under /vendor/auscope/.
-LEGACY_ORG_ASSETS = ("auscope-icon-white.png", "auscope-ncris-white.png")
+# The site's raster AuScope icon. It stays committed for the consumers that need it (the docs
+# sidebar copy and the social card are made from it), and no page in this tier names it: the chrome
+# and the collection figure draw the vector mark pair under /vendor/auscope/.
+LEGACY_ORG_ASSETS = ("auscope-icon-white.png",)
 
 # The raster colour icon, which this tier must NOT grow either. It is committed and unreferenced by
 # the site chrome on every surface; asserted rather than assumed, because a brand file is exactly
@@ -1389,32 +1390,35 @@ def test_no_page_kind_draws_the_spa_maps_colour_watermark(built):
             f"{rel}: the AuScope colour icon is unreferenced by the site chrome and belongs to no "
             "page in this tier; the collection figure draws the vector mark pair")
 
-# How often each vector file is NAMED per page kind: once in the header for every kind, and the mark
+# How often each AuScope file is NAMED per page kind: once in the header for every kind, and the mark
 # pair once more on the collection page, whose member-footprint figure carries it as a caption.
 # The mark pin above counts the whole literal and the src allow-list holds each kind's src
 # attributes exactly and in order; neither bounds how often a file is NAMED, so a url() in the inline
 # CSS or a preload link would carry it a second time and pass both.
-VECTOR_ASSETS = ("auscope/auscope-mark.svg", "auscope/auscope-mark-white.svg",
-                 "auscope/auscope-ncris-lockup.svg", "auscope/auscope-ncris-lockup-white.svg")
+VECTOR_ASSETS = ("auscope/auscope-mark.svg", "auscope/auscope-mark-white.svg")
 VECTOR_ASSET_PER_KIND = {"collections/idxcoll.html": {"auscope/auscope-mark.svg": 2,
                                                       "auscope/auscope-mark-white.svg": 2}}
+# The lock-up pair, the brand kit's PNGs, named exactly once on every page kind: in the header and
+# nowhere else. Counted by file name, so a url() or a preload in any quoting form counts too.
+RASTER_ASSETS = ("auscope-ncris-colour.png", "auscope-ncris-white.png")
 
 
-def test_no_page_kind_names_a_raster_auscope_file(built):
-    """FAILS IF any generated page names the raster AuScope icon or lock-up, in any slot. It would
-    also fail the src allow-list, but only as an unexplained count; this says which file and why it
-    may not be here."""
+def test_no_page_kind_names_the_raster_auscope_icon(built):
+    """FAILS IF any generated page names the raster AuScope icon, in any slot. It would also fail the
+    src allow-list, but only as an unexplained count; this says which file and why it may not be
+    here. The white lock-up PNG, which this pin once kept off every page as well, is now the header's
+    theme-dark lock-up on every page, held below by its count and by the header literal."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         for asset in LEGACY_ORG_ASSETS:
             assert asset not in page, (
                 f"{rel}: {asset} is unreferenced by the site chrome; this tier draws the vector "
-                "pairs under /vendor/auscope/")
+                "mark pair under /vendor/auscope/ and the lock-up PNGs under /vendor/")
 
 
 def test_no_page_kind_names_an_auscope_file_beyond_the_slots_that_keep_it(built):
-    """FAILS IF a page kind names a vector AuScope file more often than the slots it is entitled
-    to, or loses one. The figure mark is drawn into a panel and the header marks into zones, so on
+    """FAILS IF a page kind names an AuScope file, a vector mark or a lock-up PNG, more often than
+    the slots it is entitled to, or loses one. The figure mark is drawn into a panel and the header marks into zones, so on
     either surface a careless edit adds rather than replaces, and a page naming a file again is a
     mark returning by some other markup while every spelling-scoped pin above still passes."""
     for rel in _kinds(built):
@@ -1424,6 +1428,9 @@ def test_no_page_kind_names_an_auscope_file_beyond_the_slots_that_keep_it(built)
             got = len(re.findall(re.escape(asset) + r'"', page))
             assert got == want, (
                 f"{rel}: {asset} may be named {want} time(s) on this page kind; found {got}")
+        for asset in RASTER_ASSETS:
+            got = page.count(asset)
+            assert got == 1, f"{rel}: {asset} is named once, in the header; found {got}"
 
 
 def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built):

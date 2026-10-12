@@ -461,9 +461,11 @@ ACKNOWLEDGEMENT = (
     "Data Portal (https://ausmt.auscope.org.au), enabled by AuScope and the Australian Government "
     "via the National Collaborative Research Infrastructure Strategy (NCRIS).")
 
-LOCKUP_LIGHT = "/vendor/auscope/auscope-ncris-lockup.svg"
-LOCKUP_DARK = "/vendor/auscope/auscope-ncris-lockup-white.svg"
+# The brand kit's lock-up pair, the files every header carries, at the artwork's intrinsic size.
+LOCKUP_LIGHT = "/vendor/auscope-ncris-colour.png"
+LOCKUP_DARK = "/vendor/auscope-ncris-white.png"
 LOCKUP_ALT = "AuScope and NCRIS"
+LOCKUP_SIZE = 'width="1919" height="325"'
 
 
 def _sections():
@@ -596,15 +598,17 @@ def test_no_auscope_anchor_on_this_page_is_left_half_paired():
 
 def test_section_two_carries_the_lockup_pair_the_header_already_ships():
     """The lock-up in the body is the SAME pair of committed files every header on this site carries,
-    named by the same root-relative paths: Royal Blue for the light theme and white for the dark, of
-    which the theme switch shows one. FAILS if it points at a second copy or at a different artwork
-    (two files are two things to keep in step, and the official mark is not ours to redraw), if it
-    falls back to the white PNG, which would sit on the light ground, if a variant loses its alt text,
-    or if either drops the intrinsic size attributes that reserve its box before it loads.
+    named by the same root-relative paths: the brand kit's colour PNG for the light theme and its white
+    PNG for the dark, of which the theme switch shows one. FAILS if it points at a second copy or at a
+    different artwork (two files are two things to keep in step, and the official mark is not ours to
+    redraw), if the white PNG appears in any slot but the theme-dark variant, where it would sit on the
+    light ground, if a variant loses its alt text, or if either stops declaring the artwork's intrinsic
+    1919 by 325, which reserves its box at the artwork's own proportion before it loads.
 
-    The width is set in the page: max-width:100% is what keeps it inside a narrow column once the
-    declared width does not fit, and the wrapper takes no line box of its own, so the theme switch can
-    show either variant without a descender gap under it."""
+    The width is set in the page, 320px, and height:auto lets the height follow it: without that the
+    declared 325 would stand as the height and stretch the artwork. max-width:100% is what keeps it
+    inside a narrow column once the declared width does not fit, and the wrapper takes no line box of
+    its own, so the theme switch can show either variant without a descender gap under it."""
     who = _section("who")
     m = re.search(r'<p class="bodylockup">(.*?)</p>', who, re.S)
     assert m, "section 2 must carry the AuScope-NCRIS lock-up"
@@ -614,10 +618,12 @@ def test_section_two_carries_the_lockup_pair_the_header_already_ships():
         assert f'class="{cls}"' in tag and f'src="{src}"' in tag, (
             f"the body lock-up's {cls} variant must name {src}, got {tag!r}")
         assert f'alt="{LOCKUP_ALT}"' in tag, f"the lock-up must carry its alt text, got {tag!r}"
-        assert re.search(r'width="\d+" height="\d+"', tag), (
-            f"the lock-up must declare its intrinsic size, got {tag!r}")
+        assert LOCKUP_SIZE in tag, f"the lock-up must declare its intrinsic {LOCKUP_SIZE}, got {tag!r}"
         assert (ROOT / src.lstrip("/")).is_file(), f"section 2 names {src}, which the portal does not ship"
-    assert "auscope-ncris-white.png" not in who, "the white PNG sits on dark grounds only"
+    white = [tag for tag in re.findall(r"<img [^>]*>", who) if LOCKUP_DARK in tag]
+    assert len(white) == 1 and 'class="theme-dark"' in white[0], (
+        f"the white PNG sits on dark grounds only: section 2 names it once, as the theme-dark "
+        f"variant, got {white!r}")
     header = RAW.split("<header>", 1)[1].split("</header>", 1)[0]
     assert LOCKUP_LIGHT in header and LOCKUP_DARK in header, (
         "the body lock-up and the header's must be the same pair; the header no longer names it")
@@ -626,7 +632,10 @@ def test_section_two_carries_the_lockup_pair_the_header_already_ships():
     rule = re.search(r"(?m)^\s*\.bodylockup img\{([^}]*)\}", RAW)
     assert rule, "the body lock-up must carry its own sizing rule"
     body = rule.group(1)
-    assert re.search(r"(?:^|;)width:\d+px", body), f"the lock-up must declare a body width, got {body!r}"
+    assert re.search(r"(?:^|;)width:320px(?:;|$)", body), (
+        f"the lock-up must declare its 320px body width, got {body!r}")
+    assert re.search(r"(?:^|;)height:auto(?:;|$)", body), (
+        f"the height must follow the width, or the declared 325 stretches the artwork, got {body!r}")
     assert "max-width:100%" in body, (
         f"the lock-up must not outgrow a narrow reading column, got {body!r}")
     assert "display" not in body, (

@@ -31,8 +31,14 @@ The tab group's zone grows the same way, in whole tab rows:
 That second expression is why the nav container's flex-wrap is a term of the HEIGHT and not a detail
 of the nav's own layout. A nowrap container pins rows at 1 and holds the header short while the tabs
 overrun the zone sideways instead; a wrapping one stacks them and the header grows by a whole tab
-row. Measured at 375px, one declaration apart: 220px with the wrap, 174px without it, and without it
+row. Measured at 375px, one declaration apart: 260px with the wrap, 214px without it, and without it
 the tab group's right edge lands at 366px against a 357px content edge.
+
+The third zone cannot grow: it is the AuScope and NCRIS lock-up alone, at a DECLARED height equal to
+the tabs' floor, so beside the tab row it is never the tallest zone, and under 760px, where the zones
+stack, its row is exactly that declared height:
+
+    hright  = lock-up height = tab min-height
 
 Every term in these expressions is a DECLARED constant except the intrinsic text widths, which are a
 property of the font stack and are already pinned pairwise next door. This file pins the declared
@@ -119,6 +125,7 @@ def _fingerprint(where, text, is_pages):
     wordmark = _rule(text, r"(?m)^\s*\.wordmark\{([^}]*)\}", where, ".wordmark")
     tagline = _rule(text, r"(?m)^\s*\.tagline\{([^}]*)\}", where, ".tagline")
     tab = _rule(text, tab_sel, where, "nav tab")
+    lockup = _rule(text, r"(?m)^\s*\.orglockup img\{([^}]*)\}", where, ".orglockup img")
 
     found = re.findall(r"(?m)^\s*" + re.escape(MARK_RULE) + r"\{([^}]*)\}", text)
     assert len(found) == 1, (
@@ -153,6 +160,9 @@ def _fingerprint(where, text, is_pages):
         # The floor under the whole header: while the identity block fits on one line, the tab
         # boxes are the tallest thing in the header and this is the number that shows.
         "tab min-height": _decl(tab, "min-height", where, "nav tab"),
+        # The right zone's one item: its declared height is the zone's height, and under 760px the
+        # height of a stacked row of its own.
+        "lockup height": _decl(lockup, "height", where, ".orglockup img"),
         # The nav CONTAINER's wrap, which decides how many ROWS of tab boxes the centre zone
         # holds. Each row is a tab min-height, so at any viewport too narrow for one row this is
         # the term that sets max(zone heights), and it is declared rather than left to the
@@ -205,3 +215,15 @@ def test_the_identity_block_can_still_wrap_on_every_surface():
         assert "nowrap" not in tagline, (
             f"{where}: the tagline must not be pinned to one line with white-space:nowrap; on a "
             f"narrow viewport it would overflow the header instead of wrapping, got {tagline!r}")
+
+
+def test_the_lockup_is_as_tall_as_the_tabs_on_every_surface():
+    """The lock-up's declared height is the tabs' floor, 40px, on every surface. FAILS IF the two part:
+    a taller lock-up becomes the tallest zone and grows the header at every width, and a shorter one
+    stops matching the tab row it sits beside. The width is not a term of the height and follows the
+    artwork."""
+    for where, text, is_pages in _surfaces():
+        print_ = _fingerprint(where, text, is_pages)
+        assert print_["lockup height"] == print_["tab min-height"] == "40px", (
+            f"{where}: the lock-up is drawn as tall as the tabs, 40px; got lock-up "
+            f"{print_['lockup height']!r} against tabs {print_['tab min-height']!r}")

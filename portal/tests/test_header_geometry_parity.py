@@ -28,12 +28,14 @@ full-width, which is what keeps three 112px tabs from dragging a 375px page side
 sides must not cost that, so the stacking override is pinned on both surfaces too, AFTER the zone
 rules - the two selectors tie on specificity, and source order is what makes the wrap win.
 """
+import hashlib
 import re
+import struct
 from pathlib import Path
 
-from chrome_contract import (LIGHT, LOCKUP, LOCKUP_DARK, LOCKUP_LIGHT, LOCKUP_RULES, MARK_DARK,
-                             MARK_LIGHT, MARK_PAIR, MARK_RULE, PAGE_IDENTITY, THEME_RULES, flat,
-                             header_inner, header_markup, token_blocks, tokens)
+from chrome_contract import (LIGHT, LOCKUP, LOCKUP_DARK, LOCKUP_LIGHT, LOCKUP_PIXELS, LOCKUP_RULES,
+                             MARK_DARK, MARK_LIGHT, MARK_PAIR, MARK_RULE, PAGE_IDENTITY, THEME_RULES,
+                             flat, header_inner, header_markup, token_blocks, tokens)
 from engine_chrome import site_header
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
@@ -244,14 +246,79 @@ def test_every_surface_opens_its_header_with_the_auscope_mark_pair():
 
 
 def test_the_marks_the_headers_name_are_real_committed_vectors():
-    """FAILS IF a header points at a file the portal does not ship, or at something that is not a
-    vector. Every surface is served from the same origin by the portal image, so one missing file is
+    """FAILS IF a header's mark points at a file the portal does not ship, or at something that is not
+    a vector. Every surface is served from the same origin by the portal image, so one missing file is
     a broken mark on every page of the site at once."""
-    for src in (MARK_LIGHT, MARK_DARK, LOCKUP_LIGHT, LOCKUP_DARK):
+    for src in (MARK_LIGHT, MARK_DARK):
         asset = ROOT / src.lstrip("/")
         assert asset.is_file(), f"the header names {src}, which the portal does not ship"
         body = asset.read_text(encoding="utf-8")
         assert body.lstrip().startswith("<svg") and "<path" in body, f"{src} must be the vector mark"
+
+
+# The lock-up pair as the AuScope brand kit published it ("2025 AuScope Logos"): each file's SHA-256
+# and byte count, the colour file for the light theme and the white file for the dark.
+LOCKUP_FILES = {
+    LOCKUP_LIGHT: ("2025 AuScope-NCRIS Logo - Colour.png",
+                   "249d99861d37a8796acdd1b2eff73aaa4279436cbca31012d65bad9ce1190ec4", 39960),
+    LOCKUP_DARK: ("2025 AuScope-NCRIS Logo - White.png",
+                  "595a564ece1151d94347331c1521381df987da437aa3080cff47a5280cf818f6", 35628),
+}
+
+
+def test_the_lockup_the_headers_name_is_the_brand_kits_png_pair():
+    """FAILS IF a header's lock-up points at a file the portal does not ship, or at bytes that are not
+    the brand kit's file: a resize, a re-encode, a recolour or a metadata strip each change the digest.
+    FAILS too if a file stops being an 8-bit RGBA PNG of the 1919 by 325 the markup declares, because
+    the width and height attributes reserve the box before the image loads and must be its own
+    proportion."""
+    assert set(LOCKUP_FILES) == {LOCKUP_LIGHT, LOCKUP_DARK}
+    for src, (kit_name, digest, size) in LOCKUP_FILES.items():
+        asset = ROOT / src.lstrip("/")
+        assert asset.is_file(), f"the header names {src}, which the portal does not ship"
+        raw = asset.read_bytes()
+        assert raw[:8] == b"\x89PNG\r\n\x1a\n", f"{src} must be a PNG"
+        assert len(raw) == size and hashlib.sha256(raw).hexdigest() == digest, (
+            f"{src} must be the brand kit's {kit_name!r} byte for byte ({size} B, sha256 {digest})")
+        assert struct.unpack(">II", raw[16:24]) == LOCKUP_PIXELS, (
+            f"{src} must be {LOCKUP_PIXELS[0]}x{LOCKUP_PIXELS[1]}, got {struct.unpack('>II', raw[16:24])}")
+        assert raw[24] == 8 and raw[25] == 6, f"{src} must be 8-bit RGBA (PNG colour type 6)"
+        assert (f'src="{src}" alt="AuScope and NCRIS" '
+                f'width="{LOCKUP_PIXELS[0]}" height="{LOCKUP_PIXELS[1]}"') in LOCKUP, (
+            f"the contract lock-up must declare {src} at its intrinsic size")
+
+
+def test_the_vendor_inventory_records_the_lockup_pair():
+    """portal/vendor/README.md is where an operator answers "where did this file come from and is it
+    the one the brand kit published". FAILS IF it stops naming either lock-up file, the kit file it was
+    taken from, its digest or its byte count, the facts the pin above holds against the bytes."""
+    readme = (ROOT / "vendor" / "README.md").read_text(encoding="utf-8")
+    for src, (kit_name, digest, size) in LOCKUP_FILES.items():
+        name = src.rsplit("/", 1)[-1]
+        row = [line for line in readme.splitlines() if line.startswith(f"| `{name}` |")]
+        assert len(row) == 1, f"portal/vendor/README.md must carry one inventory row for {name}"
+        for fact in (kit_name, digest, f"{size} B", f"{LOCKUP_PIXELS[0]}x{LOCKUP_PIXELS[1]}"):
+            assert fact in row[0], f"the README's row for {name} must record {fact!r}: {row[0]!r}"
+
+
+# The cuts from the AuScope Style Guide that stood in for the brand kit's files. The guide's page
+# carried the mark without Tasmania, so they are gone from the tree and no surface may name them.
+RETIRED_CUTS = ("auscope-logo.svg", "auscope-logo-white.svg", "auscope-ncris-lockup.svg",
+                "auscope-ncris-lockup-white.svg")
+
+
+def test_no_surface_names_the_retired_style_guide_cuts():
+    """FAILS IF a cut comes back to vendor/auscope/, or if any chrome page, the engine's emitter or the
+    drawer's figure names one: a header restored from an earlier revision names two of them at once."""
+    for name in RETIRED_CUTS:
+        assert not (ROOT / "vendor" / "auscope" / name).exists(), (
+            f"vendor/auscope/{name} is retired; the header draws the brand kit's files")
+    surfaces = [(f"portal/{p.name}", p.read_text(encoding="utf-8")) for p in _chrome_pages()]
+    surfaces += [("engine/extract/_pages.py", PAGES_PY.read_text(encoding="utf-8")),
+                 ("portal/src/drawer.js", (ROOT / "src" / "drawer.js").read_text(encoding="utf-8"))]
+    for where, text in surfaces:
+        for name in RETIRED_CUTS:
+            assert name not in text, f"{where}: names the retired cut {name}"
 
 
 def test_no_header_carries_the_ausmt_product_mark():
@@ -453,7 +520,7 @@ ORG_ASSET_PER_PAGE = 0
 
 def test_no_chrome_page_names_the_auscope_image_at_all():
     """FAILS IF a chrome page carries the AuScope icon PNG in any slot. The site chrome draws the
-    vector marks; the PNG is a committed file that no page names."""
+    vector mark pair and the lock-up PNGs; the icon PNG is a committed file that no page names."""
     pages = _chrome_pages()
     assert pages, "no chrome page was discovered; the glob or the header marker has moved"
     for page in pages:
