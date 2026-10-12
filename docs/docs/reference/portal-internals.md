@@ -5855,3 +5855,27 @@ Coordinates are [longitude, latitude] in WGS84. `coast` is an array of closed ri
 `borders` is an array of open polylines. collScatter projects both through the SAME fixed-Australia
 transform it uses for the station dots, so the outline stays registered to the dots automatically.
 ```
+
+## portal/src/theme.js
+
+The appearance script. It runs synchronously as the first script in every page's head, static and
+engine-generated alike, and writes the resolved theme to `html[data-theme]` before the first paint so
+nothing flashes. It is an external file because the deployed Content Security Policy allows no inline
+script (`script-src 'self'`), and for the same reason no control it serves carries an inline handler.
+
+The stored choice is `localStorage["ausmt_theme"]`, one of `light`, `dark` or `system`; anything else,
+including no entry at all, means `light`, because the AuScope house style is the site's default face.
+`system` resolves through `prefers-color-scheme` and follows it live. The
+stylesheets key on the resolved attribute alone (`:root[data-theme="dark"]` carries the second token
+block), so a page needs no media query of its own.
+
+Controls need no script of their own. Any element with `data-theme-choice="light|dark|system"` sets the
+choice on click (the footer's Light and Dark control on every page), and radio inputs named
+`welcomeTheme` set it on change (the welcome dialog's Appearance row); a choice made there is saved at
+once, independently of the dialog's own "don't show this again" state. Whenever the choice is applied,
+every such control is brought back in step (`aria-pressed` on the buttons, `checked` on the radios).
+
+When the resolved theme changes, the script dispatches `ausmt:theme` on `document` with
+`detail.theme`, which is the hook for anything drawn outside CSS: map.js re-mounts the basemap in the
+other flavour and restyles the dot edges from the `--dot-edge` token. `window.AusmtTheme` exposes
+`get()` (the stored choice), `resolved()` and `set(choice)` for the same callers.
