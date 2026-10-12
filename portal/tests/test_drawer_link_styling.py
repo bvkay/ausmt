@@ -3,8 +3,9 @@
 The grid shipped with THREE anchor sites that no CSS rule ever coloured - the tile identifier links
 (.dl-id), the "Levels per Rees et al. 2019" citation link (.dl-cite) and the instruments platform-PID link
 (.dl-instr). With no author colour declared they fell back to the user agent's link colours, which on the
-navy (--panel-2 #1E2B4F) tiles are a near-invisible dark blue, going browser-purple once followed. It is
-the same defect the `.meta td a` rule already fixed for the summary tables, and it takes the same fix.
+dark theme's navy (--surface-2 #1E2B4F) tiles are a near-invisible dark blue, going browser-purple once
+followed. It is the same defect the `.meta td a` rule already fixed for the summary tables, and it takes
+the same fix.
 
 WHAT EACH LAYER PROVES (the three are deliberately different failure modes, not three spellings of one):
 

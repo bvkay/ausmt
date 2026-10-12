@@ -299,8 +299,8 @@ function setSidebarCollapsed(collapsed){
 function showLoadError(){
   var overFile=(location.protocol==="file:");
   document.getElementById("content").innerHTML = overFile
-    ? "<p style=\"padding:24px;color:#E8EDF1\">Could not load data/*.json: pages opened from disk cannot fetch data. Serve over HTTP (e.g. <code>python3 -m http.server</code>).</p>"
-    : "<p style=\"padding:24px;color:#E8EDF1\">The catalogue data isn't available yet (data/*.json not found on this server). If you operate this deployment: no data build is published; run the build pipeline (<code>make rebuild-data</code>) to publish one.</p>";
+    ? "<p style=\"padding:24px;color:var(--text)\">Could not load data/*.json: pages opened from disk cannot fetch data. Serve over HTTP (e.g. <code>python3 -m http.server</code>).</p>"
+    : "<p style=\"padding:24px;color:var(--text)\">The catalogue data isn't available yet (data/*.json not found on this server). If you operate this deployment: no data build is published; run the build pipeline (<code>make rebuild-data</code>) to publish one.</p>";
 }
 function portalIsEmpty(){return !Array.isArray(CAT)||CAT.length===0;}
 function showEmptyState(){

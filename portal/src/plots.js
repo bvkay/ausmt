@@ -20,9 +20,9 @@ function sqs(per,vals,x,y,c){return per.map((p,i)=>vals[i]==null||!isFinite(y(va
 function ebars(per,vals,errs,x,y,c,lo,hi){if(!errs)return"";return per.map((p,i)=>{const v=vals[i],e=errs[i];
     if(v==null||e==null||!(e>0))return"";const y1=y(hi(v,e)),y0=y(lo(v,e));if(!isFinite(y0)||!isFinite(y1))return"";
     const xx=x(p).toFixed(1);return `<line x1="${xx}" y1="${y0.toFixed(1)}" x2="${xx}" y2="${y1.toFixed(1)}" stroke="${c}" stroke-width=".8" stroke-opacity=".55"/>`;}).join("");}
-function frame(H,x,per,yl){let g=`<rect x="${PADL}" y="4" width="${W-PADL-PADR}" height="${H-22}" fill="none" stroke="#2B3557"/>`;
-  decades(per).forEach(d=>{g+=`<line x1="${x(d)}" y1="4" x2="${x(d)}" y2="${H-18}" stroke="#2B3557" stroke-dasharray="2,3"/><text x="${x(d)}" y="${H-6}" fill="#8FA3B0" font-size="11" text-anchor="middle" font-family="monospace">${supTen(Math.round(Math.log10(d)))}</text>`;});
-  yl.forEach(([yy,t])=>g+=`<text x="${PADL-4}" y="${yy+3}" fill="#8FA3B0" font-size="11" text-anchor="end" font-family="monospace">${t}</text>`);return g;}
+function frame(H,x,per,yl){let g=`<rect x="${PADL}" y="4" width="${W-PADL-PADR}" height="${H-22}" fill="none" style="stroke:var(--line)"/>`;
+  decades(per).forEach(d=>{g+=`<line x1="${x(d)}" y1="4" x2="${x(d)}" y2="${H-18}" style="stroke:var(--line)" stroke-dasharray="2,3"/><text x="${x(d)}" y="${H-6}" style="fill:var(--muted)" font-size="11" text-anchor="middle" font-family="monospace">${supTen(Math.round(Math.log10(d)))}</text>`;});
+  yl.forEach(([yy,t])=>g+=`<text x="${PADL-4}" y="${yy+3}" style="fill:var(--muted)" font-size="11" text-anchor="end" font-family="monospace">${t}</text>`);return g;}
 function rhoSvg(t){const per=t[T.periods];if(!per.length)return"";const vals=[...t[T.rho_xy],...t[T.rho_yx]].filter(v=>v!=null&&v>0);if(!vals.length)return"";
   const H=118,x=xScale(per);let lo=Math.floor(Math.log10(Math.min(...vals))),hi=Math.ceil(Math.log10(Math.max(...vals)));if(hi<=lo)hi=lo+1;
   const y=v=>4+(hi-Math.log10(v))/(hi-lo)*(H-26);const yl=[];for(let d=lo;d<=hi;d++)yl.push([y(10**d),supTen(d)]);
@@ -40,7 +40,7 @@ function phaseSvg(t){const per=t[T.periods];if(!per.length)return"";if(!t[T.phs_
   // value (the error is orientation-independent). See docs: portal internals, plots.js.
   const plo=(v,e)=>v-e,phi=(v,e)=>v+e;
   return svgOpen(W,H)+frame(H,x,per,[[y(0),"0"],[y(45),"45"],[y(90),"90"]])+
-   `<line x1="${PADL}" y1="${y(45)}" x2="${W-PADR}" y2="${y(45)}" stroke="#2B3557" stroke-dasharray="2,3"/>`+
+   `<line x1="${PADL}" y1="${y(45)}" x2="${W-PADR}" y2="${y(45)}" style="stroke:var(--line)" stroke-dasharray="2,3"/>`+
    ebars(per,t[T.phs_xy],t[T.phs_xy_err],x,y,"#EF7256",plo,phi)+ebars(per,t[T.phs_yx_adj],t[T.phs_yx_err],x,y,"#2E8FA3",plo,phi)+
    `<path d="${path(per,t[T.phs_xy],x,y)}" fill="none" stroke="#EF7256" stroke-width="1.1"/>`+dots(per,t[T.phs_xy],x,y,"#EF7256")+
    `<path d="${path(per,t[T.phs_yx_adj],x,y)}" fill="none" stroke="#2E8FA3" stroke-width="1.1"/>`+sqs(per,t[T.phs_yx_adj],x,y,"#2E8FA3")+`</svg>`;}
@@ -65,24 +65,24 @@ function arrowSvg(t){const per=t[T.periods];if(!per.length)return"";
   });
   // |T| = 0.5 unit-scale reference arrow (points north/up) in the top-left corner, at the SAME scale.
   const refx=PADL+6,ref=0.5,refTail=18;
-  const legend=arrow(refx,refTail+ref*scale,0,ref,scale,"#8FA3B0","1.1")+
-    `<text x="${(refx+5).toFixed(1)}" y="${(refTail-2).toFixed(1)}" fill="#8FA3B0" font-size="10" font-family="monospace">|T|=0.5</text>`;
+  const legend=arrow(refx,refTail+ref*scale,0,ref,scale,"var(--muted)","1.1")+
+    `<text x="${(refx+5).toFixed(1)}" y="${(refTail-2).toFixed(1)}" style="fill:var(--muted)" font-size="10" font-family="monospace">|T|=0.5</text>`;
   return svgOpen(W,H)+
-   `<line x1="${PADL}" y1="${base}" x2="${W-PADR}" y2="${base}" stroke="#2B3557"/>`+
-   decades(per).map(d=>`<text x="${x(d)}" y="${H-4}" fill="#8FA3B0" font-size="11" text-anchor="middle" font-family="monospace">${supTen(Math.round(Math.log10(d)))}</text>`).join("")+
+   `<line x1="${PADL}" y1="${base}" x2="${W-PADR}" y2="${base}" style="stroke:var(--line)"/>`+
+   decades(per).map(d=>`<text x="${x(d)}" y="${H-4}" style="fill:var(--muted)" font-size="11" text-anchor="middle" font-family="monospace">${supTen(Math.round(Math.log10(d)))}</text>`).join("")+
    legend+g+
-   `<rect x="${W-70}" y="2" width="8" height="8" fill="${REAL}"/><text x="${W-58}" y="9" fill="#8FA3B0" font-size="10">real</text>`+
-   `<rect x="${W-38}" y="2" width="8" height="8" fill="${IMAG}"/><text x="${W-26}" y="9" fill="#8FA3B0" font-size="10">imag</text>`+
+   `<rect x="${W-70}" y="2" width="8" height="8" fill="${REAL}"/><text x="${W-58}" y="9" style="fill:var(--muted)" font-size="10">real</text>`+
+   `<rect x="${W-38}" y="2" width="8" height="8" fill="${IMAG}"/><text x="${W-26}" y="9" style="fill:var(--muted)" font-size="10">imag</text>`+
    `</svg>`;}
 function betaCol(b){if(b==null)return"#5A6E7D";if(b<=-3)return"#3B82C4";if(b>=3)return"#C44B3B";return"#D8CFC0";}
 function ptSvg(t){const per=t[T.periods];if(!per.length||!t[T.pt_min].some(v=>v!=null))return"";const H=84,x=xScale(per),cy=37,maxR=23;let ell="";
   per.forEach((p,i)=>{const mn=t[T.pt_min][i],mx=t[T.pt_max][i],az=t[T.pt_az][i],b=t[T.pt_beta][i];if(mn==null||mx==null)return;
     const r=mx>0?mn/mx:1;const ry=maxR,rx=Math.max(1.4,maxR*Math.min(1,Math.max(0,r)));   // FIXED scale (MTpy-style): every ellipse's major axis = maxR; only the shape (φmin/φmax) varies
-    ell+=`<ellipse cx="${x(p).toFixed(1)}" cy="${cy}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" transform="rotate(${(az||0).toFixed(1)} ${x(p).toFixed(1)} ${cy})" fill="${betaCol(b)}" fill-opacity=".85" stroke="#11182D" stroke-width=".5"/>`;});
+    ell+=`<ellipse cx="${x(p).toFixed(1)}" cy="${cy}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" transform="rotate(${(az||0).toFixed(1)} ${x(p).toFixed(1)} ${cy})" fill="${betaCol(b)}" fill-opacity=".85" style="stroke:var(--dot-edge)" stroke-width=".5"/>`;});
   return svgOpen(W,H)+
-   `<line x1="${PADL}" y1="${H-18}" x2="${W-PADR}" y2="${H-18}" stroke="#2B3557"/>`+
-   decades(per).map(d=>`<text x="${x(d)}" y="${H-6}" fill="#8FA3B0" font-size="11" text-anchor="middle" font-family="monospace">${supTen(Math.round(Math.log10(d)))}</text>`).join("")+ell+
-   `<rect x="${PADL}" y="2" width="8" height="8" fill="#3B82C4"/><text x="${PADL+11}" y="9" fill="#8FA3B0" font-size="10">β≤−3</text><rect x="${PADL+48}" y="2" width="8" height="8" fill="#D8CFC0"/><text x="${PADL+59}" y="9" fill="#8FA3B0" font-size="10">|β|&lt;3</text><rect x="${PADL+96}" y="2" width="8" height="8" fill="#C44B3B"/><text x="${PADL+107}" y="9" fill="#8FA3B0" font-size="10">β≥3</text></svg>`;}
+   `<line x1="${PADL}" y1="${H-18}" x2="${W-PADR}" y2="${H-18}" style="stroke:var(--line)"/>`+
+   decades(per).map(d=>`<text x="${x(d)}" y="${H-6}" style="fill:var(--muted)" font-size="11" text-anchor="middle" font-family="monospace">${supTen(Math.round(Math.log10(d)))}</text>`).join("")+ell+
+   `<rect x="${PADL}" y="2" width="8" height="8" fill="#3B82C4"/><text x="${PADL+11}" y="9" style="fill:var(--muted)" font-size="10">β≤−3</text><rect x="${PADL+48}" y="2" width="8" height="8" fill="#D8CFC0"/><text x="${PADL+59}" y="9" style="fill:var(--muted)" font-size="10">|β|&lt;3</text><rect x="${PADL+96}" y="2" width="8" height="8" fill="#C44B3B"/><text x="${PADL+107}" y="9" style="fill:var(--muted)" font-size="10">β≥3</text></svg>`;}
 
 // Plot kind registry. Each kind has a heading, an always-visible subline (the convention / axis-key text
 // that must survive VISIBLY for the induction arrows, never hover-only), and an svg builder that takes only the TF

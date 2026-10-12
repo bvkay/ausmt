@@ -13,14 +13,11 @@ Each assertion states its failure criterion:
   * About marked active — FAILS if the centre-zone About link is not rendered in the active state, or if
     any OTHER centre nav item is (only the current page may be active).
   * no APP-STATE counts on a static page: FAILS if about.html carries any of index's live-counts ids
-    (nVis/nSel/nTot). Those three report the current map's filter and selection state, and About has
-    neither. Non-vacuous: index.html HAS these ids, so a naive copy-the-whole-header would trip this.
-    NARROWED by the API docs section, deliberately: the ban once extended to the class "counts",
-    on the reasoning that a static page has no counts to state. That reasoning covered app state only.
-    About now carries a CORPUS-totals block (total stations / total surveys, read from the catalogue at
-    load time) in index's right zone, reusing index's .counts styling so the two headers render
-    identically (see test_header_parity_about_matches_index). The app-state ids remain banned, which is
-    the half of the old assertion that was actually about honesty; the class ban was about styling.
+    (nVis/nSel/nTot) or any counts block at all. Those three report the current map's filter and
+    selection state, and About has neither. Non-vacuous: index.html HAS these ids, in its footer's
+    right zone, so a naive copy-the-whole-footer would trip this. The corpus-totals block About once
+    carried in its header's right zone left with the counts: the header's right zone is the lock-up on
+    every surface, and the footer's on About is the appearance control alone.
   * NO version chip, anywhere. FAILS if any element carrying data-ver-chip survives on any of the
     four documents. The chip was the last of the About-this-build popover's copy: the popover left
     every footer with the one-footer rule, the chip followed it into about.html's #build section,
@@ -138,21 +135,13 @@ def test_about_marked_active_and_no_other_center_nav_is():
 
 def test_about_has_no_live_counts_elements():
     """Live APP-STATE counts are meaningless on a static page: none of index's nVis/nSel/nTot may appear
-    here. The corpus-totals block About does carry is a different claim (catalogue facts, not the current
-    map's filter/selection state) and is pinned separately below; see the module docstring for why the
-    old class-level ban was narrowed."""
+    here, and no counts block of any kind, in the header or the footer."""
     els = _parse(ABOUT)
-    count_ids = {"nVis", "nSel", "nTot"}
+    count_ids = {"nVis", "nSel", "nTot", "countSlot", "footerCounts"}
     id_hits = [a.get("id") for (tag, a, inh) in els if a.get("id") in count_ids]
-    assert not id_hits, (
-        f"about.html must carry no live app-state count ids (nVis/nSel/nTot); found {id_hits}. The "
-        f"header's corpus-totals block states catalogue totals and must not borrow these ids.")
-    # Whatever .counts element About does carry must be the CORPUS one, marked as such.
+    assert not id_hits, f"about.html must carry no live app-state count ids; found {id_hits}"
     counts = [a for (tag, a, inh) in els if "counts" in _classes(a)]
-    assert len(counts) == 1, f"about.html must carry exactly one .counts element; found {len(counts)}"
-    assert "corpus" in _classes(counts[0]), (
-        "about.html's .counts element must carry the 'corpus' marker class: it states catalogue totals, "
-        "not index's live map state, and the two must stay distinguishable at a glance")
+    assert not counts, f"about.html carries no counts block at all; found {len(counts)}"
 
 
 def test_no_portal_document_carries_a_ver_chip():
@@ -233,8 +222,8 @@ def test_mtcat_link_in_footer_not_header_across_pages():
         assert not re.search(r"\bv?\d+\.\d+\b", title), (
             f"{path.name}: the footer MTCAT link title must not hard-code a schema version (it goes stale "
             f"on every bump, and the served document declares its own), got {title!r}")
-        assert "Machine-readable record (MTCAT JSON) ↗" in path.read_text(encoding="utf-8"), (
-            f"{path.name}: the verbatim MTCAT link text must be preserved")
+        assert "MTCAT JSON ↗" in path.read_text(encoding="utf-8"), (
+            f"{path.name}: the footer MTCAT link reads 'MTCAT JSON' with the leaves-the-site arrow")
 
 
 class _HeaderShape(HTMLParser):
@@ -285,13 +274,12 @@ def test_header_parity_about_matches_index():
         about.html's nav items were bare <a href="index.html"> with no ids at all, so About failed this.
         The TAG is deliberately not compared: index's are <button>s that switch app views in place, About
         is static so its must be links. Ids + order + placement are the parity that matters.
-      * CENTRE-ZONE ORDER: FAILS if the five primary items are not in the same order on both pages:
-        Map, Surveys, Collections, About, Contribute. It is five, not six: "How to use AusMT" is cut
-        from every header (the welcome tour and About cover it). The sixth slot is
-        pinned SHUT below, so a header that grows a sixth centre item fails here rather than drifting
-        back.
-      * STATS BLOCK: FAILS if either page's right zone lacks a single .counts element. Non-vacuous: the
-        earlier about.html had an empty .hright, so it failed this half.
+      * CENTRE-ZONE ORDER: FAILS if the four primary items are not in the same order on both pages:
+        Map, Surveys, Collections, About. "How to use AusMT" is cut from every header (the welcome tour
+        and About cover it) and so is "Contribute a survey" (About links it from its own body); a
+        header that grows a fifth centre item, or takes either back, fails here.
+      * THE RIGHT ZONE: FAILS if either page's right zone is not exactly one AuScope and NCRIS
+        lock-up, or still carries a counts block.
       * ACTIVE-PAGE HIGHLIGHT NOT REGRESSED: FAILS if adding the ids also made a view button active on
         About (only the current page may be highlighted) or dropped index's active Map button."""
     idx, abt = _header_shape(INDEX), _header_shape(ABOUT)
@@ -314,20 +302,22 @@ def test_header_parity_about_matches_index():
                 out.append("about")
             elif "about" in _classes(a):
                 out.append("other:" + (a.get("href") or a.get("id") or tag))
-            elif "contribute" in _classes(a):
+            elif "contribute" in _classes(a) or a.get("href") == "add-survey.html":
                 out.append("contribute")
         return out
 
-    expected = ["navMap", "navSurveys", "navCollections", "about", "contribute"]
+    expected = ["navMap", "navSurveys", "navCollections", "about"]
     for name, items in (("index.html", idx), ("about.html", abt)):
         assert centre_order(items) == expected, (
             f"{name}: header items must run {expected}; got {centre_order(items)}")
 
     for name, items in (("index.html", idx), ("about.html", abt)):
+        lockups = [a for (tag, a, in_nav) in items if "orglockup" in _classes(a)]
+        assert len(lockups) == 1, (
+            f"{name}: the header's right zone carries exactly one AuScope and NCRIS lock-up; "
+            f"found {len(lockups)}")
         counts = [a for (tag, a, in_nav) in items if "counts" in _classes(a)]
-        assert len(counts) == 1, (
-            f"{name}: the header must carry exactly one mono stats block (.counts) in its right zone; "
-            f"found {len(counts)}")
+        assert not counts, f"{name}: the counts left the header for the footer; found {len(counts)}"
 
     # Active-page highlight, both directions: index's Map view stays active; About activates NO view
     # button (its current page is marked on the About link, asserted in
@@ -363,32 +353,16 @@ def test_no_page_header_keeps_the_retired_how_to_use_entry():
             f"{path.name}: #howToUse was retired with the help panel it opened")
 
 
-def test_about_corpus_stats_are_fetched_not_hardcoded():
-    """The corpus totals must be READ from the served catalogue, never baked into the HTML, and the block
-    must degrade to invisible when the data cannot be read (file://, an unpublished deployment, an empty
-    build). FAILS if the block ships visible, if the script that fills it is missing or inlined (the
-    deployed CSP for about.html is script-src 'self' with no 'unsafe-inline'), or if a digit is
-    hard-coded into the block's markup."""
-    raw = ABOUT.read_text(encoding="utf-8")
-    assert '<script src="corpus-stats.js"></script>' in raw, (
-        "about.html must load corpus-stats.js as an EXTERNAL script (the deployed strict CSP allows no "
-        "inline script on this page)")
-    assert (ROOT / "corpus-stats.js").exists(), "portal/corpus-stats.js is missing"
-
-    block = [a for (tag, a, inh) in _parse(ABOUT) if "counts" in _classes(a)]
-    assert block and "hidden" in block[0], (
-        "the corpus-totals block must ship hidden and be revealed only once the data resolves, so a "
-        "file:// or unpublished page shows nothing rather than an empty or zero total")
-
-    js = (ROOT / "corpus-stats.js").read_text(encoding="utf-8")
-    assert "catalogue.json" in js and "surveys.json" in js, (
-        "corpus-stats.js must read the totals from catalogue.json + surveys.json")
-    assert ".catch(" in js, "corpus-stats.js must swallow a failed fetch and leave the block hidden"
-    # No fabricated number anywhere in the header block markup: the counts spans must be empty in source.
-    header_src = raw.split("<header>")[1].split("</header>")[0]
-    assert 'id="corpusStations"></b>' in header_src and 'id="corpusSurveys"></b>' in header_src, (
-        "the corpus-total spans must be EMPTY in the served HTML: the numbers can only come from the "
-        "catalogue at load time, never from a hard-coded value that would silently go stale")
+def test_the_corpus_totals_block_and_its_script_are_retired_together():
+    """The corpus totals About, Brand and Releases once carried in their headers' right zone left with
+    the counts, and the script that filled them went with them: a script whose whole job is to fill an
+    element no page carries reaches no reader. FAILS if any page carries the block or its ids again, or
+    if the tree ships or a page loads the script, which is how a half-restored block would come back."""
+    for path in sorted(ROOT.glob("*.html")):
+        raw = path.read_text(encoding="utf-8")
+        for gone in ('id="corpusCounts"', 'id="corpusStations"', 'id="corpusSurveys"', "corpus-stats.js"):
+            assert gone not in raw, f"{path.name}: {gone} is retired with the corpus totals"
+    assert not (ROOT / "corpus-stats.js").exists(), "portal/corpus-stats.js is retired with the block"
 
 
 def test_index_still_has_the_count_ids_the_about_guard_forbids():
@@ -451,18 +425,18 @@ def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_i
 # to y=0 puts the heading underneath it. scroll-margin-top is the clearance, and it was ONE number,
 # 74px, measured at 1280px and applied at every width.
 #
-# That number is only right above about 1096px. The header WRAPS as the viewport narrows, in two
-# ways at once (the identity block drops its tagline onto a second line, the tab group stacks into
-# more rows, and under 760px the three zones each take a full-width row), and it does not shrink
-# monotonically: measured on this document in Chrome at a device scale factor of 1, its height runs
-# 220px below 388, 147px to 614, 111px to 760, 142px to 872 (the zones stop stacking and the tab
-# group takes two rows on a shared line), 104px to 957, 89px to 1095, 74px to 1345 and 57px above
-# that. At 375px a 74px clearance left a heading 146px under the header, which is off the screen.
+# One number is only right in one band. The header WRAPS as the viewport narrows, in several ways at
+# once (the identity block drops its tagline onto a second line, the tab group stacks into more rows,
+# and under 760px the three zones each take a full-width row, the lock-up's included): measured on
+# this document in Chrome at a device scale factor of 1, with the AuScope lock-up in the right zone,
+# its height runs 254px below 384, 208px to 385, 181px to 450, 145px to 760, 104px to 793, 89px to
+# 931, 74px to 1181 and 57px above that. At 375px a 74px clearance would leave a heading 180px under
+# the header, which is off the screen.
 #
 # THE LADDER IS THE MAXIMUM PER BAND, NOT THE EXACT HEIGHT. Overshooting drops the heading a few
 # pixels lower than it needs to be, which a reader will not notice; undershooting hides it, which is
-# the defect. So each band carries the tallest header in its own range, which is why the 615 band
-# reads 142px rather than the 111px the header measures at 615 itself.
+# the defect. So each band carries the tallest header in its own range, which is why the base reads
+# 254px across the two pixels at 384 and 385 where the header measures 208px.
 #
 # THE FAILURE MODE OF DRIFT IS STATED because it cannot be pinned from source alone: these are
 # measurements of THIS header's content at THIS font stack, and a change to the header's wording or
@@ -473,7 +447,7 @@ def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_i
 ANCHOR_VAR = "--about-anchor-offset"
 
 # The measured header height at each pinned width, from the same run the ladder was built from.
-MEASURED_HEADER = {375: 220, 1280: 74}
+MEASURED_HEADER = {375: 254, 1280: 57}
 
 
 # EVERY DECLARATION OF THE VARIABLE IS ACCOUNTED FOR, because a reader that matches only the shape
@@ -579,15 +553,16 @@ def test_every_script_a_page_loads_is_shipped_and_every_page_script_is_loaded():
 
     Read over the page scripts at the top of portal/ and the coastline this repository generates
     into vendor/. Third-party libraries under vendor/ are somebody else's file and are held only by
-    the first direction. FAILS in the other direction too if config.js or corpus-stats.js left
-    about.html: corpus-stats.js reads AUSMT_CONFIG.data_base_url from config.js to find the
-    catalogue the header's totals come from."""
+    the first direction. A root-anchored src (the appearance script every page loads as
+    /src/theme.js, so a document served at any depth finds it) names the same file as its relative
+    spelling. FAILS too if About stops loading the appearance script, or loads config.js, which only
+    the data-reading pages need."""
     loaded = {}
     for path in sorted(ROOT.glob("*.html")):
         for src in re.findall(r'<script[^>]*\bsrc="([^"]+)"', path.read_text(encoding="utf-8")):
             if "://" in src:
                 continue
-            loaded.setdefault(src, []).append(path.name)
+            loaded.setdefault(src.lstrip("/"), []).append(path.name)
     assert loaded, "no page loaded a script, so this pin would pass over nothing"
     absent = ["%s (loaded by %s)" % (src, ", ".join(pages))
               for src, pages in sorted(loaded.items()) if not (ROOT / src).exists()]
@@ -600,10 +575,9 @@ def test_every_script_a_page_loads_is_shipped_and_every_page_script_is_loaded():
         "a page script is shipped and loaded by no page, so it reaches no reader and no visitor:\n"
         + "\n".join(dead))
     text = ABOUT.read_text(encoding="utf-8")
-    assert '<script src="config.js">' in text, (
-        "config.js stays: corpus-stats.js reads AUSMT_CONFIG.data_base_url from it")
-    assert '<script src="corpus-stats.js">' in text, (
-        "the header's corpus totals are filled by corpus-stats.js and must keep their script")
+    assert '<script src="/src/theme.js"></script>' in text, "About loads the appearance script"
+    assert '<script src="config.js">' not in text, (
+        "About reads no data, so it loads no config.js; the pages that do are index.html and releases.html")
 
 
 def test_about_api_card_describes_the_geojson_as_the_served_document_it_now_is():
@@ -631,18 +605,18 @@ def test_about_api_card_describes_the_geojson_as_the_served_document_it_now_is()
         "the API card must link the served GeoJSON document by portal-relative path")
 
 
-def test_the_about_button_carries_the_contribute_button_treatment_on_every_page():
-    """The header's About link wears the same outlined-button style as
-    "Contribute a survey", on every page that renders it, so the two header actions read as siblings.
+def test_the_about_control_is_one_outlined_button_on_every_page():
+    """The header's About link is an outlined button beside the filled tabs, on every page that
+    renders it, so it reads as a function around the application rather than as a fourth view.
     FAILS IF any page's .about rule drops the border (the old muted borderless style creeping back) or
     the pages drift apart from each other."""
     rules = {}
-    for name in ("index.html", "about.html", "releases.html"):
+    for name in ("index.html", "about.html", "releases.html", "brand.html", "add-survey.html"):
         css = (ROOT / name).read_text(encoding="utf-8")
         m = re.search(r"^\s*\.about\{([^}]*)\}", css, re.M)
         assert m, f"{name} must style the header About link"
         rules[name] = m.group(1)
     assert "border:1px solid" in rules["index.html"], \
-        "the About link must be an outlined button like .contribute, not borderless text"
+        "the About link must be an outlined button, not borderless text"
     assert len(set(rules.values())) == 1, \
         f"the .about rule must be byte-identical on every page, got {rules}"

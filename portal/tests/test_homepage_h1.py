@@ -2,12 +2,13 @@
 
 Every portal page and the whole static tier carries an h1; the map page carried none, so a crawler
 reading the site found one document with no heading of its own to name it. The fix is a heading over
-the header's identity mark rather than a second visible title: the page is an application, its first
-visible thing is the mark, and a second line of prose above the map would be a heading for the
-crawler and clutter for the reader.
+the header's AusMT wordmark rather than a second visible title: the page is an application, its name
+is already the first word a reader sees, and a second line of prose above the map would be a heading
+for the crawler and clutter for the reader.
 
-  * ONE HEADING, one wording. The h1 wraps the mark and carries the page's name in a visually hidden
-    span, so the header's look is unchanged and the heading a crawler reads is the page's own title.
+  * ONE HEADING, one wording. The h1 wraps the wordmark and carries the rest of the page's name in a
+    visually hidden span, so the header's look is unchanged and the heading a crawler reads is the
+    page's own title.
   * THE TITLE AGREES WITH IT, acronym included. "MT data" is how the community searches, and a
     heading and a title that disagree about the name of the page are two claims about one document.
   * THE TOUR URL IS THE SAME DOCUMENT. /?tour=1 is a query on the root, read by the application from
@@ -24,8 +25,8 @@ INDEX = ROOT / "index.html"
 MAIN_JS = ROOT / "src" / "main.js"
 
 H1_TEXT = "AusMT - Australia's Magnetotelluric (MT) Data Portal"
-MARK_IMG = ('<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" '
-            'width="30" height="30">')
+WORDMARK = '<span class="wordmark">AusMT</span>'
+HIDDEN_REST = " - Australia's Magnetotelluric (MT) Data Portal"
 OTHER_PAGES = ("about.html", "add-survey.html", "brand.html", "releases.html", "404.html")
 
 _VOID = {"img", "br", "hr", "input", "meta", "link", "source", "area", "base", "col", "embed",
@@ -77,17 +78,18 @@ def test_the_homepage_carries_exactly_one_h1_and_it_is_the_page_name():
         f"the homepage h1 must read {H1_TEXT!r}, got {ones[0][1]!r}"
 
 
-def test_the_h1_wraps_the_identity_mark_and_hides_its_own_text():
+def test_the_h1_wraps_the_wordmark_and_hides_the_rest_of_its_text():
     """FAILS IF the heading becomes a visible line of its own, or stops being the wrapper around the
-    header mark. The header's look is the constraint: the heading exists for a crawler and a screen
-    reader, and the identity block renders exactly as it did without it."""
+    header's wordmark. The header's look is the constraint: the visible part of the heading is the
+    wordmark every surface shows, and the rest of the page name exists for a crawler and a screen
+    reader only."""
     text = INDEX.read_text(encoding="utf-8")
     m = re.search(r"<h1\b[^>]*>(.*?)</h1>", text, re.S)
     assert m, "index.html must carry an h1"
-    assert MARK_IMG in m.group(1), \
-        "the homepage h1 must wrap the header identity mark, not stand beside it"
-    span = re.search(r'<span class="([\w-]+)">' + re.escape(H1_TEXT) + r"</span>", m.group(1))
-    assert span, f"the h1's text must sit in a hidden span, got {m.group(1)!r}"
+    assert m.group(1).startswith(WORDMARK), \
+        "the homepage h1 must open with the header's wordmark, not stand beside it"
+    span = re.search(r'<span class="([\w-]+)">' + re.escape(HIDDEN_REST) + r"</span>", m.group(1))
+    assert span, f"the rest of the h1's text must sit in a hidden span, got {m.group(1)!r}"
     rule = re.search(r"\." + span.group(1) + r"\{([^}]*)\}", text)
     assert rule, f"index.html must declare a .{span.group(1)} rule"
     for decl in ("position:absolute", "width:1px", "height:1px", "overflow:hidden", "clip"):

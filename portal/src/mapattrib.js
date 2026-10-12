@@ -1,6 +1,6 @@
 "use strict";
-// The map's attribution, collapsed to one glyph in the corner. Shared by every map this site draws: the
-// SPA's, and add-survey's picker, station preview and confirmation maps. See docs: portal internals,
+// The map's attribution, collapsed to one glyph in the top-right corner, which leaves the bottom-right to
+// the AuScope mark and its clear space. Shared by every map this site draws. See docs: portal internals,
 // mapattrib.js.
 (function (global) {
   var OPEN = "mapattrib-open";
@@ -52,7 +52,7 @@
   function mount(map, label) {
     var lib = global.L;
     if (!map || !lib || !lib.control || typeof lib.control.attribution !== "function") return null;
-    var ctl = lib.control.attribution({ prefix: false });
+    var ctl = lib.control.attribution({ prefix: false, position: "topright" });
     if (!ctl || typeof ctl.addTo !== "function") return null;
     ctl.addTo(map);
     var wrap = decorate(typeof ctl.getContainer === "function" ? ctl.getContainer() : null, label);

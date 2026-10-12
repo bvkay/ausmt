@@ -2207,9 +2207,14 @@ OBLIGATION = re.compile(r"\bcopyright\b|SPDX|CC-BY|Creative Commons|\bNOTICE\b|l
                         r"|attribution (?:obligation|term|requirement|statement)|basemap credit",
                         re.I)
 # The enumerated exceptions, at most ten, each naming the file and the reason its comment may run
-# long. Empty on purpose: the sweep left nothing that needed one, and an entry here is a claim that
-# a constraint could not be stated in two sentences with its reasoning moved.
-LENGTH_EXCEPTIONS = ()
+# long. An entry here is a claim that a constraint could not be stated in two sentences with its
+# reasoning moved.
+LENGTH_EXCEPTIONS = (
+    ("theme.js", "Appearance: the house style",
+     "the appearance script's interface: the storage key and its three values, the attribute the "
+     "stylesheets read, the event map.js listens for and the two control hooks, stated once where "
+     "they are written, because every page and the map depend on all of them together"),
+)
 # A sentence ends on a full stop that is not part of an abbreviation. The list is short because the
 # shipped prose is short; a false split only ever makes this rule stricter.
 _ABBREVIATION = re.compile(r"(?:\b(?:e\.g|i\.e|cf|etc|vs|approx|Fig|Sec|no|pp|al)\.|\b[A-Z]\.)$")

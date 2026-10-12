@@ -39,14 +39,12 @@ let COORD_POLICY={};
 // state.js.
 let TSACC=null;
 
-// BBMT stays off the copper action hex (#EF7256), and GDS off the ok/status green (#5BAE6A), so a data-type
-// marker cannot be mistaken for the selection accent or a "good" status. See docs: portal internals,
-// state.js.
-const TYPE_COL={LPMT:"#2E8FA3",BBMT:"#3730B8",AMT:"#CDA1EC",GDS:"#C255A0",other:"#999"};
-// The INK a type chip needs, which is not one colour for all four: .chip's default near-black sits at
-// 2.03:1 on BBMT's deep indigo (below WCAG AA's 4.5 and visibly muddy), where white reaches 9.22:1. See
-// docs: portal internals, state.js.
-const TYPE_INK={BBMT:"#fff"};
+// The data-type ramp, the same in both themes so a legend never changes meaning with the theme; it equals
+// the --lpmt/--bbmt/--amt/--gds tokens. See docs: portal internals, state.js.
+const TYPE_COL={LPMT:"#3F88C8",BBMT:"#FFC14F",AMT:"#9FCB5A",GDS:"#CE348A",other:"#999"};
+// The INK a type chip needs: .chip's near-black clears WCAG AA on three of the four, and GDS takes white
+// (4.68:1 against 4.01:1). See docs: portal internals, state.js.
+const TYPE_INK={GDS:"#fff"};
 // country drives the hierarchy, so {country:"New Zealand"} surfaces NZ with zero code change.
 const CC={"Australia":"AU","New Zealand":"NZ","Antarctica":"AQ","Indonesia":"ID"};
 const TS_COLLECTION={doi:"10.25914/mtjg-jp22",name:"NCI-AuScope Magnetotelluric Collection"};

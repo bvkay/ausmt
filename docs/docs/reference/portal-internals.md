@@ -12,18 +12,30 @@ section, and the pins named in these notes are the authority on the behaviour th
 
 ## portal/index.html
 
-#### DUPLICATED verbatim in about.html and add-survey.html: the five surface ...
+#### The token block is DUPLICATED verbatim in every portal page
 
 ```text
-DUPLICATED verbatim in about.html and add-survey.html: the five surface tokens must stay identical
-across all three. --copper carries the Tangerine accent; the token name does not follow it.
+The token block is DUPLICATED verbatim in every portal page and in engine/extract/_pages.py's
+sheet: a light block on :root (the AuScope house style) and a dark block on
+:root[data-theme="dark"] (the navy palette). src/theme.js writes data-theme on <html> before first
+paint, so the stylesheet never reads anything else to choose. Roles, not colours, name the
+tokens: --bg is the page ground; --surface the header, footer, rail, drawer, dialogs and cards;
+--surface-2 inputs, inactive tabs, chips and raised rows; --line rules and borders; --text,
+--muted and --heading the three inks; --accent links, the active tab, selection and focus rings,
+with --accent-ink for text on it. A card on the page ground (the About and Releases cards, the
+survey cards and the compact survey list, every card on add-survey.html) takes a --line border, a
+4px radius and --shadow, which the dark block sets to none. The data-type ramp (--lpmt, --bbmt,
+--amt, --gds) is declared once, in the light block, because a legend must not change meaning with
+the theme. Pinned by tests/test_theme_tokens.py.
 ```
 
-#### --no is rendered as TEXT on --panel (5.98:1) and --panel-2 (5.00:1), so ...
+#### --no is rendered as TEXT on --surface and --surface-2
 
 ```text
---no is rendered as TEXT on --panel (5.98:1) and --panel-2 (5.00:1), so it must stay above the
-WCAG AA 4.5:1 floor on both. Hue-preserving danger red, distinct from --part amber and --copper.
+--no is rendered as TEXT on --surface and --surface-2. The dark theme's danger red clears WCAG AA
+on both (6.63:1 and 5.80:1); the house style's #EA1E31 reads 4.44:1 on white and 3.99:1 on
+--surface-2, a hair under the 4.5:1 floor for small text, so a status that matters is never carried
+by the colour alone (every status chip and indicator also carries a glyph or a word).
 ```
 
 #### Three-zone header
@@ -34,39 +46,54 @@ each grows with its own content and the centred tabs land at a different x per v
 tests/test_header_geometry_parity.py.
 ```
 
-#### The AusMT mark (vendor/brand/ausmt-mark.svg, from tools/gen_brand.py) ...
+#### The AuScope mark pair (vendor/auscope/auscope-mark.svg and its white variant) ...
 
 ```text
-The AusMT mark (vendor/brand/ausmt-mark.svg, from tools/gen_brand.py) is a fixed 30x30 box, so it
-joins the zero-basis .hleft zone without moving the centre tabs. Stated character-identically in
+The AuScope mark pair (vendor/auscope/auscope-mark.svg and its white variant) is a fixed 30x30
+box, so it joins the zero-basis .hleft zone without moving the centre tabs; the theme switch shows
+one variant, so the pair contributes one box. Stated character-identically in
 engine/extract/_pages.py's sheet; pinned by tests/test_header_geometry_parity.py.
 ```
 
-#### The ACTIVE view is a filled copper box with dark text (#16110b on ...
+#### The theme switch: .theme-dark is hidden, and the dark theme swaps the pair
 
 ```text
-The ACTIVE view is a filled copper box with dark text (#16110b on --copper = 6.44:1, AA), and every
-     view control keeps a 40px click target. Inactive buttons read as buttons, not muted links.
+The theme switch: .theme-dark is hidden, and the dark theme hides .theme-light and shows
+.theme-dark. Its first rule is one class, so it ties with .brandmark and must follow it; and no
+rule that selects a variant may set display at a higher specificity, which is why .orglockup img
+states its size and not its display (a display:block there would show the white lock-up in the
+light theme as well). The white variants sit only on the dark ground.
+```
+
+#### The ACTIVE view is filled with --accent and lettered in --accent-ink ...
+
+```text
+The ACTIVE view is filled with --accent and lettered in --accent-ink: white on Royal Blue in the
+     light theme (13.14:1) and near-black on coral in the dark (6.44:1), both above AA. Every view
+     control keeps a 40px click target. Inactive buttons read as buttons, not muted links.
 The static header and this one must agree on the container's wrap mode: nowrap and wrap hand
      zero-basis flex children different resolved widths. Pinned pairwise by
      tests/test_header_geometry_parity.py.
 ```
 
-#### The AuScope mark, top right of the MAP and nowhere else: a screenshot ...
+#### The AuScope mark, bottom right of the MAP: a screenshot ...
 
 ```text
-The AuScope mark, top right of the MAP and nowhere else: a screenshot carries no footer, so this is
-the attribution that travels with the image, at the brand guide's clear space (32px) with neither
-tint nor reduced opacity. pointer-events:none and a z-index below Leaflet's control and popup
-layers keep it out of hit testing.
+The AuScope mark, bottom right of the MAP: a screenshot carries no header and no footer, so this is
+the attribution that travels with the image. Its inset equals its own 48px height, the style guide's
+breathing space, and that corner holds nothing else: the attribution control sits top right and the
+legend bottom left. Neither tint nor reduced opacity. pointer-events:none and a z-index below
+Leaflet's control and popup layers keep it out of hit testing. The white variant draws on the dark
+basemap; below 560px neither is drawn, by a rule anchored on #map so it outranks the theme switch.
 ```
 
 #### The map's attribution, collapsed to one glyph
 
 ```text
-The map's attribution, collapsed to one glyph. The credit is a licence term and stays with the map,
-because only the layer that is drawing knows which provider to name, and the 240px cap keeps the
-opened text clear of the legend at 560px of map. Shared character for character with
+The map's attribution, collapsed to one glyph in Leaflet's top-right corner, which leaves the
+bottom-right to the AuScope mark and its clear space. The credit is a licence term and stays with
+the map, because only the layer that is drawing knows which provider to name, and the 240px cap
+keeps the opened text clear of the legend at 560px of map. Shared character for character with
 add-survey.html; pinned by tests/test_map_attribution.py.
 ```
 
@@ -120,11 +147,12 @@ a 375px phone would scroll sideways.
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the
-AuScope-NCRIS lockup RIGHT. THIS IS THE MASTER RULE SET, carried character for character by every
-other portal document and by engine/extract/_pages.py's _CSS, so nothing here may be tuned for one
-page. The equal zero-basis side zones, the two queries on the FOOTER's own content width and the
-lockup's max-width cap are each load-bearing; pinned by tests/test_footer_regions.py.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the page's
+status and the appearance control RIGHT. THIS IS THE MASTER RULE SET, carried character for
+character by every other portal document and by engine/extract/_pages.py's _CSS, so nothing here may
+be tuned for one page. The equal zero-basis side zones and the two queries on the FOOTER's own
+content width are load-bearing; the right zone is a row of its own so the status and the control sit
+side by side against the right edge. Pinned by tests/test_footer_regions.py.
 ```
 
 #### The hand-off snackbar sits ABOVE #toast so the two can coexist (a ...
@@ -204,14 +232,17 @@ around near-white text on this dark panel. Weight drops to 500 for the same reas
 ```text
 Twin of the static collection page's .collmap/.collmark rule (engine/extract/_pages.py). The panel
 is capped at the SVG's own width, so the corner the mark is pinned to is the MAP's, not the
-column's.
+column's. The mark is the AuScope pair the header carries, and the panel behind it is --map-panel.
 ```
 
-#### The AusMT mark, not an organisation mark: AusMT is what this header ...
+#### The AuScope mark opens every header on this site; AusMT and its tagline ...
 
 ```text
-The AusMT mark, not an organisation mark: AusMT is what this header IDENTIFIES, so no header on
-this site carries a second mark of any kind. Same markup and same rule on every surface.
+The AuScope mark opens every header on this site; AusMT and its tagline stand beside it, and the
+AuScope and NCRIS lock-up takes the right zone. On this page alone the wordmark sits inside the
+page's h1, whose clipped remainder carries the page name for a crawler and a screen reader. Same
+markup on every surface apart from that heading, the Map control (a button here, a link elsewhere)
+and the current page's active state; pinned by tests/test_header_geometry_parity.py.
 ```
 
 #### Surveys and Collections are served as pages, so these two controls are ...
@@ -222,13 +253,12 @@ Surveys and Collections are served as pages, so these two controls are LINKS; Ma
 and the active-state toggles address the same three elements.
 ```
 
-#### The header's right zone carries only the live counts; the MTCAT ...
+#### FOUR header items: Map, Surveys, Collections, About
 
 ```text
-The header's right zone carries only the live counts; the MTCAT machine-readable link lives in
-the footer's bottom-left.
-One SHELL, a contextual SLOT: .counts is the same element in the same place on every view and
-countSlot's content is what changes (filters.js updateCounts). The markup here is the MAP form.
+FOUR header items: Map, Surveys, Collections, About. Contributing a survey is reached from About's
+own body, which is where a contributor reads what the submission involves; add-survey.html stays
+served. index.html?tour=1 is the on-demand way back into the guided tour, which About links.
 ```
 
 #### The single "Recently added" surface is the surveys-view #recentStrip: a ...
@@ -307,7 +337,9 @@ view. Click-closes the drawer, and sits beneath the drawer and its resize handle
 ```text
 First-visit welcome popup: role=dialog, focus-managed, closed by Esc, click-out or "Browse
 immediately". "Don't show this again" gates persistence via the localStorage key; ?tour=1 is the
-on-demand way back into the tour.
+on-demand way back into the tour. The Appearance row (Light, Dark, Follow system) is applied and
+saved the moment it changes, by src/theme.js and independently of the checkbox: a visitor who
+picks a theme and dismisses the popup for this visit only still keeps the theme.
 The wget dialog: the command is SHOWN, scrollable, with its run instructions, before anything
 lands on a clipboard. Filled and wired by fetchdialog.js showWgetDialog(); the same markup rides every
 generated survey page, driven by page-fetch.js.
@@ -326,23 +358,27 @@ tablist of plain buttons is an ARIA contract the assistive layer cannot read.
 #### LEFT
 
 ```text
-LEFT. The machine-readable MTCAT link, the same document from every page on both surfaces.
-The honest link text + href/title are kept verbatim.
+LEFT. The machine-readable MTCAT link, the same document from every page on both surfaces. Its
+text is "MTCAT JSON" with the leaves-the-site arrow, because it hands over a JSON document rather
+than another page; the href and the title are kept verbatim.
 ```
 
 #### CENTRE
 
 ```text
-CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the one link
-in the line, so it says where it goes without a title attribute; the year is a literal here and in
-the engine's shell, because a year that moved on rebuild would differ across the tree.
+CENTRE. Who enables AusMT, then the licence note. The URL text is the one link in the line, so it
+says where it goes without a title attribute. The line carries no copyright clause: the
+documentation site states the software's, and each survey carries its own data licence.
 ```
 
 #### RIGHT
 
 ```text
-RIGHT. The parent organisation's lockup, linked where the centre's URL text links. The image is
-same-origin and vendored, so stating the relationship takes no runtime dependency on its host.
+RIGHT. The live counts, then the appearance control. One SHELL, a contextual SLOT: #footerCounts is
+the same element in the same place on every view and #countSlot's content is what changes
+(filters.js updateCounts); the markup here is the MAP form. The control's two buttons carry
+data-theme-choice and src/theme.js wires them, so the footer needs no script of its own and the
+deployed CSP's ban on inline handlers is kept.
 ```
 
 #### PROGRESS BELONGS TO THE BROWSER: the 302 hands the bytes ...
@@ -358,25 +394,28 @@ no progress bar, no download-manager panel and no completion claim.
 #### tokens, header and map chrome
 
 ```text
-DUPLICATED verbatim in about.html and add-survey.html: the five surface tokens must stay identical
-       across all three. --copper carries the Tangerine accent; the token name does not follow it. See docs:
-       portal internals, index.html.
+The token block, light on :root and dark on :root[data-theme="dark"], DUPLICATED verbatim in every
+       portal page and in the engine's sheet. See docs: portal internals, index.html.
 
-These MUST equal src/state.js TYPE_COL byte-for-byte: a legend swatch and its map dot are one claim
-       held in two files. Pinned by tests/test_type_palette_separability.py.
+--lpmt, --bbmt, --amt and --gds MUST equal src/state.js TYPE_COL byte-for-byte: a legend swatch and its
+       map dot are one claim held in two files. Pinned by tests/test_type_palette_separability.py.
 
---no is rendered as TEXT on --panel (5.98:1) and --panel-2 (5.00:1), so it must stay above the WCAG
-       AA 4.5:1 floor on both. See docs: portal internals, index.html.
+--no is rendered as TEXT on --surface and --surface-2. See docs: portal internals, index.html.
 
 Three-zone header. The side zones must take equal ZERO-basis shares (flex:1 1 0, min-width:0) or each
      grows with its own content and the centred tabs land at a different x per view; pinned by
      tests/test_header_geometry_parity.py. See docs: portal internals, index.html.
 
-The AusMT mark (vendor/brand/ausmt-mark.svg, from tools/gen_brand.py) is a fixed 30x30 box, so it joins
-     the zero-basis .hleft zone without moving the centre tabs. See docs: portal internals, index.html.
+The AuScope mark pair is a fixed 30x30 box, so it joins the zero-basis .hleft zone without moving the
+     centre tabs. See docs: portal internals, index.html.
 
-The ACTIVE view is a filled copper box with dark text (#16110b on --copper = 6.44:1, AA), and every
-     view control keeps a 40px click target. See docs: portal internals, index.html.
+The heading wraps the wordmark and takes no type of its own, so its line box is the wordmark's and the
+     identity block measures as it does on every other surface; the page name is clipped.
+
+The theme switch follows .brandmark, which it ties on specificity. See docs: portal internals, index.html.
+
+The ACTIVE view is filled with --accent and lettered in --accent-ink, and every view control keeps a
+     40px click target. See docs: portal internals, index.html.
 
 Two of these controls are links and one is a button, so they take the same box, token and active
      look and read as one control group.
@@ -385,13 +424,13 @@ The MTCAT link lives in the footer's bottom-left; the footer's flex gap handles 
 
 Mute the basemap only: station overlays render outside the tile pane, so they keep full colour.
 
-The AuScope mark, top right of the MAP and nowhere else: a screenshot carries no footer, so this is the
-     attribution that travels with the image, at the brand guide's clear space (32px) with neither tint nor
-     reduced opacity. See docs: portal internals, index.html.
+The AuScope mark, bottom right of the MAP, inset by its own height. See docs: portal internals,
+     index.html.
 
-The map's attribution, collapsed to one glyph. The credit is a licence term and stays with the map,
-     because only the layer that is drawing knows which provider to name, and the 240px cap keeps the opened
-     text clear of the legend at 560px of map. See docs: portal internals, index.html.
+Anchored on the map's id so it outranks the theme switch that shows the dark variant.
+
+The map's attribution, collapsed to one glyph in the top-right corner. See docs: portal internals,
+     index.html.
 
 flex-shrink:0 is load-bearing: #filterPane is a column flex, so a tall mode pane squashes this control,
      and .seg clips its overflow, so it collapses silently to its 2px borders and leaves the rail a one-way
@@ -408,7 +447,7 @@ With no collections in the boot data this stays empty, and :empty removes it so 
 
 Reuses the drawer's Related-products tile language verbatim: the whole tile is the action.
 
-.armed: a draw button reflecting the shared armedDrawMode (its tool is live) - matches the copper
+.armed: a draw button reflecting the shared armedDrawMode (its tool is live) - matches the accent
      active look of .primary / .seg button.on, so it reads as "currently on".
 
 ```
@@ -433,7 +472,7 @@ Links inside .meta tables must be given the site accent, or they fall back to th
 Self-hosted identifier logos (ORCID next to an investigator, ROR next to an organisation) - small,
      baseline-aligned, non-shrinking; vendor pngs are same-origin (CSP-safe).
 
-Copper like every other in-drawer link, and not word-break:break-all material.
+The accent, like every other in-drawer link, and not word-break:break-all material.
 
 Tab strip reuses .seg; six tabs need a tighter type scale and horizontal scroll safety on narrow drawers
 
@@ -474,8 +513,8 @@ Absence markers use neutral --muted, not amber --part: absence is ordinary, and 
 The LOADING state a section shows while its heavy product is still in flight. Deliberately quiet
      and NOT an absence marker, which is the muted --prov styling above.
 
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope-NCRIS
-     lockup RIGHT. See docs: portal internals, index.html.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the status and the
+     appearance control RIGHT. See docs: portal internals, index.html.
 
 The hand-off snackbar sits ABOVE #toast so the two can coexist (a hand-off can follow an export toast
      within its dwell). It carries at most one action button; it never carries a progress bar. See docs:
@@ -511,8 +550,7 @@ This sheet must carry NO rule for .introoverlay, .intropanel, .introclose, .intr
 The card must be a CONSTANT size and centred position on EVERY step: _tourCardBox centres via
      (viewport - offsetWidth/offsetHeight)/2, so a variable size shifts it off centre.
 
-Primary advance button (Next/Done): copper fill with dark text
-     (#16110b on --copper = 6.44:1, AA).
+Primary advance button (Next/Done): accent fill with --accent-ink text, the active tab's pair.
 
 ```
 
@@ -595,49 +633,18 @@ nothing relative, so og:url and og:image are absolute.
 
 ```text
 Uniform chrome: the three-zone header below is index.html's, so About carries the same chrome as
-the portal. This page is STATIC, so the centre items are links rather than app buttons and the
-right zone carries catalogue totals rather than live map state; the sticky positioning is
-About-specific, because this page scrolls.
+the portal: the AuScope mark and AusMT's name at the left, the tabs and About in the centre, the
+AuScope and NCRIS lock-up at the right. This page is STATIC, so the centre items are links rather
+than app buttons; the sticky positioning is shared with the other scrolling pages. The rules are
+the shared header rule set, colours in tokens.
 ```
 
-#### The AusMT mark, generated by tools/gen_brand.py, is the header identity ...
+#### flex-wrap is a term of the header's HEIGHT
 
 ```text
-The AusMT mark, generated by tools/gen_brand.py, is the header identity on every surface of the
-site. Same file, same markup and character-identical rule on index.html, brand.html and the
-generated pages (engine/extract/_pages.py).
-```
-
-#### flex-wrap is a term of the header's HEIGHT, not a detail of the nav ...
-
-```text
-flex-wrap is a term of the header's HEIGHT, not a detail of the nav: the three tabs hold a
-112px floor each, so on a narrow viewport a nowrap container keeps them on one row and
-overruns the zone instead of stacking. Character-identical to the other four surfaces.
-```
-
-#### Centre-zone nav items are links on this static page (index uses ...
-
-```text
-Centre-zone nav items are links on this static page (index uses <button>s that switch app views),
-matching index's nav: equal-width bordered boxes, 40px targets and a copper-filled active state
-(#16110b on --copper = 6.44:1). None of Map/Surveys/Collections is the current page here, so the
-current page is marked on its own .about link instead.
-```
-
-#### The header right zone's mono stats block, copied verbatim from ...
-
-```text
-The header right zone's mono stats block, copied verbatim from index.html's .counts so the two
-headers render identically. The .corpus marker distinguishes corpus totals from index's live app
-state, at a glance and in the chrome pins.
-```
-
-#### Matches index.html: at narrow widths the three header zones stack ...
-
-```text
-Matches index.html: at narrow widths the three header zones stack full-width and left-align, so the
-centred nav / right-aligned mtcat link don't read as stranded fragments once they wrap.
+flex-wrap is a term of the header's HEIGHT, not a detail of the nav: the three tabs hold a 112px
+floor each, so on a narrow viewport a nowrap container keeps them on one row and overruns the zone
+instead of stacking. Character-identical on every surface wearing the chrome.
 ```
 
 #### THE IN-PAGE ANCHOR OFFSET FOLLOWS THE HEADER
@@ -645,60 +652,43 @@ centred nav / right-aligned mtcat link don't read as stranded fragments once the
 ```text
 THE IN-PAGE ANCHOR OFFSET FOLLOWS THE HEADER. The header is sticky, so an anchor that scrolls its
 section to y=0 puts the heading underneath it and scroll-margin-top is the clearance. One number
-will not do: the header WRAPS as the viewport narrows, is 220px tall at 375px, and does not shrink
-monotonically, so each band below carries the TALLEST header in its own range (overshooting drops
-a heading a few pixels low, undershooting hides it). These are measurements of this header's
-content at this font stack: anything that changes its wording, its nav or its zones moves the wrap
-points and the ladder must be re-measured, and no source-read pin can see the header get taller.
-tests/test_about_uniform_chrome.py holds the shape and the values at 375px and 1280px.
+will not do: the header WRAPS as the viewport narrows (with every zone stacked under 760px the
+lock-up takes a row of its own) and is 254px tall at 375px against 57px at 1280px, so each band below
+carries the TALLEST header in its own range (overshooting drops a heading a few pixels low,
+undershooting hides it). These are measurements of this header's content at this font stack:
+anything that changes its wording, its nav or its zones moves the wrap points and the ladder must be
+re-measured, and no source-read pin can see the header get taller. tests/test_about_uniform_chrome.py
+holds the shape and the values at 375px and 1280px.
 ```
 
-#### The AuScope-NCRIS lockup in the body, the same committed file every ...
+#### The AuScope-NCRIS lock-up in the body, the pair the header carries ...
 
 ```text
-The AuScope-NCRIS lockup in the body, the same committed file every footer carries. The width is
-capped HERE and not in the file, because the committed raster is 1919px wide; object-fit holds the
-mark's proportions wherever that cap bites.
+The AuScope-NCRIS lock-up in the body, the pair the header carries, drawn larger: the Royal Blue
+variant on the light ground and the white one on the dark, of which the theme switch shows one. The
+wrapper takes no line box of its own and the images state no display, so the switch can show either
+without a descender gap and without being outranked.
 ```
 
-#### One footer, three regions: the MTCAT machine-readable link LEFT, the ...
+#### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement
-CENTRE, the AuScope-NCRIS lockup RIGHT. The rule set below is index.html's, character for
-character, where the zone geometry and the two container states are stated once;
-tests/test_footer_regions.py holds all seven surfaces identical, so an edit here that is not an
-edit there fails. STICKY, not fixed: it keeps its own box in flow, so the last line of the page
-is never hidden under it, which is why body is a viewport-tall column and main takes its free
-space. Below 560px of viewport it would cover most of a phone screen, so it returns to flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance
+control RIGHT. The rule set below is index.html's, character for character, where the zone geometry
+and the two container states are stated once; tests/test_footer_regions.py holds all seven surfaces
+identical, so an edit here that is not an edit there fails. STICKY, not fixed: it keeps its own box
+in flow, so the last line of the page is never hidden under it, which is why body is a
+viewport-tall column and main takes its free space. Below 560px of viewport it would cover most of a
+phone screen, so it returns to flow.
 ```
 
-#### The AusMT mark, not an organisation mark: AusMT is the thing this ...
+#### The AuScope mark opens every header on this site
 
 ```text
-The AusMT mark, not an organisation mark: AusMT is the thing this header IDENTIFIES, so it
-opens the header and no header on this site carries a second mark of any kind. The AuScope
-relationship is stated in the footer and in About's Who enables AusMT, which is where a
-reader asks it. Same file, same markup and same rule on every surface wearing this chrome.
-```
-
-#### Each item has its own destination: Map is the SPA root, and Surveys and ...
-
-```text
-Each item has its own destination: Map is the SPA root, and Surveys and Collections are the
-prerendered index pages the engine emits and the box serves at those exact paths. They carry
-index's navMap/navSurveys/navCollections ids so the two headers are comparable
-element-for-element (the header-parity pin). The TAG differs by necessity: on index these are
-<button>s that switch app views in place, and this page is static.
-```
-
-#### The right zone carries the corpus-totals block, not index's live app ...
-
-```text
-The right zone carries the corpus-totals block, not index's live app state: this page has no map,
-filter or selection to report, so the three live ids (nVis/nSel/nTot) stay off it. corpus-stats.js
-reveals the block only when both documents resolve to a non-empty corpus, so a file:// page, an
-unpublished deployment or an empty build shows nothing rather than a fabricated total.
+The AuScope mark opens every header on this site, and AusMT's name, a link to the portal root,
+stands beside it. About marks itself current on its own .about control, because none of the three
+tabs is this page. The page carries no counts anywhere: it has no map, filter or selection to
+report, so the live ids (nVis/nSel/nTot) stay off it.
 ```
 
 #### About is the two-minute front door: it answers seven questions and then ...
@@ -733,54 +723,56 @@ releases-page pins hold it here. No version chip: this is a route, not the runni
 identity.
 ```
 
-#### The site's ONE footer, three regions, the same strings and the same ...
+#### The site's ONE footer
 
 ```text
-The site's ONE footer, three regions, the same strings and the same targets index.html
-carries. A sibling of main, not a child of it: it is the page's bottom edge, and only a
-body-level footer is a contentinfo landmark.
+The site's ONE footer, the same strings and the same targets index.html carries. A sibling of
+main, not a child of it: it is the page's bottom edge, and only a body-level footer is a
+contentinfo landmark.
 ```
 
-#### CENTRE
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
 
 ```text
-CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the
-one link in the line. The year is a literal, the mechanism both surfaces use.
-```
-
-#### A SEPARATE FILE, not an inline block: the deployed CSP for every page ...
-
-```text
-A SEPARATE FILE, not an inline block: the deployed CSP for every page except add-survey.html is
-script-src 'self' with no 'unsafe-inline' (deploy/docker/caddy/Caddyfile, @strictPages), so an
-inline script here would be blocked in production.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The acknowledgement's
+URL text is the one link in the line and carries no copyright clause. The control's buttons carry
+data-theme-choice and src/theme.js, the one script this page loads, wires them.
 ```
 
 ## portal/add-survey.html
 
-#### The AusMT mark, generated by tools/gen_brand.py, is the header identity ...
+#### Uniform chrome: the three-zone header, index.html's geometry
 
 ```text
-The AusMT mark, generated by tools/gen_brand.py, is the header identity on every surface of the
-site. Same file, same markup and character-identical rule on index.html, brand.html and the
-generated pages (engine/extract/_pages.py).
+Uniform chrome: the three-zone header, index.html's geometry and the shared rule set, so the page a
+contributor reaches from About wears the header every other surface wears. Its way back to the
+portal is that header's own Map tab and identity link, both straight to the root.
+```
+
+#### flex-wrap is a term of the header's HEIGHT
+
+```text
+flex-wrap is a term of the header's HEIGHT: three 112px tabs must be free to stack on a narrow
+viewport. Character-identical on every surface wearing the chrome.
 ```
 
 #### AA text contrast on the status-chip tints: the PASS tint is light ...
 
 ```text
-AA text contrast on the status-chip tints: the PASS tint is light enough for --ok text to clear
-4.5:1 (4.65:1), the FAIL tint for --no text (4.74:1) and the WARNING tint for --part (4.56:1).
+AA text contrast on the status-chip tints: in the dark theme the PASS tint is light enough for --ok
+text to clear 4.5:1 (4.65:1), the FAIL tint for --no text (4.74:1) and the WARNING tint for --part
+(4.56:1). The house style's status inks are darker than the navy palette's and sit on a white
+ground, so each chip also carries its level as a word.
 ```
 
-#### One footer, three regions: the MTCAT machine-readable link LEFT, the ...
+#### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement
-CENTRE, the AuScope-NCRIS lockup RIGHT. The rule set below is index.html's, character for
-character, where the zone geometry and the two container states are stated once;
-tests/test_footer_regions.py holds all seven surfaces identical. STICKY, not fixed, so it keeps
-its box in flow and body is a viewport-tall column; below 560px it returns to ordinary flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance
+control RIGHT. The rule set is index.html's, character for character, where the zone geometry and
+the two container states are stated once; tests/test_footer_regions.py holds all seven surfaces
+identical. STICKY, not fixed, so it keeps its box in flow and body is a viewport-tall column; below
+560px it returns to ordinary flow.
 ```
 
 #### Wide enough to show a full-length folder name (SLUG_MAX = 40 mono ...
@@ -795,17 +787,19 @@ keeps the field inside the flex row on a narrow viewport.
 #### The map's attribution, collapsed to one glyph
 
 ```text
-The map's attribution, collapsed to one glyph. The credit is a licence term and stays with the map,
-because only the layer that is drawing knows which provider to name, and the 240px cap keeps the
-opened text clear of the legend at 560px of map. Shared character for character with index.html,
-because these three maps wear the same control; pinned by tests/test_map_attribution.py.
+The map's attribution, collapsed to one glyph in Leaflet's top-right corner. The credit is a licence
+term and stays with the map, because only the layer that is drawing knows which provider to name,
+and the 240px cap keeps the opened text clear of the legend at 560px of map. Shared character for
+character with index.html, because these three maps wear the same control in the same corner;
+pinned by tests/test_map_attribution.py.
 ```
 
-#### The AusMT mark, not an organisation mark: AusMT is what this header ...
+#### The AuScope mark opens every header on this site
 
 ```text
-The AusMT mark, not an organisation mark: AusMT is what this header IDENTIFIES, so no header on
-this site carries a second mark of any kind. Same markup and same rule on every surface.
+The AuScope mark opens every header on this site, AusMT's name links the portal root beside it and
+the AuScope and NCRIS lock-up takes the right zone. None of the tabs is this page, so none is
+active.
 ```
 
 #### Options are populated at runtime from the generated contract (LICENSES ...
@@ -872,19 +866,12 @@ points at in NCI Table 1 terms; the DataCite relation is DERIVED server-side fro
 is never asked here.
 ```
 
-#### CENTRE
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
 
 ```text
-CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the one
-link in the line. The year is a literal, the mechanism every page uses.
-```
-
-#### RIGHT
-
-```text
-RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. The
-image is same-origin and vendored, so stating the relationship takes no runtime dependency on
-the organisation's own host.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The acknowledgement's
+URL text is the one link in the line and carries no copyright clause; the control's buttons are
+wired by src/theme.js.
 ```
 
 #### INFO-block coords, decimal (Geotools style) or DMS ('LATITUDE ...
@@ -1706,7 +1693,7 @@ DOI citation-harvest core (window.AusmtDoiHarvest); single source, shared byte-f
 
 the collapsed map attribution control, shared with the portal map (single source)
 
-Without an apple-touch-icon iOS renders a screenshot of the page instead of the mark. Same lattice as the favicon, at 180px.
+Without an apple-touch-icon iOS renders a screenshot of the page instead of the mark. The site's app icons carry the AuScope mark.
 
 The one true URL for this page. It is substantive, indexable, linked from the root and advertised in sitemap.xml, so it must say which address it is served at.
 
@@ -1714,7 +1701,7 @@ The description is the first three sentences of this page's own lede, verbatim a
 
 --no carries the danger red that clears WCAG AA as text; see index.html.
 
-The AusMT mark, generated by tools/gen_brand.py, is the header identity on every surface of the site. Same file, same markup and character-identical rule on index.html, brand.html and the generated pages (engine/extract/_pages.py). See docs: portal internals, add-survey.html.
+The AuScope mark pair opens the header on every surface of the site, under the same .brandmark rule. See docs: portal internals, add-survey.html.
 
 originalname.edi → ROX000.edi rename preview
 
@@ -1724,7 +1711,7 @@ AA text contrast on the status-chip tints: the PASS tint is light enough for --o
 
 A non-blocking "slug already served" context warning, distinct from valid and invalid. Amber like a WARNING chip, and allowed to wrap.
 
-One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement CENTRE, the AuScope-NCRIS lockup RIGHT. See docs: portal internals, add-survey.html.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance control RIGHT. See docs: portal internals, add-survey.html.
 
 Direct upload ("Submit to AusMT"): hidden until the same-origin gateway healthz probe passes.
 
@@ -1734,11 +1721,11 @@ slug chip: the auto-derived folder name, editable inline
 
 Wide enough to show a full-length folder name (SLUG_MAX = 40 mono characters) without scrolling: the slug becomes au.<slug>.<station> in every id and URL and is expensive to change once a DOI is minted, so the submitter must be able to READ it. See docs: portal internals, add-survey.html.
 
-The map's attribution, collapsed to one glyph. The credit is a licence term and stays with the map, because only the layer that is drawing knows which provider to name, and the 240px cap keeps the opened text clear of the legend at 560px of map. See docs: portal internals, add-survey.html.
+The map's attribution, collapsed to one glyph in the top-right corner. The credit is a licence term and stays with the map, because only the layer that is drawing knows which provider to name, and the 240px cap keeps the opened text clear of the legend at 560px of map. See docs: portal internals, add-survey.html.
 
 DATAID auto-derived from filename (curator-flagged, not blocking)
 
-The AusMT mark, not an organisation mark: AusMT is what this header IDENTIFIES, so no header on this site carries a second mark of any kind. See docs: portal internals, add-survey.html.
+The AuScope mark opens every header on this site. See docs: portal internals, add-survey.html.
 
 ============================ TIER 0, the only required screen ============================
 
@@ -1776,9 +1763,7 @@ Identifiers by data level, mirroring the curator editor. Each row states WHAT th
 
 Key request. It always shows the same neutral message regardless of the response, so it can never confirm whether an address exists.
 
-CENTRE. Who enables AusMT, then the attribution and the licence note. See docs: portal internals, add-survey.html.
-
-RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. See docs: portal internals, add-survey.html.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. See docs: portal internals, add-survey.html.
 
 MAINTAINER NOTE: this page is the largest single file in the portal. It is intentionally one file while it stays manageable.
 
@@ -1998,7 +1983,7 @@ offline/aborted, silent; manual entry still works
 
 Per-EDI rename preview: shows "originalname.edi → ROX000.edi" so the submitter sees the DATAID-based packaged name BEFORE uploading. See docs: portal internals, add-survey.html.
 
-Softened DATAID gate: a missing DATAID auto-derives from the filename and is flagged for the curator (amber), it does not block. A real DATAID renames the packaged file (copper).
+Softened DATAID gate: a missing DATAID auto-derives from the filename and is flagged for the curator (amber), it does not block. A real DATAID renames the packaged file (in the accent colour).
 
 Per-row remove: one delegated listener (data-i indexes the `files` array). See docs: portal internals, add-survey.html.
 
@@ -2094,29 +2079,58 @@ start with one funding row
 
 ## portal/releases.html
 
+#### The token block every portal page declares verbatim
+
+```text
+The token block every portal page declares verbatim, light and dark; see the index.html notes.
+tests/test_theme_tokens.py holds every copy to the same values.
+```
+
+#### Uniform chrome: the header below is about.html's
+
+```text
+Uniform chrome: the header below is about.html's, copied rather than shared because the portal
+ships as classic static pages with no template step. tests/test_header_geometry_parity.py compares
+every surface's header with the one contract, so the copies cannot drift apart.
+```
+
+#### flex-wrap is a term of the header's HEIGHT
+
+```text
+flex-wrap is a term of the header's HEIGHT: three 112px tabs must be free to stack on a narrow
+viewport. Character-identical on every surface wearing the chrome.
+```
+
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the
-AuScope-NCRIS lockup RIGHT. The rule set below is index.html's, character for character, where the
-zone geometry and the two container states are stated once; tests/test_footer_regions.py holds all
-seven surfaces identical. STICKY, not fixed, so it keeps its box in flow and body is a
-viewport-tall column; below 560px of viewport it returns to ordinary flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance
+control RIGHT. The rule set below is index.html's, character for character, where the zone geometry
+and the two container states are stated once; tests/test_footer_regions.py holds all seven surfaces
+identical. STICKY, not fixed, so it keeps its box in flow and body is a viewport-tall column; below
+560px of viewport it returns to ordinary flow.
 ```
 
-#### CENTRE
+#### The AuScope mark opens every header on this site
 
 ```text
-CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the
-one link in the line. The year is a literal, the mechanism every page uses.
+The AuScope mark opens every header on this site; none of the three tabs is this page, so none is
+active, and the right zone is the AuScope and NCRIS lock-up.
 ```
 
-#### RIGHT
+#### The site's ONE footer
 
 ```text
-RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. The
-image is same-origin and vendored, so stating the relationship takes no runtime dependency
-on the organisation's own host.
+The site's ONE footer, the same strings and the same targets index.html carries. A sibling of
+main, not a child of it: only a body-level footer is a contentinfo landmark.
+```
+
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
+
+```text
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The acknowledgement's
+URL text is the one link in the line and carries no copyright clause; the control's buttons are
+wired by src/theme.js.
 ```
 
 ## portal/brand.html
@@ -2130,60 +2144,60 @@ discovery surface on it. It stays crawlable on purpose, because a robots.txt Dis
 the crawler ever reading the noindex below.
 ```
 
-#### One footer, three regions: the MTCAT machine-readable link LEFT, the ...
+#### flex-wrap is a term of the header's HEIGHT
 
 ```text
-One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement
-CENTRE, the AuScope-NCRIS lockup RIGHT. The rule set below is index.html's, character for
-character, where the zone geometry and the two container states are stated once;
-tests/test_footer_regions.py holds all seven surfaces identical, so an edit here that is not an
-edit there fails. STICKY, not fixed: it keeps its own box in flow, so the last line of the page
-is never hidden under it, which is why body is a viewport-tall column and main takes its free
-space. Below 560px of viewport it would cover most of a phone screen, so it returns to flow.
+flex-wrap is a term of the header's HEIGHT: three 112px tabs must be free to stack on a narrow
+viewport. Character-identical on every surface wearing the chrome.
 ```
 
-#### CENTRE
+#### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the one
-link in the line. The year is a literal, the mechanism every page uses.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance
+control RIGHT. The rule set below is index.html's, character for character, where the zone geometry
+and the two container states are stated once; tests/test_footer_regions.py holds all seven surfaces
+identical, so an edit here that is not an edit there fails. STICKY, not fixed: it keeps its own box
+in flow, so the last line of the page is never hidden under it, which is why body is a
+viewport-tall column and main takes its free space. Below 560px of viewport it would cover most of a
+phone screen, so it returns to flow.
 ```
 
-#### RIGHT
+#### The AuScope mark opens every header on this site
 
 ```text
-RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. The
-image is same-origin and vendored, so stating the relationship takes no runtime dependency on
-the organisation's own host.
+The AuScope mark opens every header on this site. The AusMT symbol this page offers for download is
+AusMT's product mark, carried by the documentation sidebar and the social card; the site's own
+favicon and app icons, like its header, carry the AuScope mark, and the page says so in its Mark
+section.
+```
+
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
+
+```text
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The acknowledgement's
+URL text is the one link in the line and carries no copyright clause; the control's buttons are
+wired by src/theme.js.
 ```
 
 ## portal/404.html
 
-#### One footer, three regions: the MTCAT machine-readable link LEFT, the ...
+#### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement
-CENTRE, the AuScope-NCRIS lockup RIGHT. The rule set below is index.html's, character for
-character, with the four colour tokens resolved to the literals this page writes, because it is
-served for any unmatched path at any depth and carries no token layer;
-tests/test_footer_regions.py holds all seven surfaces identical. STICKY, not fixed: it keeps its
-own box in flow, so body is a viewport-tall column and the last line is never hidden under it;
-below 560px of viewport it returns to ordinary flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance
+control RIGHT. The rule set below is index.html's, character for character: this page carries the
+token block like every other, so the theme reaches the page Caddy serves for any unmatched path too.
+tests/test_footer_regions.py holds all seven surfaces identical. STICKY, not fixed: it keeps its own
+box in flow, so body is a viewport-tall column and the last line is never hidden under it; below
+560px of viewport it returns to ordinary flow.
 ```
 
-#### CENTRE
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
 
 ```text
-CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the one
-link in the line. The year is a literal, the mechanism every page uses.
-```
-
-#### RIGHT
-
-```text
-RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. The
-image is same-origin and vendored, so stating the relationship takes no runtime dependency on
-the organisation's own host.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. Every href and the
+appearance script are root-absolute, because this document answers any address at any depth.
 ```
 
 ## portal/src/analytics-shim.js
@@ -3575,7 +3589,9 @@ boundary outline (vendor/au-outline.js - public-domain Natural Earth, see that f
 BENEATH the station dots; dots are COLOURED BY MEMBER SURVEY with a small legend. Degrades cleanly when
 AU_OUTLINE is absent (e.g. the headless harness doesn't load the vendor asset) - dots + legend still
 render. The projection is a plain equirectangular fit of the fixed AU box, so the outline and the dots
-stay registered; the canvas aspect matches the box to avoid squashing.
+stay registered; the canvas aspect matches the box to avoid squashing. The panel, the coastline and
+the dot edges are theme tokens (--map-panel, .mm-coast and .mm-dot in index.html); the member colours
+are data and stay literal.
 ```
 
 #### Fluid (viewBox + width:100%) so it scales inside its container; `maxW` ...
@@ -3584,7 +3600,7 @@ stay registered; the canvas aspect matches the box to avoid squashing.
 Fluid (viewBox + width:100%) so it scales inside its container; `maxW` optionally raises the max-width
 cap (the detail-page hero gives it more room than a list card). W stays the viewBox coordinate space so
 the geometry is identical regardless of rendered size.
-`mark` puts the AuScope mark in the panel's bottom-left corner, matching the static collection page's
+`mark` puts the AuScope mark pair in the panel's bottom-left corner, matching the static collection page's
 figure. Off by default: the list card is a thumbnail with no corner to spare, and the detail hero is the
 full-size map this belongs on. The mark is a sibling of the SVG inside a panel capped at the same width,
 never an <image> in the SVG, so the geometry stays what the colour and dot pins measure.
@@ -4147,10 +4163,11 @@ spatially selectable - without this guard null coerces to 0 and a polygon over (
 select it. It stays in ST/visible (counted, findable by name/text), just never in a bbox/shape hit.
 ```
 
-#### The header counter is ONE shell with a CONTEXTUAL slot
+#### The footer counter is ONE shell with a CONTEXTUAL slot
 
 ```text
-The header counter is ONE shell with a CONTEXTUAL slot. A fixed
+The footer counter is ONE shell with a CONTEXTUAL slot, in the footer's right zone beside the
+appearance control. A fixed
 "N shown / M selected / T total" describes what the reader is looking at only on the map: on the
 Surveys view it counts stations while the screen shows survey cards, and on the Collections views it
 counts something not on screen at all. The shell never moves; only
@@ -4265,7 +4282,7 @@ handler body - no routing change, only extracted so Enter can reuse it.
 Keyboard path for the Find dropdown. ArrowUp/Down move an active-descendant highlight,
 Enter activates the highlighted option (same activateFindItem as a click), Esc clears the query. No CSS
 rule is added to index.html for the highlight - the active option is
-styled inline to match the existing :hover look (copper fill, dark ink), and un-styled on move-off.
+styled inline to match the existing :hover look (accent fill, accent ink), and un-styled on move-off.
 (findActive is declared at the top of this file to avoid a temporal-dead-zone hazard in renderFind.)
 ```
 
@@ -4568,7 +4585,7 @@ is the reasonable reading - the rail's DATA TYPE checkboxes use the identical do
 and ARE toggles, and mapping tools conventionally make a legend a layer switch. So the four TYPE rows are
 real toggle buttons that PROXY the rail's #typeBoxes checkboxes. There is deliberately NO second state
 store: a legend click flips the SAME checkbox the rail owns and dispatches its change event, so the one
-existing #typeBoxes path (filters.js) runs every consumer - passesCore, the map redraw, the header
+existing #typeBoxes path (filters.js) runs every consumer - passesCore, the map redraw, the footer
 counts, the surveys-view decoupling and the select-lens semantics - exactly as a rail click does.
 There is no survey-badge row: the legend may not key an object the
 map does not draw, and the map draws nothing but the four data types.
@@ -4742,6 +4759,26 @@ OpenStreetMap data, so both name OSM; the second name is the provider that built
 The links open the way every outbound anchor on this site opens.
 ```
 
+#### A theme token's current value, for what is drawn outside CSS
+
+```text
+A theme token's current value, for what is drawn outside CSS: Leaflet strokes the station dots on a
+canvas and leaflet.draw styles a shape from options, so neither can read a var(). They read the
+token with getComputedStyle when they are built and again when src/theme.js announces a change. A
+headless harness with no stylesheet reads every token empty, which is why the read is guarded.
+```
+
+#### The two pmtiles layers state the SAME credit and Leaflet prints it once
+
+```text
+The two pmtiles layers state the SAME credit and Leaflet prints it once: they are one basemap split at
+the z7 crossover. The protomaps renderer paints a named flavour, so the pair is built by one
+function that takes it: "light" when data-theme is light and "dark" when it is dark, mounted at start
+in the resolved theme and remounted on "ausmt:theme" (the old pair is removed first, and the credit
+text is identical, so the attribution control still prints it once). The CARTO fallback is a raster
+and keeps its light tiles. Pinned by tests/test_map_theme.py and driven by tools/map_theme_test.js.
+```
+
 #### Mounted after the basemap so the control collects the layer already on ...
 
 ```text
@@ -4800,6 +4837,14 @@ Returns what this pass painted. The app ignores the value; the jsdom driver call
 reads it, because under a stubbed Leaflet the layer contents are unreadable Proxies.
 ```
 
+#### The shape colour is the --accent token, read here and again on every theme change
+
+```text
+The shape colour is the --accent token, read here and again on every theme change: Royal Blue on the
+light basemap and coral on the dark. The guided tour draws its demo rectangle in the same style, so a
+demonstrated selection looks like a hand-drawn one.
+```
+
 #### Explicit aria-labels on the draw + zoom toolbar anchors, set AFTER the ...
 
 ```text
@@ -4830,11 +4875,11 @@ immediate feedback and covers the L-stubbed harness, where the real DRAWSTART ev
 production reconciles via the listeners below.
 ```
 
-#### The LPMT colour split was REMOVED - all LPMT renders the flagship teal ...
+#### All LPMT renders TYPE_COL.LPMT whatever its AusLAMP membership
 
 ```text
-The LPMT colour split was REMOVED - all LPMT renders the
-flagship teal (TYPE_COL.LPMT) in type mode regardless of AusLAMP membership, and every colour mode
+All LPMT renders TYPE_COL.LPMT (the long-period blue) in type mode regardless of AusLAMP
+membership, and every colour mode
 is membership-blind. Since the map is dots-only, NO map surface carries the AusLAMP/legacy
 distinction at all: it was last held by the clustering split, which the badge rule inherited and
 which is now gone.
@@ -4978,6 +5023,15 @@ fitBounds does NOT fire it), and the container wheel/touch listeners catch scrol
 movestart is deliberately NOT used - it also fires on the app's own programmatic moves.
 ```
 
+#### A theme change redraws what CSS cannot reach
+
+```text
+A theme change redraws what CSS cannot reach: the basemap flavour, every station dot's edge (the
+--dot-edge token, near-black on the light basemap and the navy ground on the dark) and the shape
+colour, including any shape already drawn. The dot FILL is the data-type ramp, which does not change
+with the theme.
+```
+
 #### A click on the MAP BACKGROUND closes an open drawer (survey OR station)
 
 ```text
@@ -5019,11 +5073,13 @@ auto-switching the rail to Select & download. Named (not inline) so the jsdom dr
 
 ## portal/src/mapattrib.js
 
-#### The map's attribution, collapsed to one glyph in the corner
+#### The map's attribution, collapsed to one glyph in the top-right corner
 
 ```text
-The map's attribution, collapsed to one glyph in the corner. Shared by every map this site draws:
-the SPA's, and add-survey's picker, station preview and confirmation maps.
+The map's attribution, collapsed to one glyph in the top-right corner, which leaves the bottom-right
+to the AuScope mark and its clear space. Shared by every map this site draws: the SPA's, and
+add-survey's picker, station preview and confirmation maps, so the corner a reader looks in for the
+credit is the same on all four.
 
 THE CREDIT IS A LICENCE TERM, not a courtesy. The basemap is OpenStreetMap data under ODbL and
 each tile provider asks for credit of its own, so what leaves the corner is the LINE and the
@@ -5331,43 +5387,32 @@ that publishes no download index (a corpus with no verified routes ships no file
 the access rule: a withheld or coordinate-gated station is simply not in it.
 ```
 
-#### BBMT stays off the copper action hex (#EF7256), and GDS off the ...
+#### The data-type ramp, the same in both themes so a legend never changes meaning ...
 
 ```text
-BBMT stays off the copper action hex (#EF7256), and GDS off the
-ok/status green (#5BAE6A), so a data-type marker cannot be mistaken for the selection accent or a
-"good" status. LPMT teal is pinned (interaction test).
-The four data-type hues are pulled further apart. BBMT #3F6FC4 -> #5E5ED6
-(indigo) and AMT #A85CC4 -> #CDA1EC (light violet); LPMT teal and GDS magenta unchanged. The old AMT
-purple sat only ΔE00≈10 from the GDS magenta (confusable); the new pair is ΔE00≈21 with a ~20 L*
-lightness gap, and every data-type pair is now ΔE00≥21 (the four types are the four most mutually
-distinct hues in the palette). These are the map-marker colours; the index.html --lpmt/--bbmt/--amt/
---gds tokens carry the SAME hexes so the filter legend, the type-filter swatches and the map agree
-byte-for-byte. (plots.js TF-curve colours are independent and unchanged.) DIM_COL is a NON-STATUS
-palette (a cool→warm violet/magenta ramp): dimensionality (1-D/2-D/3-D) is not a quality ranking, so it
-must not borrow the red/amber/green status colours.
-LP/BB SEPARABILITY: "Long Period and Broadband icon colours are
-too similar". The earlier pair was ΔE00 26.1 on paper and still unreadable at site-dot size, because it
-separated almost entirely by HUE (teal 222° vs indigo 299°) across only 9 L* - and small marks are
-discriminated by VALUE, not hue. BBMT #5E5ED6 -> #3730B8: deeper and more saturated, which buys a 24.6 L*
-gap and a 55.7 C* gap and lifts the pair to ΔE00 34.2. LPMT is deliberately UNCHANGED - the teal is the
-established fabric colour across this portal and its atlases, so the other one moves.
-The number that actually mattered is the DEUTAN one: simulated deuteranopia collapsed the old pair to
-ΔE00 15.3 (protan 19.2); the new pair holds 25.3 / 30.1. That is the point of separating by lightness
-and along the blue-yellow axis rather than by hue - a red-green deficient reader loses the hue argument
-entirely, so a pair that leans on it is a pair that vanishes for them. The new BB also moves AWAY from
-the AMT light violet (ΔE00 27.2 -> 44.0), so "deeper blue" did not buy LP/BB at AMT's expense.
-All of it is recomputed and gated in tests/test_type_palette_separability.py; the floors are stated
-there, not here, so a future edit cannot re-converge the pair by editing a comment.
+The data-type ramp, the same in both themes so a legend never changes meaning with the theme: LPMT
+#3F88C8 (blue), BBMT #FFC14F (amber), AMT #9FCB5A (green), GDS #CE348A (magenta), the AuScope house
+style's. These are the map-marker colours; the --lpmt/--bbmt/--amt/--gds tokens carry the SAME hexes
+so the legend, the type-filter swatches and the map agree byte for byte, and the engine's _TYPE_COL
+draws the same four on every generated page. (plots.js TF-curve colours are independent and
+unchanged.) DIM_COL is a NON-STATUS palette (a cool to warm violet and magenta ramp): dimensionality
+is not a quality ranking, so it must not borrow the red, amber and green status colours.
+LP/BB SEPARABILITY was the pair the review reported ("Long Period and Broadband icon colours are too
+similar"): small marks are discriminated by VALUE, not hue. The house ramp puts the pair on opposite
+ends of the blue-yellow axis, 53.2 dE00 apart with a 26.9 L* gap, and 68.2 / 61.7 under simulated
+deuteranopia / protanopia, which is the axis a red-green deficient reader keeps. Every pair is at
+least 27.1 dE00 apart, and no type comes within the palette floor of either theme's accent, either
+page ground, the card surface or the dot edge. All of it is recomputed and gated in
+tests/test_type_palette_separability.py; the floors are stated there, not here.
 ```
 
-#### The INK a type chip needs, which is not one colour for all four ...
+#### The INK a type chip needs
 
 ```text
-The INK a type chip needs, which is not one colour for all four: .chip's default near-black sits at
-2.03:1 on BBMT's deep indigo (below WCAG AA's 4.5 and visibly muddy), where white reaches 9.22:1.
-The other three are the other way round - white on AMT's light violet is 2.12:1 against 8.85:1 for
-the default - so this is a per-type override, never a blanket flip. Measured, not judged by eye.
+The INK a type chip needs: .chip's near-black clears WCAG AA on LPMT (4.97:1), BBMT (11.61:1) and
+AMT (9.98:1), and GDS takes white (4.68:1 against 4.01:1 for the default). A per-type override,
+never a blanket flip. The ink is a literal rather than a theme token because the chip sits on the
+ramp, which does not change with the theme.
 ```
 
 #### The time-series level vocabulary, [token, label, gloss], IN THE ORDER ...
@@ -5471,10 +5516,32 @@ warm yellow #F2E27E - because the old red→green endpoints measured dE76≈9.6 
 simulation (indistinguishable for red-green CVD readers). LIGHTNESS carries the signal (relative
 luminance rises monotonically 0.046 → 0.75 along the lerp path), so the ramp survives all three
 dichromacies: simulated low↔high separation deutan 106.8 / protan 103.1 / tritan 69.1 dE76. The olive
-mid keeps the ramp off the lpmt teal and the ok green (every stop ≥17 dE00 from the data-type and
-status colours), and the null/"not evaluated" grey #5A6E7D stays clearly apart from the dark low end
-(dE00 20, L* 45 vs 26). The dark low end is marker-fill/dot material, so drawer text must not take
+mid kept the ramp off the navy palette's data-type and status colours (every stop ≥17 dE00). Against
+the house-style ramp the pale top stop sits 13.6 dE00 from BBMT's amber and the olive mid 8.7 from
+the light theme's --ok green; the completeness dot is drawer material that always sits beside its
+own readable value, never a map mark, so the two are not read for each other. The null/"not
+evaluated" grey #5A6E7D stays clearly apart from the dark low end (dE00 20, L* 45 vs 26). The dark low end is marker-fill/dot material, so drawer text must not take
 qColor as a text colour; it renders a .qvdot swatch beside plain readable text instead.
+```
+
+## portal/src/theme.js
+
+#### The appearance, chosen before first paint
+
+```text
+The house style is the light theme and the default; the navy palette is the dark one. The visitor's
+choice is stored as localStorage "ausmt_theme" = "light", "dark" or "system" (anything else, or
+nothing, means light), resolved against prefers-color-scheme for "system", and written to
+<html data-theme="light|dark">, which is the only hook the stylesheets read. The script is the
+FIRST script in every page's <head>, static and generated, and runs synchronously, so the first
+paint is already in the chosen theme. It is a file, root-anchored as /src/theme.js so a page served
+at any depth finds it, because the deployed CSP allows no inline script.
+
+Controls need no script of their own: any element with data-theme-choice sets the choice on click
+(the Light and Dark buttons in every footer), and radio inputs named welcomeTheme set it on change
+(the Appearance row in the map's welcome popup, which also offers Follow system). Both are kept in
+step with the stored choice whenever it is applied. A change dispatches "ausmt:theme" on document,
+which map.js answers for what CSS cannot reach.
 ```
 
 ## portal/src/tour.js
@@ -5756,29 +5823,6 @@ config.js is written by portal/tools/gen_config.py from portal.config.yaml and i
 reflection of the portal configuration: branding, version, deployment URLs and the analytics switch.
 To change any of that, edit portal.config.yaml and regenerate; a hand edit to config.js is lost on
 the next generate and the two surfaces then disagree about what the deployment is.
-```
-
-## portal/corpus-stats.js
-
-#### Why the totals come from the catalogue rather than the build document
-
-```text
-The About page header shows the corpus totals ("N stations, N surveys") read from the SAME static
-data products the portal app reads: catalogue.json, one row per station, and surveys.json, one entry
-per survey. About does not load the app bundle, so this is a self-contained script rather than a call
-into src/data.js; it duplicates only the base-url resolution, which it must match exactly.
-
-build.json is deliberately NOT a source here. It carries build IDENTITY (build_id, engine_commit,
-source_commit, generated) and no counts, so it cannot answer this question.
-```
-
-#### Honest by construction
-
-```text
-The block ships hidden and is revealed ONLY once both documents resolve to a non-empty corpus, so a
-file:// page (fetch blocked or cross-origin), a deployment whose data is not published yet, and an
-empty build all show nothing at all rather than a fabricated or "0 stations" total. Nothing is
-hard-coded: the numbers can only ever be what the served catalogue says.
 ```
 
 ## portal/releases.js

@@ -9,17 +9,18 @@ plus the chrome that makes it look like the rest of the portal.
 
 Each assertion states its failure criterion:
 
-  * PALETTE - FAILS if releases.html's five D+ surface/accent tokens are not byte-identical to
-    about.html's. (tests/test_theme_tokens.py pins index/about/add-survey against each other; this is
-    the same guard extended to the new page without editing that module's file list.)
+  * PALETTE - FAILS if releases.html's two token blocks, light and dark, are not identical to
+    about.html's. (tests/test_theme_tokens.py pins every page against the contract; this holds the two
+    sibling pages against each other from this page's own module.)
   * HEADER PARITY - FAILS if releases.html's header is not the same three-zone header about.html
-    carries: the same nav ids in the same order, the same six centre items in the same order, exactly
-    one .counts block in the right zone. Non-vacuous: a page with a hand-rolled header trips every line.
+    carries: the same nav ids in the same order, the same four centre items in the same order, exactly
+    one AuScope and NCRIS lock-up in the right zone and no counts. Non-vacuous: a page with a
+    hand-rolled header trips every line.
   * NO APP STATE - FAILS if the page carries index's live map-state ids (nVis/nSel/nTot), which have no
     meaning on a page with no map, no filter and no selection.
   * FOOTER CHROME - FAILS if the footer keeps the retired About-this-build popover or a version
-    chip, loses the bottom-left MTCAT link, or does not carry the AuScope-NCRIS lockup the
-    one-footer rule put in the right region on every surface.
+    chip, loses the bottom-left MTCAT link, carries an image (the lock-up moved to the header), or
+    does not carry the appearance control in its right region.
   * NO INLINE SCRIPT - FAILS if the page carries an inline <script> block. The deployed CSP for every
     page except add-survey.html is script-src 'self' with no 'unsafe-inline' (@strictPages in
     deploy/docker/caddy/Caddyfile is a `not path /add-survey.html` matcher, so a NEW page picks up the
@@ -43,6 +44,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
+
+from chrome_contract import token_blocks
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 RELEASES = ROOT / "releases.html"
@@ -116,21 +119,13 @@ def test_releases_page_exists():
 
 # --- chrome ---------------------------------------------------------------------------------------
 
-DPLUS = ("--ink", "--panel", "--panel-2", "--line", "--copper", "--text", "--muted")
-
-
-def _token(css, name):
-    m = re.search(re.escape(name) + r"\s*:\s*(#[0-9A-Fa-f]{6})", css)
-    assert m, f"{name} not found"
-    return m.group(1).upper()
-
-
 def test_palette_matches_about():
-    rel, abt = RELEASES.read_text(encoding="utf-8"), ABOUT.read_text(encoding="utf-8")
-    for name in DPLUS:
-        assert _token(rel, name) == _token(abt, name), (
-            f"releases.html {name} is {_token(rel, name)}, about.html says {_token(abt, name)}; the "
-            f"surface/accent tokens are declared verbatim on every page and must not split-brain")
+    rel = token_blocks(RELEASES.read_text(encoding="utf-8"))
+    abt = token_blocks(ABOUT.read_text(encoding="utf-8"))
+    for theme, mine, theirs in (("light", rel[0], abt[0]), ("dark", rel[1], abt[1])):
+        assert mine == theirs, (
+            f"releases.html's {theme} tokens differ from about.html's; the token blocks are declared "
+            f"verbatim on every page and must not split-brain:\n  releases {mine}\n  about    {theirs}")
 
 
 def _nav_ids(path):
@@ -138,10 +133,11 @@ def _nav_ids(path):
 
 
 def _centre_order(path):
-    """The five primary header items in document order, each reduced to a stable label. Mirrors the
+    """The four primary header items in document order, each reduced to a stable label. Mirrors the
     reducer in test_about_uniform_chrome.test_header_parity_about_matches_index, including its
-    styling of a stray .about item as 'other:<href>', which is how a sixth header entry (the retired
-    How-to-use link, or a successor to it) shows up here instead of passing quietly."""
+    styling of a stray .about item as 'other:<href>', which is how a fifth header entry (the retired
+    How-to-use or Contribute link, or a successor to either) shows up here instead of passing
+    quietly."""
     out = []
     for _tag, a, in_nav in _header(path):
         if in_nav and a.get("id") in ("navMap", "navSurveys", "navCollections"):
@@ -150,34 +146,32 @@ def _centre_order(path):
             out.append("about")
         elif "about" in _classes(a):
             out.append("other:" + (a.get("href") or a.get("id") or _tag))
-        elif "contribute" in _classes(a):
+        elif "contribute" in _classes(a) or a.get("href") == "add-survey.html":
             out.append("contribute")
     return out
 
 
 def test_header_parity_releases_matches_about():
-    """Every shipped header is FIVE items, namely Map, Surveys, Collections, About, Contribute.
-    Releases arrived on main carrying the retired sixth entry, a "How to use AusMT" link to
-    about.html#howto, so this pin holds it to the five-item order the shipped header carries.
-    Non-vacuous in both halves: run against that six-item header, the RELEASES assertion below fails
-    with other:about.html#howto in slot four."""
+    """Every shipped header is FOUR items, namely Map, Surveys, Collections, About. Releases once
+    arrived carrying the retired "How to use AusMT" link to about.html#howto, and every header carried
+    "Contribute a survey" until About's own body became its route; this pin holds the page to the
+    four-item order. Non-vacuous: a header with either retired entry fails with it in the list."""
     assert _nav_ids(RELEASES) == ["navMap", "navSurveys", "navCollections"], (
         f"releases.html nav must be navMap, navSurveys, navCollections in that order; "
         f"got {_nav_ids(RELEASES)}")
     assert _nav_ids(RELEASES) == _nav_ids(ABOUT), "releases.html and about.html nav ids diverge"
 
-    expected = ["navMap", "navSurveys", "navCollections", "about", "contribute"]
+    expected = ["navMap", "navSurveys", "navCollections", "about"]
     assert _centre_order(ABOUT) == expected, (
         "about.html's header changed shape; re-check what releases.html is being held to")
     assert _centre_order(RELEASES) == expected, (
         f"releases.html header items must run {expected}; got {_centre_order(RELEASES)}")
 
+    lockups = [a for (_t, a, _n) in _header(RELEASES) if "orglockup" in _classes(a)]
+    assert len(lockups) == 1, (
+        f"the header's right zone carries exactly one AuScope and NCRIS lock-up; found {len(lockups)}")
     counts = [a for (_t, a, _n) in _header(RELEASES) if "counts" in _classes(a)]
-    assert len(counts) == 1, (
-        f"the header must carry exactly one mono stats block (.counts) in its right zone; found {len(counts)}")
-    assert "hidden" in counts[0], (
-        "the corpus-totals block must ship hidden and be revealed only once the catalogue resolves, so a "
-        "file:// page or an unpublished deployment shows nothing rather than a zero total")
+    assert not counts, f"the header carries no counts block; found {len(counts)}"
 
     active = [a.get("id") for (_t, a, in_nav) in _header(RELEASES) if in_nav and "active" in _classes(a)]
     assert active == [], (
@@ -193,11 +187,12 @@ def test_no_live_app_state_ids():
 
 
 def test_footer_chrome_matches_the_other_pages():
-    """The one-footer rule emptied the right region of Releases and About this build and put the
-    AuScope-NCRIS lockup there instead, so the chrome this page must match is the new one. FAILS if
-    the popover or a version chip comes back here, if the MTCAT link leaves the bottom-left, or if
-    the lockup is missing. The strings and the targets are held for all six documents at once in
-    tests/test_footer_regions.py; this is the same shape asserted from this page's own parsed DOM."""
+    """The one-footer rule emptied the right region of Releases and About this build; it holds the
+    appearance control now, and the lock-up that once sat there is in the header. FAILS if the popover
+    or a version chip comes back here, if the MTCAT link leaves the bottom-left, if the footer names an
+    image, or if the control is missing. The strings and the targets are held for all six documents at
+    once in tests/test_footer_regions.py; this is the same shape asserted from this page's own parsed
+    DOM."""
     els = _footer(RELEASES)
     details = [a for (t, a, _ab) in els if t == "details" and "aboutbuild" in _classes(a)]
     assert not details, f"the About-this-build popover is retired from the footer; found {len(details)}"
@@ -211,9 +206,11 @@ def test_footer_chrome_matches_the_other_pages():
     assert len(apilinks) == 1 and apilinks[0].get("href") == "data/mtcat.json", (
         "the machine-readable MTCAT link is pinned bottom-left in the footer on every page")
 
-    logos = [a for (t, a, _ab) in els if t == "img" and "auscope-ncris-white.png" in a.get("src", "")]
-    assert [a.get("alt") for a in logos] == ["AuScope and NCRIS"], (
-        f"the footer must carry exactly one AuScope-NCRIS lockup, with its alt text; found {logos}")
+    imgs = [a for (t, a, _ab) in els if t == "img"]
+    assert not imgs, f"the footer fetches no image; the lock-up is in the header, found {imgs}"
+    controls = [a for (t, a, _ab) in els if "themectl" in _classes(a)]
+    assert len(controls) == 1 and controls[0].get("aria-label") == "Appearance", (
+        f"the footer's right region carries the one appearance control; found {controls}")
 
 
 # --- deployed-CSP and link safety -----------------------------------------------------------------

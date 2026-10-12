@@ -47,18 +47,16 @@ z-index are surface-local and carry no vertical geometry, exactly as the horizon
 leave them alone. The border-bottom is compared by its WIDTH only, for the same reason: the width is
 a term of the height, the colour is not.
 
-Zone CONTENT is not compared either, and that is the honest limit of this pin. Agreement here means
-two surfaces resolve the same height from the chrome they DECLARE; it is not a promise that two
-headers measure the same number of pixels, because the right zone is contextual by design. The SPA's
-status slot carries a live counter, and at 375px that one 15px line renders index.html's header at
-235px against brand.html's 220px with every term in this file in agreement. That is the pin working
-as intended, not a drift: the chrome is shared, the contents of the contextual slot are not.
+Zone CONTENT is not compared here, and that is the honest limit of this pin. Agreement here means
+two surfaces resolve the same height from the chrome they DECLARE; it is not a pixel measurement. The
+content is held separately: tests/test_header_geometry_parity.py compares every surface's header
+markup with the contract token by token, and with the contextual counts moved to the footer no zone
+of the header varies by page any more.
 
-NO CARVE-OUT. about.html carried the AuScope symbol as its identity mark, under a rule of its own,
-while that header was still being settled; this file once read the mark's height from whichever of
-the two rules a surface happened to use. The rule put the AusMT mark in that slot like everywhere
-else, so there is one rule to read and every surface must carry it. The height is the only thing a
-mark contributes to the header's height, and every surface declares it as 30px.
+NO CARVE-OUT. Every surface opens its header with the same AuScope mark pair under the same
+.brandmark rule, so there is one rule to read and every surface must carry it. The height is the only
+thing a mark contributes to the header's height, and every surface declares it as 30px; the theme
+switch shows one variant of the pair, so the pair contributes one box, not two.
 """
 import re
 from pathlib import Path
@@ -66,7 +64,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
-# The identity mark rule. One spelling, on every surface: the AusMT mark opens every header.
+# The identity mark rule. One spelling, on every surface: the AuScope mark opens every header.
 MARK_RULE = ".brandmark"
 
 
