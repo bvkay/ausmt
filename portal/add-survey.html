@@ -1946,7 +1946,7 @@ if(typeof document!=="undefined"&&document.getElementById){
         const st=$("m_coll_status"); if(st&&!st.value&&c.status) st.value=c.status;
         const n=c.n_surveys||0;
         hint.textContent="↳ Joining existing collection “"+(c.title||v)+"” ("+n+" survey"+(n===1?"":"s")+"). Fields prefilled, edit only to correct.";
-        hint.style.color="#5BAE6A";
+        hint.style.color="var(--ok)";
       } else {   // See docs: portal internals, add-survey.html.
         const near=Object.keys(COLLS).find(cid=>cid.toLowerCase()===v.toLowerCase());
         if(near){ hint.textContent="Did you mean “"+near+"”? A different id creates a SEPARATE collection, ids are matched exactly."; hint.style.color="var(--accent)"; }
