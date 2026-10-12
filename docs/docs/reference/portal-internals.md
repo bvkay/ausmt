@@ -55,6 +55,19 @@ one variant, so the pair contributes one box. Stated character-identically in
 engine/extract/_pages.py's sheet; pinned by tests/test_header_geometry_parity.py.
 ```
 
+#### The AuScope and NCRIS lock-up is the brand kit's PNG pair, as tall as the tabs
+
+```text
+The AuScope and NCRIS lock-up in the right zone is the AuScope brand kit's own PNG pair,
+vendor/auscope-ncris-colour.png for the light theme and vendor/auscope-ncris-white.png for the
+dark, each declared at its intrinsic 1919x325. .orglockup img draws it 40px tall, the min-height of
+the view tabs, so beside the tab row it never sets the header's height, and the width follows the
+artwork. max-width:100% keeps it inside the zero-basis .hright zone; where that zone is narrower
+than the artwork (between 761px and about 953px of viewport) the cap squeezes the image's width
+while the height stays 40px. Stated character-identically on every surface; pinned by
+tests/test_header_geometry_parity.py and tests/test_header_vertical_geometry.py.
+```
+
 #### The theme switch: .theme-dark is hidden, and the dark theme swaps the pair
 
 ```text
@@ -414,6 +427,9 @@ The heading wraps the wordmark and takes no type of its own, so its line box is 
 
 The theme switch follows .brandmark, which it ties on specificity. See docs: portal internals, index.html.
 
+The AuScope and NCRIS lock-up is the brand kit's PNG pair, drawn 40px tall, the height of the view tabs.
+     See docs: portal internals, index.html.
+
 The ACTIVE view is filled with --accent and lettered in --accent-ink, and every view control keeps a
      40px click target. See docs: portal internals, index.html.
 
@@ -653,9 +669,9 @@ instead of stacking. Character-identical on every surface wearing the chrome.
 THE IN-PAGE ANCHOR OFFSET FOLLOWS THE HEADER. The header is sticky, so an anchor that scrolls its
 section to y=0 puts the heading underneath it and scroll-margin-top is the clearance. One number
 will not do: the header WRAPS as the viewport narrows (with every zone stacked under 760px the
-lock-up takes a row of its own) and is 254px tall at 375px against 57px at 1280px, so each band below
-carries the TALLEST header in its own range (overshooting drops a heading a few pixels low,
-undershooting hides it). These are measurements of this header's content at this font stack:
+lock-up takes a 40px row of its own) and is 260px tall at 375px against 57px at 1280px, so each
+band below carries the TALLEST header in its own range (overshooting drops a heading a few pixels
+low, undershooting hides it). These are measurements of this header's content at this font stack:
 anything that changes its wording, its nav or its zones moves the wrap points and the ladder must be
 re-measured, and no source-read pin can see the header get taller. tests/test_about_uniform_chrome.py
 holds the shape and the values at 375px and 1280px.
@@ -664,10 +680,12 @@ holds the shape and the values at 375px and 1280px.
 #### The AuScope-NCRIS lock-up in the body, the pair the header carries ...
 
 ```text
-The AuScope-NCRIS lock-up in the body, the pair the header carries, drawn larger: the Royal Blue
-variant on the light ground and the white one on the dark, of which the theme switch shows one. The
-wrapper takes no line box of its own and the images state no display, so the switch can show either
-without a descender gap and without being outranked.
+The AuScope-NCRIS lock-up in the body, the pair the header carries, drawn larger: the brand kit's
+colour PNG on the light ground and its white PNG on the dark, of which the theme switch shows one.
+The images declare the artwork's intrinsic 1919x325 and the rule draws them 320px wide with
+height:auto, so the declared height sets the proportion and never the size. The wrapper takes no
+line box of its own and the images state no display, so the switch can show either without a
+descender gap and without being outranked.
 ```
 
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...

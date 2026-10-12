@@ -114,14 +114,19 @@ The header is the portal's header with two declared differences: the identity is
 root rather than the map page's heading, and the three tabs are links with the current page's tab
 active.
 
-- Left: the AuScope mark, then the AusMT wordmark and the tagline. The mark is a pair of files under
-  `/vendor/auscope/`, one inked for the light ground and one in white for the dark ground; the
-  `.theme-light` and `.theme-dark` rules show the file that matches `data-theme`, so the white file
-  never sits on the light ground.
+- Left: the AuScope mark, then the AusMT wordmark and the tagline. The mark is a pair of SVGs under
+  `/vendor/auscope/`, derived from the AuScope brand kit's own vector icon, one inked for the light
+  ground and one in white for the dark ground; the `.theme-light` and `.theme-dark` rules show the
+  file that matches `data-theme`, so the white file never sits on the light ground.
 - Centre: Map, Surveys and Collections, then About. There is no Contribute control in any header;
   `add-survey.html` stays served and About links it from its body.
-- Right: the AuScope and NCRIS lock-up, again as a light and a white file, linking
+- Right: the AuScope and NCRIS lock-up, again as a light and a white file: the brand kit's own PNGs,
+  `/vendor/auscope-ncris-colour.png` and `/vendor/auscope-ncris-white.png`, declared at their
+  intrinsic 1919 by 325 and drawn 40px tall, the height of the tabs. It links
   `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`.
+
+The site draws the 2025 AuScope brand kit's own files, which carry Tasmania, and the lock-up is as
+tall as the tabs (Owner decision 2026-10-13).
 
 ### Footer
 
@@ -169,8 +174,8 @@ card's map is drawn in exactly the dark appearance's map tokens (`_MAP_PANEL`, `
 `/vendor/*` and `/src/*` are served from the portal image and the pages tree from the data volume,
 so the two can be a deploy apart. A pages tree that names a file the running image does not serve
 shows alt text in place of the marks and loses its appearance script, so the portal image goes out
-first; `/vendor/auscope/auscope-mark.svg` and `/src/theme.js` each answering 200 is the check before
-the pages tree is swapped.
+first; `/vendor/auscope/auscope-mark.svg`, `/vendor/auscope-ncris-colour.png` and `/src/theme.js`
+each answering 200 is the check before the pages tree is swapped.
 
 ## Structured data, by page kind
 
@@ -405,8 +410,8 @@ is the AuScope half of `portal/vendor/auscope-ncris-white.png`, cut at column 12
 325 image and trimmed to its alpha bbox: the columns to the right carry a second organisation's mark
 and a descriptor line that is unreadable at card height, and the site header already carries the full
 lock-up. It is drawn no taller than the AusMT mark above it, which is how the acknowledgement is kept
-from outweighing the resource identity it acknowledges. The PNG stays committed for this crop; no
-page's chrome references it.
+from outweighing the resource identity it acknowledges. The same PNG is the header's dark-theme
+lock-up on every page, so the card's crop and the chrome draw from one file.
 
 The address is set in Inter Bold on all three families. The root card's artwork is set in that face,
 so the generated cards adopting it is what makes the three addresses one line rather than three that
@@ -472,8 +477,10 @@ static page and in the engine's page shell.
 
 The icons are the AuScope mark, Royal Blue with its lighter swoosh, not the AusMT mark
 (Owner ruling 2026-10-12). `portal/tools/gen_auscope_icons.py` renders all five files from
-`portal/vendor/auscope/auscope-mark.svg` and from nothing else, so replacing that placeholder with
-AuScope's official file and rerunning the tool is the whole of a change to the icons:
+`portal/vendor/auscope/auscope-mark.svg` and from nothing else. That file is derived from the
+AuScope brand kit's own vector icon, with the fills the kit states, `#272472` and `#A7A2C5`
+(Owner decision 2026-10-13), so a change to the mark is a change to that file and a rerun of the
+tool:
 
 | File | What it is |
 |---|---|

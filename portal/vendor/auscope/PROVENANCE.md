@@ -1,18 +1,37 @@
-# AuScope identity assets, placeholders
+# AuScope identity assets
 
-Six SVG files cut from the vector pages of the AuScope Style Guide
-(https://www.auscope.org.au/s/AuScope-Style-Guide.pdf, page 4): the mark alone, the mark with the
-wordmark, and the AuScope and NCRIS lock-up, each in Royal Blue (#282572) and in white (the mark's
-lighter swoosh at 55 percent). The paths are the guide's own geometry; the blues are normalised to the
-guide's stated hex. They stand in until AuScope supplies the official files, which replace them under
-the same names. Rules from the guide: breathing space of at least the logo's height on every side; the
-white versions sit on Royal Blue or another dark ground only.
+The site draws the AuScope brand kit's own files ("2025 AuScope Logos"), which carry Tasmania. The
+earlier cuts from the AuScope Style Guide's page did not, and are gone.
+
+## The mark pair
+
+`auscope-mark.svg` and `auscope-mark-white.svg` are derived from the kit's vector icon,
+`2025 AuScope Logo Icon.ai`, read with PyMuPDF: the file's four shapes, as cubic and line paths in
+their own geometry, translated so the ink box starts at the origin (viewBox `0 0 67.406 69.083`) and
+written to three decimals. Nothing is redrawn or simplified.
+
+| File | Fills |
+|---|---|
+| `auscope-mark.svg` | As the kit file states them: the body in its Royal Blue, `#272472`, and the swoosh in `#A7A2C5`. They are not normalised to the guide's `#282572`. |
+| `auscope-mark-white.svg` | The same four shapes in white, `#FFFFFF`, with the swoosh at `fill-opacity="0.302"`: the alpha, 77 of 255, at which the kit's `2025 AuScope Logo Icon - White.png` renders it. |
+
+Rules from the guide: breathing space of at least the logo's height on every side; the white
+versions sit on Royal Blue or another dark ground only.
+
+## The lock-up pair
+
+The AuScope and NCRIS lock-up in every header, and in About's body, is the kit's own PNG pair, kept
+one level up at the vendor root and never re-encoded, resized or recoloured:
+`../auscope-ncris-colour.png` is `2025 AuScope-NCRIS Logo - Colour.png` and
+`../auscope-ncris-white.png` is `2025 AuScope-NCRIS Logo - White.png`, both 1919 by 325. The kit's
+only vector lock-up is an EPS this repository's tools do not read, so the PNGs are drawn as
+published: 40px tall in the header, 320px wide in About. `../README.md` records each file's digest
+and size.
 
 ## Icons derived from the mark
 
 `portal/tools/gen_auscope_icons.py` renders the site's favicon and app icons from `auscope-mark.svg` and
-from nothing else, so replacing that file with the official artwork and rerunning the tool is the
-whole of a change to the icons.
+from nothing else, so a change to the mark is a change to that file and a rerun of the tool.
 
 | File | Derivation |
 |---|---|

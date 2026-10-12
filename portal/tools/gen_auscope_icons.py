@@ -4,8 +4,8 @@
     python3 tools/gen_auscope_icons.py            # (re)write the icons
     python3 tools/gen_auscope_icons.py --check    # exit 1 if a committed icon differs from a fresh render
 
-The one source is vendor/auscope/auscope-mark.svg, so replacing that file with the official artwork
-and rerunning this tool is the whole of a change to the icons. It writes:
+The one source is vendor/auscope/auscope-mark.svg, the AuScope brand kit's vector icon, so a change
+to the mark is a change to that file and a rerun of this tool. It writes:
 
   vendor/favicon.svg                 the mark's own paths in a viewBox cropped to the mark, titled AuScope
   favicon.ico                        16, 32 and 48 px frames of the mark on a transparent ground

@@ -33,6 +33,13 @@ AuScope and NCRIS lock-up, linked to AuScope. The AusMT symbol stays AusMT's pro
 documentation sidebar and the social card carry it, and the brand page offers it for talks and papers.
 The browser tab and the home-screen icons carry the AuScope mark, like the header.
 
+The files are the 2025 AuScope brand kit's own (Owner decision 2026-10-13). The kit's mark carries
+Tasmania; the cuts first taken from the style guide's page did not, so they were retired rather than
+corrected by hand. The mark is the kit's vector icon, in the colours the kit file states, and the
+lock-up is the kit's colour and white PNGs, used as published. The lock-up is drawn as tall as the
+Map, Surveys and Collections tabs beside it, so the right of the header lines up with the controls
+and the header is no taller than the tabs make it.
+
 The header carries four controls: Map, Surveys, Collections and About. Contributing a survey is
 reached from About, where a contributor reads what a submission involves before starting one.
 
