@@ -23,7 +23,8 @@ Each assertion states its failure criterion:
   * REGIONS - FAILS if a surface does not carry exactly three footer regions, or if a region holds
     something belonging to another.
   * STRINGS - FAILS if a surface's centre line drifts from the wording, if the copyright clause comes
-    back, or if the left link's label stops being "MTCAT JSON" with the leaves-the-site arrow.
+    back, if the left link's label stops being "MTCAT JSON" with the leaves-the-site arrow, or if a
+    portal page's left link loses class="apilink" or its title.
   * TARGETS - FAILS if the surfaces stop agreeing on where the MTCAT link points. The SPA is served
     from the portal root and writes it relative, the generated pages cannot, so the pin holds the
     ROOT-RELATIVE form of both against each other.
@@ -294,18 +295,24 @@ def test_the_pin_enumerates_every_page_the_portal_ships():
         f"carries the one footer too, so add it to _PORTAL_PAGES")
 
 
+# The left link as each surface writes it. The six portal pages style it by class="apilink" and explain
+# it with a title, both required; the engine's footer is the one surface that need not carry them.
+_LEFT_LINK = r'<a class="apilink" href="([^"]+)" title="[^"]*">(.*)</a>'
+_ENGINE_LEFT_LINK = r'<a (?:class="apilink" )?href="([^"]+)"(?: title="[^"]*")?>(.*)</a>'
+
+
 @pytest.mark.parametrize("where", SURFACES)
-def test_every_surface_carries_the_same_three_regions_with_the_owners_strings(where):
+def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(where):
     """REGIONS and STRINGS, on all seven surfaces. FAILS if a region is missing, out of order or holds
-    another's content, if the left label or the centre line drifts, or if the right region is anything
-    but the surface's status followed by the appearance control.
+    another's content, if a portal page's left link loses class="apilink" or its title, if the left
+    label or the centre line drifts, or if the right region is anything but the surface's status
+    followed by the appearance control.
 
     Non-vacuous in every half: the previous footer fails the left label (it read "Machine-readable
     record (MTCAT JSON)"), the centre (it carried the copyright clause) and the right region (it held
     the lock-up)."""
     regions = _regions(where, _foot(where))
-    link = re.fullmatch(r'<a (?:class="apilink" )?href="([^"]+)"(?: title="[^"]*")?>(.*)</a>',
-                        regions["left"], re.S)
+    link = re.fullmatch(_ENGINE_LEFT_LINK if where == ENGINE else _LEFT_LINK, regions["left"], re.S)
     assert link, f"{where}: the left zone holds the MTCAT link and nothing else: {regions['left']!r}"
     label = " ".join(entities(link.group(2)).split())
     assert label == f"{LEFT_LABEL} {ARROW}", (
