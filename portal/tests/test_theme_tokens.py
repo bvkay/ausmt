@@ -21,6 +21,9 @@ Each assertion states its failure criterion:
     --panel-2 or --copper.
   * THE SCRIPT - FAILS if a page does not load /src/theme.js, loads it anywhere but first in <head>,
     loads it after its <style>, or inlines it.
+  * ONE CARD TREATMENT - FAILS if a card on the page ground loses the --line border, the 4px radius
+    or the --shadow token in its base rule. Non-vacuous: the add-survey advisory (6px, no shadow), its
+    fieldset and panels and the compact survey list (8px, no shadow) fail before the house style.
 
 ENCODING: the reads state encoding="utf-8" explicitly. Without it Path.read_text() decodes with the
 locale codec, which is cp1252 on a default Windows shell, and index.html carries UTF-8 glyphs. See
@@ -128,6 +131,63 @@ def test_the_engine_shell_loads_the_appearance_script_first():
     if "{ld}" in head:
         assert at < head.index("{ld}"), (
             "engine/extract/_pages.py: the JSON-LD blocks must follow the appearance script")
+
+
+# Every card on a page ground, by page. A card is a --surface box sitting on --bg; a raised row inside a
+# card is --surface-2 and is not listed. A new card joins this list or it is not held to the treatment.
+CARDS = {
+    "index.html": (".cstat", ".scard", ".emptystate", ".maplegend", ".cardlist"),
+    "about.html": (".card", ".toc"),
+    "add-survey.html": (".advisory", "fieldset", ".panel", ".tier"),
+    "brand.html": (".usage", ".item", ".swatch", ".hero"),
+    "releases.html": (".state", ".rel"),
+}
+CARD_TREATMENT = {"border": "1px solid var(--line)", "border-radius": "4px", "box-shadow": "var(--shadow)"}
+
+
+def _base_rules(text):
+    """{selector: declarations} for the top-level rules of a page's <style>, comments stripped and
+    every at-rule block skipped, so a narrower-width override cannot stand in for the base rule. A
+    selector declared twice merges in source order, as the cascade does."""
+    css = text.split("<style>", 1)[1].split("</style>", 1)[0]
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    out, i = {}, 0
+    while True:
+        brace = css.find("{", i)
+        if brace < 0:
+            return out
+        prelude = css[i:brace].strip()
+        depth, j = 1, brace + 1
+        while depth:
+            depth += {"{": 1, "}": -1}.get(css[j], 0)
+            j += 1
+        if not prelude.startswith("@"):
+            out.setdefault(prelude, {}).update(_decls_of(css[brace + 1:j - 1]))
+        i = j
+
+
+def _decls_of(body):
+    out = {}
+    for decl in body.split(";"):
+        if ":" in decl:
+            name, value = decl.split(":", 1)
+            out[name.strip()] = " ".join(value.split())
+    return out
+
+
+def test_the_card_list_covers_every_page_but_the_404():
+    """The 404 page carries no card; every other page is enumerated, so a page added later is too."""
+    assert sorted(CARDS) == sorted(set(PAGES) - {"404.html"})
+
+
+@pytest.mark.parametrize("name,selector", [(n, s) for n, sels in CARDS.items() for s in sels])
+def test_every_card_takes_the_house_style_treatment(name, selector):
+    rules = _base_rules(_text(name))
+    assert selector in rules, f"{name}: no base {selector}{{...}} rule"
+    got = {k: rules[selector].get(k) for k in CARD_TREATMENT}
+    assert got == CARD_TREATMENT, (
+        f"{name}: the {selector} card must take the house-style card treatment:\n"
+        f"  got  {got}\n  want {CARD_TREATMENT}")
 
 
 def test_the_appearance_script_ships_and_is_never_inlined():

@@ -22,9 +22,11 @@ paint, so the stylesheet never reads anything else to choose. Roles, not colours
 tokens: --bg is the page ground; --surface the header, footer, rail, drawer, dialogs and cards;
 --surface-2 inputs, inactive tabs, chips and raised rows; --line rules and borders; --text,
 --muted and --heading the three inks; --accent links, the active tab, selection and focus rings,
-with --accent-ink for text on it. The data-type ramp (--lpmt, --bbmt, --amt, --gds) is declared
-once, in the light block, because a legend must not change meaning with the theme. Pinned by
-tests/test_theme_tokens.py.
+with --accent-ink for text on it. A card on the page ground (the About and Releases cards, the
+survey cards and the compact survey list, every card on add-survey.html) takes a --line border, a
+4px radius and --shadow, which the dark block sets to none. The data-type ramp (--lpmt, --bbmt,
+--amt, --gds) is declared once, in the light block, because a legend must not change meaning with
+the theme. Pinned by tests/test_theme_tokens.py.
 ```
 
 #### --no is rendered as TEXT on --surface and --surface-2
