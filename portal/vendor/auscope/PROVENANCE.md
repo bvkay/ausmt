@@ -20,8 +20,10 @@ whole of a change to the icons.
 | `portal/favicon.ico` | 16, 32 and 48 px frames, each the mark fitted edge to edge on its longer side on a transparent ground. |
 | `icon-180.png`, `icon-192.png`, `icon-512.png` | The mark centred at 70 percent of the icon's width on an opaque white (#FFFFFF) square, RGB. 180 is the apple-touch-icon; 192 and 512 are kept for a future web manifest. |
 
-Every raster is drawn at four times its size by PyMuPDF and resampled down with Lanczos, which keeps
-the 16 px frame's edges clean. The renderer is not in the lock environment, so
-`python3 tools/gen_auscope_icons.py --check` compares the committed files byte for byte where
-PyMuPDF is installed and says it cannot compare where it is not. The white versions of the mark are
-not used for icons: a browser tab and a home screen give no guarantee of a dark ground.
+Every raster is drawn by Pillow: each path is flattened to a polygon and filled in the source's
+order at eight times the icon's size, then resampled down with Lanczos, which keeps the 16 px frame's
+edges clean. `python3 tools/gen_auscope_icons.py --check` compares `favicon.svg` byte for byte and
+each raster as its decoded picture (mode, size and pixels; for `favicon.ico`, the frame sizes and
+each frame's pixels), so a different Pillow encoding the same picture stays in sync. The white
+versions of the mark are not used for icons: a browser tab and a home screen give no guarantee of a
+dark ground.

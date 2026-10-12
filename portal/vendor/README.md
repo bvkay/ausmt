@@ -71,8 +71,9 @@ until AuScope supplies the official files, which replace them under the same nam
 | `PROVENANCE.md` | Source, normalisation and the icon derivation. |
 
 The three PNG icons, `../favicon.svg` and `../../favicon.ico` are written by
-`tools/gen_auscope_icons.py` (it needs PyMuPDF to rasterise; `--check` compares them byte for byte
-against a fresh render). Regenerate them after replacing `auscope-mark.svg`; never edit them by hand.
+`tools/gen_auscope_icons.py`, which rasterises with Pillow; `--check` compares `favicon.svg` byte for
+byte and each raster pixel for pixel (with its mode and size, and for the ICO its frame sizes) against
+a fresh render. Regenerate them after replacing `auscope-mark.svg`; never edit them by hand.
 
 `auscope-icon-colour.png`, `auscope-icon-white.png` and `auscope-ncris-white.png`, one level up,
 are the AuScope brand kit's own files: they are kept, verbatim, and no longer drawn by the site

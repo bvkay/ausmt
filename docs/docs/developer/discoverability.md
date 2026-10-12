@@ -375,13 +375,20 @@ AuScope's official file and rerunning the tool is the whole of a change to the i
 | `portal/vendor/auscope/icon-180.png` | The apple-touch-icon: the mark centred at 70 percent of the width on an opaque white square. A home screen fills transparency with black, so the ground is opaque. |
 | `portal/vendor/auscope/icon-192.png`, `icon-512.png` | The same at the two sizes a web manifest names, so that adding one later costs no regeneration. |
 
-The rasters are drawn at four times their size and resampled down with Lanczos, which keeps the edges
-of the 16 px frame clean. The tool rasterises with PyMuPDF, which is not in the lock environment the
-portal tests run in: there `python3 tools/gen_auscope_icons.py --check` reports that it cannot compare
-and exits 0, the pins that render skip with a reason, and the structural pins (the favicon's text, the
-frame sizes, the colours, the corners and the proportions) still run. Where PyMuPDF is installed the
-check compares every file byte for byte with a fresh render. Without it the tool writes nothing and
-exits 2.
+The tool renders with Pillow alone: each path of the mark is flattened to a polygon (64 line pieces
+per curve), the polygons are filled in source order at eight times the icon's size, and the result is
+resampled down with Lanczos, which keeps the edges of the 16 px frame clean. Pillow is in the lock
+environment and in CI, so `python3 tools/gen_auscope_icons.py --check` and every pin in
+`portal/tests/test_favicon_and_app_icons.py` run wherever the portal tests do. The check compares
+`favicon.svg` byte for byte and each raster as its decoded picture: the PNGs by mode, size and pixels,
+and `favicon.ico` by its frame sizes and each frame's pixels. A different Pillow can encode the same
+picture as different bytes, so a byte comparison would go red on an encoder upgrade, while a
+one-pixel edit goes red under the picture comparison.
+
+The icon URLs are stable, so the edge serves them with `Cache-Control: no-cache` and revalidates the
+bytes (`@iconAssets` in `deploy/docker/caddy/Caddyfile`, which names `/vendor/favicon.svg` and
+`/vendor/auscope/icon-*.png` and excludes them from the thirty-day `vendor/` cache). A replaced mark
+reaches a home screen on its next fetch instead of a month later.
 
 The AusMT mark stays the product mark. `portal/tools/gen_brand.py` writes every AusMT export
 under `portal/vendor/brand/`, held by `gen_brand.py --check` in CI; the brand page offers them and
