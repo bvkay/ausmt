@@ -132,11 +132,12 @@ _FETCH_CSS = """
 """
 _FETCH_SCRIPTS = ("/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js")
 
-# The portal's own data-type palette (portal/src/state.js TYPE_COL), byte for byte, so the page maps
-# and the SPA map speak one colour language. BBMT's value is the one the portal MEASURED for LP/BB
-# separability and deutan-safety; the page carried a lightened variant of it, which meant the two
-# surfaces coloured the same survey differently and the one with the measurement behind it lost.
-_TYPE_COL = {"LPMT": "#2E8FA3", "BBMT": "#3730B8", "AMT": "#CDA1EC", "GDS": "#C255A0"}
+# The portal's own data-type ramp (portal/src/state.js TYPE_COL and the --lpmt, --bbmt, --amt and
+# --gds tokens), byte for byte, so the page maps and the SPA map speak one colour language. It is a
+# data encoding, not chrome: the same four values in both appearances, because a legend must not
+# change meaning with the theme. Every mark drawn in it takes a var(--dot-edge) stroke (.mm-dots),
+# which is what keeps the lighter hues legible on the light map panel.
+_TYPE_COL = {"LPMT": "#3F88C8", "BBMT": "#FFC14F", "AMT": "#9FCB5A", "GDS": "#CE348A"}
 _TYPE_FALLBACK = "#4FC3D9"
 
 # The portal collections view's member palette (portal/src/drawer.js COLL_PAL), same order. It has
@@ -144,18 +145,14 @@ _TYPE_FALLBACK = "#4FC3D9"
 # same colour and its legend could not disambiguate them (AusLAMP: 14 members, 8 colours, 6 reused).
 _COLL_PAL = ("#2E8FA3", "#EF7256", "#8A5FC0", "#5BAE6A", "#3F6FC4", "#C255A0", "#D9A23B", "#A85454")
 
-# The map panel's own ground, one step CLOSER to the card it sits on than a near-black would be. A
-# darker rectangle inside a lighter card reads as a box on a box, and the eye then finds the
-# rectangle before the coastline. Holding the fill at the card's own token and keeping the rule soft
-# leaves the Australia outline as the only object with an edge, which is what the panel is for.
+# The raster collection card's map colours. The SVG panels take the theme tokens through their
+# classes (.mm-panel, .mm-rule, .mm-coast, .mm-line); a PNG has no theme, so the card is drawn on the
+# dark ground in exactly the dark appearance's --map-panel, --map-line, --coast-fill and --coast-line,
+# and the card and the page it previews in that appearance draw one map.
 _MAP_PANEL = "#18213D"
 _MAP_PANEL_LINE = "#222C4E"
-
-# The coastline's own two colours, declared once because two surfaces draw the same outline in two
-# media: the SVG panels below and the raster collection card. A card that previewed a page whose
-# coastline was a different colour would read as a different map.
-_COAST_FILL = "#1d3140"
-_COAST_LINE = "#3a5266"
+_COAST_FILL = "#1D3140"
+_COAST_LINE = "#3A5266"
 
 # The site's own name, as the structured data and every og:site_name state it. Google labelled the
 # site by its publisher because nothing on it ever named the site itself.
@@ -378,15 +375,22 @@ def _minimap_height(width) -> int:
 
 
 def _outline_paths(p) -> str:
-    """The schematic coast rings and state borders, projected by `p`."""
+    """The schematic coast rings and state borders, projected by `p`. Colours come from the page's
+    theme through the classes, so the geometry carries no colour of its own."""
     def path(ring, close=True):
         d = "M" + "L".join(f"{x},{y}" for x, y in (p(lo, la) for lo, la in ring))
         return d + ("Z" if close else "")
-    coast = "".join(f'<path d="{path(r)}" fill="{_COAST_FILL}" stroke="{_COAST_LINE}" '
-                    f'stroke-width="1"/>' for r in au.COAST)
-    borders = "".join(f'<path d="{path(r, False)}" fill="none" stroke="{_COAST_LINE}" '
-                      f'stroke-width=".8" stroke-dasharray="3 3"/>' for r in au.BORDERS)
+    coast = "".join(f'<path class="mm-coast" d="{path(r)}" stroke-width="1"/>' for r in au.COAST)
+    borders = "".join(f'<path class="mm-line" d="{path(r, False)}" stroke-width=".8" '
+                      f'stroke-dasharray="3 3"/>' for r in au.BORDERS)
     return coast + borders
+
+
+def _map_panel(width, height) -> str:
+    """The panel a map is drawn on: its ground and its frame, as the first element of the SVG so
+    everything after it paints over it. The frame keeps a 1px stroke at any rendered size."""
+    return (f'<rect class="mm-panel mm-rule" x=".5" y=".5" width="{width - 1}" '
+            f'height="{height - 1}" rx="8" vector-effect="non-scaling-stroke"/>')
 
 
 def au_outline_defs(width):
@@ -465,25 +469,24 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
             group.append(dot(pt))
         if group:
             runs.append(f'<g fill="{fill}">{"".join(group)}</g>')
-        dots = f'<g fill-opacity=".9">{"".join(runs)}</g>'
+        dots = f'<g class="mm-dots" fill-opacity=".9">{"".join(runs)}</g>'
     marker = ""
     # The ring is the exact complement of the dot gate: its whole job is to stand in for dots too
-    # small to draw, so it is meaningful when and only when they are suppressed. Keying it off a
-    # point COUNT instead put a ring on every map that happened to be short, including one drawn
-    # from a sampled footprint, where it marked the centroid of a continent.
+    # small to draw, so it is meaningful when and only when they are suppressed. Keyed off a point
+    # COUNT, a ring would land on every short map, including one drawn from a sampled footprint,
+    # where it marks the centroid of a continent.
     if locator and points and not dots_drawn:
         clon = sum(pt[0] for pt in points) / len(points)
         clat = sum(pt[1] for pt in points) / len(points)
         mx, my = p(clon, clat)
-        # Muted, not coral: the ring is a locator hint on a map, and coral is reserved for primary
-        # actions and active states. Same ink as the footprint panel's scale bar,
-        # so the two map annotations read as one layer over the geography.
-        marker = (f'<circle cx="{mx}" cy="{my}" r="9" fill="none" stroke="#8FA3B0" '
+        # Muted ink, never the accent: the ring is a locator hint on a map, and the accent is
+        # reserved for links, active states and focus. The footprint panel's scale bar takes the
+        # same class, so the two map annotations read as one layer over the geography.
+        marker = (f'<circle class="mm-note" cx="{mx}" cy="{my}" r="9" '
                   f'stroke-width="1.4" opacity=".75"/>')
     return (f'<svg viewBox="0 0 {width} {height}"{xlink_ns} role="img" '
-            f'aria-label="{_e(label)}" '
-            f'style="background:{_MAP_PANEL};border:1px solid {_MAP_PANEL_LINE};border-radius:8px">'
-            f'{outline}{dots}{marker}</svg>')
+            f'aria-label="{_e(label)}">'
+            f'{_map_panel(width, height)}{outline}{dots}{marker}</svg>')
 
 
 def _footprint_svg(points, *, width=230) -> str:
@@ -529,10 +532,13 @@ def _footprint_svg(points, *, width=230) -> str:
         if run:
             coast_parts.append(run)
     coast = "".join(
-        '<polyline points="' + " ".join(f"{p(lo, la)[0]},{p(lo, la)[1]}" for lo, la in part)
-        + '" fill="none" stroke="#3a5266" stroke-width="1.2"/>' for part in coast_parts)
-    dots = "".join(f'<circle cx="{p(pt[0], pt[1])[0]}" cy="{p(pt[0], pt[1])[1]}" r="2.1" '
-                   f'fill="{_TYPE_COL.get(pt[2], _TYPE_FALLBACK)}"/>' for pt in points)
+        '<polyline class="mm-line" points="'
+        + " ".join(f"{p(lo, la)[0]},{p(lo, la)[1]}" for lo, la in part)
+        + '" stroke-width="1.2"/>' for part in coast_parts)
+    dots = ('<g class="mm-dots">'
+            + "".join(f'<circle cx="{p(pt[0], pt[1])[0]}" cy="{p(pt[0], pt[1])[1]}" r="2.1" '
+                      f'fill="{_TYPE_COL.get(pt[2], _TYPE_FALLBACK)}"/>' for pt in points)
+            + "</g>")
     # scale bar: a round number close to a third of the panel width, in km at the mid latitude
     km_per_deg = 111.32 * math.cos(math.radians((la0 + la1) / 2))
     panel_km = dlo * (1 - 2 * pad) * km_per_deg
@@ -540,13 +546,12 @@ def _footprint_svg(points, *, width=230) -> str:
     nice = min((1, 2, 5, 10, 20, 50, 100, 200, 500, 1000), key=lambda n: abs(n - target))
     bar_px = nice / (dlo * km_per_deg) * width if dlo * km_per_deg else 0
     y = height - 10
-    scale = (f'<g stroke="#8FA3B0" stroke-width="1.2"><line x1="{pad * width:.1f}" y1="{y}" '
-             f'x2="{pad * width + bar_px:.1f}" y2="{y}"/></g>'
-             f'<text x="{pad * width + bar_px + 5:.1f}" y="{y + 3.5}" fill="#8FA3B0" '
+    scale = (f'<line class="mm-note" x1="{pad * width:.1f}" y1="{y}" '
+             f'x2="{pad * width + bar_px:.1f}" y2="{y}" stroke-width="1.2"/>'
+             f'<text class="mm-label" x="{pad * width + bar_px + 5:.1f}" y="{y + 3.5}" '
              f'font-size="10" font-family="ui-monospace,Menlo,monospace">{nice} km</text>')
-    return (f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Station grid detail" '
-            f'style="background:{_MAP_PANEL};border:1px solid {_MAP_PANEL_LINE};border-radius:8px">'
-            f'{coast}{dots}{scale}</svg>')
+    return (f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Station grid detail">'
+            f'{_map_panel(width, height)}{coast}{dots}{scale}</svg>')
 
 
 # --------------------------------------------------------------------------- page shell
@@ -611,6 +616,13 @@ _CSS = """
   .mapcap{font-size:.75rem;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
   @media(max-width:760px){.hero-maps.two{grid-template-columns:1fr}}
   @media(max-width:640px){.hero{grid-template-columns:1fr}}
+  .mm-panel{fill:var(--map-panel)}
+  .mm-rule{stroke:var(--map-line)}
+  .mm-coast{fill:var(--coast-fill);stroke:var(--coast-line)}
+  .mm-line{fill:none;stroke:var(--coast-line)}
+  .mm-dots{stroke:var(--dot-edge);stroke-width:.3}
+  .mm-note{fill:none;stroke:var(--muted)}
+  .mm-label{fill:var(--muted)}
   .cstats{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}
   .cstat{background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:.55rem .9rem;min-width:96px}
   .cnum{color:var(--heading);font-size:1.15rem;font-weight:650;font-variant-numeric:tabular-nums}
@@ -1936,11 +1948,12 @@ def _collection_scatter(member_labels, member_points, title, *, width=560, legen
     # part of this fixed-extent panel that is always open ocean (the nearest coastline in the bottom
     # 120 viewBox units is Tasmania, at x=326 of 560), so the overlay cannot reach the geography at
     # any rendered width. The legend is a sibling of the figure, so it is out of reach by structure.
-    # This is the legend=True form alone: the hub card has no panel padding to spare.
+    # This is the legend=True form alone: the hub card has no panel padding to spare. The mark is a
+    # pair, the inked file for the light map panel and the white one for the dark, and the theme
+    # rules show the one that matches the page; the white file never sits on the light panel.
     return (f'<figure class="collmap">{svg}'
-            # One unbroken literal, held character-identical against the SPA's own
-            # (portal/tests/test_collection_map_mark.py).
-            '<img class="collmark" src="/vendor/auscope-icon-white.png" alt="AuScope" width="27" height="28">'
+            # One unbroken literal: portal/tests/test_collection_map_mark.py reads this source.
+            '<img class="collmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="42" height="42"><img class="collmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="42" height="42">'
             "</figure>"
             f'<p class="colllegend">{"".join(legend_rows)}</p>')
 
