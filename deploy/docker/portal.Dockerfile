@@ -21,19 +21,18 @@
 #   - index.html's map (portal/src/map.js) loads tiles from basemaps.cartocdn.com — allow-listed in
 #     the default/index CSP img-src.
 #   - the auscope.org.au ANCHORS, which are now the FOOTER's alone. The header's AuScope symbol was
-#     the third one on each of the five pages above; it is withdrawn from every header on the site,
-#     so what is left is two on every one of the six pages: the acknowledgement's URL text and the
-#     AuScope-NCRIS lockup, both in the footer. about.html carries a THIRD, the "Learn more about
-#     AuScope" link in its Who enables AusMT section. 404.html is not an exception: it has no
-#     header, and no page's header has an anchor. All of them are
-#     NAVIGATION links, not resource loads: CSP does not govern <a href> targets. The images those
-#     pages fetch are vendored and served from 'self' under img-src: the AusMT identity mark
-#     (vendor/brand/ausmt-mark.svg), on the five chrome pages and not on 404.html, and the
-#     AuScope-NCRIS lockup (vendor/auscope-ncris-white.png), which about.html names twice, once in
-#     its body and once in its footer, and every other page including 404.html once.
-#     vendor/auscope-icon-white.png is fetched by no page here. The file still ships: the
-#     generated collection pages draw it on their member-footprint panels, the docs site's sidebar
-#     copy is made from it and tools/gen_social_card.py composites it.
+#     two on every chrome page: the AuScope-NCRIS lock-up in the header's right zone and the
+#     acknowledgement's URL text in the footer; 404.html has no header, so it carries the footer's
+#     one. about.html carries two more, its body lock-up and the "Learn more about AuScope" link in
+#     its Who enables AusMT section. All of them are NAVIGATION links, not resource loads: CSP does
+#     not govern <a href> targets. The images those pages fetch are vendored and served from 'self'
+#     under img-src: the AuScope mark pair (vendor/auscope/auscope-mark.svg and its white twin) at
+#     the head of every chrome page's identity zone and in the map's corner, and the lock-up pair
+#     (vendor/auscope/auscope-ncris-lockup.svg and its white twin) in every header and in about.html's
+#     body; each pair ships both files and CSS shows the one the appearance selects. The brand kit's
+#     own PNGs (vendor/auscope-ncris-white.png, auscope-icon-colour.png, auscope-icon-white.png) are
+#     fetched by no page here and still ship: the docs site's sidebar copy and tools/gen_social_card.py
+#     are made from the white icon.
 #   - the auscope.org.au METADATA, which loads nothing: the JSON-LD publisher URL and the WebSite
 #     node's own url on index.html, every page's rel=canonical, and og:url plus og:image on
 #     index.html, about.html, releases.html and add-survey.html (brand.html is noindex and
