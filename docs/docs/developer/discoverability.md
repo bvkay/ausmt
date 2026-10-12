@@ -452,3 +452,53 @@ carries a canonical, a description and `robots noindex`.
 Descriptions are the page's own lede, word for word, and `og:title` is the page's own `<title>`. An
 invented summary is a second wording of the page that nobody maintains and that drifts the first time
 the page is edited. `portal/tests/test_page_metadata.py` pins both rules against the page bodies.
+
+### Site icons
+
+Every page, the static ones and the generated ones alike, links the same three icons in its head, in
+this order and in this form:
+
+```html
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">
+```
+
+The hrefs are root-anchored, because a generated page served at `/surveys/<slug>` cannot resolve a
+relative vendor path, and none carries a query: a search engine keeps the icon URL it found on the
+home page, so a change to an icon replaces the bytes at the same path. No web manifest and no
+pinned-tab mask icon ship. `portal/tests/test_favicon_and_app_icons.py` holds the block on every
+static page and in the engine's page shell.
+
+The icons are the AuScope mark, Royal Blue with its lighter swoosh, not the AusMT mark
+(Owner ruling 2026-10-12). `portal/tools/gen_auscope_icons.py` renders all five files from
+`portal/vendor/auscope/auscope-mark.svg` and from nothing else, so replacing that placeholder with
+AuScope's official file and rerunning the tool is the whole of a change to the icons:
+
+| File | What it is |
+|---|---|
+| `portal/vendor/favicon.svg` | The mark's own path elements, verbatim, in a viewBox cropped to the ink, with a title of AuScope. Transparent. |
+| `portal/favicon.ico` | 16, 32 and 48 px frames of the mark, edge to edge on its longer side, on a transparent ground. A browser that reads no SVG icon asks the site root for this file by name. |
+| `portal/vendor/auscope/icon-180.png` | The apple-touch-icon: the mark centred at 70 percent of the width on an opaque white square. A home screen fills transparency with black, so the ground is opaque. |
+| `portal/vendor/auscope/icon-192.png`, `icon-512.png` | The same at the two sizes a web manifest names, so that adding one later costs no regeneration. |
+
+The tool renders with Pillow alone: each path of the mark is flattened to a polygon (64 line pieces
+per curve), the polygons are filled in source order at eight times the icon's size, and the result is
+resampled down with Lanczos, which keeps the edges of the 16 px frame clean. Pillow is in the lock
+environment and in CI, so `python3 tools/gen_auscope_icons.py --check` and every pin in
+`portal/tests/test_favicon_and_app_icons.py` run wherever the portal tests do. The check compares
+`favicon.svg` byte for byte and each raster as its decoded picture: the PNGs by mode, size and pixels,
+and `favicon.ico` by its frame sizes and each frame's pixels. A different Pillow can encode the same
+picture as different bytes, so a byte comparison would go red on an encoder upgrade, while a
+one-pixel edit goes red under the picture comparison.
+
+The icon URLs are stable, so the edge serves them with `Cache-Control: no-cache` and revalidates the
+bytes (`@iconAssets` in `deploy/docker/caddy/Caddyfile`, which names `/vendor/favicon.svg` and
+`/vendor/auscope/icon-*.png` and excludes them from the thirty-day `vendor/` cache). A replaced mark
+reaches a home screen on its next fetch instead of a month later.
+
+The AusMT mark stays the product mark. `portal/tools/gen_brand.py` writes every AusMT export
+under `portal/vendor/brand/`, held by `gen_brand.py --check` in CI; the brand page offers them and
+the link-preview cards carry the mark. Its three app icons (`ausmt-icon-180.png`, `-192.png` and
+`-512.png`, the mark on a navy disc) remain brand-kit files for anyone placing the AusMT mark on a
+tile, and no page links them.

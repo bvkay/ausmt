@@ -2,8 +2,8 @@
 
 The brief asks for a canonical dot-grid Australia used at every size and on both backgrounds, in one
 declared palette. The failure mode that rule exists to prevent is the ordinary one: a second geometry
-appears for the favicon, a third for the app icon, someone nudges a hex in an SVG, and six months later
-no two AusMT marks are the same shape. So the geometry, the palette and the colour mapping are computed
+appears for a small render, a third for the app icon, someone nudges a hex in an SVG, and six months
+later no two AusMT marks are the same shape. So the geometry, the palette and the colour mapping are computed
 ONCE by portal/tools/gen_brand.py, written to contract/brand.json, and every export is a rendering of
 that file. These pins hold that arrangement:
 
@@ -18,9 +18,8 @@ that file. These pins hold that arrangement:
     see before anyone else.
   * the palette is FOUR declared hex stops with their derivation recorded, and every dot colour is the
     ramp evaluated at that dot's own column. No dot may carry a colour off the ramp.
-  * the radius is a declared function of output size (the favicon sheet's size-adaptive rule), stated
-    as ordered bands, so the 16 px render can be fuller than the presentation render without a second
-    geometry existing anywhere.
+  * the radius is a declared function of output size, stated as ordered bands, so a 16 px render can
+    be fuller than the presentation render without a second geometry existing anywhere.
   * the typography block records the rule itself: the web/SVG wordmark renders in the site's system
     UI stack, and the bundled face is a DETERMINISTIC RASTER SUBSTITUTE, never the AusMT typeface.
   * the bundled face ships its OFL text and a provenance note whose recorded digests are CHECKED
@@ -133,16 +132,16 @@ def test_the_palette_is_four_declared_stops_and_every_dot_rides_the_ramp():
 
 
 def test_the_dot_radius_is_a_declared_function_of_output_size():
-    """The favicon sheet's size-adaptive rule, made machine-readable. FAILS IF the bands stop ascending,
-    if the ratios stop shrinking as the output grows (the whole point is that SMALL renders get FULLER
-    dots), or if the 16 px band is not the fullest one."""
+    """The size-adaptive radius rule, made machine-readable. FAILS IF the bands stop ascending, if the
+    ratios stop shrinking as the output grows (the whole point is that SMALL renders get FULLER dots),
+    or if the 16 px band is not the fullest one."""
     r = _doc()["geometry"]["radius_ratio_by_output_size"]
     bands = r["bands"]
     assert [b["max_px"] for b in bands] == sorted(b["max_px"] for b in bands), "bands must ascend by size"
     ratios = [b["ratio"] for b in bands] + [r["above"]]
     assert ratios == sorted(ratios, reverse=True), \
         f"the radius ratio must shrink as the output grows (small renders get fuller dots), got {ratios}"
-    assert bands[0]["max_px"] == 16, "the 16 px band is the one the favicon acceptance rests on"
+    assert bands[0]["max_px"] == 16, "the bands start at 16 px, the smallest render the rule declares"
     assert bands[0]["ratio"] > r["above"], "the 16 px dots must be enlarged against the presentation dots"
 
 
