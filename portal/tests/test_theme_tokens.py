@@ -21,7 +21,7 @@ Each assertion states its failure criterion:
     --panel-2 or --copper.
   * THE SCRIPT - FAILS if a page does not load /src/theme.js, loads it anywhere but first in <head>,
     loads it after its <style>, or inlines it.
-  * ONE CARD TREATMENT - FAILS if a card on the page ground loses the --line border, the 4px radius
+  * ONE CARD STYLE - FAILS if a card on the page ground loses the --line border, the 4px radius
     or the --shadow token in its base rule. Non-vacuous: the add-survey advisory (6px, no shadow), its
     fieldset and panels and the compact survey list (8px, no shadow) fail before the house style.
 
@@ -134,7 +134,7 @@ def test_the_engine_shell_loads_the_appearance_script_first():
 
 
 # Every card on a page ground, by page. A card is a --surface box sitting on --bg; a raised row inside a
-# card is --surface-2 and is not listed. A new card joins this list or it is not held to the treatment.
+# card is --surface-2 and is not listed. A new card joins this list or nothing holds its style.
 CARDS = {
     "index.html": (".cstat", ".scard", ".emptystate", ".maplegend", ".cardlist"),
     "about.html": (".card", ".toc"),
@@ -142,7 +142,7 @@ CARDS = {
     "brand.html": (".usage", ".item", ".swatch", ".hero"),
     "releases.html": (".state", ".rel"),
 }
-CARD_TREATMENT = {"border": "1px solid var(--line)", "border-radius": "4px", "box-shadow": "var(--shadow)"}
+CARD_STYLE = {"border": "1px solid var(--line)", "border-radius": "4px", "box-shadow": "var(--shadow)"}
 
 
 def _base_rules(text):
@@ -181,13 +181,13 @@ def test_the_card_list_covers_every_page_but_the_404():
 
 
 @pytest.mark.parametrize("name,selector", [(n, s) for n, sels in CARDS.items() for s in sels])
-def test_every_card_takes_the_house_style_treatment(name, selector):
+def test_every_card_takes_the_house_style_card_rules(name, selector):
     rules = _base_rules(_text(name))
     assert selector in rules, f"{name}: no base {selector}{{...}} rule"
-    got = {k: rules[selector].get(k) for k in CARD_TREATMENT}
-    assert got == CARD_TREATMENT, (
-        f"{name}: the {selector} card must take the house-style card treatment:\n"
-        f"  got  {got}\n  want {CARD_TREATMENT}")
+    got = {k: rules[selector].get(k) for k in CARD_STYLE}
+    assert got == CARD_STYLE, (
+        f"{name}: the {selector} card must take the house-style border, radius and shadow:\n"
+        f"  got  {got}\n  want {CARD_STYLE}")
 
 
 def test_the_appearance_script_ships_and_is_never_inlined():
