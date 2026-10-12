@@ -12,13 +12,11 @@ and rerunning this tool is the whole of a change to the icons. It writes:
   vendor/auscope/icon-<size>.png     180, 192 and 512 px: the mark at 70 percent of the icon's width,
                                      centred on an opaque white square
 
-Rasterising an SVG needs a renderer. PyMuPDF is the one used here, and it is not in the lock
-environment CI runs, so it is imported only when a raster is drawn: without it the tool writes
-nothing and exits 2, and --check states that it cannot compare and exits 0.
-
-The rasters are drawn at four times their size and resampled down with Lanczos, which keeps the
-16 px frame's edges clean. They carry no timestamp, so the same renderer and Pillow write the same
-bytes on every run, and --check compares bytes.
+Pillow is the only renderer. Each path is flattened to a polygon, the polygons are filled in source
+order at eight times the icon's size, and the result is resampled down with Lanczos, which keeps the
+16 px frame's edges clean. --check compares favicon.svg as text bytes and every raster as its decoded
+picture (mode, size and pixels; for favicon.ico the frame sizes and each frame's pixels), because a
+different Pillow can encode the same picture as different bytes.
 """
 import argparse
 import io
@@ -43,7 +41,9 @@ APP_ICON_SIZES = (180, 192, 512)
 # white and the mark keeps 15 percent of the width clear on each side.
 APP_ICON_MARK_WIDTH = 0.70
 APP_ICON_GROUND = (255, 255, 255)
-SUPERSAMPLE = 4
+SUPERSAMPLE = 8
+# Line pieces per cubic segment when a path is flattened to a polygon.
+CUBIC_STEPS = 64
 # The viewBox is rounded outward to this many decimals, so rounding can only add space, never crop ink.
 VIEWBOX_DECIMALS = 2
 
@@ -155,75 +155,134 @@ def favicon_svg(paths):
 # Rasters
 # ==================================================================================================
 
-def _renderer():
-    try:
-        import pymupdf
-    except ModuleNotFoundError:
-        return None
-    return pymupdf
-
-
 def _pillow():
-    from PIL import Image
-    return Image
+    from PIL import Image, ImageDraw
+    return Image, ImageDraw
 
 
-def _draw(renderer, paths, side, px):
-    """The mark centred in a square of `side` user units, drawn at `px` pixels with SUPERSAMPLE and
-    returned as RGBA at `px`. MuPDF hands back premultiplied samples, and resampling in that space is
-    what keeps a dark fringe off the anti-aliased edge."""
-    Image = _pillow()
+def _polygon(d):
+    """One path's outline as a closed polygon, each cubic flattened to CUBIC_STEPS line pieces.
+
+    A path with a second subpath refuses: its polygons would be filled one by one, so a hole would be
+    filled in without failing."""
+    segs = _segments(d)
+    pts = [segs[0][0]] if segs else []
+    for p0, p1, p2, p3 in segs:
+        if p0 != pts[-1]:
+            raise SystemExit("ERROR: a path with more than one subpath is not drawn here")
+        if p0 == p1 and p2 == p3:
+            pts.append(p3)
+            continue
+        for k in range(1, CUBIC_STEPS + 1):
+            t = k / CUBIC_STEPS
+            pts.append(tuple((1 - t) ** 3 * a + 3 * (1 - t) ** 2 * t * b + 3 * (1 - t) * t * t * c
+                             + t ** 3 * e for a, b, c, e in zip(p0, p1, p2, p3)))
+    return pts
+
+
+def _fill(path):
+    m = re.search(r'\bfill="#([0-9A-Fa-f]{6})"', path)
+    if not m:
+        raise SystemExit("ERROR: a <path> element carries no #RRGGBB fill")
+    return tuple(int(m.group(1)[k:k + 2], 16) for k in (0, 2, 4)) + (255,)
+
+
+def _draw(paths, side, px):
+    """The mark centred in a square of `side` user units, as RGBA at `px` pixels.
+
+    Drawn at SUPERSAMPLE times the size on a transparent canvas, then resampled with Lanczos; Pillow
+    resamples RGBA premultiplied, which keeps a dark fringe off the anti-aliased edge."""
+    Image, ImageDraw = _pillow()
     x0, y0, x1, y1 = mark_bbox(paths)
-    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
     big = px * SUPERSAMPLE
-    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{big}" height="{big}" '
-           f'viewBox="{cx - side / 2!r} {cy - side / 2!r} {side!r} {side!r}">{"".join(paths)}</svg>')
-    with renderer.open(stream=svg.encode("utf-8"), filetype="svg") as doc:
-        pix = doc[0].get_pixmap(alpha=True)
-        if (pix.width, pix.height) != (big, big):
-            raise SystemExit(f"ERROR: the renderer drew {pix.width}x{pix.height}, not {big}x{big}")
-        im = Image.frombytes("RGBa", (big, big), pix.samples)
-    return im.resize((px, px), Image.LANCZOS).convert("RGBA")
+    scale = big / side
+    left, top = (x0 + x1) / 2 - side / 2, (y0 + y1) / 2 - side / 2
+    im = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(im)
+    for path in paths:
+        d = re.search(r'\bd="([^"]*)"', path).group(1)
+        # Pillow puts a pixel's centre on the integer coordinate, half a pixel from the SVG's.
+        draw.polygon([((x - left) * scale - 0.5, (y - top) * scale - 0.5) for x, y in _polygon(d)],
+                     fill=_fill(path))
+    return im.resize((px, px), Image.LANCZOS)
 
 
-def ico_frame(renderer, paths, size):
+def ico_frame(paths, size):
     """The mark fitted to a transparent square of `size` px, its longer side edge to edge."""
     x0, y0, x1, y1 = mark_bbox(paths)
-    return _draw(renderer, paths, max(x1 - x0, y1 - y0), size)
+    return _draw(paths, max(x1 - x0, y1 - y0), size)
 
 
-def ico_bytes(renderer, paths):
-    frames = [ico_frame(renderer, paths, size) for size in ICO_SIZES]
+def ico_bytes(paths):
+    frames = [ico_frame(paths, size) for size in ICO_SIZES]
     buf = io.BytesIO()
     frames[-1].save(buf, "ICO", sizes=[(s, s) for s in ICO_SIZES], append_images=frames[:-1])
     return buf.getvalue()
 
 
-def app_icon(renderer, paths, size):
+def app_icon(paths, size):
     """The mark at APP_ICON_MARK_WIDTH of the width, centred on the opaque ground, as RGB."""
-    Image = _pillow()
+    Image, _ImageDraw = _pillow()
     x0, _y0, x1, _y1 = mark_bbox(paths)
-    mark = _draw(renderer, paths, (x1 - x0) / APP_ICON_MARK_WIDTH, size)
+    mark = _draw(paths, (x1 - x0) / APP_ICON_MARK_WIDTH, size)
     ground = Image.new("RGBA", mark.size, APP_ICON_GROUND + (255,))
     return Image.alpha_composite(ground, mark).convert("RGB")
 
 
-def app_icon_bytes(renderer, paths, size):
+def app_icon_bytes(paths, size):
     buf = io.BytesIO()
-    app_icon(renderer, paths, size).save(buf, "PNG")
+    app_icon(paths, size).save(buf, "PNG")
     return buf.getvalue()
+
+
+# ==================================================================================================
+# The drift gate
+# ==================================================================================================
+
+def _png_matches(path, want):
+    """Mode, size and decoded pixels. The mode is compared before the conversion to RGBA, so a file
+    re-saved in another mode that happens to decode to the same pixels still fails."""
+    Image, _ImageDraw = _pillow()
+    with Image.open(path) as have, Image.open(io.BytesIO(want)) as fresh:
+        return (have.mode == fresh.mode and have.size == fresh.size
+                and have.convert("RGBA").tobytes() == fresh.convert("RGBA").tobytes())
+
+
+def _ico_matches(path, want):
+    """The frame sizes and every frame's decoded pixels."""
+    Image, _ImageDraw = _pillow()
+    with Image.open(path) as have, Image.open(io.BytesIO(want)) as fresh:
+        if have.format != "ICO" or have.info["sizes"] != fresh.info["sizes"]:
+            return False
+        for size in sorted(fresh.info["sizes"]):
+            have.size, fresh.size = size, size
+            if have.convert("RGBA").tobytes() != fresh.convert("RGBA").tobytes():
+                return False
+    return True
+
+
+def _matches(path, kind, want):
+    """True when the committed file is what the tool would write today."""
+    if not path.is_file():
+        return False
+    if kind == "bytes":
+        return path.read_bytes() == want
+    try:
+        return (_ico_matches if kind == "ico" else _png_matches)(path, want)
+    except OSError:
+        return False
 
 
 # ==================================================================================================
 # The artefact set
 # ==================================================================================================
 
-def artefacts(renderer):
-    """[(path, bytes)] for every file this tool owns."""
+def artefacts():
+    """[(path, kind, bytes)] for every file this tool owns; kind is how --check compares it."""
     paths = mark_paths(MARK.read_text(encoding="utf-8"))
-    items = [(FAVICON_SVG, favicon_svg(paths).encode("utf-8")),
-             (FAVICON_ICO, ico_bytes(renderer, paths))]
-    items += [(app_icon_path(size), app_icon_bytes(renderer, paths, size)) for size in APP_ICON_SIZES]
+    items = [(FAVICON_SVG, "bytes", favicon_svg(paths).encode("utf-8")),
+             (FAVICON_ICO, "ico", ico_bytes(paths))]
+    items += [(app_icon_path(size), "png", app_icon_bytes(paths, size)) for size in APP_ICON_SIZES]
     return items
 
 
@@ -233,18 +292,9 @@ def main(argv=None):
     p.add_argument("--check", action="store_true",
                    help="exit 1 if a committed icon differs from a fresh render; writes nothing")
     a = p.parse_args(argv)
-    renderer = _renderer()
-    if renderer is None:
-        if a.check:
-            print("auscope icons: not checked, PyMuPDF (import pymupdf) is not installed here to "
-                  "render the mark")
-            return 0
-        print("ERROR: gen_auscope_icons.py needs PyMuPDF (import pymupdf) to rasterise the AuScope "
-              "mark, and it is not installed in this Python.", file=sys.stderr)
-        return 2
-    items = artefacts(renderer)
+    items = artefacts()
     if a.check:
-        stale = [path for path, data in items if not path.is_file() or path.read_bytes() != data]
+        stale = [path for path, kind, data in items if not _matches(path, kind, data)]
         if stale:
             print("AUSCOPE ICON DRIFT: regenerate with `python3 portal/tools/gen_auscope_icons.py`. "
                   "Stale: " + ", ".join(str(s.relative_to(ROOT.parent)) for s in stale),
@@ -252,7 +302,7 @@ def main(argv=None):
             return 1
         print(f"auscope icons: {len(items)} file(s) in sync with tools/gen_auscope_icons.py")
         return 0
-    for path, data in items:
+    for path, _kind, data in items:
         path.write_bytes(data)
     print(f"wrote {len(items)} file(s) from {MARK.relative_to(ROOT)}")
     return 0
