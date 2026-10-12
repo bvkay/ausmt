@@ -1981,7 +1981,7 @@ offline/aborted, silent; manual entry still works
 
 Per-EDI rename preview: shows "originalname.edi → ROX000.edi" so the submitter sees the DATAID-based packaged name BEFORE uploading. See docs: portal internals, add-survey.html.
 
-Softened DATAID gate: a missing DATAID auto-derives from the filename and is flagged for the curator (amber), it does not block. A real DATAID renames the packaged file (copper).
+Softened DATAID gate: a missing DATAID auto-derives from the filename and is flagged for the curator (amber), it does not block. A real DATAID renames the packaged file (in the accent colour).
 
 Per-row remove: one delegated listener (data-i indexes the `files` array). See docs: portal internals, add-survey.html.
 
