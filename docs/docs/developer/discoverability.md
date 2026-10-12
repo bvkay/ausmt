@@ -66,6 +66,109 @@ link, which is what the URL contract promises.
 Every page is rendered from the already-served public documents alone, so a page can never disclose
 anything the gated products do not already publish.
 
+## Page chrome and appearance
+
+Every engine-written page wears the portal's own header, footer, icon links and appearance control,
+so a reader arriving on a survey page from a search result meets the same site the map shows. The
+appearance follows Owner ruling 2026-10-12: the AuScope house style is the default appearance, and
+the navy palette the portal carried before it is the dark appearance.
+
+### The appearance script and the token block
+
+Each page loads `/src/theme.js` as the first script in its `<head>`, before the stylesheet, so the
+first paint is already in the reader's choice. The script resolves the choice stored under the
+`ausmt_theme` key (light, dark or follow the system; light when nothing is stored) and writes it to
+`<html data-theme="light|dark">`, which is the only hook the stylesheet reads. The pages are served
+under a CSP whose `script-src` is `'self'`, so they carry no inline script and no inline event
+handler; the appearance control in the footer is wired by the script through its
+`data-theme-choice` attributes.
+
+The stylesheet opens with the portal's token block: the house style in `:root` and the dark
+appearance in `:root[data-theme="dark"]`, which restates only what differs. Every chrome colour on
+a page is one of these tokens, never a literal.
+
+| Token | Used for |
+|---|---|
+| `--bg` | the page ground |
+| `--surface` | the header, the footer, cards and dialogs |
+| `--surface-2` | inputs, inactive tabs, chips and raised rows |
+| `--line` | rules and borders |
+| `--text`, `--muted` | body text and secondary text |
+| `--heading` | headings and the AusMT wordmark |
+| `--accent`, `--accent-ink` | links, the active tab, selection and focus rings, and text set on the accent |
+| `--lpmt`, `--bbmt`, `--amt`, `--gds` | the data-type ramp, identical in both appearances |
+| `--map-panel`, `--map-line`, `--coast-fill`, `--coast-line` | the map panels and the coastline |
+| `--dot-edge` | the edge every station mark is stroked with |
+
+A card is a `--surface` box with a 1px `--line` border, a 4px corner radius and the `--shadow`
+token, which is a soft shadow in the light appearance and none in the dark. The type stack is
+`--sans`, which names Libre Franklin first; the face is not bundled, so the stack falls through to
+Inter and the system faces, which is intended.
+
+### Header
+
+The header is the portal's header with two declared differences: the identity is a link to the
+root rather than the map page's heading, and the three tabs are links with the current page's tab
+active.
+
+- Left: the AuScope mark, then the AusMT wordmark and the tagline. The mark is a pair of files under
+  `/vendor/auscope/`, one inked for the light ground and one in white for the dark ground; the
+  `.theme-light` and `.theme-dark` rules show the file that matches `data-theme`, so the white file
+  never sits on the light ground.
+- Centre: Map, Surveys and Collections, then About. There is no Contribute control in any header;
+  `add-survey.html` stays served and About links it from its body.
+- Right: the AuScope and NCRIS lock-up, again as a light and a white file, linking
+  `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`.
+
+### Footer
+
+Three regions, the same on every page apart from the status slot.
+
+- Left: `MTCAT JSON ↗`, linking `/data/mtcat.json`.
+- Centre: "AusMT is enabled by AuScope · www.auscope.org.au · Data licences vary by survey", the
+  address being the region's one link.
+- Right: the page's status, then the appearance control (Light · Dark). The status is what the page
+  can state about itself: the surveys hub states its catalogue counts, and every other page leaves
+  the slot empty. The control is the portal footer's own block, two buttons that the appearance
+  script marks with `aria-pressed`.
+
+The footer fetches nothing. Its box, its regions and its narrow-width states are one rule set with
+the portal's documents, held by `portal/tests/test_footer_regions.py`.
+
+### Icons
+
+Every page links the same three icons as the portal's documents, in this order: `/favicon.ico`,
+`/vendor/favicon.svg` and the 180 px app icon `/vendor/auscope/icon-180.png`.
+
+### Maps
+
+The survey hero map, the station-grid zoom, the hub card maps and the collection map carry no
+colour of their own beyond the data. The panel is a `<rect class="mm-panel mm-rule">` (ground
+`--map-panel`, frame `--map-line`), the coast rings are `mm-coast` (`--coast-fill` and
+`--coast-line`), the state borders and the zoom's coastline are `mm-line`, and the locator ring and
+the scale bar are `mm-note` and `mm-label` in `--muted`. One map therefore serves both appearances.
+
+Station marks keep their literal fills, because the ramp is a data encoding and not chrome: LPMT
+`#3F88C8`, BBMT `#FFC14F`, AMT `#9FCB5A` and GDS `#CE348A` (`_TYPE_COL`, byte for byte the portal's
+`TYPE_COL` and the `--lpmt` to `--gds` tokens), and the collection member palette unchanged. The
+ramp is the same in both appearances, so a legend never changes meaning with the theme. Every mark
+sits in a `.mm-dots` group that strokes it in `--dot-edge`, which keeps the lighter hues legible on
+the light panel.
+
+The collection map's corner mark is the AuScope mark pair, placed and sized as before.
+
+The link-preview cards are PNGs and have no theme. They stay on the dark ground, and the collection
+card's map is drawn in exactly the dark appearance's map tokens (`_MAP_PANEL`, `_MAP_PANEL_LINE`,
+`_COAST_FILL` and `_COAST_LINE`).
+
+### Deploy order
+
+`/vendor/*` and `/src/*` are served from the portal image and the pages tree from the data volume,
+so the two can be a deploy apart. A pages tree that names a file the running image does not serve
+shows alt text in place of the marks and loses its appearance script, so the portal image goes out
+first; `/vendor/auscope/auscope-mark.svg` and `/src/theme.js` each answering 200 is the check before
+the pages tree is swapped.
+
 ## Structured data, by page kind
 
 Each node is emitted as its own `<script type="application/ld+json">` element, in the order below.
@@ -297,9 +400,10 @@ The AuScope lockup is last, on the same margin, keeping a declared clear space a
 bottom edge so the column ends on one line across every family whatever the block above it does. It
 is the AuScope half of `portal/vendor/auscope-ncris-white.png`, cut at column 1200 of that 1919 by
 325 image and trimmed to its alpha bbox: the columns to the right carry a second organisation's mark
-and a descriptor line that is unreadable at card height, and the site footer already carries the full
-acknowledgement. It is drawn no taller than the AusMT mark above it, which is how the acknowledgement
-is kept from outweighing the resource identity it acknowledges.
+and a descriptor line that is unreadable at card height, and the site header already carries the full
+lock-up. It is drawn no taller than the AusMT mark above it, which is how the acknowledgement is kept
+from outweighing the resource identity it acknowledges. The PNG stays committed for this crop; no
+page's chrome references it.
 
 The address is set in Inter Bold on all three families. The root card's artwork is set in that face,
 so the generated cards adopting it is what makes the three addresses one line rather than three that
