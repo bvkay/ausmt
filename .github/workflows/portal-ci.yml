@@ -127,6 +127,11 @@ jobs:
       - name: Brand artefacts in sync with tools/gen_brand.py
         run: python tools/gen_brand.py --check
 
+      # The site icons are the AuScope mark, rendered by tools/gen_auscope_icons.py from the vendored
+      # SVG; the same drift gate holds the committed favicon.ico, favicon.svg and app icons to it.
+      - name: Site icons in sync with tools/gen_auscope_icons.py
+        run: python tools/gen_auscope_icons.py --check
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"

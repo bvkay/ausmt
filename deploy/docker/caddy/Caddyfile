@@ -75,10 +75,10 @@
 	# home page and keeps the URL it found, so the icon URLs stay stable and their bytes revalidate.
 	@vendorAssets {
 		path /vendor/*
-		not path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png
+		not path /vendor/favicon.svg /vendor/auscope/icon-*.png
 	}
 	header @vendorAssets Cache-Control "public, max-age=2592000"
-	@iconAssets path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png
+	@iconAssets path /vendor/favicon.svg /vendor/auscope/icon-*.png
 	header @iconAssets Cache-Control "no-cache"
 	@revalidate {
 		not path /vendor/*
@@ -368,10 +368,10 @@
 	# home page and keeps the URL it found, so the icon URLs stay stable and their bytes revalidate.
 	@vendorAssets {
 		path /vendor/*
-		not path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png
+		not path /vendor/favicon.svg /vendor/auscope/icon-*.png
 	}
 	header @vendorAssets Cache-Control "public, max-age=2592000"
-	@iconAssets path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png
+	@iconAssets path /vendor/favicon.svg /vendor/auscope/icon-*.png
 	header @iconAssets Cache-Control "no-cache"
 	@revalidate {
 		not path /vendor/*

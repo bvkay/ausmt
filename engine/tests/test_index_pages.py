@@ -1244,7 +1244,7 @@ def test_the_header_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
             f"{rel}: the lock-up anchor must be one line-height:0 block"
         m = re.search(r"\.orglockup img\{([^}]*)\}", css)
         assert m, f"{rel}: the header lock-up carries no sizing rule"
-        assert m.group(1) == "height:34px;width:auto;max-width:100%;display:block", \
+        assert m.group(1) == "height:34px;width:auto;max-width:100%", \
             f"{rel}: the lock-up rule must be the SPA's own: {m.group(1)!r}"
         assert ".orglogo" not in css, f"{rel}: the footer lock-up's rules must not come back"
 
@@ -1305,7 +1305,7 @@ def test_every_page_kind_carries_the_auscope_mark_pair_beside_the_wordmark(built
     pair anywhere but the header's left identity zone, sizes it off the shared rule, or loses a theme
     rule: without them both files of each pair would paint at once, the white one on the light
     ground. The rules must FOLLOW .brandmark, which states display:block at the same specificity,
-    and the lock-up's own default must follow .orglockup img, which outranks .theme-dark."""
+    and no rule that selects a variant image may set display at a specificity above the switch."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         assert ('<div class="hzone hleft">\n'
@@ -1326,9 +1326,9 @@ def test_every_page_kind_carries_the_auscope_mark_pair_beside_the_wordmark(built
         assert at == sorted(at), f"{rel}: the three theme rules must be in order: {at}"
         assert at[0] > css.index(".brandmark{"), \
             f"{rel}: the theme rules must follow .brandmark, which ties with them on specificity"
-        own = css.find(".orglockup .theme-dark{display:none}")
-        assert own > css.index(".orglockup img{"), \
-            f"{rel}: the lock-up's dark file must be hidden by a rule that outranks .orglockup img"
+        sizing = re.search(r"\.orglockup img\{([^}]*)\}", css)
+        assert sizing and "display" not in sizing.group(1), \
+            f"{rel}: the lock-up sizing rule must not set display, or it outranks the theme switch"
         assert "/vendor/brand/ausmt-mark.svg" not in page, \
             f"{rel}: the AuScope mark opens the header; the AusMT mark is not chrome on this tier"
 

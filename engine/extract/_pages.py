@@ -682,7 +682,7 @@ _CSS = """
   .ts-n{color:var(--muted)}
   .scroll{max-height:360px;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:0 .8rem}
   ul{padding-left:1.2rem}
-  header.site{display:flex;align-items:center;line-height:normal;gap:12px 16px;padding:8px 18px;background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+  header.site{display:flex;align-items:center;line-height:normal;gap:12px 16px;padding:8px 18px;background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap;font-family:var(--sans)}
   header.site,header.site *{box-sizing:border-box}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
   .hleft{flex:1 1 0;min-width:0}
@@ -698,12 +698,10 @@ _CSS = """
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
   .orglockup{display:block;line-height:0}
-  .orglockup img{height:34px;width:auto;max-width:100%;display:block}
+  .orglockup img{height:34px;width:auto;max-width:100%}
   .theme-dark{display:none}
   :root[data-theme="dark"] .theme-light{display:none}
   :root[data-theme="dark"] .theme-dark{display:block}
-  /* .orglockup img outranks .theme-dark, so the lock-up states its own light-ground default. */
-  .orglockup .theme-dark{display:none}
   .counts{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
   .counts b{color:var(--text)}
   @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
