@@ -440,7 +440,7 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
         assert card.is_file() and card.read_bytes()[:2] == b"\x89P", "referenced card must exist"
 
     # NO dash glyphs and NO ticks anywhere on the page
-    assert "–" not in page and "—" not in page, "no en/em dashes"
+    assert chr(0x2013) not in page and chr(0x2014) not in page, "no en/em dashes"
     assert "✓" not in page and "&#10003;" not in page, "no tick glyphs"
 
     # JSON-LD enrichment, including the spatialCoverage fix (the declared extent tuple renders)
@@ -1384,11 +1384,10 @@ def test_every_collection_member_gets_its_own_colour_and_a_dot_label():
                             member_points={f"Member {i}": [(115.0 + i, -20.0 - i * 0.5)]
                                            for i in range(14)},
                             member_facts=None, level_counts=None, formats=None)
-    # A member's colour is stated once, on the group carrying that member's dots; it was once
-    # repeated on every circle. Either element answers this test, which is about fourteen members
-    # getting fourteen distinct colours and not about where the attribute sits. The coast rings are
-    # excluded by naming the two elements rather than by matching a bare fill, because a <path>
-    # carries the panel's own fill and would be counted as a fifteenth colour.
+    # A member's colour is stated once, on the group carrying that member's dots. Either element
+    # answers this test, which is about fourteen members getting fourteen distinct colours and not
+    # about where the attribute sits. The two elements are named rather than matching a bare fill,
+    # so a fill that ever returned to the panel or the coast could not be counted as a member.
     dot_fill = r'<(?:g|circle) [^>]*fill="(#[0-9A-Fa-f]{6})"'
     fills = re.findall(dot_fill, page)
     assert len(fills) == 14, fills
@@ -1418,11 +1417,10 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
     speak the portal's type palette, a sub-degree survey's minimap draws the ring only, and the
     collection page carries the member-coloured scatter with its legend.
 
-    Two swatch assertions moved with LANE-CONTRACT-PAGE-HIERARCHY.md and are restated, not
-    dropped. BBMT is #3730B8, the value portal/src/state.js measured for LP/BB separability and
-    deutan-safety, in place of the lightened #5B54D6. The locator ring is
-    muted rather than coral, because coral is reserved for primary actions and active states; the
-    ring assertion still bites, on the new ink."""
+    The swatch assertions follow the portal's ramp: BBMT is #FFC14F, the --bbmt token and
+    portal/src/state.js TYPE_COL's value, the same in both appearances. The locator ring is the
+    muted annotation class rather than the accent, because the accent is reserved for links,
+    active states and focus; the ring assertion still bites, on the class."""
     surveys = _make_rich_survey(tmp_path)
     pkg = surveys / "pages-r"
     y = (pkg / "survey.yaml").read_text(encoding="utf-8")
@@ -1431,10 +1429,10 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
     out = _build(surveys, tmp_path / "out")
     page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
     assert "km</text>" in page, "the footprint zoom must carry a scale bar"
-    assert "#3730B8" in page, "dots must speak the type palette (BBMT indigo)"
+    assert 'fill="#FFC14F"' in page, "dots must speak the type palette (BBMT amber)"
     minimap = re.search(r'aria-label="Survey location in Australia".*?</svg>', page, re.S).group(0)
-    assert "<circle" in minimap and 'stroke="#8FA3B0"' in minimap
-    assert 'fill="#3730B8"' not in minimap, \
+    assert '<circle class="mm-note"' in minimap, "the sub-degree minimap draws the locator ring"
+    assert 'fill="#FFC14F"' not in minimap, \
         "a sub-degree survey's minimap draws the ring only; the zoom panel owns the dots"
     coll = (out / "pages" / "collections" / "testcoll.html").read_text(encoding="utf-8")
     assert "Member stations of" in coll, "the collection page must carry the member scatter"
@@ -1445,26 +1443,31 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
 def test_the_page_palette_and_the_type_floor_follow_the_brief(tmp_path):
     """Measurable properties of the emitted CSS and SVG.
 
-    Four separate debts. The BBMT swatch drifted from the value the portal measured for LP/BB
-    separability and deutan-safety (portal/src/state.js), and the drift was TEST-LOCKED. The minimap
-    centroid ring was coral, which is reserved for primary actions and active states, not for
-    decoration on a map. The stylesheet had no focus rule at all while the SPA has one. And several
-    secondary labels sat at .72rem or below, under the 12px floor the SPA states for itself.
+    Four properties. The type swatches are the portal's ramp (portal/src/state.js TYPE_COL and the
+    --lpmt to --gds tokens), so a superseded ramp value on a page is a drift from the portal. The
+    minimap centroid ring is a muted annotation, never the accent, which is reserved for links,
+    active states and focus rather than decoration on a map. The stylesheet carries a focus rule,
+    as the SPA does. And no secondary label sits under the 12px floor the SPA states for itself.
 
-    FAILS IF the stale BBMT hex returns, if coral goes back on the ring, if the focus rule goes
-    missing, if any CSS font-size drops below 12px, or if the map annotation's user-unit size drops
-    where it would render under the floor on a narrow screen."""
+    FAILS IF a superseded ramp hex returns to a survey page, if the ring takes the accent or a
+    literal ink, if the focus rule goes missing, if any CSS font-size drops below 12px, or if the
+    map annotation's user-unit size drops where it would render under the floor on a narrow
+    screen."""
     surveys = _make_rich_survey(tmp_path)
     out = _build(surveys, tmp_path / "out")
     page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
 
-    assert "#3730B8" in page, "BBMT must speak the measured, deutan-safe value"
-    assert "#5B54D6" not in page, "the superseded BBMT hex must be gone from every page surface"
+    assert 'fill="#FFC14F"' in page, "BBMT must speak the portal's ramp value"
+    for stale in ("#5B54D6", "#3730B8", "#2E8FA3", "#CDA1EC", "#C255A0"):
+        assert stale not in page, f"the superseded ramp hex {stale} must stay off every survey page"
 
     minimap = re.search(r'aria-label="Survey location in Australia".*?</svg>', page, re.S).group(0)
-    assert "<circle" in minimap, "the locator ring still marks the survey"
-    assert 'stroke="#EF7256"' not in minimap, \
-        "coral is for primary actions and active states, not a decorative ring on a map"
+    ring = re.search(r'<circle class="mm-note"[^>]*/>', minimap)
+    assert ring, "the locator ring still marks the survey"
+    assert not re.search(r'\s(?:stroke|fill)="', ring.group(0)), \
+        f"the ring's ink is its class's, never a literal: {ring.group(0)}"
+    assert ".mm-note{fill:none;stroke:var(--muted)}" in page, \
+        "the accent is for links, active states and focus, not a decorative ring on a map"
 
     assert ":focus-visible" in page, "keyboard focus must be visible (the SPA has this, pages did not)"
 
@@ -1585,7 +1588,7 @@ def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
     assert "5 - 100,000 s" in page, "the period range must use a spaced hyphen"
     assert "2016 to 2021" not in page and "5 to 100,000" not in page, \
         "the word form of a range is retired from UI chrome"
-    assert "\u2013" not in page and "\u2014" not in page, "no en/em dashes"
+    assert chr(0x2013) not in page and chr(0x2014) not in page, "no en/em dashes"
     stn = pages.station_page(doc=docs[0], survey_slug="s", base="https://x.example")
     # No disjunction: the first arm ("5.0 - 100,000.0 s") is what the row printed BEFORE it took the
     # shared helper, so accepting it let the station page bypass _fmt_period and print the trailing
@@ -1593,7 +1596,7 @@ def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
     assert "5 - 100,000 s" in stn, \
         f"the station period row must use the shared helper and a spaced hyphen: " \
         f"{stn[stn.find('Period'):][:120]!r}"
-    assert "\u2013" not in stn and "\u2014" not in stn
+    assert chr(0x2013) not in stn and chr(0x2014) not in stn
 
 
 def test_the_licence_reads_in_human_form_in_chrome_and_keeps_its_identifier_in_json_ld():
@@ -1785,7 +1788,9 @@ def test_a_collection_without_prose_renders_exactly_as_before(tmp_path):
 
 
 def test_the_collection_map_carries_the_auscope_mark_in_its_bottom_left_corner():
-    """The mark over the collection footprint, asserted on the RENDERED page.
+    """The mark pair over the collection footprint, asserted on the RENDERED page. The pair is the
+    AuScope mark inked for the light map panel and in white for the dark one, with the theme
+    classes that show the file matching the page; the white file never sits on the light panel.
 
     The corner is chosen, not arbitrary: this map is a FIXED-EXTENT projection of Australia, so the
     bottom left shows the same open ocean at every rendered width (the nearest coastline in the
@@ -1793,16 +1798,19 @@ def test_the_collection_map_carries_the_auscope_mark_in_its_bottom_left_corner()
     legend is a SIBLING of the figure rather than content inside it, so the mark cannot reach that
     either.
 
-    FAILS IF the mark leaves the figure, if the figure stops being the positioning context it is
-    absolutely placed against, or if it is pushed INSIDE the SVG. That last one is the reason for
+    FAILS IF the mark pair leaves the figure, loses a theme class, if the figure stops being the
+    positioning context it is absolutely placed against, or if it is pushed INSIDE the SVG. That last one is the reason for
     the <image> assertion: the footprint's geometry is what the colour ramp, the dot-per-station
     coverage pin and the hub's size budget all measure, and a brand asset inside it would land in
     the middle of all three."""
     pages = _pages_module()
     page = _collection_call(pages)
-    mark = ('<img class="collmark" src="/vendor/auscope-icon-white.png" alt="AuScope" '
-            'width="27" height="28">')
-    assert page.count(mark) == 1, f"the collection map must carry the mark exactly once, got {page.count(mark)}"
+    mark = ('<img class="collmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" '
+            'width="42" height="42"><img class="collmark theme-dark" '
+            'src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="42" height="42">')
+    assert page.count(mark) == 1, f"the collection map must carry the mark pair exactly once, got {page.count(mark)}"
+    assert page.count('class="collmark') == 2, "the figure carries the pair and no third mark"
+    assert "auscope-icon-white.png" not in page, "the raster icon is not the figure's mark"
     figure = page.split('<figure class="collmap">', 1)[1].split("</figure>", 1)[0]
     assert mark in figure, "the mark must sit inside the map's own figure"
     assert figure.index("</svg>") < figure.index(mark), \
@@ -2166,13 +2174,20 @@ def test_the_page_carries_the_dialog_once_and_loads_only_external_scripts():
     assert re.findall(r'<script src="([^"]+)"></script>', tail) == \
         ["/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js"], \
         "the composers, the dialog controller and the page driver load at the end of the body, in that order"
+    assert re.findall(r'<script src="([^"]+)"></script>', page) == \
+        ["/src/theme.js", "/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js"], \
+        "the page's script list begins with the appearance script, the one script its head carries"
+    assert page.index('<script src="/src/theme.js">') < page.index("</head>"), \
+        "the appearance script runs in the head, before the first paint"
     for tag in re.findall(r"<script\b[^>]*>", page):
         assert 'src="' in tag or 'type="application/ld+json"' in tag, \
             f"an inline executable script would need CSP unsafe-inline, which the pages never get: {tag}"
     page0 = _fixture_page(fx, _pages_module(), None)
     assert "lvlact-fetch" not in page0 and 'id="wgetModal"' not in page0 \
         and "/src/page-fetch.js" not in page0 and "Pointers file" not in page0, \
-        "a survey with no routed level carries no card, no dialog and no script"
+        "a survey with no routed level carries no card, no dialog and no dialog script"
+    assert re.findall(r'<script src="([^"]+)"></script>', page0) == ["/src/theme.js"], \
+        "a survey with no routed level loads the appearance script alone"
 
 
 def test_the_page_dialog_is_the_spa_s_own_markup():
