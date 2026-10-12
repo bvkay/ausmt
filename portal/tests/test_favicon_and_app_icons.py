@@ -21,6 +21,7 @@ exports are held by tests/test_brand_exports.py. What these pins hold:
 NO WEB MANIFEST: 192 and 512 are rendered so that a manifest can be added later, but an installable
 PWA is its own decision.
 """
+import fnmatch
 import json
 import re
 import subprocess
@@ -41,6 +42,7 @@ TOOL = ROOT / "tools" / "gen_auscope_icons.py"
 BRAND_TOOL = ROOT / "tools" / "gen_brand.py"
 BRAND_JSON = REPO / "contract" / "brand.json"
 PAGES_PY = REPO / "engine" / "extract" / "_pages.py"
+CADDYFILE = REPO / "deploy" / "docker" / "caddy" / "Caddyfile"
 
 ROYAL_BLUE = (0x28, 0x25, 0x72)
 SWOOSH_TINT = (0xBF, 0xBD, 0xD4)
@@ -484,3 +486,18 @@ def test_no_icon_href_carries_a_version_query(name):
     for href in re.findall(r'<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"', text):
         assert "?" not in href, f"{name}: {href} carries a query; icon URLs are stable by rule"
 
+
+def test_the_edge_revalidates_every_vendor_icon_the_block_links():
+    """The stable URLs above hold only while the edge revalidates the bytes behind them. FAILS IF a
+    /vendor/ icon the block links is not named by @iconAssets, or not excluded from the thirty-day
+    @vendorAssets cache, on both listeners of deploy/docker/caddy/Caddyfile: a replaced mark would
+    then stay on a home screen for a month. /favicon.ico revalidates under the default rule."""
+    text = CADDYFILE.read_text(encoding="utf-8")
+    icon_rules = re.findall(r"@iconAssets path ([^\n]+)", text)
+    exclusions = [re.search(r"not path ([^\n]+)", block).group(1)
+                  for block in re.findall(r"@vendorAssets \{(.*?)\n\t\}", text, re.S)]
+    assert len(icon_rules) == 2 and len(exclusions) == 2, "one icon rule and one vendor rule per listener"
+    for href in (h for h in ICON_FILES if h.startswith("/vendor/")):
+        for rule in icon_rules + exclusions:
+            assert any(fnmatch.fnmatchcase(href, glob) for glob in rule.split()), (
+                f"{href} is not matched by the Caddyfile icon path list {rule!r}")
