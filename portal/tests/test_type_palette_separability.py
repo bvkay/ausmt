@@ -6,7 +6,7 @@ Measured with this module's own functions: every pair is at least 27.07 dE00 apa
 BBMT/AMT); LPMT/BBMT is 53.22, with a 26.9 L* gap and a 103.5 b* gap across the blue-yellow axis, and
 68.15 / 61.72 under simulated deuteranopia / protanopia. LPMT's CIELAB hue is 267.1 deg. Against the
 chrome the nearest type to each reference is: --accent light #282572 33.6 (GDS), --accent dark #EF7256
-29.8 (GDS), the light ground #D8D9D7 25.9 (AMT), the dark ground #11182D 40.2 (LPMT), --surface white
+29.8 (GDS), the light ground #F2F2F1 27.5 (BBMT), the dark ground #11182D 40.2 (LPMT), --surface white
 28.7 (BBMT), the light dot edge #231F20 38.3 (GDS).
 
 The pair this module was opened for was reported on the deployed badge map: "Long Period and Broadband
@@ -292,7 +292,7 @@ def test_lp_bb_pair_survives_simulated_red_green_deficiency():
 CHROME = {
     "the light --accent": "#282572",
     "the dark --accent": "#EF7256",
-    "the light page ground --bg": "#D8D9D7",
+    "the light page ground --bg": "#F2F2F1",
     "the dark page ground --bg (and the dark --dot-edge)": "#11182D",
     "the light --surface": "#FFFFFF",
     "the light --dot-edge": "#231F20",

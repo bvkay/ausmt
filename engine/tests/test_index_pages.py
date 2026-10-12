@@ -881,7 +881,7 @@ THEME_RULES = ('.theme-dark{display:none}',
 # on a page is one of these names; the ramp (--lpmt to --gds) is restated by neither block's
 # differences, because a legend must not change meaning with the theme.
 LIGHT_TOKENS = [
-    ("--bg", "#D8D9D7"), ("--surface", "#FFFFFF"), ("--surface-2", "#F2F3F2"), ("--line", "#CED4DA"),
+    ("--bg", "#F2F2F1"), ("--surface", "#FFFFFF"), ("--surface-2", "#F2F3F2"), ("--line", "#CED4DA"),
     ("--text", "#333333"), ("--muted", "#6C757D"), ("--heading", "#282572"),
     ("--accent", "#282572"), ("--accent-ink", "#FFFFFF"),
     ("--lpmt", "#3F88C8"), ("--bbmt", "#FFC14F"), ("--amt", "#9FCB5A"), ("--gds", "#CE348A"),

@@ -10,7 +10,7 @@ import re
 
 # The two token blocks, light (the AuScope house style) and dark. Every page declares both verbatim.
 LIGHT = {
-    "--bg": "#D8D9D7", "--surface": "#FFFFFF", "--surface-2": "#F2F3F2", "--line": "#CED4DA",
+    "--bg": "#F2F2F1", "--surface": "#FFFFFF", "--surface-2": "#F2F3F2", "--line": "#CED4DA",
     "--text": "#333333", "--muted": "#6C757D", "--heading": "#282572", "--accent": "#282572",
     "--accent-ink": "#FFFFFF",
     "--lpmt": "#3F88C8", "--bbmt": "#FFC14F", "--amt": "#9FCB5A", "--gds": "#CE348A", "--dot-edge": "#231F20",
