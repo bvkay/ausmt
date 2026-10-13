@@ -759,7 +759,7 @@ The appearance choice's second home: the welcome dialog's row, on a page every h
 a reader who dismissed the welcome dialog can still change the theme. The three radios are named
 appearance, as the dialog's are, and src/theme.js, the first script in this page's head, sets the
 choice on change and checks the radio that matches the stored choice; the page needs no script of
-its own. The .appearance rules set the row as the dialog sets it, with a muted legend, inline
+its own. The .appearance rules set the row in muted text with a muted semibold legend, inline
 labels with a 5px gap and accent-coloured radios, at 14px against the page's 16px body. It is
 section 9, after the hand-off, because it is a setting rather than an answer.
 tests/test_about_copy_batch.py holds its words, its row, its rules and its place, and
