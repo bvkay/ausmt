@@ -714,10 +714,6 @@ _CSS = """
   .fleft{flex:1 1 0;min-width:0}
   .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
   .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
-  .themectl{display:inline-flex;align-items:center;gap:6px;font-size:12.5px}
-  .themectl button{background:none;border:0;padding:0;color:var(--muted);font:inherit;cursor:pointer}
-  .themectl button[aria-pressed="true"]{color:var(--accent);font-weight:700}
-  .themesep{color:var(--line)}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
@@ -854,12 +850,12 @@ def _site_footer(status="") -> str:
     party's logs. The build identity is not printed here; build_provenance.json and /about.html
     carry it.
 
-    The right region is the page's contextual `status`, then the appearance control. The status is
-    what the page can actually state (the surveys hub's catalogue counts) and is empty elsewhere,
-    because a counter that cannot count the page it is on is decoration pretending to be data. The
-    appearance control is the SPA's own block, character for character: two buttons that
-    /src/theme.js wires by their data-theme-choice attribute, so the page carries no script or
-    handler of its own for them, and that script keeps aria-pressed in step with the stored choice.
+    The right region is the page's contextual `status` and nothing else. The status is what the
+    page can actually state (the surveys hub's catalogue counts) and is empty elsewhere, because a
+    counter that cannot count the page it is on is decoration pretending to be data. An empty
+    region still takes its zone's share of the row, which keeps the acknowledgement on the page's
+    axis. The footer carries no appearance control: the choice lives on /about.html and in the
+    map's welcome dialog, both wired by /src/theme.js.
 
     IT IS WRITTEN AFTER </main>, as the page's own bottom edge rather than the reading column's: a
     footer inside main is not a contentinfo landmark, and set in the 840px measure it could not hold
@@ -871,9 +867,7 @@ def _site_footer(status="") -> str:
             '<a href="https://www.auscope.org.au" target="_blank" '
             'rel="noopener noreferrer">AuScope</a> &#183; '
             "Data licences vary by survey</div>\n"
-            f'<div class="fzone fright">{status}'
-            '<div class="themectl" role="group" aria-label="Appearance"><button type="button" data-theme-choice="light" aria-pressed="true">Light</button><span class="themesep">·</span><button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div>'
-            "</div>\n"
+            f'<div class="fzone fright">{status}</div>\n'
             "</footer>\n")
 
 

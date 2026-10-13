@@ -392,10 +392,6 @@
   .fleft{flex:1 1 0;min-width:0}
   .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
   .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
-  .themectl{display:inline-flex;align-items:center;gap:6px;font-size:12.5px}
-  .themectl button{background:none;border:0;padding:0;color:var(--muted);font:inherit;cursor:pointer}
-  .themectl button[aria-pressed="true"]{color:var(--accent);font-weight:700}
-  .themesep{color:var(--line)}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
@@ -809,8 +805,8 @@
   <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">MTCAT JSON ↗</a></div>
   <!-- CENTRE. Who enables AusMT, then the licence note. See docs: portal internals, index.html. -->
   <div class="fzone fcenter">AusMT is enabled by <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">AuScope</a> · Data licences vary by survey</div>
-  <!-- RIGHT. The live counts, then the appearance control. See docs: portal internals, index.html. -->
-  <div class="fzone fright"><div class="counts" id="footerCounts"><span id="countSlot" title="stations passing the current filters · stations selected · total stations in the catalogue"><b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> total</span></div><div class="themectl" role="group" aria-label="Appearance"><button type="button" data-theme-choice="light" aria-pressed="true">Light</button><span class="themesep">·</span><button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div></div>
+  <!-- RIGHT. The live counts. See docs: portal internals, index.html. -->
+  <div class="fzone fright"><div class="counts" id="footerCounts"><span id="countSlot" title="stations passing the current filters · stations selected · total stations in the catalogue"><b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> total</span></div></div>
 </footer>
 <div id="toast" role="status"></div>
 <!-- PROGRESS BELONGS TO THE BROWSER: the 302 hands the bytes browser-to-archive, CORS forbids an in-page
