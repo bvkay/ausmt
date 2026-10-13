@@ -147,13 +147,13 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 
 
 # The fetched assets a page in this tier may carry, restated (not weakened). The rule was "no src at
-# all", which was the right rule while the pages had no identity mark: it kept out build-time reads,
-# inlined copies and every external fetch. The marks make an exception worth stating precisely
-# rather than loosening the rule to "images are fine": same-origin files, served by the portal
-# image, cached once for the whole site. What stays forbidden is everything the strict rule was
-# protecting: no http, no https, no protocol-relative and no data URI may ever appear as a src, and
-# no OTHER path may either. The lists below are EXACT and ORDERED, so an extra asset, or the same
-# asset in the wrong slot, fails.
+# all", which was the right rule while the pages fetched no image: it kept out build-time reads,
+# inlined copies and every external fetch. The header's lock-up pair and the collection figure's
+# mark make an exception worth stating precisely rather than loosening the rule to "images are
+# fine": same-origin files, served by the portal image, cached once for the whole site. What stays
+# forbidden is everything the strict rule was protecting: no http, no https, no protocol-relative
+# and no data URI may ever appear as a src, and no OTHER path may either. The lists below are EXACT
+# and ORDERED, so an extra asset, or the same asset in the wrong slot, fails.
 #
 # The header carries one image, as a PAIR of files: the AuScope and NCRIS lock-up closing the right
 # zone, the brand kit's colour and white PNGs, one for the light ground and one for the dark
@@ -996,11 +996,12 @@ def _kinds(built):
 
 
 def test_every_static_page_carries_the_one_global_header(built):
-    """The SPA header is the site's ONE header: the AusMT wordmark linking the root and the tagline on
-    the left, and no mark; the three filled application tabs in the centre with the CURRENT page's
-    tab active and About beside them as the smaller outlined control; the AuScope and NCRIS lock-up
-    on the right, the header's only AuScope presence. The whole element is held character for character, so a page kind
-    that activates the wrong tab, points a tab elsewhere, grows a control or loses one fails here.
+    """The SPA header is the site's ONE header: the AusMT wordmark linking the root and the tagline
+    on the left, and no mark; the three filled application tabs in the centre with the CURRENT
+    page's tab active and About beside them as the smaller outlined control; the AuScope and NCRIS
+    lock-up on the right, the header's only AuScope presence. The whole element is held character
+    for character, so a page kind that activates the wrong tab, points a tab elsewhere, grows a
+    control or loses one fails here.
 
     Contribute is not a header control on any surface: add-survey.html stays served, and About links
     it from its body. FAILS IF it comes back, as markup or as a .contribute rule, or if the header's

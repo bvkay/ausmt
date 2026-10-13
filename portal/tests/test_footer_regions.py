@@ -80,8 +80,8 @@ ARROW = "↗"
 MTCAT = "/data/mtcat.json"
 
 # THE ONE EXTERNAL TARGET. The organisation's name in the centre line navigates here, and it is the
-# footer's only link off the site. It governs NAVIGATION ONLY: _no_external_fetch below holds the other half, that no footer
-# on any surface FETCHES anything, from any host.
+# footer's only link off the site. It governs NAVIGATION ONLY: _no_external_fetch below holds the
+# other half, that no footer on any surface FETCHES anything, from any host.
 _EXTERNAL_NAV = ("https://www.auscope.org.au",)
 
 # NO FOOTER CARRIES A MAP CREDIT, on any surface. The basemap's attribution is a licence obligation
