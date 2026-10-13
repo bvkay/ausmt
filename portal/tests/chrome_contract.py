@@ -72,8 +72,8 @@ PAGE_IDENTITY = f'<a class="wordmark" href="/">{NAME}</a>'
 # homepage's alone, the one surface whose name is wrapped in its h1.
 BRANDMARK_RULE = ".brandmark{height:36px;width:36px;display:block;flex:none}"
 WORDMARK_RULES = (".wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;"
-                  "letter-spacing:-.01em;line-height:1;color:var(--heading);text-decoration:none}",
-                  ".wordmark b{font-weight:800}")
+                  "letter-spacing:.02em;line-height:1;color:var(--heading);text-decoration:none}",
+                  ".wordmark b{font-weight:900}")
 BRANDH1_RULE = ".brandh1{flex:none;font-size:inherit}"
 
 # The right zone is the tagline alone, on one line. Where the zero-basis zone is narrower than the

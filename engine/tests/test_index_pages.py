@@ -1026,8 +1026,8 @@ def test_every_static_page_carries_the_one_global_header(built):
             f"{rel}: the header is a --surface band with a --line rule beneath: {site}"
         for rule in (".brandmark{height:36px;width:36px;display:block;flex:none}",
                      ".wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;"
-                     "letter-spacing:-.01em;line-height:1;color:var(--heading);text-decoration:none}",
-                     ".wordmark b{font-weight:800}",
+                     "letter-spacing:.02em;line-height:1;color:var(--heading);text-decoration:none}",
+                     ".wordmark b{font-weight:900}",
                      ".tagline{color:var(--muted);font-size:14px;white-space:nowrap;min-width:0;"
                      "overflow:hidden;text-overflow:ellipsis}",
                      "header.site nav a:hover{border-color:var(--accent)}",

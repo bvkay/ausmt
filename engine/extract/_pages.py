@@ -689,8 +689,8 @@ _CSS = """
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .brandmark{height:36px;width:36px;display:block;flex:none}
-  .wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;letter-spacing:-.01em;line-height:1;color:var(--heading);text-decoration:none}
-  .wordmark b{font-weight:800}
+  .wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;letter-spacing:.02em;line-height:1;color:var(--heading);text-decoration:none}
+  .wordmark b{font-weight:900}
   .tagline{color:var(--muted);font-size:14px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
   header.site nav{display:flex;gap:6px;flex-wrap:wrap}
   header.site nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;text-decoration:none}

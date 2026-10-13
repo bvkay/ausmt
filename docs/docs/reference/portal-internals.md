@@ -53,7 +53,7 @@ The identity zone is the AuScope mark pair and AusMT's name on every surface: th
 vector icon, vendor/auscope/auscope-mark.svg for the light theme and its white twin for the dark,
 36px square, then the name set at the AuScope logo's own proportions scaled to that mark. The
 zone's 12px gap is the logo's gap from mark to text, the 24.5px name has a cap height 0.48 of the
-mark, and "Aus" is set at 800 against "MT" at 300, as "Au" is heavy against "Scope". The name's
+mark, and "Aus" is set at 900 against "MT" at 300, tracked at .02em, as "Au" is heavy against "Scope". The name's
 line-height is 1, so its line box is its font size and the 36px mark sets the zone's height, short
 of the tabs' 40px floor: from 761px of viewport up the header is 57px. The block sits in the
 zero-basis .hleft zone without moving the centre tabs. Pinned by tests/test_header_geometry_parity.py

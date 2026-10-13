@@ -123,7 +123,7 @@ active.
   file, the brand kit's vector icon, `/vendor/auscope/auscope-mark.svg` and
   `/vendor/auscope/auscope-mark-white.svg`, drawn 36px square. The wordmark is set at the AuScope
   logo's own proportions scaled to that mark: the zone's 12px gap from mark to name, 24.5px type
-  whose cap height is 0.48 of the mark, and "Aus" at weight 800 against "MT" at 300. The
+  whose cap height is 0.48 of the mark, and "Aus" at weight 900 against "MT" at 300, tracked at .02em. The
   `.theme-light` and `.theme-dark` rules show the file that matches `data-theme`, so the white file
   never sits on the light ground. These two files are the header's only fetched assets.
 - Centre: Map, Surveys and Collections, then About. There is no Contribute control in any header;
