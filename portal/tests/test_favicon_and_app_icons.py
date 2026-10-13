@@ -1,7 +1,8 @@
 """The favicon and the app icons are the AuScope mark, and every surface links them.
 
 The browser tab and the home-screen icon carry the parent organisation's mark, Royal Blue with its
-lighter swoosh, rendered by portal/tools/gen_auscope_icons.py from vendor/auscope/auscope-mark.svg.
+lighter swoosh, rendered by portal/tools/gen_auscope_icons.py from vendor/auscope/auscope-mark.svg,
+the AuScope brand kit's vector icon with the two fills the kit file states, #272472 and #A7A2C5.
 The AusMT mark stays the product mark of the brand page and the link-preview cards, and its
 exports are held by tests/test_brand_exports.py. What these pins hold:
 
@@ -44,16 +45,19 @@ BRAND_JSON = REPO / "contract" / "brand.json"
 PAGES_PY = REPO / "engine" / "extract" / "_pages.py"
 CADDYFILE = REPO / "deploy" / "docker" / "caddy" / "Caddyfile"
 
-ROYAL_BLUE = (0x28, 0x25, 0x72)
-SWOOSH_TINT = (0xBF, 0xBD, 0xD4)
+# The mark's two fills, as the brand kit's vector file states them: its Royal Blue and the swoosh.
+ROYAL_BLUE = (0x27, 0x24, 0x72)
+SWOOSH_TINT = (0xA7, 0xA2, 0xC5)
+MARK_FILLS = {"#272472", "#A7A2C5"}
 WHITE = (255, 255, 255)
 ICO_SIZES = (16, 32, 48)
 APP_ICONS = {"icon-180.png": 180, "icon-192.png": 192, "icon-512.png": 512}
 # The mark's width as a fraction of an app icon's width.
 APP_ICON_MARK_WIDTH = 0.70
 # Per channel, on 0 to 255: the furthest an ICO frame's mean opaque colour may sit from the blend the
-# vector's areas predict. Anti-aliasing moves it by about 6 at 16 px; the AusMT mark's lattice
-# averages near (150, 70, 200), and the white mark near (255, 255, 255).
+# vector's areas predict, (53.2, 50.0, 123.2) for a swoosh share of 0.111 of the ink. Anti-aliasing
+# moves it by at most 4.8 at 16 px, 1.5 at 32 px and 0.8 at 48 px; the AusMT mark's lattice averages
+# near (150, 70, 200), and the white mark near (255, 255, 255).
 BLEND_TOLERANCE = 12
 
 # The static portal documents that carry the site chrome. 404.html is not a chrome page (it has no
@@ -133,9 +137,9 @@ def _expected_blend():
     areas = Counter()
     for outline, fill in _mark():
         areas[fill] += _area(outline)
-    assert set(areas) == {"#282572", "#BFBDD4"}, \
-        f"the mark is Royal Blue with a lighter swoosh, its fills are {sorted(areas)}"
-    f = areas["#BFBDD4"] / sum(areas.values())
+    assert set(areas) == MARK_FILLS, \
+        f"the mark is the kit's Royal Blue with a lighter swoosh, its fills are {sorted(areas)}"
+    f = areas["#%02X%02X%02X" % SWOOSH_TINT] / sum(areas.values())
     return tuple((1 - f) * b + f * s for b, s in zip(ROYAL_BLUE, SWOOSH_TINT)), f
 
 
@@ -266,7 +270,12 @@ def test_every_root_icon_frame_is_the_generators_render_at_its_own_size(size):
 def test_every_app_icon_is_the_mark_on_an_opaque_white_square(name, size):
     """FAILS IF an app icon is missing, is not its declared size, carries an alpha channel (a home
     screen fills transparency with black), loses its white corners, or stops carrying the mark at
-    70 percent of its width, centred, in the mark's own two solid colours."""
+    70 percent of its width, centred, in the mark's own two solid colours.
+
+    Measured on the kit's mark at 180, 192 and 512 px: the mark spans 126, 134 and 358 px against
+    126.0, 134.4 and 358.4; its height sits 1.1, 0.3 and 0.9 px under the vector's proportion; and the
+    swoosh's pure ink covers 0.099, 0.101 and 0.116 of the blue's against the 0.125 its area predicts,
+    the shortfall being the thin swoosh's anti-aliased edge."""
     from PIL import Image
     path = ICON_DIR / name
     assert path.is_file(), f"vendor/auscope/{name} must be committed"

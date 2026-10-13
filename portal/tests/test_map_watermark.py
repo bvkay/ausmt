@@ -6,8 +6,8 @@ attribution that travels with the image.
 
 TWO VARIANTS, ONE SHOWN. The mark ships in Royal Blue for the light basemap and in white for the dark
 one, and the theme switch shows exactly one: the white mark sits only on a dark ground. The files are
-the vector placeholders in portal/vendor/auscope/, which the official files replace under the same
-names (portal/vendor/auscope/PROVENANCE.md).
+the AuScope brand kit's vector icon in portal/vendor/auscope/, with the fills the kit states
+(portal/vendor/auscope/PROVENANCE.md).
 
 THE STYLE GUIDE'S RULES, APPLIED AS NUMBERS (AuScope Style Guide, Identity):
   * CLEAR SPACE. The guide asks for breathing space of at least the full height of the logo on all

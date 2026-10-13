@@ -3,14 +3,14 @@
 The ask: About must wear the portal's three-zone header (brand / centre nav / right zone) and
 the site's one footer, so chrome is uniform across pages. These are STRUCTURAL assertions parsed
 from the real DOM (stdlib html.parser, so no jsdom / node dependency and no substring-vs-comment false
-positives — HTML comments are not surfaced as elements by the parser).
+positives: HTML comments are not surfaced as elements by the parser).
 
 Each assertion states its failure criterion:
 
-  * three-zone header — FAILS if about.html's <header> does not contain exactly one element carrying
+  * three-zone header: FAILS if about.html's <header> does not contain exactly one element carrying
     each of the .hleft / .hcenter / .hright zone classes (the classes index.html uses). Proven
     non-vacuous: the pre-fix about.html had a flat header with none of these classes.
-  * About marked active — FAILS if the centre-zone About link is not rendered in the active state, or if
+  * About marked active: FAILS if the centre-zone About link is not rendered in the active state, or if
     any OTHER centre nav item is (only the current page may be active).
   * no APP-STATE counts on a static page: FAILS if about.html carries any of index's live-counts ids
     (nVis/nSel/nTot) or any counts block at all. Those three report the current map's filter and
@@ -187,14 +187,14 @@ def test_mtcat_link_in_footer_not_header_across_pages():
     apilink (a.apilink -> data/mtcat.json) INSIDE <footer>, and NONE inside <header>.
 
     Failure criteria, both non-vacuous and mutually hermetic:
-      * footer-PRESENCE — FAILS if a page's <footer> does not carry exactly one a.apilink. This proves the
+      * footer-PRESENCE: FAILS if a page's <footer> does not carry exactly one a.apilink. This proves the
         link still exists after the move, so the header-absence half below is a real relocation and not a
         vacuous pass on a deleted element.
-      * header-ABSENCE — FAILS if any a.apilink survives inside <header>. Proven falsifiable by a git-archive
+      * header-ABSENCE: FAILS if any a.apilink survives inside <header>. Proven falsifiable by a git-archive
         red-proof against the pre-move HTML (link in the header): that HTML fails header-ABSENCE here.
 
     Parsed-DOM (not raw text): about.html also links data/mtcat.json from its <main> body with class 'link'
-    (not 'apilink'), which lives in neither <header> nor <footer>, so neither collector counts it — the
+    (not 'apilink'), which lives in neither <header> nor <footer>, so neither collector counts it: the
     class match ('apilink') is deliberately specific so that body link cannot smuggle a false positive.
 
     MTCAT 1.2 fix round: the title pin was "MTCAT v1.0 discovery document (JSON)" on all three pages, for
@@ -428,15 +428,15 @@ def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_i
 # One number is only right in one band. The header WRAPS as the viewport narrows, in several ways at
 # once (the identity block drops its tagline onto a second line, the tab group stacks into more rows,
 # and under 760px the three zones each take a full-width row, the lock-up's included): measured on
-# this document in Chrome at a device scale factor of 1, with the AuScope lock-up in the right zone,
-# its height runs 254px below 384, 208px to 385, 181px to 450, 145px to 760, 104px to 793, 89px to
-# 931, 74px to 1181 and 57px above that. At 375px a 74px clearance would leave a heading 180px under
-# the header, which is off the screen.
+# this document in Chrome at a device scale factor of 1, with the AuScope lock-up 40px tall in the
+# right zone, its height runs 260px below 384, 214px to 385, 187px to 450, 151px to 760, 104px to
+# 793, 89px to 931, 74px to 1181 and 57px above that. At 375px a 74px clearance would leave a heading
+# 186px under the header, which is off the screen.
 #
 # THE LADDER IS THE MAXIMUM PER BAND, NOT THE EXACT HEIGHT. Overshooting drops the heading a few
 # pixels lower than it needs to be, which a reader will not notice; undershooting hides it, which is
 # the defect. So each band carries the tallest header in its own range, which is why the base reads
-# 254px across the two pixels at 384 and 385 where the header measures 208px.
+# 260px across the two pixels at 384 and 385 where the header measures 214px.
 #
 # THE FAILURE MODE OF DRIFT IS STATED because it cannot be pinned from source alone: these are
 # measurements of THIS header's content at THIS font stack, and a change to the header's wording or
@@ -447,7 +447,7 @@ def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_i
 ANCHOR_VAR = "--about-anchor-offset"
 
 # The measured header height at each pinned width, from the same run the ladder was built from.
-MEASURED_HEADER = {375: 254, 1280: 57}
+MEASURED_HEADER = {375: 260, 1280: 57}
 
 
 # EVERY DECLARATION OF THE VARIABLE IS ACCOUNTED FOR, because a reader that matches only the shape
@@ -501,7 +501,7 @@ def _resolve(ladder, width):
 
 def test_the_in_page_anchor_offset_is_a_variable_and_not_one_number():
     """FAILS if the retired static 74px comes back, or if the sections stop reading the ladder.
-    One number cannot follow a header that is 220px tall at 375px and 57px tall at 1440px, and the
+    One number cannot follow a header that is 260px tall at 375px and 57px tall at 1440px, and the
     direction it is wrong in at the narrow end is the one that hides the heading."""
     text = ABOUT.read_text(encoding="utf-8")
     assert "scroll-margin-top:74px" not in text, (
@@ -529,7 +529,7 @@ def test_the_anchor_offset_ladder_descends_and_is_declared_in_px():
 
 def test_the_ladder_resolves_to_the_measured_header_height_at_the_pinned_widths():
     """The ladder against the ruler. FAILS if the value a browser would use at 375px or at 1280px is
-    smaller than the header measured there: at 375px that is a heading scrolled under 220px of
+    smaller than the header measured there: at 375px that is a heading scrolled under 260px of
     header, and the reader sees the section below the one they asked for.
 
     Held as ">=" and not "==" on purpose, for the reason the ladder is a per-band maximum: a band

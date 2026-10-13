@@ -56,47 +56,46 @@ Generated, not hand-edited: `tools/gen_auscope_icons.py` writes it from
 
 ## auscope/
 
-The AuScope identity, as the site chrome draws it. Placeholders cut from the AuScope Style Guide
-until AuScope supplies the official files, which replace them under the same names;
-`auscope/PROVENANCE.md` records where each came from and the guide's rules for using them.
+The AuScope mark, as the site chrome draws it, and the icons made from it. The mark pair is derived
+from the AuScope brand kit's own vector icon, `2025 AuScope Logo Icon.ai`; `auscope/PROVENANCE.md`
+records the derivation and the guide's rules for using it.
 
 | File | What it is |
 |---|---|
-| `auscope-mark.svg` | The mark in Royal Blue (#282572) with its lighter swoosh. The source of every icon below. |
-| `auscope-mark-white.svg` | The mark in white, for dark grounds only. |
-| `auscope-logo.svg`, `auscope-logo-white.svg` | The mark with the AuScope wordmark, Royal Blue and white. |
-| `auscope-ncris-lockup.svg`, `auscope-ncris-lockup-white.svg` | The AuScope and NCRIS lock-up, Royal Blue and white. |
+| `auscope-mark.svg` | The mark in the kit's Royal Blue (#272472) with its lighter swoosh (#A7A2C5), the fills the kit file states. The source of every icon below. |
+| `auscope-mark-white.svg` | The mark in white, the swoosh at 0.302 opacity as the kit's white PNG renders it, for dark grounds only. |
 | `icon-180.png` | The apple-touch-icon: the mark at 70 percent of the width on opaque white. Generated. |
 | `icon-192.png`, `icon-512.png` | The same at the sizes a web manifest names; no manifest ships. Generated. |
-| `PROVENANCE.md` | Source, normalisation and the icon derivation. |
+| `PROVENANCE.md` | Source, derivation and the icon derivation table. |
 
 The three PNG icons, `../favicon.svg` and `../../favicon.ico` are written by
 `tools/gen_auscope_icons.py`, which rasterises with Pillow; `--check` compares `favicon.svg` byte for
 byte and each raster pixel for pixel (with its mode and size, and for the ICO its frame sizes) against
-a fresh render. Regenerate them after replacing `auscope-mark.svg`; never edit them by hand.
+a fresh render. Regenerate them after any change to `auscope-mark.svg`; never edit them by hand.
 
-`auscope-icon-colour.png`, `auscope-icon-white.png` and `auscope-ncris-white.png`, one level up,
-are the AuScope brand kit's own files: they are kept, verbatim, and no longer drawn by the site
-chrome. The social card tool, the engine's link-preview cards and the documentation sidebar still
-derive their AuScope marks from them, as their own notes below and in the docs state.
+`auscope-ncris-colour.png`, `auscope-ncris-white.png`, `auscope-icon-colour.png` and
+`auscope-icon-white.png`, one level up, are the AuScope brand kit's own files, kept verbatim. The two
+lock-up PNGs are drawn in every header, colour on the light theme and white on the dark, and in
+About's body. `auscope-icon-colour.png` is drawn by nothing on the site. `auscope-icon-white.png` is
+drawn by the documentation sidebar's copy of it and composited by `tools/gen_social_card.py`; the
+engine's link-preview cards draw a crop of the white lock-up, pinned against its file.
 
-## auscope-ncris-white.png
+## auscope-ncris-colour.png and auscope-ncris-white.png
 
-The AuScope-NCRIS white lockup from the AuScope brand kit. The site chrome no longer draws it (the
-header carries `auscope/auscope-ncris-lockup.svg` and its white twin); the engine's link-preview
-cards draw a crop of it, pinned against this file. Committed VERBATIM from the AuScope brand kit
-("2025 AuScope Logos", file `2025 AuScope-NCRIS Logo - White.png`); it is a third-party trademark
-asset, so it is never resized, re-encoded or recoloured here, which is why the committed file keeps
-its full 1919x325 resolution.
+The AuScope and NCRIS lock-up pair from the AuScope brand kit, the header's light and dark variants,
+drawn 40px tall, the height of the view tabs. Committed VERBATIM from the AuScope brand kit
+("2025 AuScope Logos"); they are third-party trademark assets, so they are never resized, re-encoded
+or recoloured here, which is why each committed file keeps its full 1919x325 resolution.
 
 | File | Source | Dimensions | SHA-256 | Size |
 |---|---|---|---|---|
+| `auscope-ncris-colour.png` | AuScope brand kit, `2025 AuScope-NCRIS Logo - Colour.png` | 1919x325 RGBA | `249d99861d37a8796acdd1b2eff73aaa4279436cbca31012d65bad9ce1190ec4` | 39960 B |
 | `auscope-ncris-white.png` | AuScope brand kit, `2025 AuScope-NCRIS Logo - White.png` | 1919x325 RGBA | `595a564ece1151d94347331c1521381df987da437aa3080cff47a5280cf818f6` | 35628 B |
 
 ## auscope-icon-colour.png
 
-The AuScope icon in its brand colours, from the AuScope brand kit. The site chrome no longer draws
-it: the map's corner mark is `auscope/auscope-mark.svg` and its white twin. Committed VERBATIM from
+The AuScope icon in its brand colours, from the AuScope brand kit. Nothing on the site draws it: the
+map's corner mark is `auscope/auscope-mark.svg` and its white twin. Committed VERBATIM from
 the AuScope brand kit ("2025 AuScope Logos", file `2025 AuScope Logo Icon - Colour.png`); it is a
 third-party trademark asset, so it is never resized, re-encoded, recoloured or faded, which is why
 the committed file keeps its full 281x288 resolution.
