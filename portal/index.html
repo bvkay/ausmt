@@ -85,7 +85,6 @@
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--heading);text-decoration:none}
-  .brandmark{height:30px;width:30px;display:block;flex:none}
   /* The heading wraps the wordmark and takes no type of its own, so its line box is the wordmark's and
      the identity block measures as it does on every other surface; the page name is clipped. */
   .brandh1{flex:none;font-size:inherit}
@@ -589,9 +588,8 @@
 <body>
 <header>
   <div class="hzone hleft">
-    <!-- The AuScope mark opens every header on this site; AusMT and its tagline stand beside it. See
-         docs: portal internals, index.html. -->
-    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="30" height="30"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="30" height="30">
+    <!-- AusMT's name and tagline are the identity zone; the lock-up at the right is the header's
+         only AuScope presence. See docs: portal internals, index.html. -->
     <h1 class="brandh1"><span class="wordmark">AusMT</span><span class="visually-hidden"> - Australia's Magnetotelluric (MT) Data Portal</span></h1>
     <div class="tagline">Australia's Magnetotelluric Data Portal</div>
   </div>

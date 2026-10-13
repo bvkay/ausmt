@@ -688,7 +688,6 @@ _CSS = """
   .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
-  .brandmark{height:30px;width:30px;display:block;flex:none}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--heading);text-decoration:none}
   .tagline{color:var(--muted);font-size:12.5px}
   header.site nav{display:flex;gap:6px;flex-wrap:wrap}
@@ -787,38 +786,37 @@ _NAV_TABS = (("navMap", "Map", "/"),
 def _site_header(active="") -> str:
     """The ONE header, everywhere: portal/index.html's header with the tabs rendered as links.
 
-    Left is the AuScope mark, then the AusMT wordmark linking the root and the tagline. The centre
-    carries the three filled application tabs with the CURRENT page's tab in the active state, and
-    About beside them as the smaller outlined supporting control. The right zone is the AuScope and
-    NCRIS lock-up, linking the parent organisation in a new tab; it is the same on every page, and
-    a page's contextual status rides the footer instead.
+    Left is the AusMT wordmark linking the root, then the tagline, and nothing else: the identity
+    zone carries no mark. The centre carries the three filled application tabs with the CURRENT
+    page's tab in the active state, and About beside them as the smaller outlined supporting
+    control. The right zone is the AuScope and NCRIS lock-up, linking the parent organisation in a
+    new tab; it is the header's only AuScope presence, the same on every page, and a page's
+    contextual status rides the footer instead.
 
-    THE FETCHED ASSETS ARE NAMED. The mark and the lock-up are each a PAIR of same-origin files, one
-    inked for the light ground and one in white for the dark ground: the mark as two SVGs, the
-    lock-up as the AuScope brand kit's own colour and white PNGs, drawn 40px tall, the height of the
-    tabs. The .theme-light and .theme-dark rules show the one that matches <html data-theme>, and the
-    white files never sit on the light ground. They are served by the portal image beside these
-    pages: not a build-time read and not an external fetch. engine/tests/test_index_pages.py holds
-    the src allow-list to these four files.
+    THE FETCHED ASSETS ARE NAMED. The lock-up is a PAIR of same-origin files, the AuScope brand
+    kit's own colour and white PNGs, drawn 40px tall, the height of the tabs. The .theme-light and
+    .theme-dark rules show the one that matches <html data-theme>, and the white file never sits on
+    the light ground. Both are served by the portal image beside these pages: not a build-time read
+    and not an external fetch. engine/tests/test_index_pages.py holds the header's src allow-list
+    to these two files.
 
     VERSION SKEW. /vendor/* and /src/* are served from the portal image and the pages tree from the
     data volume, so the two can be a deploy apart. A pages tree that names a file the running image
-    does not serve renders alt text in place of a mark and loses its appearance script, so the
-    portal image goes out first, and /vendor/auscope/auscope-mark.svg,
-    /vendor/auscope-ncris-colour.png and /src/theme.js each answering 200 is the check before the
-    pages tree is swapped.
+    does not serve renders alt text in place of an image and loses its appearance script, so the
+    portal image goes out first, and /vendor/auscope-ncris-colour.png, /src/theme.js and
+    /vendor/auscope/auscope-mark.svg (the collection figure's corner mark) each answering 200 is the
+    check before the pages tree is swapped.
 
-    The mark is a fixed 30x30 box inside the zero-basis .hleft zone, so the identity block cannot
-    move the centre tab group: a zero-basis side hands its leftover space out evenly whatever it
-    holds (portal/tests/test_header_geometry_parity.py). Each image pair, the About control and the
-    lock-up anchor are one unbroken literal, because that pin reads this file's SOURCE against
-    portal/index.html's header, character for character."""
+    The identity block sits inside the zero-basis .hleft zone, so it cannot move the centre tab
+    group: a zero-basis side hands its leftover space out evenly whatever it holds
+    (portal/tests/test_header_geometry_parity.py). The lock-up anchor and the About control are
+    each one unbroken literal, because that pin reads this file's SOURCE against portal/index.html's
+    header, character for character."""
     tabs = "".join(
         f'      <a id="{i}" href="{h}"' + (' class="active"' if i == active else "") + f">{lbl}</a>\n"
         for i, lbl, h in _NAV_TABS)
     return ('<header class="site">\n'
             '  <div class="hzone hleft">\n'
-            '    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="30" height="30"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="30" height="30">\n'
             '    <a class="wordmark" href="/">AusMT</a>\n'
             '    <div class="tagline">Australia\'s Magnetotelluric Data Portal</div>\n'
             '  </div>\n'

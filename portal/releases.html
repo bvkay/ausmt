@@ -56,7 +56,6 @@
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--heading);text-decoration:none}
-  .brandmark{height:30px;width:30px;display:block;flex:none}
   .tagline{color:var(--muted);font-size:12.5px}
   /* flex-wrap is a term of the header's HEIGHT: three 112px tabs must be free to stack on a narrow
      viewport. See docs: portal internals, releases.html. */
@@ -146,8 +145,8 @@
 <body>
 <header>
   <div class="hzone hleft">
-    <!-- The AuScope mark opens every header on this site. See docs: portal internals, releases.html. -->
-    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="30" height="30"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="30" height="30">
+    <!-- AusMT's name and tagline are the identity zone; the lock-up at the right is the header's
+         only AuScope presence. See docs: portal internals, releases.html. -->
     <a class="wordmark" href="/">AusMT</a>
     <div class="tagline">Australia's Magnetotelluric Data Portal</div>
   </div>
