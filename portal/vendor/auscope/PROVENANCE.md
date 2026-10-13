@@ -15,18 +15,20 @@ written to three decimals. Nothing is redrawn or simplified.
 | `auscope-mark.svg` | As the kit file states them: the body in its Royal Blue, `#272472`, and the swoosh in `#A7A2C5`. They are not normalised to the guide's `#282572`. |
 | `auscope-mark-white.svg` | The same four shapes in white, `#FFFFFF`, with the swoosh at `fill-opacity="0.302"`: the alpha, 77 of 255, at which the kit's `2025 AuScope Logo Icon - White.png` renders it. |
 
-Rules from the guide: breathing space of at least the logo's height on every side; the white
-versions sit on Royal Blue or another dark ground only.
+The mark opens every header, 36px square, and captions the collection figures. Rules from the
+guide: breathing space of at least the logo's height on every side; the white versions sit on Royal
+Blue or another dark ground only.
 
 ## The lock-up pair
 
-The AuScope and NCRIS lock-up in every header, and in About's body, is the kit's own PNG pair, kept
-one level up at the vendor root and never re-encoded, resized or recoloured:
+The AuScope and NCRIS lock-up at the right of every footer on the pages without the big map, in the
+map page's corner and in About's body is the kit's own PNG pair, kept one level up at the vendor root
+and never re-encoded, resized or recoloured:
 `../auscope-ncris-colour.png` is `2025 AuScope-NCRIS Logo - Colour.png` and
 `../auscope-ncris-white.png` is `2025 AuScope-NCRIS Logo - White.png`, both 1919 by 325. The kit's
 only vector lock-up is an EPS this repository's tools do not read, so the PNGs are drawn as
-published: 40px tall in the header, 320px wide in About. `../README.md` records each file's digest
-and size.
+published: 30px tall in the footer, 44px tall in the map's corner at 80 percent opacity, 320px wide
+in About. `../README.md` records each file's digest and size.
 
 ## Icons derived from the mark
 

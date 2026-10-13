@@ -589,7 +589,7 @@ _ENGINE_GROWS = ("main", "flex:1 0 auto")
 _GROUND = "background:var(--surface)"
 
 # The centre line's weight, as ONE declaration on the zone rather than a span around the sentence.
-# 700 is the sans family's bold; the header wordmark's 800 is a display weight for a 22px mark.
+# 700 is the sans family's bold; the header wordmark's 800 is a display weight for its heavy "Aus".
 _CENTRE_WEIGHT = "font-weight:700"
 
 _FOOTER_RULE = r"(?m)^\s*footer\{([^}]*)\}"

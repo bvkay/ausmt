@@ -13,9 +13,9 @@ tests/test_favicon_and_app_icons.py; these are the AusMT brand kit. The rules th
     printed, and it is the usual way a brand kit rots.
   * TRANSPARENT. No background plate in either format, so a variant sits on whatever it is placed on
     and the two variants stay a choice of INK rather than a choice of card.
-  * THE TYPOGRAPHY RULE. The SVG wordmark declares the site's own system UI stack at weight 800 and
-    the declared tracking, so it renders in the reader's fonts and matches the portal header. No SVG
-    names the bundled raster face, because it has nothing to do with what a browser draws.
+  * THE TYPOGRAPHY RULE. The SVG wordmark declares the system UI stack brand.json records, at weight
+    800 and the declared tracking, so it renders in the reader's fonts. No SVG names the bundled
+    raster face, because it has nothing to do with what a browser draws.
   * NO EN OR EM DASH anywhere in generated asset text.
   * The PNGs are rendered from the same declared geometry rather than by rasterising the SVGs, which
     is why they are checked for the geometry's own signature (transparent corners, the declared sizes)
@@ -123,13 +123,13 @@ def test_the_two_backgrounds_differ_only_in_the_wordmark_ink():
 @pytest.mark.parametrize("name", DARK_VARIANTS + LIGHT_VARIANTS)
 def test_the_svg_wordmark_declares_the_sites_own_font_stack(name):
     """The typography rule, on the surface it governs. FAILS IF an SVG wordmark stops declaring the
-    portal header's stack and weight, loses the declared tracking, or names the bundled raster face:
+    stack and weight brand.json records, loses the declared tracking, or names the bundled raster face:
     the exports must render in the READER's fonts, and the bundled face is a generator detail."""
     doc = json.loads(BRAND_JSON.read_text(encoding="utf-8"))["typography"]
     text = _svg(name)
     assert f'font-family="{doc["web_font_stack"]}"' in text, \
-        f"{name}: the wordmark must declare the site's system UI stack"
-    assert f'font-weight="{doc["web_font_weight"]}"' in text, f"{name}: weight must match the header"
+        f"{name}: the wordmark must declare the system UI stack brand.json records"
+    assert f'font-weight="{doc["web_font_weight"]}"' in text, f"{name}: weight must be brand.json's"
     assert f'letter-spacing="{doc["letter_spacing_em"]}em"' in text, \
         f"{name}: the declared tracking must ride the SVG, not the font engine's default"
     assert "inter" not in text.lower(), \

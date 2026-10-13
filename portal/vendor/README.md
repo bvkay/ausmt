@@ -56,8 +56,8 @@ Generated, not hand-edited: `tools/gen_auscope_icons.py` writes it from
 
 ## auscope/
 
-The AuScope mark, as the map's corner and the collection figures draw it (no header carries it), and
-the icons made from it. The mark pair is derived from the AuScope brand kit's own vector icon,
+The AuScope mark, as every header and the collection figures draw it, 36px square in the header,
+and the icons made from it. The mark pair is derived from the AuScope brand kit's own vector icon,
 `2025 AuScope Logo Icon.ai`; `auscope/PROVENANCE.md` records the derivation and the guide's rules for
 using it.
 
@@ -76,15 +76,16 @@ a fresh render. Regenerate them after any change to `auscope-mark.svg`; never ed
 
 `auscope-ncris-colour.png`, `auscope-ncris-white.png`, `auscope-icon-colour.png` and
 `auscope-icon-white.png`, one level up, are the AuScope brand kit's own files, kept verbatim. The two
-lock-up PNGs are drawn in every header, colour on the light theme and white on the dark, and in
-About's body. `auscope-icon-colour.png` is drawn by nothing on the site. `auscope-icon-white.png` is
+lock-up PNGs are drawn at the right of every footer on the pages without the big map, in the map
+page's corner and in About's body, colour on the light theme and white on the dark. `auscope-icon-colour.png` is drawn by nothing on the site. `auscope-icon-white.png` is
 drawn by the documentation sidebar's copy of it and composited by `tools/gen_social_card.py`; the
 engine's link-preview cards draw a crop of the white lock-up, pinned against its file.
 
 ## auscope-ncris-colour.png and auscope-ncris-white.png
 
-The AuScope and NCRIS lock-up pair from the AuScope brand kit, the header's light and dark variants,
-drawn 40px tall, the height of the view tabs. Committed VERBATIM from the AuScope brand kit
+The AuScope and NCRIS lock-up pair from the AuScope brand kit, the light and dark variants drawn
+30px tall at the right of every footer on the pages without the big map and 44px tall in the map
+page's corner. Committed VERBATIM from the AuScope brand kit
 ("2025 AuScope Logos"); they are third-party trademark assets, so they are never resized, re-encoded
 or recoloured here, which is why each committed file keeps its full 1919x325 resolution.
 
@@ -96,7 +97,7 @@ or recoloured here, which is why each committed file keeps its full 1919x325 res
 ## auscope-icon-colour.png
 
 The AuScope icon in its brand colours, from the AuScope brand kit. Nothing on the site draws it: the
-map's corner mark is `auscope/auscope-mark.svg` and its white twin. Committed VERBATIM from
+headers draw `auscope/auscope-mark.svg` and its white twin, and the map's corner the lock-up pair. Committed VERBATIM from
 the AuScope brand kit ("2025 AuScope Logos", file `2025 AuScope Logo Icon - Colour.png`); it is a
 third-party trademark asset, so it is never resized, re-encoded, recoloured or faded, which is why
 the committed file keeps its full 281x288 resolution.

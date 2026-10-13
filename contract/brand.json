@@ -1363,7 +1363,7 @@
     "mark_units": 1000
   },
   "typography": {
-    "note": "The web and SVG wordmark renders in the site's own system UI stack, so the logo and the portal header agree in the viewer's fonts. The raster exports cannot depend on the viewer's fonts, so they are drawn with a bundled face that serves only as a deterministic rendering substitute.",
+    "note": "The web and SVG wordmark renders in a system UI stack, so the logo renders in the viewer's own fonts. The raster exports cannot depend on the viewer's fonts, so they are drawn with a bundled face that serves only as a deterministic rendering substitute.",
     "web_font_stack": "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif",
     "web_font_weight": 800,
     "letter_spacing_em": -0.02,

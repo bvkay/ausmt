@@ -109,7 +109,9 @@ written outside the block.
 A card is a `--surface` box with a 1px `--line` border, a 4px corner radius and the `--shadow`
 token, which is a soft shadow in the light appearance and none in the dark. The type stack is
 `--sans`, which names Libre Franklin first; the face is not bundled, so the stack falls through to
-Inter and the system faces, which is intended.
+Inter and the system faces, which is intended. The header's wordmark alone leads with Calibre,
+AuScope's typeface, over `--sans`: AuScope's licence covers it on this site, but no page declares an
+`@font-face` and no font file is served yet, so a reader without the face installed sees `--sans`.
 
 ### Header
 
@@ -117,21 +119,22 @@ The header is the portal's header with two declared differences: the identity is
 root rather than the map page's heading, and the three tabs are links with the current page's tab
 active.
 
-- Left: the AusMT wordmark, linking the root, and the tagline, and nothing else. The identity zone
-  carries no mark and fetches nothing.
+- Left: the AuScope mark, then the AusMT wordmark linking the root. The mark is a light and a white
+  file, the brand kit's vector icon, `/vendor/auscope/auscope-mark.svg` and
+  `/vendor/auscope/auscope-mark-white.svg`, drawn 36px square. The wordmark is set at the AuScope
+  logo's own proportions scaled to that mark: the zone's 12px gap from mark to name, 24.5px type
+  whose cap height is 0.48 of the mark, and "Aus" at weight 800 against "MT" at 300. The
+  `.theme-light` and `.theme-dark` rules show the file that matches `data-theme`, so the white file
+  never sits on the light ground. These two files are the header's only fetched assets.
 - Centre: Map, Surveys and Collections, then About. There is no Contribute control in any header;
   `add-survey.html` stays served and About links it from its body.
-- Right: the AuScope and NCRIS lock-up, the header's only AuScope presence, as a light and a white
-  file: the brand kit's own PNGs, `/vendor/auscope-ncris-colour.png` and
-  `/vendor/auscope-ncris-white.png`, declared at their intrinsic 1919 by 325 and drawn 40px tall, the
-  height of the tabs. The `.theme-light` and `.theme-dark` rules show the file that matches
-  `data-theme`, so the white file never sits on the light ground. It links
-  `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`. These two files are the
-  header's only fetched assets.
+- Right: the tagline, "Australia's Magnetotelluric Data Portal", at 14px on one line. Where its
+  zone is narrower than the line, from 761px to about 976px of viewport, it ends in an ellipsis
+  inside the zone rather than spilling over the About control.
 
-The site draws the 2025 AuScope brand kit's own files, which carry Tasmania, and the lock-up is as
-tall as the tabs (Owner decision 2026-10-13). The identity zone carries no mark, so the lock-up is
-the one AuScope image in every header (Owner decision 2026-10-13).
+The header is 57px tall from 761px of viewport up. The site draws the 2025 AuScope brand kit's own
+files, which carry Tasmania (Owner decision 2026-10-13). The mark opens every header, the tagline
+closes it and the AuScope and NCRIS lock-up moved to the footer (Owner decision 2026-10-13).
 
 ### Footer
 
@@ -141,14 +144,21 @@ Three regions, the same on every page apart from the status slot.
 - Centre: "AusMT is enabled by AuScope · Data licences vary by survey". "AuScope" is the region's
   one link, opening `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`; the
   address is not printed (Owner decision 2026-10-13).
-- Right: the page's status, and nothing else. The status is what the page can state about itself:
-  the surveys hub states its catalogue counts, and every other page leaves the zone empty. The
-  empty zone stays, because it takes its share of the row and so keeps the centre on the page's
-  axis. The footer carries no appearance control (Owner decision 2026-10-13); the choice is on
+- Right: the page's status, then the AuScope and NCRIS lock-up (Owner decision 2026-10-13). The
+  status is what the page can state about itself: the surveys hub states its catalogue counts, and
+  every other page has none, so its right zone is the lock-up alone. The lock-up is a light and a
+  white file, the brand kit's own PNGs, `/vendor/auscope-ncris-colour.png` and
+  `/vendor/auscope-ncris-white.png`, declared at their intrinsic 1919 by 325 and drawn 30px tall,
+  linking `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`. A negative
+  block margin makes its margin box one footer text line, so it does not make the sticky footer
+  taller. The footer carries no appearance control (Owner decision 2026-10-13); the choice is on
   `/about.html` and in the map's welcome dialog.
 
-The footer fetches nothing. Its box, its regions and its narrow-width states are one rule set with
-the portal's documents, held by `portal/tests/test_footer_regions.py`.
+The footer fetches the lock-up pair and nothing else, and carries two anchors to AuScope, the
+centre's name and the lock-up. Its box, its regions and its narrow-width states are one rule set
+with the portal's documents, held by `portal/tests/test_footer_regions.py`. On the surveys hub the
+counts wrap beside the lock-up from 557px to 890px of viewport, which makes that footer one line
+taller there.
 
 ### Icons
 
@@ -170,7 +180,8 @@ ramp is the same in both appearances, so a legend never changes meaning with the
 sits in a `.mm-dots` group that strokes it in `--dot-edge`, which keeps the lighter hues legible on
 the light panel.
 
-The collection map's corner mark is the AuScope mark pair, placed and sized as before.
+The collection map's corner mark is the AuScope mark pair, the files every header opens with,
+placed and sized as before.
 
 The link-preview cards are PNGs and have no theme. They stay on the dark ground, and the collection
 card's map is drawn in exactly the dark appearance's map tokens (`_MAP_PANEL`, `_MAP_PANEL_LINE`,
@@ -181,8 +192,8 @@ card's map is drawn in exactly the dark appearance's map tokens (`_MAP_PANEL`, `
 `/vendor/*` and `/src/*` are served from the portal image and the pages tree from the data volume,
 so the two can be a deploy apart. A pages tree that names a file the running image does not serve
 shows alt text in place of its images and loses its appearance script, so the portal image goes
-out first; `/vendor/auscope-ncris-colour.png` (every header's lock-up),
-`/vendor/auscope/auscope-mark.svg` (the collection map's corner mark) and `/src/theme.js` each
+out first; `/vendor/auscope/auscope-mark.svg` (every header's mark and the collection map's corner
+mark), `/vendor/auscope-ncris-colour.png` (every footer's lock-up) and `/src/theme.js` each
 answering 200 is the check before the pages tree is swapped.
 
 ## Structured data, by page kind
@@ -416,10 +427,11 @@ The AuScope lockup is last, on the same margin, keeping a declared clear space a
 bottom edge so the column ends on one line across every family whatever the block above it does. It
 is the AuScope half of `portal/vendor/auscope-ncris-white.png`, cut at column 1200 of that 1919 by
 325 image and trimmed to its alpha bbox: the columns to the right carry a second organisation's mark
-and a descriptor line that is unreadable at card height, and the site header already carries the full
+and a descriptor line that is unreadable at card height, and the site footer already carries the full
 lock-up. It is drawn no taller than the AusMT mark above it, which is how the acknowledgement is kept
-from outweighing the resource identity it acknowledges. The same PNG is the header's dark-theme
-lock-up on every page, so the card's crop and the chrome draw from one file.
+from outweighing the resource identity it acknowledges. The same PNG is the footer's dark-theme
+lock-up on every page without the big map, and the map's corner draws it on the dark basemap, so the
+card's crop and the chrome draw from one file.
 
 The address is set in Inter Bold on all three families. The root card's artwork is set in that face,
 so the generated cards adopting it is what makes the three addresses one line rather than three that

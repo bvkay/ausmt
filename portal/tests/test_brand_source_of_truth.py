@@ -20,8 +20,8 @@ that file. These pins hold that arrangement:
     ramp evaluated at that dot's own column. No dot may carry a colour off the ramp.
   * the radius is a declared function of output size, stated as ordered bands, so a 16 px render can
     be fuller than the presentation render without a second geometry existing anywhere.
-  * the typography block records the rule itself: the web/SVG wordmark renders in the site's system
-    UI stack, and the bundled face is a DETERMINISTIC RASTER SUBSTITUTE, never the AusMT typeface.
+  * the typography block records the rule itself: the web/SVG wordmark renders in a system UI stack,
+    and the bundled face is a DETERMINISTIC RASTER SUBSTITUTE, never the AusMT typeface.
   * the bundled face ships its OFL text and a provenance note whose recorded digests are CHECKED
     against the bytes beside them, so the note's own replacement procedure enforces itself.
   * gen_brand.py --check is green on the committed tree (the drift gate, mirroring gen_config).
@@ -146,13 +146,13 @@ def test_the_dot_radius_is_a_declared_function_of_output_size():
 
 
 def test_the_typography_block_states_the_ruling_not_just_the_font():
-    """FAILS IF brand.json stops recording that the web/SVG wordmark is the SITE's system UI stack and
-    that the bundled face is only a deterministic raster substitute. The rule is binding on how the
+    """FAILS IF brand.json stops recording that the web/SVG wordmark is a system UI stack and that
+    the bundled face is only a deterministic raster substitute. The rule is binding on how the
     brand is described, so the machine-readable truth has to carry it, not just a comment in a tool."""
     typo = _doc()["typography"]
     assert typo["web_font_stack"] == "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif", \
-        "the SVG wordmark must declare the site header's own stack, character for character"
-    assert typo["web_font_weight"] == 800, "the SVG wordmark matches the header wordmark's weight"
+        "the SVG wordmark must declare the system UI stack, character for character"
+    assert typo["web_font_weight"] == 800, "the SVG wordmark is set at weight 800"
     assert "monospace" not in json.dumps(typo).lower(), \
         "a monospaced face never renders the wordmark (monospace belongs to identifiers elsewhere)"
     assert typo["raster_substitute"]["is_the_ausmt_typeface"] is False, \
