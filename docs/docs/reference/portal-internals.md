@@ -75,10 +75,11 @@ engine's sheets.
 ```text
 The right zone is the tagline, "Australia's Magnetotelluric Data Portal", at 14px in --muted, on
 one line. The zone is zero-basis, so a nowrap line wider than the zone would spill out of its left
-edge and paint over the About control, 92px of it at 761px of viewport; the tagline also takes
-min-width:0, overflow:hidden and text-overflow:ellipsis, so where the zone is narrower than the
-line it ends in an ellipsis inside the zone. Measured in Chrome with the fallback stack, that band
-runs from 761px to 976px of viewport. Stated character-identically on every surface; pinned by
+edge and paint over the centre zone's right end, 92px of it at 761px of viewport: all of the About
+control and the end of the Collections tab. The tagline also takes min-width:0, overflow:hidden and
+text-overflow:ellipsis, so where the zone is narrower than the line it ends in an ellipsis inside
+the zone. Measured in Chrome with the fallback stack, that band runs from 761px to 976px of
+viewport. Stated character-identically on every surface; pinned by
 tests/test_header_geometry_parity.py and tests/test_header_vertical_geometry.py.
 ```
 

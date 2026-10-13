@@ -531,8 +531,9 @@ def test_the_right_zone_is_the_tagline_alone_on_every_surface():
 def test_every_surface_declares_the_tagline_rule_verbatim():
     """The tagline sits on one line in a zero-basis zone, so where the zone is narrower than the line it
     must end in an ellipsis inside the zone: without min-width:0, overflow:hidden and
-    text-overflow:ellipsis the line spills out of the zone's left edge and paints over the About
-    control, 92px of it at 761px of viewport. FAILS IF any surface's rule drifts by a character."""
+    text-overflow:ellipsis the line spills out of the zone's left edge and paints over the centre
+    zone's right end, 92px of it at 761px of viewport: all of the About control and the end of the
+    Collections tab. FAILS IF any surface's rule drifts by a character."""
     for where, text in _surfaces_text():
         assert text.count(TAGLINE_RULE) == 1, (
             f"{where}: expected exactly one {TAGLINE_RULE!r}, found {text.count(TAGLINE_RULE)}")

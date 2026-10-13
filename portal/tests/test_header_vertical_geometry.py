@@ -217,8 +217,9 @@ def test_the_zones_can_still_wrap_and_the_tagline_cannot_spill_on_every_surface(
 
     FAILS IF a surface reaches for flex-wrap:nowrap on the zones, or if the tagline's one line loses
     min-width:0, overflow:hidden or text-overflow:ellipsis: without them the line sizes its zero-basis
-    zone's item to its full width, spills out of the zone's left edge and paints over the About
-    control, 92px of it at 761px of viewport."""
+    zone's item to its full width, spills out of the zone's left edge and paints over the centre
+    zone's right end, 92px of it at 761px of viewport: all of the About control and the end of the
+    Collections tab."""
     for where, text, is_pages in _surfaces():
         hzone = _rule(text, r"(?m)^\s*\.hzone\{([^}]*)\}", where, ".hzone",
                       must_contain="display:")
