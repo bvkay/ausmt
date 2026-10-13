@@ -166,11 +166,12 @@ a 375px phone would scroll sideways.
 
 ```text
 One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the page's
-status and the appearance control RIGHT. THIS IS THE MASTER RULE SET, carried character for
-character by every other portal document and by engine/extract/_pages.py's _CSS, so nothing here may
-be tuned for one page. The equal zero-basis side zones and the two queries on the FOOTER's own
-content width are load-bearing; the right zone is a row of its own so the status and the control sit
-side by side against the right edge. Pinned by tests/test_footer_regions.py.
+status RIGHT. THIS IS THE MASTER RULE SET, carried character for character by every other portal
+document and by engine/extract/_pages.py's _CSS, so nothing here may be tuned for one page. The
+equal zero-basis side zones and the two queries on the FOOTER's own content width are load-bearing;
+the right zone is a row of its own so the status sits against the right edge, and on a page with no
+status the empty zone still takes its share of the row, which keeps the centre on the page's axis.
+The footer carries no control. Pinned by tests/test_footer_regions.py.
 ```
 
 #### The hand-off snackbar sits ABOVE #toast so the two can coexist (a ...
@@ -358,7 +359,9 @@ First-visit welcome popup: role=dialog, focus-managed, closed by Esc, click-out 
 immediately". "Don't show this again" gates persistence via the localStorage key; ?tour=1 is the
 on-demand way back into the tour. The Appearance row (Light, Dark, Follow system) is applied and
 saved the moment it changes, by src/theme.js and independently of the checkbox: a visitor who
-picks a theme and dismisses the popup for this visit only still keeps the theme.
+picks a theme and dismisses the popup for this visit only still keeps the theme. Its radios are
+named appearance because the same row is About's section 9, the choice's home for a visitor who
+dismissed the popup; no footer carries an appearance control.
 The wget dialog: the command is SHOWN, scrollable, with its run instructions, before anything
 lands on a clipboard. Filled and wired by fetchdialog.js showWgetDialog(); the same markup rides every
 generated survey page, driven by page-fetch.js.
@@ -395,11 +398,10 @@ own data licence.
 #### RIGHT
 
 ```text
-RIGHT. The live counts, then the appearance control. One SHELL, a contextual SLOT: #footerCounts is
-the same element in the same place on every view and #countSlot's content is what changes
-(filters.js updateCounts); the markup here is the MAP form. The control's two buttons carry
-data-theme-choice and src/theme.js wires them, so the footer needs no script of its own and the
-deployed CSP's ban on inline handlers is kept.
+RIGHT. The live counts, and nothing after them. One SHELL, a contextual SLOT: #footerCounts is the
+same element in the same place on every view and #countSlot's content is what changes
+(filters.js updateCounts); the markup here is the MAP form. The footer carries no control: the
+appearance choice is the welcome dialog's Appearance row and About's section 9.
 ```
 
 #### PROGRESS BELONGS TO THE BROWSER: the 302 hands the bytes ...
@@ -537,8 +539,8 @@ Absence markers use neutral --muted, not amber --part: absence is ordinary, and 
 The LOADING state a section shows while its heavy product is still in flight. Deliberately quiet
      and NOT an absence marker, which is the muted --prov styling above.
 
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the status and the
-     appearance control RIGHT. See docs: portal internals, index.html.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the status
+     RIGHT. See docs: portal internals, index.html.
 
 The hand-off snackbar sits ABOVE #toast so the two can coexist (a hand-off can follow an export toast
      within its dwell). It carries at most one action button; it never carries a progress bar. See docs:
@@ -699,13 +701,13 @@ descender gap and without being outranked.
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance
-control RIGHT. The rule set below is index.html's, character for character, where the zone geometry
-and the two container states are stated once; tests/test_footer_regions.py holds all seven surfaces
-identical, so an edit here that is not an edit there fails. STICKY, not fixed: it keeps its own box
-in flow, so the last line of the page is never hidden under it, which is why body is a
-viewport-tall column and main takes its free space. Below 560px of viewport it would cover most of a
-phone screen, so it returns to flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT
+that keeps the centre on the page's axis. The rule set below is index.html's, character for
+character, where the zone geometry and the two container states are stated once;
+tests/test_footer_regions.py holds all seven surfaces identical, so an edit here that is not an
+edit there fails. STICKY, not fixed: it keeps its own box in flow, so the last line of the page is
+never hidden under it, which is why body is a viewport-tall column and main takes its free space.
+Below 560px of viewport it would cover most of a phone screen, so it returns to flow.
 ```
 
 #### AusMT's name and tagline are the identity zone
@@ -717,12 +719,13 @@ control, because none of the three tabs is this page. The page carries no counts
 map, filter or selection to report, so the live ids (nVis/nSel/nTot) stay off it.
 ```
 
-#### About is the two-minute front door: it answers seven questions and then ...
+#### About is the two-minute front door: it answers seven questions, hands ...
 
 ```text
-About is the two-minute front door: it answers seven questions and then hands off. Every deeper
-topic is a link into the docs site, and every target was fetched and returned 200 before it was
-written here. The #howto and #api ids are kept, because other surfaces deep-link them.
+About is the two-minute front door: it answers seven questions, hands off, then offers the
+appearance choice. Every deeper topic is a link into the docs site, and every target was fetched
+and returned 200 before it was written here. The #howto and #api ids are kept, because other
+surfaces deep-link them.
 ```
 
 #### The no-hosting claim and the hand-off are ONE statement: the no-hosting ...
@@ -749,6 +752,20 @@ releases-page pins hold it here. No version chip: this is a route, not the runni
 identity.
 ```
 
+#### The appearance choice's second home
+
+```text
+The appearance choice's second home: the welcome dialog's row, on a page every header reaches, so
+a reader who dismissed the welcome dialog can still change the theme. The three radios are named
+appearance, as the dialog's are, and src/theme.js, the first script in this page's head, sets the
+choice on change and checks the radio that matches the stored choice; the page needs no script of
+its own. The .appearance rules set the row as the dialog sets it, with a muted legend, inline
+labels with a 5px gap and accent-coloured radios, at 14px against the page's 16px body. It is
+section 9, after the hand-off, because it is a setting rather than an answer.
+tests/test_about_copy_batch.py holds its words, its row, its rules and its place, and
+tests/test_theme_tokens.py holds the row to the welcome dialog's.
+```
+
 #### The site's ONE footer
 
 ```text
@@ -757,12 +774,13 @@ main, not a child of it: it is the page's bottom edge, and only a body-level foo
 contentinfo landmark.
 ```
 
-#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The organisation's
-name is the acknowledgement's one link, and the line carries no copyright clause. The control's
-buttons carry data-theme-choice and src/theme.js, the one script this page loads, wires them.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. The organisation's name is the
+acknowledgement's one link, and the line carries no copyright clause. The right zone holds nothing:
+About has no status to report and carries the appearance choice as its section 9, not as a footer
+control, and the empty zone keeps the three-zone geometry that holds the centre on the page's axis.
 ```
 
 ## portal/add-survey.html
@@ -794,11 +812,11 @@ ground, so each chip also carries its level as a word.
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance
-control RIGHT. The rule set is index.html's, character for character, where the zone geometry and
-the two container states are stated once; tests/test_footer_regions.py holds all seven surfaces
-identical. STICKY, not fixed, so it keeps its box in flow and body is a viewport-tall column; below
-560px it returns to ordinary flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT
+that keeps the centre on the page's axis. The rule set is index.html's, character for character,
+where the zone geometry and the two container states are stated once; tests/test_footer_regions.py
+holds all seven surfaces identical. STICKY, not fixed, so it keeps its box in flow and body is a
+viewport-tall column; below 560px it returns to ordinary flow.
 ```
 
 #### Wide enough to show a full-length folder name (SLUG_MAX = 40 mono ...
@@ -892,12 +910,13 @@ points at in NCI Table 1 terms; the DataCite relation is DERIVED server-side fro
 is never asked here.
 ```
 
-#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The organisation's
-name is the acknowledgement's one link, and the line carries no copyright clause; the control's
-buttons are wired by src/theme.js.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. The organisation's name is the
+acknowledgement's one link, and the line carries no copyright clause. The page has no status and
+the footer carries no control, so the right zone holds nothing; it stays, because the empty zone
+keeps the centre on the page's axis.
 ```
 
 #### INFO-block coords, decimal (Geotools style) or DMS ('LATITUDE ...
@@ -1737,7 +1756,7 @@ AA text contrast on the status-chip tints: the PASS tint is light enough for --o
 
 A non-blocking "slug already served" context warning, distinct from valid and invalid. Amber like a WARNING chip, and allowed to wrap.
 
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance control RIGHT. See docs: portal internals, add-survey.html.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT that keeps the centre on the page's axis. See docs: portal internals, add-survey.html.
 
 Direct upload ("Submit to AusMT"): hidden until the same-origin gateway healthz probe passes.
 
@@ -1789,7 +1808,7 @@ Identifiers by data level, mirroring the curator editor. Each row states WHAT th
 
 Key request. It always shows the same neutral message regardless of the response, so it can never confirm whether an address exists.
 
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. See docs: portal internals, add-survey.html.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. See docs: portal internals, add-survey.html.
 
 MAINTAINER NOTE: this page is the largest single file in the portal. It is intentionally one file while it stays manageable.
 
@@ -2130,11 +2149,11 @@ viewport. Character-identical on every surface wearing the chrome.
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance
-control RIGHT. The rule set below is index.html's, character for character, where the zone geometry
-and the two container states are stated once; tests/test_footer_regions.py holds all seven surfaces
-identical. STICKY, not fixed, so it keeps its box in flow and body is a viewport-tall column; below
-560px of viewport it returns to ordinary flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT
+that keeps the centre on the page's axis. The rule set below is index.html's, character for
+character, where the zone geometry and the two container states are stated once;
+tests/test_footer_regions.py holds all seven surfaces identical. STICKY, not fixed, so it keeps its
+box in flow and body is a viewport-tall column; below 560px of viewport it returns to ordinary flow.
 ```
 
 #### AusMT's name and tagline are the identity zone
@@ -2152,12 +2171,13 @@ The site's ONE footer, the same strings and the same targets index.html carries.
 main, not a child of it: only a body-level footer is a contentinfo landmark.
 ```
 
-#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The organisation's
-name is the acknowledgement's one link, and the line carries no copyright clause; the control's
-buttons are wired by src/theme.js.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. The organisation's name is the
+acknowledgement's one link, and the line carries no copyright clause. The page has no status and
+the footer carries no control, so the right zone holds nothing; it stays, because the empty zone
+keeps the centre on the page's axis.
 ```
 
 ## portal/brand.html
@@ -2181,13 +2201,13 @@ viewport. Character-identical on every surface wearing the chrome.
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance
-control RIGHT. The rule set below is index.html's, character for character, where the zone geometry
-and the two container states are stated once; tests/test_footer_regions.py holds all seven surfaces
-identical, so an edit here that is not an edit there fails. STICKY, not fixed: it keeps its own box
-in flow, so the last line of the page is never hidden under it, which is why body is a
-viewport-tall column and main takes its free space. Below 560px of viewport it would cover most of a
-phone screen, so it returns to flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT
+that keeps the centre on the page's axis. The rule set below is index.html's, character for
+character, where the zone geometry and the two container states are stated once;
+tests/test_footer_regions.py holds all seven surfaces identical, so an edit here that is not an
+edit there fails. STICKY, not fixed: it keeps its own box in flow, so the last line of the page is
+never hidden under it, which is why body is a viewport-tall column and main takes its free space.
+Below 560px of viewport it would cover most of a phone screen, so it returns to flow.
 ```
 
 #### AusMT's name and tagline are the identity zone
@@ -2199,12 +2219,13 @@ product mark, carried by the documentation sidebar and the social card; the site
 app icons carry the AuScope mark, and the page says so in its Mark section.
 ```
 
-#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The organisation's
-name is the acknowledgement's one link, and the line carries no copyright clause; the control's
-buttons are wired by src/theme.js.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. The organisation's name is the
+acknowledgement's one link, and the line carries no copyright clause. The page has no status and
+the footer carries no control, so the right zone holds nothing; it stays, because the empty zone
+keeps the centre on the page's axis.
 ```
 
 ## portal/404.html
@@ -2212,19 +2233,20 @@ buttons are wired by src/theme.js.
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the appearance
-control RIGHT. The rule set below is index.html's, character for character: this page carries the
-token block like every other, so the theme reaches the page Caddy serves for any unmatched path too.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT
+that keeps the centre on the page's axis. The rule set below is index.html's, character for
+character: this page carries the token block like every other, so the theme reaches the page Caddy
+serves for any unmatched path too.
 tests/test_footer_regions.py holds all seven surfaces identical. STICKY, not fixed: it keeps its own
 box in flow, so body is a viewport-tall column and the last line is never hidden under it; below
 560px of viewport it returns to ordinary flow.
 ```
 
-#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. Every href and the
-appearance script are root-absolute, because this document answers any address at any depth.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. Every href and the appearance script
+are root-absolute, because this document answers any address at any depth.
 ```
 
 ## portal/src/analytics-shim.js
@@ -4193,13 +4215,12 @@ select it. It stays in ST/visible (counted, findable by name/text), just never i
 #### The footer counter is ONE shell with a CONTEXTUAL slot
 
 ```text
-The footer counter is ONE shell with a CONTEXTUAL slot, in the footer's right zone beside the
-appearance control. A fixed
-"N shown / M selected / T total" describes what the reader is looking at only on the map: on the
-Surveys view it counts stations while the screen shows survey cards, and on the Collections views it
-counts something not on screen at all. The shell never moves; only
-this slot's content changes, and where nothing true can be said about what is on screen it says
-nothing rather than leaving a stale number standing.
+The footer counter is ONE shell with a CONTEXTUAL slot, and the whole of the footer's right zone.
+A fixed "N shown / M selected / T total" describes what the reader is looking at only on the map:
+on the Surveys view it counts stations while the screen shows survey cards, and on the Collections
+views it counts something not on screen at all. The shell never moves; only this slot's content
+changes, and where nothing true can be said about what is on screen it says nothing rather than
+leaving a stale number standing.
 ```
 
 #### The WORKSPACE LINE
@@ -5566,11 +5587,11 @@ FIRST script in every page's <head>, static and generated, and runs synchronousl
 paint is already in the chosen theme. It is a file, root-anchored as /src/theme.js so a page served
 at any depth finds it, because the deployed CSP allows no inline script.
 
-Controls need no script of their own: any element with data-theme-choice sets the choice on click
-(the Light and Dark buttons in every footer), and radio inputs named welcomeTheme set it on change
-(the Appearance row in the map's welcome popup, which also offers Follow system). Both are kept in
-step with the stored choice whenever it is applied. A change dispatches "ausmt:theme" on document,
-which map.js answers for what CSS cannot reach.
+The control needs no script of its own: radio inputs named appearance set the choice on change, and
+the one whose value matches the stored choice is checked whenever it is applied. The row has two
+homes, the map's welcome popup and About's Appearance section, each offering Light, Dark and Follow
+system; no footer carries a control and no button hook is wired. A change dispatches "ausmt:theme"
+on document, which map.js answers for what CSS cannot reach.
 ```
 
 ## portal/src/tour.js
@@ -5942,11 +5963,12 @@ including no entry at all, means `light`, because the AuScope house style is the
 stylesheets key on the resolved attribute alone (`:root[data-theme="dark"]` carries the second token
 block), so a page needs no media query of its own.
 
-Controls need no script of their own. Any element with `data-theme-choice="light|dark|system"` sets the
-choice on click (the footer's Light and Dark control on every page), and radio inputs named
-`welcomeTheme` set it on change (the welcome dialog's Appearance row); a choice made there is saved at
-once, independently of the dialog's own "don't show this again" state. Whenever the choice is applied,
-every such control is brought back in step (`aria-pressed` on the buttons, `checked` on the radios).
+The control needs no script of its own. Radio inputs named `appearance` set the choice on change, and
+a choice is saved at once, independently of the welcome dialog's own "don't show this again" state.
+The row has two homes: the welcome dialog's Appearance row on the map page, shown on a first visit,
+and the Appearance section on `about.html`, which every header reaches. No footer carries a control
+and the script wires no button. Whenever the choice is applied, the radio whose value matches it is
+checked.
 
 When the resolved theme changes, the script dispatches `ausmt:theme` on `document` with
 `detail.theme`, which is the hook for anything drawn outside CSS: map.js re-mounts the basemap in the

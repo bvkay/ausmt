@@ -68,10 +68,12 @@ anything the gated products do not already publish.
 
 ## Page chrome and appearance
 
-Every engine-written page wears the portal's own header, footer, icon links and appearance control,
-so a reader arriving on a survey page from a search result meets the same site the map shows. The
+Every engine-written page wears the portal's own header, footer, icon links and appearance, so a
+reader arriving on a survey page from a search result meets the same site the map shows. The
 appearance follows Owner ruling 2026-10-12: the AuScope house style is the default appearance, and
-the navy palette the portal carried before it is the dark appearance.
+the navy palette the portal carried before it is the dark appearance. A reader changes it on
+`/about.html`, which every header links, or in the map's welcome dialog; no page's footer carries
+an appearance control (Owner decision 2026-10-13).
 
 ### The appearance script and the token block
 
@@ -80,8 +82,9 @@ first paint is already in the reader's choice. The script resolves the choice st
 `ausmt_theme` key (light, dark or follow the system; light when nothing is stored) and writes it to
 `<html data-theme="light|dark">`, which is the only hook the stylesheet reads. The pages are served
 under a CSP whose `script-src` is `'self'`, so they carry no inline script and no inline event
-handler; the appearance control in the footer is wired by the script through its
-`data-theme-choice` attributes.
+handler. The engine's pages carry no appearance control of their own: the script wires the radios
+named `appearance` where they appear, in About's Appearance section and in the map's welcome
+dialog.
 
 The stylesheet opens with the portal's token block: the house style in `:root` and the dark
 appearance in `:root[data-theme="dark"]`, which restates only what differs. Every chrome colour on
@@ -138,10 +141,11 @@ Three regions, the same on every page apart from the status slot.
 - Centre: "AusMT is enabled by AuScope · Data licences vary by survey". "AuScope" is the region's
   one link, opening `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`; the
   address is not printed (Owner decision 2026-10-13).
-- Right: the page's status, then the appearance control (Light · Dark). The status is what the page
-  can state about itself: the surveys hub states its catalogue counts, and every other page leaves
-  the slot empty. The control is the portal footer's own block, two buttons that the appearance
-  script marks with `aria-pressed`.
+- Right: the page's status, and nothing else. The status is what the page can state about itself:
+  the surveys hub states its catalogue counts, and every other page leaves the zone empty. The
+  empty zone stays, because it takes its share of the row and so keeps the centre on the page's
+  axis. The footer carries no appearance control (Owner decision 2026-10-13); the choice is on
+  `/about.html` and in the map's welcome dialog.
 
 The footer fetches nothing. Its box, its regions and its narrow-width states are one rule set with
 the portal's documents, held by `portal/tests/test_footer_regions.py`.

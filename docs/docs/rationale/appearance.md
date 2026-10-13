@@ -10,9 +10,16 @@ that ruling settled. The tokens, the rules and the pins that hold them are in
 
 The light theme is the AuScope Style Guide's palette: a grey page ground, white cards, Royal Blue
 headings, links and active controls. The dark theme is the navy palette, unchanged, with the coral
-accent. A visitor chooses in the footer of any page, or from the welcome popup on the map, where
-"Follow system" is offered too. The choice is remembered in the browser and applied before the first
-paint, so a returning visitor never sees a flash of the other theme.
+accent. A visitor chooses Light, Dark or Follow system in one of two places: the welcome popup on
+the map, which a first visit opens, and the Appearance section of the About page, which every
+header links, so a visitor who dismissed the popup can still change it. The choice is remembered in
+the browser and applied before the first paint, so a returning visitor never sees a flash of the
+other theme.
+
+The footer carries no appearance control (Owner decision 2026-10-13). The Light and Dark switch
+left the right of every footer, and the choice keeps the two homes above: the welcome popup for a
+first visit, and the About page for every visit after it, since About is the page every header
+reaches.
 
 The stylesheets name colours by role (page ground, surface, line, text, heading, accent) rather than by
 hue, so one set of rules serves both themes and a new page cannot pick a colour that only works in one
@@ -50,7 +57,7 @@ The footer states who enables AusMT and that data licences vary by survey: "AusM
 AuScope · Data licences vary by survey". AuScope's name is the line's one link and opens AuScope's
 home page in a new tab; the address is not printed beside it (Owner decision 2026-10-13). It carries
 the machine-readable catalogue link on the left and, on the right, the map's live counts where there
-is a map, then the appearance control.
+is a map; elsewhere the right of the footer is empty, which keeps the line centred on the page.
 
 ## The mark on the map
 
