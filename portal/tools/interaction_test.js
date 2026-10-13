@@ -1562,11 +1562,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!doc.getElementById("howToUse"), "#howToUse was retired with the 'How AusMT works' panel");
   ok(doc.getElementById("welcomeTour"), "#welcomeTour (the welcome popup's tour button) is missing");
 
-  // THE SPA HEADER'S AuScope PRESENCE. The identity zone is the h1-wrapped wordmark and the tagline and
-  // carries no mark, and the right zone is the AuScope and NCRIS lock-up pair, linked to AuScope; the icon
-  // PNG that once closed the right zone stays withdrawn. Asserted against the REAL index.html DOM rather
-  // than its source text, so a mark restored under different markup is caught by the slot it lands in and
-  // not only by the literal it was written as.
+  // THE SPA HEADER'S AuScope PRESENCE. The identity zone is the AuScope mark pair and the h1-wrapped
+  // wordmark, the right zone is the tagline alone, and the header links AuScope nowhere: the lock-up
+  // closes the other pages' footers and takes this page's map corner. The icon PNG that once closed the
+  // right zone stays withdrawn. Asserted against the REAL index.html DOM rather than its source text, so
+  // an image restored under different markup is caught by the slot it lands in and not only by the
+  // literal it was written as.
   const _hdr = doc.querySelector("header");
   ok(_hdr, "index.html must carry the site header");
   ok(_hdr.querySelectorAll(".orgmark").length === 0,
@@ -1576,44 +1577,45 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify([..._hdr.querySelectorAll("img")].map(i => i.getAttribute("src"))));
   const _left = _hdr.querySelector(".hleft");
   const _drawn = _left ? [..._left.querySelectorAll("img, svg, picture, object, embed, canvas")] : [];
-  ok(_left && _drawn.length === 0,
-    "the identity zone carries no mark of any kind, got " + JSON.stringify(_drawn.map(e => e.outerHTML)));
+  ok(_drawn.length === 2 && _drawn.every(e => e.tagName === "IMG") &&
+     _drawn[0].getAttribute("src") === "/vendor/auscope/auscope-mark.svg" &&
+     _drawn[1].getAttribute("src") === "/vendor/auscope/auscope-mark-white.svg",
+    "the identity zone draws the AuScope mark pair and nothing else, got " + JSON.stringify(_drawn.map(e => e.outerHTML)));
   const _items = _left ? [..._left.children].map(e => e.tagName.toLowerCase() + "." + e.className) : [];
-  ok(JSON.stringify(_items) === JSON.stringify(["h1.brandh1", "div.tagline"]),
-    "the identity zone is the heading-wrapped wordmark and the tagline alone, got " + JSON.stringify(_items));
+  ok(JSON.stringify(_items) === JSON.stringify(["img.brandmark theme-light", "img.brandmark theme-dark", "h1.brandh1"]),
+    "the identity zone is the mark pair and the heading-wrapped wordmark alone, got " + JSON.stringify(_items));
   const _right = _hdr.querySelector(".hright");
   ok(_right, "the header keeps its right zone");
   const _outbound = [..._hdr.querySelectorAll("a")].filter(a => (a.getAttribute("href") || "").indexOf("auscope.org.au") >= 0);
-  ok(_outbound.length === 1 && _outbound[0].classList.contains("orglockup") && _right.contains(_outbound[0]),
-    "the header's one outbound AuScope anchor is the lock-up in the right zone, found " + _outbound.length);
-  ok(_right && _right.querySelectorAll("img").length === 2 && !_right.querySelector(".counts"),
-    "the right zone is the lock-up pair alone; the counts moved to the footer");
+  ok(_outbound.length === 0, "the header links AuScope nowhere; the lock-up left it, found " + _outbound.length);
+  ok(_right && _right.children.length === 1 && _right.children[0].className === "tagline" &&
+     !_right.querySelector("img") && !_right.querySelector(".counts"),
+    "the right zone is the tagline alone; the counts moved to the footer and the lock-up to the map's corner");
 
-  // THE MAP WATERMARK. The AuScope mark pair in the map's bottom-right corner, for the reason the chrome
-  // could not give: the map is what people screenshot into talks and reports, and a screenshot carries no
-  // header or footer. Driven off the REAL index.html DOM, so a mark that moved out of the map container,
-  // grew a link around it or lost its alt text fails here.
+  // THE MAP WATERMARK. The AuScope and NCRIS lock-up pair in the map's bottom-right corner, for the reason
+  // the chrome could not give: the map is what people screenshot into talks and reports, and a screenshot
+  // carries no header or footer. Driven off the REAL index.html DOM, so a lock-up that moved out of the map
+  // container, grew a link around it or lost its alt text fails here.
   const _mapEl = doc.getElementById("map");
   ok(_mapEl, "index.html must carry the Leaflet map container");
-  const _marks = [..._mapEl.querySelectorAll("img.mapmark")];
-  ok(_marks.length === 2,
-    "the map must carry the watermark pair inside its own container, found " + _marks.length);
-  ok(_marks.length === 2 && _marks[0].getAttribute("src") === "/vendor/auscope/auscope-mark.svg" &&
-     _marks[1].getAttribute("src") === "/vendor/auscope/auscope-mark-white.svg",
-    "the watermark must be the AuScope mark pair, got " + JSON.stringify(_marks.map(m => m.getAttribute("src"))));
-  ok(_marks.every(m => m.getAttribute("alt") === "AuScope"),
-    "the watermark is attribution and must name the organisation in its alt text");
-  ok(_marks.every(m => !m.closest("a")),
-    "the watermark must not be a link; the header carries the link and a link here takes a tab " +
-    "stop in the middle of the map");
+  const _locks = [..._mapEl.querySelectorAll("img.maplock")];
+  ok(_locks.length === 2,
+    "the map must carry the lock-up pair inside its own container, found " + _locks.length);
+  ok(_locks.length === 2 && _locks[0].getAttribute("src") === "/vendor/auscope-ncris-colour.png" &&
+     _locks[1].getAttribute("src") === "/vendor/auscope-ncris-white.png",
+    "the watermark must be the AuScope and NCRIS lock-up pair, got " + JSON.stringify(_locks.map(m => m.getAttribute("src"))));
+  ok(_locks.every(m => m.getAttribute("alt") === "AuScope and NCRIS"),
+    "the watermark is attribution and must name both organisations in its alt text");
+  ok(_locks.every(m => !m.closest("a")),
+    "the watermark must not be a link; a link here takes a tab stop in the middle of the map");
   // The two properties that make it unable to intercept a zoom, a draw, a popup or the tour. Read
   // from the document's OWN stylesheet text and compared as numbers against Leaflet's, because
   // jsdom does not run a full cascade for these properties.
   const _sheet = [...doc.querySelectorAll("style")].map(s => s.textContent).join("\n");
-  const _mapmarkRule = (_sheet.match(/\.mapmark\{[^}]*\}/) || [""])[0];
-  ok(/pointer-events:\s*none/.test(_mapmarkRule),
-    "the watermark must be out of hit testing entirely (pointer-events:none), got " + JSON.stringify(_mapmarkRule));
-  const _mine = parseInt((_mapmarkRule.match(/z-index:\s*(\d+)/) || [0, "0"])[1], 10);
+  const _maplockRule = (_sheet.match(/\.maplock\{[^}]*\}/) || [""])[0];
+  ok(/pointer-events:\s*none/.test(_maplockRule),
+    "the watermark must be out of hit testing entirely (pointer-events:none), got " + JSON.stringify(_maplockRule));
+  const _mine = parseInt((_maplockRule.match(/z-index:\s*(\d+)/) || [0, "0"])[1], 10);
   const _leaflet = fs.readFileSync(path.join(PORTAL, "vendor", "leaflet.css"), "utf8");
   const _ctlZ = parseInt((_leaflet.match(/\.leaflet-control \{[^}]*?z-index: (\d+)/) || [0, "0"])[1], 10);
   const _popZ = parseInt((_leaflet.match(/\.leaflet-popup-pane\s*\{ z-index: (\d+); \}/) || [0, "0"])[1], 10);

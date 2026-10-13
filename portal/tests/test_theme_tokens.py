@@ -28,6 +28,10 @@ Each assertion states its failure criterion:
   * ONE CARD STYLE - FAILS if a card on the page ground loses the --line border, the 4px radius
     or the --shadow token in its base rule. Non-vacuous: the add-survey advisory (6px, no shadow), its
     fieldset and panels and the compact survey list (8px, no shadow) fail before the house style.
+  * THE WORDMARK'S FAMILY - FAILS if a header's wordmark stops leading its stack with Calibre over the
+    --sans token, or if any page or engine sheet declares an @font-face or names a font file. AuScope's
+    licence covers Calibre on this site, but no face is served, so a reader without it installed sees
+    --sans; a face declared before its files ship is a request every page makes and loses.
 
 ENCODING: the reads state encoding="utf-8" explicitly. Without it Path.read_text() decodes with the
 locale codec, which is cp1252 on a default Windows shell, and index.html carries UTF-8 glyphs. See
@@ -39,8 +43,8 @@ from pathlib import Path
 import pytest
 
 from chrome_contract import (ABOUT_APPEARANCE, DARK, LIGHT, RAMP, RETIRED_TOKENS, THEME_SCRIPT,
-                             WELCOME_APPEARANCE, flat, token_blocks)
-from engine_chrome import PAGES_PY, function_source
+                             WELCOME_APPEARANCE, WORDMARK_FAMILY, flat, token_blocks)
+from engine_chrome import PAGES_PY, function_source, namespace
 
 ROOT = Path(__file__).resolve().parent.parent   # portal/
 PAGES = ("index.html", "about.html", "add-survey.html", "brand.html", "releases.html", "404.html")
@@ -267,3 +271,42 @@ def test_the_appearance_script_wires_the_radios_and_nothing_else():
     values = re.findall(r'name="appearance" value="([a-z]+)"', WELCOME_APPEARANCE)
     assert values == ["light", "dark", "system"], (
         f"the row offers exactly the three choices set() accepts, in order: {values}")
+
+
+# A served font file, by extension, in any slot a page or a sheet could name one: a src, a url() or a
+# link. The engine's card renderer reads a bundled face at build time, which no page names; this reads
+# the served sheets only, so that read is not one of these.
+_FONT_FILE = re.compile(r"\.(?:woff2?|otf|ttf|eot)\b", re.I)
+
+
+def _wordmark_family(where, text):
+    rules = re.findall(r"(?m)^\s*\.wordmark\{([^}]*)\}", text)
+    assert len(rules) == 1, f"{where}: expected exactly one .wordmark rule, found {len(rules)}"
+    family = re.search(r"(?:^|;)font-family:([^;}]*)", rules[0])
+    assert family, f"{where}: the wordmark must declare its own family: {rules[0]!r}"
+    return family.group(1)
+
+
+@pytest.mark.parametrize("name", PAGES)
+def test_the_wordmark_leads_with_calibre_and_no_page_ships_a_face(name):
+    """THE WORDMARK'S FAMILY, page by page. FAILS if a header's wordmark declares any family but
+    Calibre over the --sans token, or if the page declares an @font-face or names a font file. 404.html
+    carries no header, so only the second half reaches it."""
+    text = _text(name)
+    if name != "404.html":
+        assert _wordmark_family(name, text) == WORDMARK_FAMILY, (
+            f"{name}: the wordmark's stack is {WORDMARK_FAMILY}, falling through to the page's --sans")
+    assert "@font-face" not in text, f"{name}: no page declares a face; the Calibre files are not served"
+    assert not _FONT_FILE.search(text), f"{name}: no page names a font file: {_FONT_FILE.search(text)}"
+
+
+def test_the_engine_sheets_lead_the_wordmark_with_calibre_and_ship_no_face():
+    """THE WORDMARK'S FAMILY on the generated pages, read from the sheets the engine writes. FAILS if
+    the shared sheet's wordmark declares any other family, or if any of the engine's sheets declares an
+    @font-face or names a font file."""
+    sheets = {k: v for k, v in namespace().items() if k.endswith("_CSS") and isinstance(v, str)}
+    assert {"_CSS", "_INDEX_CSS", "_FETCH_CSS"} <= set(sheets), f"the engine's sheets moved: {sorted(sheets)}"
+    assert _wordmark_family("engine/extract/_pages.py _CSS", sheets["_CSS"]) == WORDMARK_FAMILY
+    for name, sheet in sheets.items():
+        assert "@font-face" not in sheet, f"engine/extract/_pages.py {name}: no sheet declares a face"
+        assert not _FONT_FILE.search(sheet), f"engine/extract/_pages.py {name}: no sheet names a font file"

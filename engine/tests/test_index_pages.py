@@ -148,22 +148,21 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 
 # The fetched assets a page in this tier may carry, restated (not weakened). The rule was "no src at
 # all", which was the right rule while the pages fetched no image: it kept out build-time reads,
-# inlined copies and every external fetch. The header's lock-up pair and the collection figure's
-# mark make an exception worth stating precisely rather than loosening the rule to "images are
-# fine": same-origin files, served by the portal image, cached once for the whole site. What stays
-# forbidden is everything the strict rule was protecting: no http, no https, no protocol-relative
-# and no data URI may ever appear as a src, and no OTHER path may either. The lists below are EXACT
-# and ORDERED, so an extra asset, or the same asset in the wrong slot, fails.
+# inlined copies and every external fetch. The header's mark pair, the footer's lock-up pair and the
+# collection figure's mark make an exception worth stating precisely rather than loosening the rule
+# to "images are fine": same-origin files, served by the portal image, cached once for the whole
+# site. What stays forbidden is everything the strict rule was protecting: no http, no https, no
+# protocol-relative and no data URI may ever appear as a src, and no OTHER path may either. The lists
+# below are EXACT and ORDERED, so an extra asset, or the same asset in the wrong slot, fails.
 #
-# The header carries one image, as a PAIR of files: the AuScope and NCRIS lock-up closing the right
-# zone, the brand kit's colour and white PNGs, one for the light ground and one for the dark
-# (portal/vendor/auscope/PROVENANCE.md: the white files sit on dark grounds only). The identity zone
-# carries no mark, so the lock-up is the header's only AuScope presence. The theme rules show one
-# file of the pair, but the markup names both. The footer fetches nothing: its right region is the
-# page's status, inline, or nothing.
-ALLOWED_HEADER_SRCS = ["/vendor/auscope-ncris-colour.png", "/vendor/auscope-ncris-white.png"]
-ALLOWED_FOOTER_SRCS = []
-ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
+# The header carries one image, as a PAIR of files: the AuScope mark opening the identity zone, the
+# brand kit's vector icon in its own colours and in white. The footer carries one, as a pair too: the
+# AuScope and NCRIS lock-up closing the right region, the brand kit's colour and white PNGs. One file
+# of each pair is for the light ground and one for the dark (portal/vendor/auscope/PROVENANCE.md: the
+# white files sit on dark grounds only); the theme rules show one file of each pair, but the markup
+# names both.
+ALLOWED_HEADER_SRCS = ["/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg"]
+ALLOWED_FOOTER_SRCS = ["/vendor/auscope-ncris-colour.png", "/vendor/auscope-ncris-white.png"]
 
 # The collection page draws the one thing in this tier that carries a mark in its BODY: the member
 # footprint map, which puts the AuScope mark pair in the panel's bottom-left corner. That mark is a
@@ -213,8 +212,9 @@ def _page_scripts(page):
 
 def _allowed_srcs(rel, page=""):
     """The exact, ordered src list this page kind may carry, in DOCUMENT order: the head's
-    appearance script, the two header files, then whatever body mark the kind is named for, then
-    the footer's (none), then the scripts the page's body earns (the dialog's three, the hub's one).
+    appearance script, the header's mark pair, then whatever body mark the kind is named for, then
+    the footer's lock-up pair, then the scripts the page's body earns (the dialog's three, the hub's
+    one).
     The order is the assertion, so the body mark has to be spliced between the chrome groups rather
     than appended after them."""
     return (HEAD_SCRIPT_SRCS + ALLOWED_HEADER_SRCS + ALLOWED_BODY_SRCS.get(rel, [])
@@ -256,12 +256,13 @@ def _assert_scripts_are_files(page, rel):
         f"{rel}: no inline event handler may appear: {_INLINE_HANDLER.search(page).group(0)!r}"
 
 
-def test_index_pages_carry_no_script_and_only_the_header_lockup(built):
+def test_index_pages_carry_no_script_and_only_the_chrome_pairs(built):
     """FAILS IF an index page grows an inline script or handler, a stylesheet link, or any fetched
-    asset beyond the allow-listed header lock-up pair, the appearance script in the head and, on the
-    surveys hub alone, its one same-origin controls script. The entity pages' determinism posture
-    (stdlib-only build, everything else inline, no network at build) is inherited, not
-    re-litigated; the lock-up and the scripts are the named exceptions and every one is same-origin.
+    asset beyond the allow-listed header mark pair and footer lock-up pair, the appearance script in
+    the head and, on the surveys hub alone, its one same-origin controls script. The entity pages'
+    determinism posture (stdlib-only build, everything else inline, no network at build) is
+    inherited, not re-litigated; the two pairs and the scripts are the named exceptions and every
+    one is same-origin.
 
     A ld+json block is data, not code: nothing in it executes, and the hub pages carry one so a
     search result can show the trail back to the root. It is stripped before the guard rather than
@@ -272,8 +273,9 @@ def test_index_pages_carry_no_script_and_only_the_header_lockup(built):
         srcs = _page_srcs(page, rel)
         assert srcs == _allowed_srcs(rel, page), \
             f"{rel}: the only fetched assets may be {_allowed_srcs(rel, page)}, got {srcs}"
-        assert HEADER_LOCKUP in _header(page), f"{rel}: the header's right zone carries the lock-up pair"
-        assert "auscope-mark" not in _header(page), f"{rel}: the header names no AuScope mark"
+        assert HEADER_MARKS in _header(page), f"{rel}: the header's identity zone opens with the mark pair"
+        assert FOOTER_LOCKUP in _footer(page), f"{rel}: the footer's right region closes on the lock-up"
+        assert "auscope-ncris" not in _header(page), f"{rel}: the header names no lock-up file"
         assert "rel=\"stylesheet\"" not in page, f"{rel}: styles stay inline"
         assert not any(d in page for d in _DASHES), f"{rel}: no en/em dashes"
 
@@ -843,23 +845,28 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 # test the image cannot run.
 _FOOTER_LINK = ("MTCAT JSON", "/data/mtcat.json")
 
-# The parent organisation's address. The header's lock-up and the footer's acknowledgement both
-# navigate here; nothing on any page fetches from it.
+# The parent organisation's address. The footer's acknowledgement and its lock-up both navigate
+# here; nothing on any page fetches from it.
 AUSCOPE_URL = "https://www.auscope.org.au"
 # Both anchors to that address leave the site, so both open in a new tab and hand the opened page no
 # handle on this one: target="_blank" grants window.opener, from which the opened document can
 # navigate the tab it came from. One literal in one order, the portal documents' own spelling.
 NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
 
-# The header's identity zone, the wordmark linking the root and the tagline and nothing else, and its
-# one image pair, the lock-up; each exactly as the pages write it.
-HEADER_IDENTITY = ('<div class="hzone hleft">\n'
-                   '    <a class="wordmark" href="/">AusMT</a>\n'
-                   "    <div class=\"tagline\">Australia's Magnetotelluric Data Portal</div>\n"
-                   "  </div>\n")
-# The mark pair's files. No header names them; the collection figure is their one consumer here.
+# The header's identity zone, the AuScope mark pair and then AusMT's name linking the root, and its
+# right zone, the tagline; each exactly as the pages write it.
 MARK_FILES = ("/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg")
-HEADER_LOCKUP = (f'<a class="orglockup" href="{AUSCOPE_URL}" {NEW_TAB}>'
+HEADER_MARKS = (f'<img class="brandmark theme-light" src="{MARK_FILES[0]}" alt="AuScope" width="36" '
+                f'height="36"><img class="brandmark theme-dark" src="{MARK_FILES[1]}" alt="AuScope" '
+                'width="36" height="36">')
+HEADER_IDENTITY = ('<div class="hzone hleft">\n'
+                   f"    {HEADER_MARKS}\n"
+                   '    <a class="wordmark" href="/"><b>Aus</b>MT</a>\n'
+                   "  </div>\n")
+HEADER_RIGHT = ('<div class="hzone hright"><div class="tagline">Australia\'s Magnetotelluric Data '
+                'Portal</div></div>')
+# The footer's lock-up, after the page's status in its right region.
+FOOTER_LOCKUP = (f'<a class="orglockup" href="{AUSCOPE_URL}" {NEW_TAB}>'
                  '<img class="theme-light" src="/vendor/auscope-ncris-colour.png" '
                  'alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" '
                  'src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" '
@@ -870,8 +877,9 @@ HEADER_LOCKUP = (f'<a class="orglockup" href="{AUSCOPE_URL}" {NEW_TAB}>'
 RETIRED_CONTROL = ("themectl", "themesep", "data-theme-choice", "aria-pressed")
 
 # The theme switch, verbatim on every surface and in this order: the dark file of each pair hidden
-# by default, then the pair swapped under <html data-theme="dark">. No one-class rule in the sheet
-# sets display on a variant, so nothing ties with the first rule.
+# by default, then the pair swapped under <html data-theme="dark">. The one one-class rule in the
+# sheet that sets display on a variant is .brandmark, which ties with the first rule and comes before
+# the switch, so the switch wins.
 THEME_RULES = ('.theme-dark{display:none}',
                ':root[data-theme="dark"] .theme-light{display:none}',
                ':root[data-theme="dark"] .theme-dark{display:block}')
@@ -941,7 +949,7 @@ def _contrast(a, b):
 
 def _expected_header(active):
     """The whole header element this tier must write, character for character: portal/index.html's
-    header with its two declared differences (the identity is a link to the root and carries no
+    header with its two declared differences (the name is a link to the root and carries no
     heading; the Map tab is a link and the CURRENT page's tab is the active one) and About
     root-anchored, because a page served at /surveys/<slug> cannot resolve a relative path."""
     tabs = "".join(f'      <a id="{i}" href="{h}"' + (' class="active"' if i == active else "")
@@ -956,9 +964,7 @@ def _expected_header(active):
             "    </nav>\n"
             '    <a class="about" href="/about.html">About</a>\n'
             "  </div>\n"
-            '  <div class="hzone hright">\n'
-            f"    {HEADER_LOCKUP}\n"
-            "  </div>\n"
+            f"  {HEADER_RIGHT}\n"
             "</header>")
 
 
@@ -971,11 +977,12 @@ def _footer(page):
 
 
 def _status(foot):
-    """The footer's contextual status: the whole of the right region, which is the footer's last and
-    carries nothing after the status."""
+    """The footer's contextual status: the right region with the lock-up that closes it set aside. The
+    region is the footer's last and carries nothing after the lock-up."""
     right = foot.split('<div class="fzone fright">', 1)[1]
-    assert right.endswith("</div>\n"), f"the right region must close the footer: {right!r}"
-    status = right[:-len("</div>\n")]
+    assert right.endswith(f"{FOOTER_LOCKUP}</div>\n"), (
+        f"the right region must close on the lock-up and close the footer: {right!r}")
+    status = right[:-len(f"{FOOTER_LOCKUP}</div>\n")]
     for gone in RETIRED_CONTROL:
         assert gone not in status, f"the right region holds the status alone, found {gone!r}: {right!r}"
     return status
@@ -993,12 +1000,11 @@ def _kinds(built):
 
 
 def test_every_static_page_carries_the_one_global_header(built):
-    """The SPA header is the site's ONE header: the AusMT wordmark linking the root and the tagline
-    on the left, and no mark; the three filled application tabs in the centre with the CURRENT
-    page's tab active and About beside them as the smaller outlined control; the AuScope and NCRIS
-    lock-up on the right, the header's only AuScope presence. The whole element is held character
-    for character, so a page kind that activates the wrong tab, points a tab elsewhere, grows a
-    control or loses one fails here.
+    """The SPA header is the site's ONE header: the AuScope mark and AusMT's name linking the root on
+    the left; the three filled application tabs in the centre with the CURRENT page's tab active and
+    About beside them as the smaller outlined control; the tagline on the right. The whole element
+    is held character for character, so a page kind that activates the wrong tab, points a tab
+    elsewhere, grows a control or loses one fails here.
 
     Contribute is not a header control on any surface: add-survey.html stays served, and About links
     it from its body. FAILS IF it comes back, as markup or as a .contribute rule, or if the header's
@@ -1018,9 +1024,12 @@ def test_every_static_page_carries_the_one_global_header(built):
         assert site and "background:var(--surface)" in site.group(1) \
             and "border-bottom:1px solid var(--line)" in site.group(1), \
             f"{rel}: the header is a --surface band with a --line rule beneath: {site}"
-        for rule in (".wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;"
-                     "color:var(--heading);text-decoration:none}",
-                     ".tagline{color:var(--muted);font-size:12.5px}",
+        for rule in (".brandmark{height:36px;width:36px;display:block;flex:none}",
+                     ".wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;"
+                     "letter-spacing:-.01em;line-height:1;color:var(--heading);text-decoration:none}",
+                     ".wordmark b{font-weight:800}",
+                     ".tagline{color:var(--muted);font-size:14px;white-space:nowrap;min-width:0;"
+                     "overflow:hidden;text-overflow:ellipsis}",
                      "header.site nav a:hover{border-color:var(--accent)}",
                      "header.site nav a.active{color:var(--accent-ink);background:var(--accent);"
                      "border-color:var(--accent)}",
@@ -1042,9 +1051,9 @@ def test_the_footer_status_slot_is_contextual_and_empty_off_the_surveys_hub(buil
     on is decoration pretending to be data. The status is the whole of the footer's right region,
     which is empty where there is no status and carries no control.
 
-    The header's right zone is the AuScope and NCRIS lock-up and nothing else: it says the same
-    thing on every page, so no count, and no count id, may ride it. FAILS IF a status leaves the
-    footer, appears where it is not earned, or the lock-up zone gains anything."""
+    The header's right zone is the tagline and nothing else: it says the same thing on every page,
+    so no count, and no count id, may ride it. FAILS IF a status leaves the footer, appears where it
+    is not earned, or the tagline zone gains anything."""
     for rel, (_active, _lbl, _href, has_slot) in _kinds(built).items():
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         slot = _status(_footer(page))
@@ -1054,9 +1063,9 @@ def test_the_footer_status_slot_is_contextual_and_empty_off_the_surveys_hub(buil
                 f"{rel}: the surveys hub must state its static counts in the SPA's grammar: {slot!r}"
         else:
             assert slot == "", f"{rel}: the status slot must be empty, got {slot!r}"
-        right = _header(page).split('<div class="hzone hright">', 1)[1].split("</div>", 1)[0]
-        assert right.strip() == HEADER_LOCKUP, \
-            f"{rel}: the header's right zone holds the lock-up alone: {right!r}"
+        right = _header(page).rsplit('<div class="hzone hright">', 1)[-1]
+        assert '<div class="hzone hright">' + right == f"{HEADER_RIGHT}\n</header>", \
+            f"{rel}: the header's right zone holds the tagline alone and closes the header: {right!r}"
         assert "counts" not in _header(page), f"{rel}: no count rides the header"
 
 
@@ -1070,16 +1079,18 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
     nothing else. The separators are U+00B7, written in the centre as the numeric
     reference so a mis-decoded read of this file cannot smuggle a hyphen past the pin.
 
-    The footer fetches nothing: the lock-up is the header's. Releases and About this build stay out
-    of the footer on every surface; /about.html carries the running build's identity and the route
-    to the citable releases in its own body (portal/tests/test_about_uniform_chrome.py). A per-page
-    machine link is asserted separately: a survey and a station page each carry their own record in
-    the body under "Identifiers and provenance".
+    The footer fetches the lock-up pair and nothing else, and links AuScope twice, from the centre's
+    name and from the lock-up. Releases and About this build stay out of the footer on every
+    surface; /about.html carries the running build's identity and the route to the citable releases
+    in its own body (portal/tests/test_about_uniform_chrome.py). A per-page machine link is asserted
+    separately: a survey and a station page each carry their own record in the body under
+    "Identifiers and provenance".
 
     FAILS IF the one-line footer survives anywhere, if the three regions are not present with their
-    exact strings, if a region's links move or retarget, if the copyright clause or the lock-up
-    comes back, if a retired control comes back (the appearance control included), or if the footer
-    differs between page kinds."""
+    exact strings, if a region's links move or retarget, if the copyright clause or the retired
+    footer logo comes back, if the lock-up leaves the right region or another image joins it, if a
+    retired control comes back (the appearance control included), or if the footer differs between
+    page kinds."""
     seen = {}
     for rel, (_active, label, href, _slot) in _kinds(built).items():
         page = (built / "pages" / rel).read_text(encoding="utf-8")
@@ -1109,16 +1120,21 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
                           "Data licences vary by survey"), \
             f"{rel}: centre region is not the acknowledgement line: {centre!r}"
         assert centre.count("<a") == 1, f"{rel}: the centre region carries exactly one link"
-        assert foot.count(f'href="{AUSCOPE_URL}"') == 1, \
-            f"{rel}: the footer carries exactly one anchor to {AUSCOPE_URL}"
+        assert foot.count(f'href="{AUSCOPE_URL}"') == 2, \
+            f"{rel}: the footer carries two anchors to {AUSCOPE_URL}, the centre's name and the lock-up"
         assert "www.auscope.org.au" not in re.sub(r"<[^>]+>", "", foot), \
             f"{rel}: the address is the link's target, never printed as text: {centre!r}"
         assert "&#169;" not in foot and "contributors" not in foot, \
             f"{rel}: the copyright clause stays out of the footer: {foot!r}"
 
-        # RIGHT. The status (held by its own pin), no control and nothing fetched.
-        assert "<img" not in foot and "orglogo" not in foot and "src=" not in foot, \
-            f"{rel}: the footer fetches nothing; the lock-up is the header's: {foot!r}"
+        # RIGHT. The status (held by its own pin), then the lock-up, no control and nothing else
+        # fetched.
+        assert foot.count(FOOTER_LOCKUP) == 1 and foot.count("<a ") == 3, \
+            f"{rel}: the right region closes on the lock-up, the footer's third and last anchor: {foot!r}"
+        assert re.findall(r'src="([^"]+)"', foot) == ALLOWED_FOOTER_SRCS and foot.count("src=") == 2, \
+            f"{rel}: the footer fetches the lock-up pair and nothing else: {foot!r}"
+        assert foot.count("<img") == 2 and "orglogo" not in foot, \
+            f"{rel}: the lock-up pair is the footer's only image: {foot!r}"
         for control in ("<button", "<input", "<select", "<fieldset", " role=", "aria-pressed"):
             assert control not in foot, \
                 f"{rel}: the footer carries no control, found {control!r}: {foot!r}"
@@ -1234,27 +1250,33 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
         "scroll), so main is where the space is stated")
 
 
-def test_the_header_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
-    """The lock-up files are the brand kit's 1919x325 PNGs; what a reader sees is a 40px-high mark,
-    the height of the tabs beside it, and the width follows from the height. The anchor is a
-    line-height:0 block, so the image box is the zone's content and no line box adds a descender
-    under it.
+def test_the_footer_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
+    """The lock-up files are the brand kit's 1919x325 PNGs; what a reader sees is a 30px-high lock-up
+    at the bottom right, and the width follows from the height. The anchor takes no line box of its
+    own, so the image box is its whole height, and its negative block margin makes its margin box one
+    footer text line (12.5px at line-height 1.5), so the lock-up never sets a footer row's height.
 
     FAILS IF the height rule goes (every page would paint the file at its intrinsic size), if the
-    width stops following the height, if the max-width cap is lost (it is what holds the lock-up
-    inside the right zone once the header stacks at 375px), if object-fit:contain is lost (where
-    the cap binds, from 761px to about 953px of viewport, the box is narrower than the artwork and
-    the trademark would be squeezed sideways), or if the footer lock-up's rules come back beside
+    width stops following the height, if the margin stops cancelling the difference between the
+    lock-up and the text line, if the max-width cap is lost (it is what holds the lock-up inside the
+    right region beside the surveys hub's counts), if object-fit:contain is lost (where the cap
+    binds, on the hub from 557px to 890px of viewport, the box is narrower than the artwork and the
+    trademark would be squeezed sideways), or if the retired footer logo's rules come back beside
     it."""
     for rel in _kinds(built):
         css = _css((built / "pages" / rel).read_text(encoding="utf-8"))
-        assert css.count(".orglockup{display:block;line-height:0}") == 1, \
-            f"{rel}: the lock-up anchor must be one line-height:0 block"
+        assert css.count(".orglockup{display:inline-block;line-height:0;margin:-5.625px 0}") == 1, \
+            f"{rel}: the lock-up anchor must be one line-height:0 inline block, one text line tall"
         m = re.search(r"\.orglockup img\{([^}]*)\}", css)
-        assert m, f"{rel}: the header lock-up carries no sizing rule"
-        assert m.group(1) == "height:40px;width:auto;max-width:100%;object-fit:contain", \
-            f"{rel}: the lock-up rule must be the SPA's own: {m.group(1)!r}"
-        assert ".orglogo" not in css, f"{rel}: the footer lock-up's rules must not come back"
+        assert m, f"{rel}: the footer lock-up carries no sizing rule"
+        assert m.group(1) == "height:30px;width:auto;max-width:100%;object-fit:contain", \
+            f"{rel}: the lock-up rule must be the static pages' own: {m.group(1)!r}"
+        footer = re.search(r"\bfooter\{([^}]*)\}", css).group(1)
+        size = float(re.search(r"(?:^|;)font-size:([\d.]+)px", footer).group(1))
+        line = float(re.search(r"(?:^|;)line-height:([\d.]+)(?:;|$)", footer).group(1))
+        assert 30 + 2 * -5.625 == size * line, (
+            f"{rel}: the lock-up's margin box must be one footer text line, {size * line}px")
+        assert ".orglogo" not in css, f"{rel}: the retired footer logo's rules must not come back"
 
 
 def test_the_chrome_carries_only_the_allow_listed_marks_and_no_inline_script(built):
@@ -1307,26 +1329,29 @@ def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
             f"{rel}: icon links must be same-origin portal paths, got {hrefs}"
 
 
-def test_every_page_kind_opens_its_identity_zone_with_the_wordmark_and_no_mark(built):
-    """The identity block. Every surface of the site carries the same identity zone: AusMT's wordmark
-    linking the root, then the tagline, and nothing else. FAILS IF a page kind puts an image of any
-    kind in the zone, names either AuScope mark file anywhere in its header, keeps a .brandmark rule
-    in its sheet (nothing carries the class, and a rule left behind invites the element back), or
-    loses a theme rule: without the switch both files of the lock-up pair would paint at once, the
-    white one on the light ground. The three theme rules are each declared once and in order, and
-    no rule that selects a variant image may set display at a specificity above the switch."""
+def test_every_page_kind_opens_its_identity_zone_with_the_mark_and_the_name(built):
+    """The identity block. Every surface of the site carries the same identity zone: the AuScope mark
+    pair, then AusMT's name linking the root, and nothing else. FAILS IF a page kind puts any other
+    image of any kind in the zone, names either mark file other than once in its header, drops the
+    mark's sizing rule or places it after the theme switch (it sets display:block and ties with the
+    switch's first rule, so after it the white mark would paint on the light ground), or loses a
+    theme rule: without the switch both files of each pair would paint at once. The three theme rules
+    are each declared once and in order, and no rule that selects a variant image may set display at
+    a specificity above the switch."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         head = _header(page)
         assert HEADER_IDENTITY in head, \
-            f"{rel}: the identity zone is the wordmark and the tagline, and nothing else"
+            f"{rel}: the identity zone is the mark pair and the name, and nothing else"
         zone = head.split('<div class="hzone hleft">', 1)[1].split('<div class="hzone hcenter">', 1)[0]
-        for tag in ("<img", "<svg", "<picture", "<object", "<embed", "<canvas", "style="):
-            assert tag not in zone, f"{rel}: the identity zone carries no mark, found {tag!r}: {zone!r}"
+        assert zone.count("<img") == 2, f"{rel}: the mark pair is the zone's only image: {zone!r}"
+        for tag in ("<svg", "<picture", "<object", "<embed", "<canvas", "style="):
+            assert tag not in zone, f"{rel}: the identity zone carries no other image, found {tag!r}: {zone!r}"
         for src in MARK_FILES:
-            assert src not in head, f"{rel}: the header names no AuScope mark, found {src}"
+            assert head.count(src) == 1, f"{rel}: the header names {src} once, found {head.count(src)}"
         css = _css(page)
-        assert ".brandmark" not in css, f"{rel}: the .brandmark rule has nothing to style"
+        mark_rule = ".brandmark{height:36px;width:36px;display:block;flex:none}"
+        assert css.count(mark_rule) == 1, f"{rel}: the mark's sizing rule is declared once"
         # Anchored to the line: the lock-up's own default, below, carries the first rule's text
         # inside a longer selector and must not answer for it.
         found = [[m.start() for m in re.finditer(r"(?m)^[ \t]*" + re.escape(rule) + r"$", css)]
@@ -1335,6 +1360,7 @@ def test_every_page_kind_opens_its_identity_zone_with_the_wordmark_and_no_mark(b
             f"{rel}: each of the three theme rules is declared exactly once: {found}"
         at = [f[0] for f in found]
         assert at == sorted(at), f"{rel}: the three theme rules must be in order: {at}"
+        assert css.index(mark_rule) < at[0], f"{rel}: the mark's rule must come before the switch"
         sizing = re.search(r"\.orglockup img\{([^}]*)\}", css)
         assert sizing and "display" not in sizing.group(1), \
             f"{rel}: the lock-up sizing rule must not set display, or it outranks the theme switch"
@@ -1343,9 +1369,9 @@ def test_every_page_kind_opens_its_identity_zone_with_the_wordmark_and_no_mark(b
 
 
 # The parent-organisation mark that closed a header's right zone as an icon, WITHDRAWN on every
-# surface: the right zone carries the full lock-up instead. What this asserts is that the emitter
-# puts the icon form on NO page kind, in no zone. The portal surface's half of the same rule is held
-# in portal/tests/test_header_geometry_parity.py.
+# surface: the header opens with the AuScope mark pair and the footer closes on the full lock-up.
+# What this asserts is that the emitter puts the icon form on NO page kind, in no zone. The portal
+# surface's half of the same rule is held in portal/tests/test_header_geometry_parity.py.
 ORG_MARK_IMG = '<a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>'
 ORG_MARK_CLASS = 'class="orgmark"'
 ORG_MARK_RULE = ".orgmark{display:flex;align-items:center;flex:none;margin-left:16px}"
@@ -1371,16 +1397,16 @@ def test_no_page_kind_carries_the_auscope_org_mark_in_its_header(built):
             assert needle not in where, (
                 f"{rel}: the header's AuScope icon is withdrawn from every surface; {label} is "
                 f"back as {needle!r}")
-        # The right zone stays and holds the lock-up. FAILS IF the zone itself went: the geometry
+        # The right zone stays and holds the tagline. FAILS IF the zone itself went: the geometry
         # pins read three zones, and a header with two re-floats the centre tab group on every page
         # in the tier.
-        assert f'<div class="hzone hright">\n    {HEADER_LOCKUP}\n  </div>' in head, (
-            f"{rel}: the right zone stays, holding the lock-up")
+        assert f"  {HEADER_RIGHT}\n" in head, f"{rel}: the right zone stays, holding the tagline"
 
 
 # The site's raster AuScope icon. It stays committed for the consumers that need it (the docs
 # sidebar copy and the social card are made from it), and no page in this tier names it: the header
-# draws the lock-up PNGs and the collection figure the vector mark pair under /vendor/auscope/.
+# and the collection figure draw the vector mark pair under /vendor/auscope/ and the footer the
+# lock-up PNGs.
 LEGACY_ORG_ASSETS = ("auscope-icon-white.png",)
 
 # The raster colour icon, which this tier must NOT grow either. It is committed and unreferenced by
@@ -1398,16 +1424,16 @@ def test_no_page_kind_draws_the_spa_maps_colour_watermark(built):
             f"{rel}: the AuScope colour icon is unreferenced by the site chrome and belongs to no "
             "page in this tier; the collection figure draws the vector mark pair")
 
-# How often each AuScope file is NAMED per page kind. The mark pair is named by no header, so never on
-# most kinds, and once on the collection page, whose member-footprint figure carries it as a caption.
-# The identity pin above reads the header and the src allow-list holds each kind's src attributes
+# How often each AuScope file is NAMED per page kind. The mark pair is named once by every header,
+# and once more on the collection page, whose member-footprint figure carries it as a caption. The
+# identity pin above reads the header and the src allow-list holds each kind's src attributes
 # exactly and in order; neither bounds how often a file is NAMED, so a url() in the inline CSS or a
 # preload link would carry it a second time and pass both.
 VECTOR_ASSETS = ("auscope/auscope-mark.svg", "auscope/auscope-mark-white.svg")
-VECTOR_ASSET_DEFAULT = 0
-VECTOR_ASSET_PER_KIND = {"collections/idxcoll.html": {"auscope/auscope-mark.svg": 1,
-                                                      "auscope/auscope-mark-white.svg": 1}}
-# The lock-up pair, the brand kit's PNGs, named exactly once on every page kind: in the header and
+VECTOR_ASSET_DEFAULT = 1
+VECTOR_ASSET_PER_KIND = {"collections/idxcoll.html": {"auscope/auscope-mark.svg": 2,
+                                                      "auscope/auscope-mark-white.svg": 2}}
+# The lock-up pair, the brand kit's PNGs, named exactly once on every page kind: in the footer and
 # nowhere else. Counted by file name, so a url() or a preload in any quoting form counts too.
 RASTER_ASSETS = ("auscope-ncris-colour.png", "auscope-ncris-white.png")
 
@@ -1415,8 +1441,8 @@ RASTER_ASSETS = ("auscope-ncris-colour.png", "auscope-ncris-white.png")
 def test_no_page_kind_names_the_raster_auscope_icon(built):
     """FAILS IF any generated page names the raster AuScope icon, in any slot. It would also fail the
     src allow-list, but only as an unexplained count; this says which file and why it may not be
-    here. The white lock-up PNG is the header's theme-dark lock-up on every page, held below by its
-    count and by the header literal."""
+    here. The white lock-up PNG is the footer's theme-dark lock-up on every page, held below by its
+    count and by the footer literal."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         for asset in LEGACY_ORG_ASSETS:
@@ -1427,11 +1453,10 @@ def test_no_page_kind_names_the_raster_auscope_icon(built):
 
 def test_no_page_kind_names_an_auscope_file_beyond_the_slots_that_keep_it(built):
     """FAILS IF a page kind names an AuScope file, a vector mark or a lock-up PNG, more often than
-    the slots it is entitled to, or loses one. The figure mark is drawn into a panel and the
-    lock-up into the header's right zone, so on either surface a careless edit adds rather than
-    replaces, and a page naming a file again is a mark returning by some other markup while every
-    spelling-scoped pin above still passes. A mark file named on a kind with no figure is the
-    header's mark coming back."""
+    the slots it is entitled to, or loses one. The mark opens the header, the figure mark is drawn
+    into a panel and the lock-up closes the footer's right region, so on any surface a careless edit
+    adds rather than replaces, and a page naming a file again is a mark returning by some other
+    markup while every spelling-scoped pin above still passes."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         for asset in VECTOR_ASSETS:
@@ -1441,7 +1466,7 @@ def test_no_page_kind_names_an_auscope_file_beyond_the_slots_that_keep_it(built)
                 f"{rel}: {asset} may be named {want} time(s) on this page kind; found {got}")
         for asset in RASTER_ASSETS:
             got = page.count(asset)
-            assert got == 1, f"{rel}: {asset} is named once, in the header; found {got}"
+            assert got == 1, f"{rel}: {asset} is named once, in the footer; found {got}"
 
 
 def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built):

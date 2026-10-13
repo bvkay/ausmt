@@ -2,8 +2,8 @@
 
 The static pages and the engine's generated pages each carry their own copy of this chrome, because
 the portal ships as classic static pages with no template step. These literals are the contract those
-copies are compared against: the appearance tokens, the header's identity and lock-up, the footer's
-regions and the appearance row. A pin compares a surface with these strings rather than with
+copies are compared against: the appearance tokens, the header's identity and tagline, the lock-up
+the footers and the map carry, the footer's regions and the appearance row. A pin compares a surface with these strings rather than with
 another surface, so two copies that drift together still fail.
 """
 import re
@@ -46,36 +46,76 @@ ICON_BLOCK = ('<link rel="icon" href="/favicon.ico" sizes="any">\n'
               '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">\n'
               '<link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">')
 
-# The AuScope mark pair. No header names it: the identity zone is AusMT's wordmark and tagline alone,
-# and the lock-up at the right is the header's only AuScope presence. The files stay committed for
-# the map's corner, the collection figures and the icons.
+# The AuScope mark pair, the brand kit's vector icon in its own colours and in white. It opens every
+# header's identity zone, 36px square, and the collection figures and the icons draw the same files.
 MARK_LIGHT = "/vendor/auscope/auscope-mark.svg"
 MARK_DARK = "/vendor/auscope/auscope-mark-white.svg"
+MARK_SIZE = 36
+MARK_PAIR = (f'<img class="brandmark theme-light" src="{MARK_LIGHT}" alt="AuScope" width="36" height="36">'
+             f'<img class="brandmark theme-dark" src="{MARK_DARK}" alt="AuScope" width="36" height="36">')
 
-# The lock-up is the AuScope brand kit's own colour and white PNGs, named at their intrinsic 1919 by 325
-# and drawn 40px tall, the height of the view tabs, with the width following the artwork. Where the
-# right zone is narrower than that, object-fit:contain keeps the artwork's proportion inside the box.
+# AusMT's name, set at the AuScope logo's own proportions scaled to the 36px mark: the identity zone's
+# 12px gap from mark to name, a 24.5px size whose cap height is 0.48 of the mark, and "Aus" heavy
+# against a light "MT" as "Au" is heavy against "Scope". The family stack leads with Calibre, which
+# AuScope's licence covers on this site; no sheet declares an @font-face for it and nothing names a
+# font file, so a reader without the face installed sees the --sans stack.
+WORDMARK_FAMILY = "'Calibre',var(--sans)"
+NAME = "<b>Aus</b>MT"
+TAGLINE = "Australia's Magnetotelluric Data Portal"
+H1_TEXT = "AusMT - Australia's Magnetotelluric (MT) Data Portal"
+INDEX_IDENTITY = (f'<h1 class="brandh1"><span class="wordmark">{NAME}</span>'
+                  '<span class="visually-hidden"> - Australia\'s Magnetotelluric (MT) Data Portal</span></h1>')
+PAGE_IDENTITY = f'<a class="wordmark" href="/">{NAME}</a>'
+
+# The identity zone's rules, verbatim on every surface. The mark's rule sets display, so it ties with
+# the switch's first rule on specificity and must come BEFORE the switch. The heading rule is the
+# homepage's alone, the one surface whose name is wrapped in its h1.
+BRANDMARK_RULE = ".brandmark{height:36px;width:36px;display:block;flex:none}"
+WORDMARK_RULES = (".wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;"
+                  "letter-spacing:-.01em;line-height:1;color:var(--heading);text-decoration:none}",
+                  ".wordmark b{font-weight:800}")
+BRANDH1_RULE = ".brandh1{flex:none;font-size:inherit}"
+
+# The right zone is the tagline alone, on one line. Where the zero-basis zone is narrower than the
+# line it ends in an ellipsis inside the zone: overflowing, it would paint over the About control.
+TAGLINE_RULE = (".tagline{color:var(--muted);font-size:14px;white-space:nowrap;min-width:0;"
+                "overflow:hidden;text-overflow:ellipsis}")
+RIGHT_ZONE = f'<div class="hzone hright"><div class="tagline">{TAGLINE}</div></div>'
+
+# The AuScope and NCRIS lock-up is the AuScope brand kit's own colour and white PNGs, named at their
+# intrinsic 1919 by 325. It closes the right of every footer on the pages without the big map, linked
+# to AuScope, and it takes the map's corner on index.html, unlinked. No header carries it.
 LOCKUP_LIGHT = "/vendor/auscope-ncris-colour.png"
 LOCKUP_DARK = "/vendor/auscope-ncris-white.png"
 LOCKUP_PIXELS = (1919, 325)
 LOCKUP = ('<a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">'
           f'<img class="theme-light" src="{LOCKUP_LIGHT}" alt="AuScope and NCRIS" width="1919" height="325">'
           f'<img class="theme-dark" src="{LOCKUP_DARK}" alt="AuScope and NCRIS" width="1919" height="325"></a>')
-LOCKUP_RULES = (".orglockup{display:block;line-height:0}",
-                ".orglockup img{height:40px;width:auto;max-width:100%;object-fit:contain}")
+# The footer lock-up's rules. It is drawn 30px tall with the width following the artwork, and where
+# its zone is narrower, object-fit:contain keeps the artwork's proportion inside the box. The negative
+# block margin makes the anchor's margin box one footer text line, 12.5px at line-height 1.5, so the
+# lock-up never sets the height of a footer row.
+LOCKUP_HEIGHT = 30
+FOOTER_LINE = 12.5 * 1.5
+LOCKUP_RULES = (".orglockup{display:inline-block;line-height:0;margin:-5.625px 0}",
+                ".orglockup img{height:30px;width:auto;max-width:100%;object-fit:contain}")
+# The surfaces whose footer carries the lock-up, by the path a failure message names: every page
+# without the big map. index.html's footer right zone is its live counts alone.
+LOCKUP_FOOTERS = ("404.html", "about.html", "add-survey.html", "brand.html", "releases.html",
+                  "engine/extract/_pages.py")
 
-# The switch, verbatim on every surface and in this order. Its first rule is one class, so it would tie
-# on specificity with any one-class rule that also set display on a variant; no surface carries such a
-# rule, and nothing that selects a variant may outrank the switch.
+# The map's corner on index.html: the same pair, unlinked, 44px tall and inset by its own height.
+MAP_LOCKUP = (f'<img class="maplock theme-light" src="{LOCKUP_LIGHT}" alt="AuScope and NCRIS" '
+              'width="1919" height="325">'
+              f'<img class="maplock theme-dark" src="{LOCKUP_DARK}" alt="AuScope and NCRIS" '
+              'width="1919" height="325">')
+
+# The switch, verbatim on every surface and in this order. Its first rule is one class, so it ties on
+# specificity with .brandmark, which sets display:block on both variants; the switch FOLLOWS that rule
+# on every surface, and nothing that selects a variant at a higher specificity may set display.
 THEME_RULES = ('.theme-dark{display:none}',
                ':root[data-theme="dark"] .theme-light{display:none}',
                ':root[data-theme="dark"] .theme-dark{display:block}')
-
-TAGLINE = "Australia's Magnetotelluric Data Portal"
-H1_TEXT = "AusMT - Australia's Magnetotelluric (MT) Data Portal"
-INDEX_IDENTITY = ('<h1 class="brandh1"><span class="wordmark">AusMT</span>'
-                  '<span class="visually-hidden"> - Australia\'s Magnetotelluric (MT) Data Portal</span></h1>')
-PAGE_IDENTITY = '<a class="wordmark" href="/">AusMT</a>'
 
 # The appearance choice: three radios named "appearance", which src/theme.js reads on change and
 # checks to match the stored choice. The same row has two homes, the map page's welcome dialog and
@@ -130,9 +170,9 @@ def _decls(body):
 
 
 # The header, by zone. index.html writes exactly this; every other surface differs only where the
-# contract says it may: the identity is a link with no heading, Map is a link, the current page's
+# contract says it may: the name is a link with no heading, Map is a link, the current page's
 # control carries class="active", and the engine's pages root-anchor About. The identity zone is the
-# wordmark and the tagline and nothing else.
+# mark pair and the name, and the right zone is the tagline.
 def header_markup(surface, active=None):
     """The header's inner markup for `surface` ("index", "page" or "engine"), active control named."""
     def cls(name, base=None):
@@ -143,12 +183,11 @@ def header_markup(surface, active=None):
     else:
         identity, nav_map = PAGE_IDENTITY, f'<a id="navMap"{cls("navMap")} href="/">Map</a>'
     about = "/about.html" if surface == "engine" else "about.html"
-    return ('<div class="hzone hleft">' + identity + f'<div class="tagline">{TAGLINE}</div></div>'
+    return ('<div class="hzone hleft">' + MARK_PAIR + identity + '</div>'
             '<div class="hzone hcenter"><nav>' + nav_map +
             f'<a id="navSurveys"{cls("navSurveys")} href="/surveys">Surveys</a>'
             f'<a id="navCollections"{cls("navCollections")} href="/collections">Collections</a></nav>'
-            f'<a{cls("about", "about")} href="{about}">About</a></div>'
-            '<div class="hzone hright">' + LOCKUP + '</div>')
+            f'<a{cls("about", "about")} href="{about}">About</a></div>' + RIGHT_ZONE)
 
 
 def tokens(markup):

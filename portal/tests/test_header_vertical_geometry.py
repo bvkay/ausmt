@@ -13,17 +13,21 @@ The gap was systematic rather than unlucky, so the close is systematic too. The 
 
     header = padding-block + border-bottom + max(zone heights)
 
-and TWO of the zones can grow. The identity zone, once its content wraps, is
+and the zones are built so that only ONE of them can grow. The identity zone is the 36px AuScope mark
+and AusMT's name on one line,
 
-    hleft  = line-box(first line) + row-gap + line-box(tagline)
+    hleft  = max(mark height, line-box(name))  =  36px
 
-where a line box is font-size x line-height and the first line is the wordmark's own line box: the
-zone carries no mark, so nothing else stands on that line. WHETHER it wraps at a given viewport is the
-other half:
+where a line box is font-size x line-height and the name declares line-height:1, so its line box is
+its 24.5px font size and the mark is the taller item. The block would wrap only if
 
-    wraps  <=>  wordmark-width + gap + tagline-width  >  zone-width
+    wraps  <=>  mark-width + gap + name-width  >  zone-width
 
-The tab group's zone grows the same way, in whole tab rows:
+and at 36 + 12 + about 79px it never does: the zone is 139px at 761px of viewport, and below 760px
+the zones stack full width. The right zone is the tagline on one line, white-space:nowrap with its
+overflow contained, so it is one line box at every width and never adds a row.
+
+The tab group's zone grows, in whole tab rows:
 
     hcenter = rows x tab-min-height + (rows - 1) x row-gap
     rows    = 1 while the nav container may not wrap, whatever the width; otherwise it grows as
@@ -35,11 +39,14 @@ overrun the zone sideways instead; a wrapping one stacks them and the header gro
 row. Measured at 375px, one declaration apart: 260px with the wrap, 214px without it, and without it
 the tab group's right edge lands at 366px against a 357px content edge.
 
-The third zone cannot grow: it is the AuScope and NCRIS lock-up alone, at a DECLARED height equal to
-the tabs' floor, so beside the tab row it is never the tallest zone, and under 760px, where the zones
-stack, its row is exactly that declared height:
+Beside one tab row neither side zone is the tallest, because the mark is shorter than the tabs'
+floor, so from 761px up the header is the tabs' floor plus its padding and border:
 
-    hright  = lock-up height = tab min-height
+    header  = 2 x 8px + 1px + max(36px, 24.5px, line-box(tagline), 40px)  =  57px
+
+Measured in Chrome at a device scale factor of 1, in both themes, on every chrome surface: 57px from
+761px up, 134px from 451px to 760px, 170px from 384px to 450px and 216px below 384px, where the
+stacked zones add the mark's row, the tab rows and the tagline's line.
 
 Every term in these expressions is a DECLARED constant except the intrinsic text widths, which are a
 property of the font stack and are already pinned pairwise next door. This file pins the declared
@@ -60,21 +67,24 @@ content is held separately: tests/test_header_geometry_parity.py compares every 
 markup with the contract token by token, and with the contextual counts moved to the footer no zone
 of the header varies by page any more.
 
-NO MARK, ON ANY SURFACE. The identity zone is the wordmark and the tagline alone, so the expressions
-above have no mark term, and the fingerprint holds that no surface declares the sizing rule a mark in
-that zone would need: a rule with nothing to style is how a mark comes back, and the box it sized
-would be a new term of the first line. tests/test_header_geometry_parity.py holds the markup half,
-that no identity zone carries an image of any kind.
+ONE MARK BOX, ON EVERY SURFACE. The identity zone opens with the mark pair, so the mark's declared
+box is a term of the first line and the fingerprint carries it: a mark taller than the tabs' floor
+would set the header's height at every width. tests/test_header_geometry_parity.py holds the markup
+half, that every identity zone is the mark pair and the name and nothing else.
 """
 import re
 from pathlib import Path
 
+from chrome_contract import MARK_SIZE
+
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
-# The sizing rule an identity mark would need. No surface declares it, because no identity zone carries
-# a mark.
-RETIRED_MARK_RULE = ".brandmark"
+# The tabs' floor and the header's own box at one row, the terms of the 57px desktop height.
+TAB_FLOOR = 40
+HEADER_PADDING_BLOCK = 8
+HEADER_BORDER = 1
+DESKTOP_HEADER = 57
 
 
 def _rule(text, pattern, where, what, must_contain=None):
@@ -128,12 +138,7 @@ def _fingerprint(where, text, is_pages):
     wordmark = _rule(text, r"(?m)^\s*\.wordmark\{([^}]*)\}", where, ".wordmark")
     tagline = _rule(text, r"(?m)^\s*\.tagline\{([^}]*)\}", where, ".tagline")
     tab = _rule(text, tab_sel, where, "nav tab")
-    lockup = _rule(text, r"(?m)^\s*\.orglockup img\{([^}]*)\}", where, ".orglockup img")
-
-    found = re.findall(re.escape(RETIRED_MARK_RULE) + r"\b[^{]*\{", text)
-    assert not found, (
-        f"{where}: declares {len(found)} {RETIRED_MARK_RULE} rule(s); the identity zone carries no "
-        "mark, so the header's first line takes its height from the wordmark alone")
+    mark = _rule(text, r"(?m)^\s*\.brandmark\{([^}]*)\}", where, ".brandmark")
 
     return {
         # The header box itself: the padding and the border are added to the tallest zone, the
@@ -147,23 +152,28 @@ def _fingerprint(where, text, is_pages):
         # Width only. The colour is surface-local and is not a term of the height.
         "header border-bottom width": _decl(
             header, "border-bottom", where, "header").split()[0],
-        # The identity zone: its row-gap is the space between the wordmark's line and the
-        # tagline's once the block wraps, and flex-wrap is what allows the wrap at all.
+        # Every zone: its gap is the 12px between the mark and the name, and the row gap between a
+        # zone's items once they wrap, which flex-wrap is what allows at all.
         "hzone align-items": _decl(hzone, "align-items", where, ".hzone"),
         "hzone gap": _decl(hzone, "gap", where, ".hzone"),
         "hzone flex-wrap": _decl(hzone, "flex-wrap", where, ".hzone"),
-        # The two identity items. Their font metrics set the line boxes, and their widths are what
-        # decide the wrap in the first place.
+        # The identity zone's two items. The mark's declared box is the zone's height; the name's
+        # font size, line height and family set its line box, and with the weight and tracking its
+        # width, which is what decides the wrap in the first place.
+        "brandmark height": _decl(mark, "height", where, ".brandmark"),
+        "brandmark width": _decl(mark, "width", where, ".brandmark"),
+        "wordmark font-family": _decl(wordmark, "font-family", where, ".wordmark"),
         "wordmark font-size": _decl(wordmark, "font-size", where, ".wordmark"),
         "wordmark font-weight": _decl(wordmark, "font-weight", where, ".wordmark"),
         "wordmark letter-spacing": _decl(wordmark, "letter-spacing", where, ".wordmark"),
+        "wordmark line-height": _decl(wordmark, "line-height", where, ".wordmark"),
+        # The right zone's one item: its font size sets its line box, and its white-space decides
+        # whether it can ever take a second line.
         "tagline font-size": _decl(tagline, "font-size", where, ".tagline"),
+        "tagline white-space": _decl(tagline, "white-space", where, ".tagline"),
         # The floor under the whole header: while the identity block fits on one line, the tab
         # boxes are the tallest thing in the header and this is the number that shows.
         "tab min-height": _decl(tab, "min-height", where, "nav tab"),
-        # The right zone's one item: its declared height is the zone's height, and under 760px the
-        # height of a stacked row of its own.
-        "lockup height": _decl(lockup, "height", where, ".orglockup img"),
         # The nav CONTAINER's wrap, which decides how many ROWS of tab boxes the centre zone
         # holds. Each row is a tab min-height, so at any viewport too narrow for one row this is
         # the term that sets max(zone heights), and it is declared rather than left to the
@@ -176,10 +186,10 @@ def test_every_chrome_surface_shares_one_vertical_fingerprint():
     """One set of declared chrome terms, carried by every surface that wears the chrome. FAILS IF
     any surface drifts on any declared term of the header's height, of its identity block's wrap or
     of its tab group's row count: a line-height, a font size, a gap, the padding, the border's
-    width, the tab boxes' floor or the nav container's wrap; or if any surface declares a sizing
-    rule for an identity mark. This is the pin the 57.00px to 82.47px reflow needed and did not
-    have, and it fails on the TERM rather than on a pixel count, so it means the same thing on a CI
-    runner and on a laptop with different fonts installed.
+    width, the tab boxes' floor, the mark's box, the name's line height or family, the tagline's
+    white-space or the nav container's wrap. This is the pin the 57.00px to 82.47px reflow needed
+    and did not have, and it fails on the TERM rather than on a pixel count, so it means the same
+    thing on a CI runner and on a laptop with different fonts installed.
 
     Because every term is a declared constant, one comparison covers every viewport: what agrees at
     1280px agrees at 375px. What it does NOT cover is zone content, which is contextual by design
@@ -200,31 +210,56 @@ def test_every_chrome_surface_shares_one_vertical_fingerprint():
                       for k, (ref, mine) in sorted(drifted.items())))
 
 
-def test_the_identity_block_can_still_wrap_on_every_surface():
-    """The wrap itself is load-bearing and must stay possible. FAILS IF a surface reaches for
-    flex-wrap:nowrap or a nowrap white-space on the identity block to force one line: at 375px the
-    identity block MUST be free to stack, and a header that refuses to wrap drags a phone-width page
-    sideways instead. The fix for an unwanted wrap is the zone's width or the block's own width,
-    never taking the wrap away."""
+def test_the_zones_can_still_wrap_and_the_tagline_cannot_spill_on_every_surface():
+    """The zones' wrap is load-bearing and must stay possible: at 375px the tab group and About must be
+    free to stack, and a header that refuses to wrap drags a phone-width page sideways. The tagline
+    is the one item held to one line, so it must contain its own overflow instead.
+
+    FAILS IF a surface reaches for flex-wrap:nowrap on the zones, or if the tagline's one line loses
+    min-width:0, overflow:hidden or text-overflow:ellipsis: without them the line sizes its zero-basis
+    zone's item to its full width, spills out of the zone's left edge and paints over the About
+    control, 92px of it at 761px of viewport."""
     for where, text, is_pages in _surfaces():
         hzone = _rule(text, r"(?m)^\s*\.hzone\{([^}]*)\}", where, ".hzone",
                       must_contain="display:")
         assert _decl(hzone, "flex-wrap", where, ".hzone") == "wrap", (
-            f"{where}: the identity zone must stay free to wrap; without it three 112px tabs and a "
-            "38 character tagline drag a 375px page sideways")
+            f"{where}: the zones must stay free to wrap; without it three 112px tabs and the About "
+            "control drag a 375px page sideways")
         tagline = _rule(text, r"(?m)^\s*\.tagline\{([^}]*)\}", where, ".tagline")
-        assert "nowrap" not in tagline, (
-            f"{where}: the tagline must not be pinned to one line with white-space:nowrap; on a "
-            f"narrow viewport it would overflow the header instead of wrapping, got {tagline!r}")
+        for prop, value in (("white-space", "nowrap"), ("min-width", "0"), ("overflow", "hidden"),
+                            ("text-overflow", "ellipsis")):
+            assert _decl(tagline, prop, where, ".tagline") == value, (
+                f"{where}: the tagline must declare {prop}:{value}, got {tagline!r}")
 
 
-def test_the_lockup_is_as_tall_as_the_tabs_on_every_surface():
-    """The lock-up's declared height is the tabs' floor, 40px, on every surface. FAILS IF the two part:
-    a taller lock-up becomes the tallest zone and grows the header at every width, and a shorter one
-    stops matching the tab row it sits beside. The width is not a term of the height and follows the
-    artwork."""
+def _px(where, what, raw):
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)px", raw)
+    assert m, f"{where}: {what} must be a px length, got {raw!r}"
+    return float(m.group(1))
+
+
+def test_the_tabs_floor_sets_the_desktop_header_on_every_surface():
+    """From 761px up the header is one row, and its height is the tabs' floor plus its own padding and
+    border, 57px, because no other zone is taller than the tabs. FAILS IF the mark's declared box
+    reaches the tabs' 40px floor (it would set the header's height at every width), if the name's
+    line box, font size times its unitless line height, outgrows the mark, if the tabs' floor or the
+    header's padding or border moves, or if the mark stops being square. The tagline's line box is the
+    one term read from font metrics rather than declared; at 14px it is well under the floor in any
+    face this stack can resolve to."""
     for where, text, is_pages in _surfaces():
         print_ = _fingerprint(where, text, is_pages)
-        assert print_["lockup height"] == print_["tab min-height"] == "40px", (
-            f"{where}: the lock-up is drawn as tall as the tabs, 40px; got lock-up "
-            f"{print_['lockup height']!r} against tabs {print_['tab min-height']!r}")
+        tab = _px(where, "the tabs' floor", print_["tab min-height"])
+        mark_h = _px(where, "the mark's height", print_["brandmark height"])
+        mark_w = _px(where, "the mark's width", print_["brandmark width"])
+        name = _px(where, "the name's size", print_["wordmark font-size"])
+        line = float(print_["wordmark line-height"])
+        assert tab == TAB_FLOOR, f"{where}: the tabs' floor is {TAB_FLOOR}px, got {tab}"
+        assert mark_h == mark_w == MARK_SIZE < tab, (
+            f"{where}: the mark is {MARK_SIZE}px square, shorter than the tabs' floor, got {mark_w}x{mark_h}")
+        assert name * line <= mark_h, (
+            f"{where}: the name's line box ({name * line}px) must not outgrow the mark ({mark_h}px)")
+        assert print_["header padding"] == f"{HEADER_PADDING_BLOCK}px 18px", (
+            f"{where}: the header's padding is a term of the 57px height, got {print_['header padding']!r}")
+        assert print_["header border-bottom width"] == f"{HEADER_BORDER}px", (
+            f"{where}: the header's border is a term of the 57px height")
+        assert 2 * HEADER_PADDING_BLOCK + HEADER_BORDER + max(tab, mark_h, name * line) == DESKTOP_HEADER
