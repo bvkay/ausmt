@@ -53,8 +53,10 @@ sees the name in the site's own sans-serif, at the same size and weights.
 The AuScope and NCRIS lock-up closes the footer at the bottom right of every page without the big
 map: About, Brand, Releases, Add survey, the page-not-found page, and every survey, station and
 collection page (Owner decision 2026-10-13). It links AuScope's home page in a new tab, as the
-footer's line does. It is drawn 30px tall and set so that it does not make the footer any taller.
-On the map page the lock-up is in the map's corner instead, and the footer keeps its live counts.
+footer's line does. It is drawn 30px tall and set so that it does not make the footer any taller on
+a wider window; on a phone-sized window, where the footer scrolls with the page, it takes a line of
+its own, and on the surveys catalogue the counts beside it can wrap to a second line. On the map
+page the lock-up is in the map's corner instead, and the footer keeps its live counts.
 About also shows the lock-up in its "Who enables AusMT" section.
 
 The AusMT symbol stays AusMT's product mark: the documentation sidebar and the social card carry it,

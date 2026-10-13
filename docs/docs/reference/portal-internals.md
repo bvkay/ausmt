@@ -2255,8 +2255,9 @@ of a phone screen, so it returns to flow, where the lock-up's stacked row adds o
 ```text
 The AuScope mark, then AusMT's name set at the AuScope logo's proportions, the name linking the
 portal root; the tagline is the right zone's. The AusMT symbol this page offers for download is
-AusMT's product mark, carried by the documentation sidebar and the social card; the site's header,
-favicon and app icons carry the AuScope mark, and the page says so in its Mark section.
+AusMT's product mark, carried by the documentation sidebar and the social card; the site's favicon
+and app icons carry the AuScope mark, and the page says so in its Mark section; every header opens
+with the same mark.
 ```
 
 #### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up
