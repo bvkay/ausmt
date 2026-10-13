@@ -20,7 +20,8 @@ Each assertion states its failure criterion:
     meaning on a page with no map, no filter and no selection.
   * FOOTER CHROME - FAILS if the footer keeps the retired About-this-build popover or a version
     chip, loses the bottom-left MTCAT link, carries an image (the lock-up moved to the header), or
-    carries anything in its right region (the appearance control moved to About).
+    carries anything in its right region (the page has no status, and no footer carries a
+    control).
   * NO INLINE SCRIPT - FAILS if the page carries an inline <script> block. The deployed CSP for every
     page except add-survey.html is script-src 'self' with no 'unsafe-inline' (@strictPages in
     deploy/docker/caddy/Caddyfile is a `not path /add-survey.html` matcher, so a NEW page picks up the
@@ -188,7 +189,8 @@ def test_no_live_app_state_ids():
 
 def test_footer_chrome_matches_the_other_pages():
     """The one-footer rule emptied the right region of Releases and About this build; the lock-up
-    that once sat there is in the header, and the appearance control that followed it is on About.
+    that once sat there is in the header. The footer carries no control; the appearance choice is
+    in the map's welcome dialog and in About's section 9.
     FAILS if the popover or a version chip comes back here, if the MTCAT link leaves the bottom-left,
     if the footer names an image, or if the right region holds any element at all. The strings and
     the targets are held for all six documents at once in tests/test_footer_regions.py; this is the

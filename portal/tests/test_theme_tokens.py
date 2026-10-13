@@ -254,8 +254,8 @@ def test_the_engine_pages_carry_no_appearance_row():
 def test_the_appearance_script_wires_the_radios_and_nothing_else():
     """THE CONTROL, script side. FAILS if src/theme.js stops reading a change on the radios named
     "appearance" or stops checking the one that matches the stored choice, if it keeps a hook for a
-    control no page carries (a data-theme-choice element, a pressed state, a click listener, the
-    radios' earlier name), or if the window.AusmtTheme interface its callers use changes."""
+    control no page carries (a data-theme-choice element, a pressed state, a click listener, radios
+    named welcomeTheme), or if the window.AusmtTheme interface its callers use changes."""
     script = (ROOT / "src" / "theme.js").read_text(encoding="utf-8")
     for wire in _WIRING:
         assert wire in script, f"src/theme.js: the radios must be wired by {wire!r}"

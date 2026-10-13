@@ -5,9 +5,10 @@ The rule is one footer: LEFT the machine-readable catalogue, CENTRE the AuScope 
 the licence note, RIGHT the page's status. The SPA's status is its live station counts; a generated
 page's is whatever its contextual status markup is; the other static pages have none and keep the
 zone empty, because the empty zone still takes its share of the row and so holds the centre on the
-page's axis. The AuScope and NCRIS lock-up left the footer for the header's right zone, the copyright
-clause left the acknowledgement and the appearance control left for the welcome dialog and About, so
-the footer fetches nothing at all, carries exactly one outbound link and holds no control.
+page's axis. The AuScope and NCRIS lock-up left the footer for the header's right zone and the
+copyright clause left the acknowledgement, so the footer fetches nothing at all and carries exactly
+one outbound link. It holds no control: the appearance choice lives in the map's welcome dialog and
+in About's Appearance section.
 
 WHY THE ENGINE HALF LIVES HERE rather than in engine/tests: portal-ci runs on portal/** AND on
 engine/extract/_pages.py, so an edit to either surface fires this module, where the engine workflow
@@ -455,8 +456,9 @@ class _Tags(HTMLParser):
 def test_no_footer_carries_a_control(where):
     """NO CONTROL, on all seven surfaces. FAILS if a footer carries a button, an input or any other
     form control, a control group or a pressed state, or an inline handler, which the deployed CSP
-    would block. Non-vacuous: every surface's footer carried a labelled group of two buttons with
-    aria-pressed until the control left for the welcome dialog and About."""
+    would block. Non-vacuous: a labelled group of two buttons carrying aria-pressed, the shape a
+    footer appearance control takes, fails it on every surface by tag, by role and by pressed
+    state."""
     foot = _foot(where)
     parser = _Tags()
     parser.feed(foot)

@@ -518,8 +518,8 @@ def test_the_contents_box_lists_every_section_in_order():
         f"every contents entry must carry visible text, got {entries}")
 
 
-# Section 9's paragraph as a reader sees it, and the styling that makes its row read as the welcome
-# dialog's: a muted legend, inline labels with a small gap and accent-coloured radios.
+# Section 9's paragraph as a reader sees it, and the styling that sets its row: muted text with a
+# muted legend, inline labels with a small gap and accent-coloured radios.
 APPEARANCE_COPY = ("Light is the house style. Dark keeps the portal's earlier palette. Follow system "
                    "takes the choice from your device. The choice is kept in this browser; the welcome "
                    "panel on the map offers the same choice on a first visit.")
