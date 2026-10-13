@@ -46,27 +46,40 @@ each grows with its own content and the centred tabs land at a different x per v
 tests/test_header_geometry_parity.py.
 ```
 
-#### The identity zone carries no mark
+#### The identity zone is the AuScope mark and AusMT's name
 
 ```text
-The identity zone carries no mark on any surface: AusMT's name and tagline are its whole content,
-and the AuScope and NCRIS lock-up at the right is the header's only AuScope presence. No sheet
-declares a sizing rule for a mark there, so the first line of the zone is the wordmark's own line
-box, and the block sits in the zero-basis .hleft zone without moving the centre tabs. Pinned by
-tests/test_header_geometry_parity.py and tests/test_header_vertical_geometry.py.
+The identity zone is the AuScope mark pair and AusMT's name on every surface: the brand kit's
+vector icon, vendor/auscope/auscope-mark.svg for the light theme and its white twin for the dark,
+36px square, then the name set at the AuScope logo's own proportions scaled to that mark. The
+zone's 12px gap is the logo's gap from mark to text, the 24.5px name has a cap height 0.48 of the
+mark, and "Aus" is set at 900 against "MT" at 300, tracked at .02em, as "Au" is heavy against "Scope". The name's
+line-height is 1, so its line box is its font size and the 36px mark sets the zone's height, short
+of the tabs' 40px floor: from 761px of viewport up the header is 57px. The block sits in the
+zero-basis .hleft zone without moving the centre tabs. Pinned by tests/test_header_geometry_parity.py
+and tests/test_header_vertical_geometry.py.
 ```
 
-#### The AuScope and NCRIS lock-up is the brand kit's PNG pair, as tall as the tabs
+#### The wordmark's family leads with Calibre
 
 ```text
-The AuScope and NCRIS lock-up in the right zone is the AuScope brand kit's own PNG pair,
-vendor/auscope-ncris-colour.png for the light theme and vendor/auscope-ncris-white.png for the
-dark, each declared at its intrinsic 1919x325. .orglockup img draws it 40px tall, the min-height of
-the view tabs, so beside the tab row it never sets the header's height, and the width follows the
-artwork. max-width:100% keeps it inside the zero-basis .hright zone; where that zone is narrower
-than the artwork (between 761px and about 953px of viewport) the box keeps its 40px height and
-object-fit:contain draws the artwork at its own proportion inside it, smaller than 40px tall in
-that band. Stated character-identically on every surface; pinned by
+The wordmark's family is 'Calibre' over the --sans token. Calibre is AuScope's typeface, and
+AuScope's licence covers its use on this site; no sheet declares an @font-face for it and nothing
+names a font file, so until the face is served a reader without it installed sees the --sans stack
+the rest of the page is set in. Pinned by tests/test_theme_tokens.py, on every page and on the
+engine's sheets.
+```
+
+#### The right zone is the tagline, on one line
+
+```text
+The right zone is the tagline, "Magnetotelluric Data Discovery & Access", at 14px in --muted, on
+one line. The zone is zero-basis, so a nowrap line wider than the zone would spill out of its left
+edge and paint over the centre zone's right end, 92px of it at 761px of viewport: all of the About
+control and the end of the Collections tab. The tagline also takes min-width:0, overflow:hidden and
+text-overflow:ellipsis, so where the zone is narrower than the line it ends in an ellipsis inside
+the zone. Measured in Chrome with the fallback stack, that band runs from 761px to 976px of
+viewport. Stated character-identically on every surface; pinned by
 tests/test_header_geometry_parity.py and tests/test_header_vertical_geometry.py.
 ```
 
@@ -74,11 +87,12 @@ tests/test_header_geometry_parity.py and tests/test_header_vertical_geometry.py.
 
 ```text
 The theme switch: .theme-dark is hidden, and the dark theme hides .theme-light and shows
-.theme-dark. The three rules keep that order on every surface. The first is one class, so it would
-tie with any one-class rule that set display on a variant, and no sheet carries one; no rule that
-selects a variant may set display at a higher specificity either, which is why .orglockup img
-states its size and not its display (a display:block there would show the white lock-up in the
-light theme as well). The white variants sit only on the dark ground.
+.theme-dark. The three rules keep that order on every surface. The first is one class, so it ties
+with .brandmark, which sets display:block on both mark variants; the mark's rule comes before the
+switch on every surface, so the switch wins. No rule that selects a variant may set display at a
+higher specificity, which is why .orglockup img, .maplock and .collmark state their size and not
+their display (a display:block there would show a white file in the light theme as well). The
+white variants sit only on the dark ground.
 ```
 
 #### The ACTIVE view is filled with --accent and lettered in --accent-ink ...
@@ -92,27 +106,31 @@ The static header and this one must agree on the container's wrap mode: nowrap a
      tests/test_header_geometry_parity.py.
 ```
 
-#### The AuScope mark, bottom right of the MAP: a screenshot ...
+#### The AuScope and NCRIS lock-up, bottom right of the MAP: a screenshot ...
 
 ```text
-The AuScope mark, bottom right of the MAP: a screenshot carries no header and no footer, so this is
-the attribution that travels with the image. Its inset equals its own 48px height, the style guide's
-breathing space, and that corner holds nothing else: the attribution control sits top right and the
-legend bottom left. It draws at 80 percent opacity, opacity:.8 exactly, the one change permitted on
-it: both files keep their own colours, with no filter, tint or blend. pointer-events:none and a
-z-index below Leaflet's control and popup layers keep it out of hit testing. The white variant draws
-on the dark basemap; below 560px neither is drawn, by a rule anchored on #map so it outranks the
-theme switch.
+The AuScope and NCRIS lock-up, bottom right of the MAP: a screenshot carries no header and no
+footer, so this is the attribution that travels with the image. It is the brand kit's colour PNG on
+the light basemap and its white PNG on the dark, 44px tall with the width following the artwork,
+and its inset equals its own height, the style guide's breathing space; that corner holds nothing
+else: the attribution control sits top right and the legend bottom left. It draws at 80 percent
+opacity, opacity:.8 exactly, the one change permitted on it: both files keep their own colours,
+with no filter, tint or blend. pointer-events:none and a z-index below Leaflet's control and popup
+layers keep it out of hit testing, and the legend stacks above it. The lock-up is about 260px wide,
+so a narrow map brings the expanded legend to it: measured with the rail open, the legend overlaps
+the lock-up's left end from 761px to about 852px of viewport, and the clear space against the
+legend holds from about 897px. Below 900px neither variant is drawn, so the two never meet, by a rule anchored on #map so
+it outranks the theme switch. The map page's footer carries no lock-up of its own.
 ```
 
 #### The map's attribution, collapsed to one glyph
 
 ```text
 The map's attribution, collapsed to one glyph in Leaflet's top-right corner, which leaves the
-bottom-right to the AuScope mark and its clear space. The credit is a licence term and stays with
-the map, because only the layer that is drawing knows which provider to name, and the 240px cap
-keeps the opened text clear of the legend at 560px of map. Shared character for character with
-add-survey.html; pinned by tests/test_map_attribution.py.
+bottom-right to the AuScope and NCRIS lock-up and its clear space. The credit is a licence term and
+stays with the map, because only the layer that is drawing knows which provider to name, and the
+240px cap keeps the opened text clear of the legend at 560px of map. Shared character for character
+with add-survey.html; pinned by tests/test_map_attribution.py.
 ```
 
 #### flex-shrink:0 is load-bearing: #filterPane is a column flex, so a tall ...
@@ -169,9 +187,11 @@ One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENT
 status RIGHT. THIS IS THE MASTER RULE SET, carried character for character by every other portal
 document and by engine/extract/_pages.py's _CSS, so nothing here may be tuned for one page. The
 equal zero-basis side zones and the two queries on the FOOTER's own content width are load-bearing;
-the right zone is a row of its own so the status sits against the right edge, and on a page with no
-status the empty zone still takes its share of the row, which keeps the centre on the page's axis.
-The footer carries no control. Pinned by tests/test_footer_regions.py.
+the right zone is a row of its own so what it holds sits against the right edge: here the live
+counts alone, and on every page without the big map the AuScope and NCRIS lock-up, after the
+status where the page has one. This page declares no .orglockup rule, because its footer draws no
+lock-up; the map's corner carries it. The footer carries no control. Pinned by
+tests/test_footer_regions.py.
 ```
 
 #### The hand-off snackbar sits ABOVE #toast so the two can coexist (a ...
@@ -251,18 +271,19 @@ around near-white text on this dark panel. Weight drops to 500 for the same reas
 ```text
 Twin of the static collection page's .collmap/.collmark rule (engine/extract/_pages.py). The panel
 is capped at the SVG's own width, so the corner the mark is pinned to is the MAP's, not the
-column's. The mark is the AuScope pair the map's corner carries, and the panel behind it is
+column's. The mark is the AuScope pair every header opens with, and the panel behind it is
 --map-panel.
 ```
 
-#### AusMT's name and tagline are the identity zone; the lock-up at the right ...
+#### The AuScope mark, then AusMT's name set at the AuScope logo's proportions
 
 ```text
-AusMT's name and tagline are the identity zone, which carries no mark; the AuScope and NCRIS lock-up
-at the right is the header's only AuScope presence. On this page alone the wordmark sits inside the
-page's h1, whose clipped remainder carries the page name for a crawler and a screen reader. Same
-markup on every surface apart from that heading, the Map control (a button here, a link elsewhere)
-and the current page's active state; pinned by tests/test_header_geometry_parity.py.
+The AuScope mark, then AusMT's name set at the AuScope logo's proportions; the tagline is the right
+zone's. On this page alone the name sits inside the page's h1, whose clipped remainder carries the
+page name for a crawler and a screen reader; the heading still reads "AusMT" and then the rest,
+because the heavy "Aus" is a <b> inside the name and changes its weight, not its text. Same markup
+on every surface apart from that heading, the Map control (a button here, a link elsewhere) and
+the current page's active state; pinned by tests/test_header_geometry_parity.py.
 ```
 
 #### Surveys and Collections are served as pages, so these two controls are ...
@@ -400,8 +421,9 @@ own data licence.
 ```text
 RIGHT. The live counts, and nothing after them. One SHELL, a contextual SLOT: #footerCounts is the
 same element in the same place on every view and #countSlot's content is what changes
-(filters.js updateCounts); the markup here is the MAP form. The footer carries no control: the
-appearance choice is the welcome dialog's Appearance row and About's section 9.
+(filters.js updateCounts); the markup here is the MAP form. The map page's footer carries no
+lock-up, because the map's corner does. The footer carries no control: the appearance choice is
+the welcome dialog's Appearance row and About's section 9.
 ```
 
 #### PROGRESS BELONGS TO THE BROWSER: the 302 hands the bytes ...
@@ -429,16 +451,18 @@ Three-zone header. The side zones must take equal ZERO-basis shares (flex:1 1 0,
      grows with its own content and the centred tabs land at a different x per view; pinned by
      tests/test_header_geometry_parity.py. See docs: portal internals, index.html.
 
-The identity zone carries no mark, so no sheet sizes one. See docs: portal internals, index.html.
+The AuScope mark is 36px square and its rule comes before the theme switch it ties with; the name is
+     set at the AuScope logo's proportions in 'Calibre' over --sans. See docs: portal internals,
+     index.html.
 
-The heading wraps the wordmark and takes no type of its own, so its line box is the wordmark's and the
-     identity block measures as it does on every other surface; the page name is clipped.
+The heading wraps the wordmark and takes no type of its own, so the identity block measures as it
+     does on every other surface; the page name is clipped.
+
+The tagline sits on one line and ends in an ellipsis inside its zone where the zone is narrower. See
+     docs: portal internals, index.html.
 
 The theme switch, three rules in this order, outranked by nothing that selects a variant. See docs:
      portal internals, index.html.
-
-The AuScope and NCRIS lock-up is the brand kit's PNG pair, drawn 40px tall, the height of the view tabs.
-     See docs: portal internals, index.html.
 
 The ACTIVE view is filled with --accent and lettered in --accent-ink, and every view control keeps a
      40px click target. See docs: portal internals, index.html.
@@ -450,8 +474,8 @@ The MTCAT link lives in the footer's bottom-left; the footer's flex gap handles 
 
 Mute the basemap only: station overlays render outside the tile pane, so they keep full colour.
 
-The AuScope mark, bottom right of the MAP, inset by its own height and drawn at 80 percent
-     opacity. See docs: portal internals, index.html.
+The AuScope and NCRIS lock-up, bottom right of the MAP, 44px tall, inset by its own height and drawn
+     at 80 percent opacity. See docs: portal internals, index.html.
 
 Anchored on the map's id so it outranks the theme switch that shows the dark variant.
 
@@ -659,9 +683,9 @@ nothing relative, so og:url and og:image are absolute.
 
 ```text
 Uniform chrome: the three-zone header below is index.html's, so About carries the same chrome as
-the portal: AusMT's name and tagline at the left, the tabs and About in the centre, the AuScope
-and NCRIS lock-up at the right. This page is STATIC, so the centre items are links rather
-than app buttons; the sticky positioning is shared with the other scrolling pages. The rules are
+the portal: the AuScope mark and AusMT's name at the left, the tabs and About in the centre, the
+tagline at the right. This page is STATIC, so the centre items are links rather than app buttons;
+the sticky positioning is shared with the other scrolling pages. The rules are
 the shared header rule set, colours in tokens.
 ```
 
@@ -678,19 +702,19 @@ instead of stacking. Character-identical on every surface wearing the chrome.
 ```text
 THE IN-PAGE ANCHOR OFFSET FOLLOWS THE HEADER. The header is sticky, so an anchor that scrolls its
 section to y=0 puts the heading underneath it and scroll-margin-top is the clearance. One number
-will not do: the header WRAPS as the viewport narrows (with every zone stacked under 760px the
-lock-up takes a 40px row of its own) and is 229px tall at 375px against 57px at 1280px, so each
-band below carries the TALLEST header in its own range (overshooting drops a heading a few pixels
-low, undershooting hides it). These are measurements of this header's content at this font stack:
-anything that changes its wording, its nav or its zones moves the wrap points and the ladder must be
-re-measured, and no source-read pin can see the header get taller. tests/test_about_uniform_chrome.py
-holds the shape and the values at 375px and 1280px.
+will not do: the header WRAPS as the viewport narrows (with every zone stacked under 760px the mark,
+the tab rows and the tagline each take a row of their own) and is 216px tall at 375px against 57px
+at 1280px, so each band below carries the TALLEST header in its own range (overshooting drops a
+heading a few pixels low, undershooting hides it). These are measurements of this header's content
+at this font stack: anything that changes its wording, its nav or its zones moves the wrap points
+and the ladder must be re-measured, and no source-read pin can see the header get taller.
+tests/test_about_uniform_chrome.py holds the shape and the values at 375px and 1280px.
 ```
 
-#### The AuScope-NCRIS lock-up in the body, the pair the header carries ...
+#### The AuScope-NCRIS lock-up in the body, the pair the footer carries ...
 
 ```text
-The AuScope-NCRIS lock-up in the body, the pair the header carries, drawn larger: the brand kit's
+The AuScope-NCRIS lock-up in the body, the pair the footer carries, drawn larger: the brand kit's
 colour PNG on the light ground and its white PNG on the dark, of which the theme switch shows one.
 The images declare the artwork's intrinsic 1919x325 and the rule draws them 320px wide with
 height:auto, so the declared height sets the proportion and never the size. The wrapper takes no
@@ -701,20 +725,24 @@ descender gap and without being outranked.
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT
-that keeps the centre on the page's axis. The rule set below is index.html's, character for
-character, where the zone geometry and the two container states are stated once;
-tests/test_footer_regions.py holds all seven surfaces identical, so an edit here that is not an
-edit there fails. STICKY, not fixed: it keeps its own box in flow, so the last line of the page is
-never hidden under it, which is why body is a viewport-tall column and main takes its free space.
-Below 560px of viewport it would cover most of a phone screen, so it returns to flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope and
+NCRIS lock-up RIGHT. The rule set below is index.html's, character for character, where the zone
+geometry and the two container states are stated once; tests/test_footer_regions.py holds all seven
+surfaces identical, so an edit here that is not an edit there fails. The two .orglockup rules are
+shared with every surface whose footer draws the lock-up: 30px tall with the width following the
+artwork, and a negative block margin of 5.625px that makes the anchor's margin box one footer text
+line (12.5px at line-height 1.5), so the lock-up never sets a row's height and the sticky footer
+keeps the height its text gives it, 33.75px on one row and 56.5px on two. STICKY, not fixed: it
+keeps its own box in flow, so the last line of the page is never hidden under it, which is why body
+is a viewport-tall column and main takes its free space. Below 560px of viewport it would cover most
+of a phone screen, so it returns to flow, where the lock-up's stacked row adds one text line.
 ```
 
-#### AusMT's name and tagline are the identity zone
+#### The AuScope mark, then AusMT's name set at the AuScope logo's proportions
 
 ```text
-AusMT's name and tagline are the identity zone, and the name links the portal root; the lock-up at
-the right is the header's only AuScope presence. About marks itself current on its own .about
+The AuScope mark, then AusMT's name set at the AuScope logo's proportions, the name linking the
+portal root; the tagline is the right zone's. About marks itself current on its own .about
 control, because none of the three tabs is this page. The page carries no counts anywhere: it has no
 map, filter or selection to report, so the live ids (nVis/nSel/nTot) stay off it.
 ```
@@ -774,13 +802,14 @@ main, not a child of it: it is the page's bottom edge, and only a body-level foo
 contentinfo landmark.
 ```
 
-#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. The organisation's name is the
-acknowledgement's one link, and the line carries no copyright clause. The right zone holds nothing:
-About has no status to report and carries the appearance choice as its section 9, not as a footer
-control, and the empty zone keeps the three-zone geometry that holds the centre on the page's axis.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. The organisation's name is the
+acknowledgement's one link, and the line carries no copyright clause. About has no status to report
+and carries the appearance choice as its section 9, not as a footer control, so the right zone is
+the AuScope and NCRIS lock-up alone: the brand kit's colour and white PNGs, linking AuScope in a new
+tab with rel="noopener noreferrer", at the bottom right of the page.
 ```
 
 ## portal/add-survey.html
@@ -812,11 +841,15 @@ ground, so each chip also carries its level as a word.
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT
-that keeps the centre on the page's axis. The rule set is index.html's, character for character,
-where the zone geometry and the two container states are stated once; tests/test_footer_regions.py
-holds all seven surfaces identical. STICKY, not fixed, so it keeps its box in flow and body is a
-viewport-tall column; below 560px it returns to ordinary flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope and
+NCRIS lock-up RIGHT. The rule set is index.html's, character for character, where the zone geometry
+and the two container states are stated once; tests/test_footer_regions.py holds all seven surfaces
+identical. The two .orglockup rules are shared with every surface whose footer draws the lock-up:
+30px tall with the width following the artwork, and a negative block margin of 5.625px that makes
+the anchor's margin box one footer text line (12.5px at line-height 1.5), so the lock-up never sets
+a row's height and the sticky footer keeps the height its text gives it, 33.75px on one row and
+56.5px on two. STICKY, not fixed, so it keeps its box in flow and body is a viewport-tall column;
+below 560px it returns to ordinary flow.
 ```
 
 #### Wide enough to show a full-length folder name (SLUG_MAX = 40 mono ...
@@ -838,12 +871,11 @@ character with index.html, because these three maps wear the same control in the
 pinned by tests/test_map_attribution.py.
 ```
 
-#### AusMT's name and tagline are the identity zone
+#### The AuScope mark, then AusMT's name set at the AuScope logo's proportions
 
 ```text
-AusMT's name and tagline are the identity zone, and the name links the portal root; the AuScope and
-NCRIS lock-up at the right is the header's only AuScope presence. None of the tabs is this page, so
-none is active.
+The AuScope mark, then AusMT's name set at the AuScope logo's proportions, the name linking the
+portal root; the tagline is the right zone's. None of the tabs is this page, so none is active.
 ```
 
 #### Options are populated at runtime from the generated contract (LICENSES ...
@@ -910,13 +942,13 @@ points at in NCI Table 1 terms; the DataCite relation is DERIVED server-side fro
 is never asked here.
 ```
 
-#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. The organisation's name is the
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. The organisation's name is the
 acknowledgement's one link, and the line carries no copyright clause. The page has no status and
-the footer carries no control, so the right zone holds nothing; it stays, because the empty zone
-keeps the centre on the page's axis.
+the footer carries no control, so the right zone is the AuScope and NCRIS lock-up alone, the brand
+kit's colour and white PNGs linking AuScope in a new tab, at the bottom right of the page.
 ```
 
 #### INFO-block coords, decimal (Geotools style) or DMS ('LATITUDE ...
@@ -1746,7 +1778,7 @@ The description is the first three sentences of this page's own lede, verbatim a
 
 --no carries the danger red that clears WCAG AA as text; see index.html.
 
-The identity zone is AusMT's name and tagline on every surface of the site, and carries no mark. See docs: portal internals, add-survey.html.
+The identity zone is the AuScope mark and AusMT's name on every surface of the site, and the tagline is the right zone's. See docs: portal internals, add-survey.html.
 
 originalname.edi → ROX000.edi rename preview
 
@@ -1756,7 +1788,7 @@ AA text contrast on the status-chip tints: the PASS tint is light enough for --o
 
 A non-blocking "slug already served" context warning, distinct from valid and invalid. Amber like a WARNING chip, and allowed to wrap.
 
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT that keeps the centre on the page's axis. See docs: portal internals, add-survey.html.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope and NCRIS lock-up RIGHT. See docs: portal internals, add-survey.html.
 
 Direct upload ("Submit to AusMT"): hidden until the same-origin gateway healthz probe passes.
 
@@ -1770,7 +1802,7 @@ The map's attribution, collapsed to one glyph in the top-right corner. The credi
 
 DATAID auto-derived from filename (curator-flagged, not blocking)
 
-AusMT's name and tagline are the identity zone; the lock-up at the right is the header's only AuScope presence. See docs: portal internals, add-survey.html.
+The AuScope mark, then AusMT's name set at the AuScope logo's proportions. See docs: portal internals, add-survey.html.
 
 ============================ TIER 0, the only required screen ============================
 
@@ -1808,7 +1840,7 @@ Identifiers by data level, mirroring the curator editor. Each row states WHAT th
 
 Key request. It always shows the same neutral message regardless of the response, so it can never confirm whether an address exists.
 
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. See docs: portal internals, add-survey.html.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. See docs: portal internals, add-survey.html.
 
 MAINTAINER NOTE: this page is the largest single file in the portal. It is intentionally one file while it stays manageable.
 
@@ -2149,19 +2181,23 @@ viewport. Character-identical on every surface wearing the chrome.
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT
-that keeps the centre on the page's axis. The rule set below is index.html's, character for
-character, where the zone geometry and the two container states are stated once;
-tests/test_footer_regions.py holds all seven surfaces identical. STICKY, not fixed, so it keeps its
-box in flow and body is a viewport-tall column; below 560px of viewport it returns to ordinary flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope and
+NCRIS lock-up RIGHT. The rule set below is index.html's, character for character, where the zone
+geometry and the two container states are stated once; tests/test_footer_regions.py holds all seven
+surfaces identical. The two .orglockup rules are shared with every surface whose footer draws the
+lock-up: 30px tall with the width following the artwork, and a negative block margin of 5.625px that
+makes the anchor's margin box one footer text line (12.5px at line-height 1.5), so the lock-up never
+sets a row's height and the sticky footer keeps the height its text gives it, 33.75px on one row and
+56.5px on two. STICKY, not fixed, so it keeps its box in flow and body is a viewport-tall column;
+below 560px of viewport it returns to ordinary flow.
 ```
 
-#### AusMT's name and tagline are the identity zone
+#### The AuScope mark, then AusMT's name set at the AuScope logo's proportions
 
 ```text
-AusMT's name and tagline are the identity zone, which carries no mark; none of the three tabs is
-this page, so none is active, and the right zone is the AuScope and NCRIS lock-up, the header's only
-AuScope presence.
+The AuScope mark, then AusMT's name set at the AuScope logo's proportions, the name linking the
+portal root; none of the three tabs is this page, so none is active, and the right zone is the
+tagline.
 ```
 
 #### The site's ONE footer
@@ -2171,13 +2207,13 @@ The site's ONE footer, the same strings and the same targets index.html carries.
 main, not a child of it: only a body-level footer is a contentinfo landmark.
 ```
 
-#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. The organisation's name is the
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. The organisation's name is the
 acknowledgement's one link, and the line carries no copyright clause. The page has no status and
-the footer carries no control, so the right zone holds nothing; it stays, because the empty zone
-keeps the centre on the page's axis.
+the footer carries no control, so the right zone is the AuScope and NCRIS lock-up alone, the brand
+kit's colour and white PNGs linking AuScope in a new tab, at the bottom right of the page.
 ```
 
 ## portal/brand.html
@@ -2201,31 +2237,36 @@ viewport. Character-identical on every surface wearing the chrome.
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT
-that keeps the centre on the page's axis. The rule set below is index.html's, character for
-character, where the zone geometry and the two container states are stated once;
-tests/test_footer_regions.py holds all seven surfaces identical, so an edit here that is not an
-edit there fails. STICKY, not fixed: it keeps its own box in flow, so the last line of the page is
-never hidden under it, which is why body is a viewport-tall column and main takes its free space.
-Below 560px of viewport it would cover most of a phone screen, so it returns to flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope and
+NCRIS lock-up RIGHT. The rule set below is index.html's, character for character, where the zone
+geometry and the two container states are stated once; tests/test_footer_regions.py holds all seven
+surfaces identical, so an edit here that is not an edit there fails. The two .orglockup rules are
+shared with every surface whose footer draws the lock-up: 30px tall with the width following the
+artwork, and a negative block margin of 5.625px that makes the anchor's margin box one footer text
+line (12.5px at line-height 1.5), so the lock-up never sets a row's height and the sticky footer
+keeps the height its text gives it, 33.75px on one row and 56.5px on two. STICKY, not fixed: it
+keeps its own box in flow, so the last line of the page is never hidden under it, which is why body
+is a viewport-tall column and main takes its free space. Below 560px of viewport it would cover most
+of a phone screen, so it returns to flow, where the lock-up's stacked row adds one text line.
 ```
 
-#### AusMT's name and tagline are the identity zone
+#### The AuScope mark, then AusMT's name set at the AuScope logo's proportions
 
 ```text
-AusMT's name and tagline are the identity zone, which carries no mark; the lock-up at the right is
-the header's only AuScope presence. The AusMT symbol this page offers for download is AusMT's
-product mark, carried by the documentation sidebar and the social card; the site's own favicon and
-app icons carry the AuScope mark, and the page says so in its Mark section.
+The AuScope mark, then AusMT's name set at the AuScope logo's proportions, the name linking the
+portal root; the tagline is the right zone's. The AusMT symbol this page offers for download is
+AusMT's product mark, carried by the documentation sidebar and the social card; the site's favicon
+and app icons carry the AuScope mark, and the page says so in its Mark section; every header opens
+with the same mark.
 ```
 
-#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. The organisation's name is the
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. The organisation's name is the
 acknowledgement's one link, and the line carries no copyright clause. The page has no status and
-the footer carries no control, so the right zone holds nothing; it stays, because the empty zone
-keeps the centre on the page's axis.
+the footer carries no control, so the right zone is the AuScope and NCRIS lock-up alone, the brand
+kit's colour and white PNGs linking AuScope in a new tab, at the bottom right of the page.
 ```
 
 ## portal/404.html
@@ -2233,20 +2274,24 @@ keeps the centre on the page's axis.
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
 
 ```text
-One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty RIGHT
-that keeps the centre on the page's axis. The rule set below is index.html's, character for
-character: this page carries the token block like every other, so the theme reaches the page Caddy
-serves for any unmatched path too.
-tests/test_footer_regions.py holds all seven surfaces identical. STICKY, not fixed: it keeps its own
-box in flow, so body is a viewport-tall column and the last line is never hidden under it; below
-560px of viewport it returns to ordinary flow.
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope and
+NCRIS lock-up RIGHT. The rule set below is index.html's, character for character: this page carries
+the token block like every other, so the theme reaches the page Caddy serves for any unmatched path
+too. The two .orglockup rules are shared with every surface whose footer draws the lock-up: 30px
+tall with the width following the artwork, and a negative block margin of 5.625px that makes the
+anchor's margin box one footer text line (12.5px at line-height 1.5), so the lock-up never sets a
+row's height and the sticky footer keeps the height its text gives it, 33.75px on one row and 56.5px
+on two. The lock-up's light and dark variants are this page's only pair, so it carries the three
+theme-switch rules beside them. tests/test_footer_regions.py holds all seven surfaces identical.
+STICKY, not fixed: it keeps its own box in flow, so body is a viewport-tall column and the last line
+is never hidden under it; below 560px of viewport it returns to ordinary flow.
 ```
 
-#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty
+#### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. Every href and the appearance script
-are root-absolute, because this document answers any address at any depth.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. Every href, every src and the
+appearance script are root-absolute, because this document answers any address at any depth.
 ```
 
 ## portal/src/analytics-shim.js
@@ -5127,9 +5172,9 @@ auto-switching the rail to Select & download. Named (not inline) so the jsdom dr
 
 ```text
 The map's attribution, collapsed to one glyph in the top-right corner, which leaves the bottom-right
-to the AuScope mark and its clear space. Shared by every map this site draws: the SPA's, and
-add-survey's picker, station preview and confirmation maps, so the corner a reader looks in for the
-credit is the same on all four.
+to the AuScope and NCRIS lock-up and its clear space. Shared by every map this site draws: the
+SPA's, and add-survey's picker, station preview and confirmation maps, so the corner a reader looks
+in for the credit is the same on all four.
 
 THE CREDIT IS A LICENCE TERM, not a courtesy. The basemap is OpenStreetMap data under ODbL and
 each tile provider asks for credit of its own, so what leaves the corner is the LINE and the

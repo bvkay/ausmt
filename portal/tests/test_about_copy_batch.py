@@ -466,7 +466,8 @@ ACKNOWLEDGEMENT = (
     "Data Portal (https://ausmt.auscope.org.au), enabled by AuScope and the Australian Government "
     "via the National Collaborative Research Infrastructure Strategy (NCRIS).")
 
-# The brand kit's lock-up pair, the files every header carries, at the artwork's intrinsic size.
+# The brand kit's lock-up pair, the files every footer without the big map carries, at the
+# artwork's intrinsic size.
 LOCKUP_LIGHT = "/vendor/auscope-ncris-colour.png"
 LOCKUP_DARK = "/vendor/auscope-ncris-white.png"
 LOCKUP_ALT = "AuScope and NCRIS"
@@ -597,9 +598,9 @@ def test_section_two_states_who_enables_ausmt():
 
 
 # HOW EVERY OUTBOUND ANCHOR TO AuScope OPENS, as ONE literal in ONE order. It is the spelling
-# tests/test_footer_regions.py holds on the two footer anchors across six documents and the engine's
-# emitter; section 2's link is the site's third and last one, and three spellings of the same rule
-# is how one of them silently loses half of it.
+# tests/test_footer_regions.py holds on the footer anchors across six documents and the engine's
+# emitter, the centre's name and the lock-up; section 2's link is About's third, and two spellings of
+# the same rule is how one of them silently loses half of it.
 NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
 
 
@@ -635,8 +636,8 @@ def test_no_auscope_anchor_on_this_page_is_left_half_paired():
             f"got {tag!r}")
 
 
-def test_section_two_carries_the_lockup_pair_the_header_already_ships():
-    """The lock-up in the body is the SAME pair of committed files every header on this site carries,
+def test_section_two_carries_the_lockup_pair_the_footer_already_ships():
+    """The lock-up in the body is the SAME pair of committed files About's footer carries,
     named by the same root-relative paths: the brand kit's colour PNG for the light theme and its white
     PNG for the dark, of which the theme switch shows one. FAILS if it points at a second copy or at a
     different artwork (two files are two things to keep in step, and the official mark is not ours to
@@ -663,9 +664,12 @@ def test_section_two_carries_the_lockup_pair_the_header_already_ships():
     assert len(white) == 1 and 'class="theme-dark"' in white[0], (
         f"the white PNG sits on dark grounds only: section 2 names it once, as the theme-dark "
         f"variant, got {white!r}")
+    footer = RAW.split("<footer>", 1)[1].split("</footer>", 1)[0]
+    assert LOCKUP_LIGHT in footer and LOCKUP_DARK in footer, (
+        "the body lock-up and the footer's must be the same pair; the footer does not name it")
     header = RAW.split("<header>", 1)[1].split("</header>", 1)[0]
-    assert LOCKUP_LIGHT in header and LOCKUP_DARK in header, (
-        "the body lock-up and the header's must be the same pair; the header no longer names it")
+    assert LOCKUP_LIGHT not in header and LOCKUP_DARK not in header, (
+        "the lock-up left the header; the header opens with the AuScope mark instead")
     wrap = re.search(r"(?m)^\s*\.bodylockup\{([^}]*)\}", RAW)
     assert wrap and "line-height:0" in wrap.group(1), "the body lock-up's wrapper takes no line box"
     rule = re.search(r"(?m)^\s*\.bodylockup img\{([^}]*)\}", RAW)

@@ -8,12 +8,14 @@ for the crawler and clutter for the reader.
 
   * ONE HEADING, one wording. The h1 wraps the wordmark and carries the rest of the page's name in a
     visually hidden span, so the header's look is unchanged and the heading a crawler reads is the
-    page's own title.
+    page's own title. The wordmark sets "Aus" in a <b> of its own, which changes its weight and not
+    its text: the heading still reads "AusMT" and then the hidden rest.
   * THE TITLE AGREES WITH IT, acronym included. "MT data" is how the community searches, and a
     heading and a title that disagree about the name of the page are two claims about one document.
   * THE TOUR URL IS THE SAME DOCUMENT. /?tour=1 is a query on the root, read by the application from
     location.search; it selects no second file, so the one heading covers both URLs.
 """
+import html
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -24,9 +26,9 @@ ROOT = Path(__file__).resolve().parents[1]          # portal/
 INDEX = ROOT / "index.html"
 MAIN_JS = ROOT / "src" / "main.js"
 
-H1_TEXT = "AusMT - Australia's Magnetotelluric (MT) Data Portal"
-WORDMARK = '<span class="wordmark">AusMT</span>'
-HIDDEN_REST = " - Australia's Magnetotelluric (MT) Data Portal"
+H1_TEXT = "AusMT: Magnetotelluric Data Discovery & Access"
+WORDMARK = '<span class="wordmark"><b>Aus</b>MT</span>'
+HIDDEN_REST = ": Magnetotelluric Data Discovery &amp; Access"
 OTHER_PAGES = ("about.html", "add-survey.html", "brand.html", "releases.html", "404.html")
 
 _VOID = {"img", "br", "hr", "input", "meta", "link", "source", "area", "base", "col", "embed",
@@ -70,8 +72,9 @@ def _headings(path):
 
 def test_the_homepage_carries_exactly_one_h1_and_it_is_the_page_name():
     """FAILS IF the map page ships no h1, ships more than one, or names itself anything but the
-    declared wording. More than one is as wrong as none: a crawler reading two top level headings
-    has two claims about what the document is."""
+    declared wording, the wordmark's two runs and the hidden span read as one text. More than one is
+    as wrong as none: a crawler reading two top level headings has two claims about what the
+    document is."""
     ones = [(at, text) for level, at, text in _headings(INDEX) if level == 1]
     assert len(ones) == 1, f"index.html must carry exactly one h1, found {len(ones)}: {ones}"
     assert ones[0][1] == H1_TEXT, \
@@ -101,7 +104,7 @@ def test_the_h1_wraps_the_wordmark_and_hides_the_rest_of_its_text():
 def test_the_title_and_the_heading_agree():
     """FAILS IF the title and the h1 name the page differently. The acronym is in both or in
     neither: two names for one document is what a crawler reports as a conflict."""
-    title = re.search(r"<title>(.*?)</title>", INDEX.read_text(encoding="utf-8")).group(1)
+    title = html.unescape(re.search(r"<title>(.*?)</title>", INDEX.read_text(encoding="utf-8")).group(1))
     assert title == H1_TEXT, f"the title must read {H1_TEXT!r}, got {title!r}"
 
 

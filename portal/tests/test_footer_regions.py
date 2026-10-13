@@ -2,13 +2,15 @@
 emits.
 
 The rule is one footer: LEFT the machine-readable catalogue, CENTRE the AuScope acknowledgement with
-the licence note, RIGHT the page's status. The SPA's status is its live station counts; a generated
-page's is whatever its contextual status markup is; the other static pages have none and keep the
-zone empty, because the empty zone still takes its share of the row and so holds the centre on the
-page's axis. The AuScope and NCRIS lock-up left the footer for the header's right zone and the
-copyright clause left the acknowledgement, so the footer fetches nothing at all and carries exactly
-one outbound link. It holds no control: the appearance choice lives in the map's welcome dialog and
-in About's Appearance section.
+the licence note, RIGHT the page's status and, on every page without the big map, the AuScope and
+NCRIS lock-up after it, so the lock-up sits at the bottom right of every such page. The SPA's status
+is its live station counts and its right zone holds nothing else, because its map's corner carries
+the lock-up; a generated page's right zone is its contextual status markup, then the lock-up; the
+other five static pages have no status, so theirs is the lock-up alone. On those six surfaces the
+footer fetches the lock-up pair and nothing else and carries two anchors to AuScope, the centre's
+name and the lock-up; the SPA's fetches nothing and carries one. The copyright clause left the
+acknowledgement. The footer holds no control: the appearance choice lives in the map's welcome
+dialog and in About's Appearance section.
 
 WHY THE ENGINE HALF LIVES HERE rather than in engine/tests: portal-ci runs on portal/** AND on
 engine/extract/_pages.py, so an edit to either surface fires this module, where the engine workflow
@@ -32,10 +34,14 @@ Each assertion states its failure criterion:
     from the portal root and writes it relative, the generated pages cannot, so the pin holds the
     ROOT-RELATIVE form of both against each other.
   * THE ONE EXTERNAL TARGET - FAILS if a footer reaches any external host other than the single
-    allow-listed AuScope navigation address, and FAILS if a footer FETCHES anything at all: with the
-    lock-up gone it names no image, no stylesheet and no url().
-  * THE RIGHT ZONE - FAILS if a surface's right zone is anything but its status: exactly the live
-    counts on index.html, exactly the status on the engine's pages, nothing on the other five.
+    allow-listed AuScope navigation address, and FAILS if a footer FETCHES anything but the lock-up
+    pair, same-origin, on the six surfaces that draw it: no other image, no stylesheet, no script
+    and no url(), and nothing at all on index.html.
+  * THE RIGHT ZONE - FAILS if a surface's right zone is anything but its contents: exactly the live
+    counts on index.html, exactly the status then the lock-up on the engine's pages, exactly the
+    lock-up on the other five.
+  * THE LOCK-UP KEEPS THE FOOTER'S HEIGHT - FAILS if the lock-up's rules drift, leave a surface that
+    draws it or come to one that does not, or if its margin box stops being one footer text line.
   * NO CONTROL - FAILS if any footer carries a button, an input or any other control, a control
     group, a pressed state or an inline handler the CSP would block.
   * GEOMETRY - FAILS if any surface stops being a wrapping flex row or a query container, if a side
@@ -44,18 +50,20 @@ Each assertion states its failure criterion:
   * ONE FOOTER RULE SET, ON ALL SEVEN SURFACES - FAILS if any surface's footer rule set drifts from
     portal/index.html's by a character, or reaches for a literal colour instead of a token.
   * THE RETIRED CONTENT STAYS RETIRED - FAILS if Releases, About this build, the disclosure popover,
-    the copyright clause, the footer lock-up or the appearance control comes back to any footer.
-  * THE EXTERNAL ANCHOR OPENS IN A NEW TAB - FAILS if the AuScope anchor on any surface loses
-    target="_blank" or rel="noopener noreferrer", or if an in-site footer link takes a target.
+    the copyright clause, the retired footer logo or the appearance control comes back to any footer.
+  * THE EXTERNAL ANCHORS OPEN IN A NEW TAB - FAILS if an AuScope anchor on any surface loses
+    target="_blank" or rel="noopener noreferrer", if a surface carries more or fewer of them than
+    its contents call for, or if an in-site footer link takes a target.
 
 BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's: the sibling pages set their content in
 reading columns of different widths, so no single viewport number describes "the three regions do
 not fit" on more than one page kind at a time.
 
-THE OWN-ROW BREAKPOINT IS A MEASUREMENT OF THE CONTENT, not a design constant. It was measured with the
-longer acknowledgement and the lock-up in place; both regions are shorter now, so the 1421px query
-fires earlier than the content strictly needs, which only ever puts the centre on its own row a
-little sooner. Anything that lengthens a region again moves this number and it has to be re-measured.
+THE OWN-ROW BREAKPOINT IS A MEASUREMENT OF THE CONTENT, not a design constant. It was measured with a
+longer acknowledgement than the line carries now, so the 1421px query fires earlier than the content
+strictly needs, which only ever puts the centre on its own row a little sooner: at 1422px of footer
+content the three regions share one row with the lock-up on the right, measured in Chrome. Anything
+that lengthens a region again moves this number and it has to be re-measured.
 """
 import hashlib
 import re
@@ -65,7 +73,8 @@ from pathlib import Path
 
 import pytest
 
-from chrome_contract import FOOTER_CENTRE, FOOTER_CENTRE_MARKUP, entities, flat
+from chrome_contract import (FOOTER_CENTRE, FOOTER_CENTRE_MARKUP, FOOTER_LINE, LOCKUP, LOCKUP_DARK,
+                             LOCKUP_FOOTERS, LOCKUP_HEIGHT, LOCKUP_LIGHT, LOCKUP_RULES, entities, flat)
 from engine_chrome import function_source, site_footer
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
@@ -107,12 +116,12 @@ INDEX_STATUS = ('<div class="counts" id="footerCounts"><span id="countSlot" titl
                 'current filters · stations selected · total stations in the catalogue">'
                 '<b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> '
                 'total</span></div>')
-# A generated page's status, as a probe the engine's footer must carry verbatim as its whole right
-# zone.
+# A generated page's status, as a probe the engine's footer must carry verbatim at the head of its
+# right zone, before the lock-up.
 ENGINE_STATUS = '<span class="counts">probe status</span>'
 
-# The white lock-up, the header's theme-dark variant, committed as its rights holder published it; no
-# footer names it, and portal/vendor/README.md records the same facts.
+# The white lock-up, the footer's theme-dark variant, committed as its rights holder published it;
+# portal/vendor/README.md records the same facts.
 LOGO_SRC = "/vendor/auscope-ncris-white.png"
 LOGO_SHA256 = "595a564ece1151d94347331c1521381df987da437aa3080cff47a5280cf818f6"
 LOGO_BYTES = 35628
@@ -120,12 +129,12 @@ LOGO_PIXELS = (1919, 325)
 
 # What the rules took OUT of every footer. Held as a negative so nothing drifts back in one page at a
 # time: the popover's CSS is swept as well as its markup, because a rule left behind is an invitation
-# to re-add the element it styles.
+# to re-add the element it styles. The lock-up's own class is orglockup; orglogo is the retired logo.
 RETIRED = ("aboutbuild", "About this build", ">Releases<", "releases.html", "orglogo",
-           "©", "AusMT contributors", "Machine-readable record", "<img", "Light", "Dark")
+           "©", "AusMT contributors", "Machine-readable record", "Light", "Dark")
 # The classes and the hook of the retired footer control, swept from the whole document or the
-# engine's source with the popover's and the footer lock-up's: a rule or an attribute left behind is
-# an invitation to re-add the element it served.
+# engine's source with the popover's and the retired footer logo's: a rule or an attribute left behind
+# is an invitation to re-add the element it served.
 RETIRED_CLASSES = ("aboutbuild", "orglogo", "themectl", "themesep", "data-theme-choice")
 
 _ZONE_CLASSES = {"left": "fzone fleft", "centre": "fzone fcenter", "right": "fzone fright"}
@@ -294,13 +303,19 @@ def _text(where):
 
 
 def _expected_right(where):
-    """The whole right zone: the live counts on the SPA, the probe status on the engine's footer,
-    nothing on the other five pages."""
+    """The whole right zone: the live counts on the SPA, the probe status then the lock-up on the
+    engine's footer, the lock-up alone on the other five pages."""
     if where == "index.html":
         return INDEX_STATUS
     if where.startswith("engine/"):
-        return ENGINE_STATUS
-    return ""
+        return ENGINE_STATUS + LOCKUP
+    return LOCKUP
+
+
+def test_the_lockup_footers_are_every_surface_without_the_big_map():
+    """FAILS IF the contract's list of lock-up footers stops being every footer surface but the SPA's,
+    which is how a new page would be left without the lock-up at its bottom right."""
+    assert sorted(LOCKUP_FOOTERS) == sorted(s for s in SURFACES if s != "index.html")
 
 
 def test_the_pin_enumerates_every_page_the_portal_ships():
@@ -320,11 +335,12 @@ _ENGINE_LEFT_LINK = r'<a (?:class="apilink" )?href="([^"]+)"(?: title="[^"]*")?>
 def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(where):
     """REGIONS and STRINGS, on all seven surfaces. FAILS if a region is missing, out of order or holds
     another's content, if a portal page's left link loses class="apilink" or its title, if the left
-    label or the centre line drifts, or if the right region is anything but the surface's status.
+    label or the centre line drifts, or if the right region is anything but the surface's contents:
+    its status, then the lock-up on every surface without the big map.
 
     Non-vacuous in every half: the earlier footers fail the left label (it read "Machine-readable
     record (MTCAT JSON)"), the centre (it carried the copyright clause, and then the address as the
-    link's text) and the right region (it held the lock-up, and then the appearance control)."""
+    link's text) and the right region (it held the appearance control, and then nothing)."""
     regions = _regions(where, _foot(where))
     link = re.fullmatch(_ENGINE_LEFT_LINK if where == ENGINE else _LEFT_LINK, regions["left"], re.S)
     assert link, f"{where}: the left zone holds the MTCAT link and nothing else: {regions['left']!r}"
@@ -350,16 +366,17 @@ def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(
 
     right = flat(regions["right"])
     assert right == flat(_expected_right(where)), (
-        f"{where}: the right region must be the surface's status and nothing else:\n"
+        f"{where}: the right region must be the surface's status and lock-up as its contents call "
+        "for, and nothing else:\n"
         f"  got  {right!r}\n  want {flat(_expected_right(where))!r}")
 
 
-def test_a_generated_page_without_status_keeps_an_empty_right_zone():
+def test_a_generated_page_without_status_keeps_the_lockup_alone():
     """The engine's status is contextual and may be empty. FAILS IF an empty status leaves a
-    placeholder behind, or takes the zone with it: _regions requires all three zones, because the
-    empty right zone is what keeps the acknowledgement on the page's axis."""
+    placeholder behind or takes the lock-up with it: the right zone is then the lock-up alone, exactly
+    as on the five static pages without a status."""
     right = _regions("engine/extract/_pages.py", _engine_footer(""))["right"]
-    assert right == "", f"an empty status must leave the right zone empty: {right!r}"
+    assert flat(right) == LOCKUP, f"an empty status must leave the lock-up alone: {right!r}"
 
 
 def test_the_surfaces_agree_on_where_the_footer_points():
@@ -376,10 +393,11 @@ def test_the_surfaces_agree_on_where_the_footer_points():
         f"the engine footer's MTCAT link must target {MTCAT}")
 
 
-def test_the_white_lockup_png_stays_committed_unaltered_and_out_of_every_footer():
-    """The white PNG lock-up is the header's theme-dark variant and is committed as its rights holder
+def test_the_white_lockup_png_stays_committed_unaltered_and_only_the_lockup_footers_name_it():
+    """The white PNG lock-up is the footer's theme-dark variant and is committed as its rights holder
     published it. FAILS if the file is missing or its bytes change (a resize, a re-encode, a
-    recolour, a metadata strip), or if any footer names it again."""
+    recolour, a metadata strip), if a lock-up footer names it other than once, or if the SPA's
+    footer names it at all."""
     path = ROOT / LOGO_SRC.lstrip("/")
     assert path.is_file(), f"{LOGO_SRC} stays committed"
     raw = path.read_bytes()
@@ -392,21 +410,24 @@ def test_the_white_lockup_png_stays_committed_unaltered_and_out_of_every_footer(
         f"{LOGO_SRC}: expected {LOGO_PIXELS[0]}x{LOGO_PIXELS[1]}, found {width}x{height}")
     assert raw[24] == 8 and raw[25] == 6, (
         f"{LOGO_SRC}: expected 8-bit RGBA (colour type 6), found bit depth {raw[24]} type {raw[25]}")
+    assert LOGO_SRC == LOCKUP_DARK, "the white lock-up is the contract's theme-dark variant"
     name = LOGO_SRC.rsplit("/", 1)[-1]
-    for where in _PORTAL_PAGES:
-        assert name not in _foot(where), f"{where}: the footer names the lock-up {name}"
-
-
-def test_the_engine_footer_does_not_name_the_white_lockup():
-    name = LOGO_SRC.rsplit("/", 1)[-1]
-    assert name not in _foot(ENGINE), f"{ENGINE}: the footer names the lock-up {name}"
+    for where in SURFACES:
+        want = 1 if where in LOCKUP_FOOTERS else 0
+        assert _foot(where).count(name) == want, (
+            f"{where}: the footer names the white lock-up {name} {want} time(s), "
+            f"found {_foot(where).count(name)}")
 
 
 def _no_external_fetch(where, footer_html, sheet):
     """THE ONE EXTERNAL TARGET, second half. A footer may NAVIGATE to the allow-listed AuScope
-    address; nothing in it, or in the rules that style it, may FETCH anything. With the lock-up gone
-    the footer names no resource at all."""
-    assert "<img" not in footer_html, f"{where}: a footer fetches no image: {footer_html!r}"
+    address; what it FETCHES is the lock-up pair, same-origin and root-absolute, on the surfaces that
+    draw it, and nothing else on any surface: no other image, no stylesheet, no script, no url() in
+    the rules that style it."""
+    want = [LOCKUP_LIGHT, LOCKUP_DARK] if where in LOCKUP_FOOTERS else []
+    srcs = re.findall(r"""\bsrc\s*=\s*["']?([^"'\s>]+)""", footer_html)
+    assert srcs == want, f"{where}: the footer fetches {want} and nothing else, found {srcs}"
+    assert footer_html.count("src=") == len(want), f"{where}: every src in the footer is counted"
     assert "<link" not in footer_html and "@import" not in footer_html, (
         f"{where}: a footer fetches no stylesheet of its own: {footer_html!r}")
     assert "<script" not in footer_html, f"{where}: a footer loads no script"
@@ -415,7 +436,7 @@ def _no_external_fetch(where, footer_html, sheet):
 
 
 @pytest.mark.parametrize("where", SURFACES)
-def test_no_footer_fetches_anything(where):
+def test_no_footer_fetches_anything_but_the_lockup_pair(where):
     """THE ONE EXTERNAL TARGET, held on every surface. See _no_external_fetch."""
     sheet = "".join(f"{sel}{{{body}}}" for sel, body in _SET_RE.findall(_outside_queries(_text(where))))
     _no_external_fetch(where, _foot(where), sheet)
@@ -424,9 +445,9 @@ def test_no_footer_fetches_anything(where):
 @pytest.mark.parametrize("where", SURFACES)
 def test_the_retired_content_has_left_every_footer(where):
     """THE RETIRED CONTENT STAYS RETIRED. FAILS if Releases, About this build, the disclosure popover,
-    the copyright clause, the old left label or the footer lock-up comes back to a footer on any
-    surface. Swept from the whole document for the popover's class and the lock-up's, because a rule
-    left behind styles an element someone will re-add."""
+    the copyright clause, the old left label or the retired footer logo (orglogo) comes back to a
+    footer on any surface. Swept from the whole document for the popover's class and the retired
+    logo's, because a rule left behind styles an element someone will re-add."""
     foot = _foot(where)
     for gone in RETIRED:
         assert gone not in entities(foot), f"{where}: {gone!r} left the footer and must not come back"
@@ -479,9 +500,9 @@ def test_every_footer_is_a_wrapping_flex_row_whose_side_zones_take_equal_zero_ba
 
     THE SIDE ZONES TAKE EQUAL ZERO BASIS, which is what page-centres the acknowledgement: zones that
     size to their own content leave the centre centred in the LEFTOVER space. flex:1 1 0 on both sides
-    makes them the same width whatever they hold, the empty right zone on five pages included;
-    min-width:0 lets a side zone go under its own content rather than force a wrap. The right zone
-    is a row of its own, so its status sits against the right edge.
+    makes them the same width whatever they hold, the lock-up on six surfaces and the live counts on
+    the map page included; min-width:0 lets a side zone go under its own content rather than force a
+    wrap. The right zone is a row of its own, so what it holds sits against the right edge.
 
     There are two states below one row and each is pinned. Below the width the three regions need,
     the centre takes a row of its own UNDER the other two; below the width those two need, every
@@ -570,7 +591,7 @@ _ENGINE_GROWS = ("main", "flex:1 0 auto")
 _GROUND = "background:var(--surface)"
 
 # The centre line's weight, as ONE declaration on the zone rather than a span around the sentence.
-# 700 is the sans family's bold; the header wordmark's 800 is a display weight for a 22px mark.
+# 700 is the sans family's bold; the header wordmark's 800 is a display weight for its heavy "Aus".
 _CENTRE_WEIGHT = "font-weight:700"
 
 _FOOTER_RULE = r"(?m)^\s*footer\{([^}]*)\}"
@@ -723,22 +744,28 @@ def _anchors(where, footer_html):
 
 
 @pytest.mark.parametrize("where", SURFACES)
-def test_the_auscope_anchor_opens_in_a_new_tab_on_every_surface(where):
-    """THE EXTERNAL ANCHOR LEAVES THE TAB, and hands the opened page nothing. The organisation's
-    name in the centre sentence is the footer's one link to the AuScope address, and it carries
-    target="_blank" rel="noopener noreferrer" in that one spelling on all seven surfaces.
+def test_the_auscope_anchors_open_in_a_new_tab_on_every_surface(where):
+    """THE EXTERNAL ANCHORS LEAVE THE TAB, and hand the opened page nothing. The organisation's name
+    in the centre sentence links the AuScope address on every surface, and the lock-up links it
+    again on the six surfaces that draw it; each carries target="_blank" rel="noopener noreferrer"
+    in that one spelling.
 
-    FAILS if a surface loses either attribute, spells the pair differently, links the address more
-    than once (the lock-up that was the second link is in the header now), or gives an IN-SITE
-    footer link a target of its own."""
+    FAILS if a surface loses either attribute on either anchor, spells the pair differently, links
+    the address more or fewer times than its contents call for (twice where the lock-up is drawn,
+    once on the SPA), or gives an IN-SITE footer link a target of its own."""
     anchors = _anchors(where, _foot(where))
     external = [tag for href, tag in anchors if href in _EXTERNAL_NAV]
-    assert len(external) == 1, (
-        f"{where}: the footer carries exactly one anchor to {_EXTERNAL_NAV[0]}, the "
-        f"organisation's name in the centre sentence; found {len(external)}: {external!r}")
-    assert _NEW_TAB in external[0], (
-        f"{where}: an anchor that leaves the site opens in a new tab and hands it no opener; "
-        f"expected {_NEW_TAB!r} in {external[0]!r}")
+    want = 2 if where in LOCKUP_FOOTERS else 1
+    assert len(external) == want, (
+        f"{where}: the footer carries {want} anchor(s) to {_EXTERNAL_NAV[0]}, the organisation's "
+        f"name{' and the lock-up' if want == 2 else ''}; found {len(external)}: {external!r}")
+    for tag in external:
+        assert _NEW_TAB in tag, (
+            f"{where}: an anchor that leaves the site opens in a new tab and hands it no opener; "
+            f"expected {_NEW_TAB!r} in {tag!r}")
+    if want == 2:
+        assert 'class="orglockup"' in external[1], (
+            f"{where}: the second AuScope anchor is the lock-up, after the centre's name: {external!r}")
     for href, tag in anchors:
         if href in _EXTERNAL_NAV:
             continue
@@ -815,3 +842,54 @@ def test_the_centre_zone_holds_the_same_markup_on_every_surface(where):
     assert got == master, (
         f"{where}: the acknowledgement must hold portal/index.html's markup once the "
         f"separator's spelling is resolved.\n  master: {master!r}\n  {where}: {got!r}")
+
+
+# THE LOCK-UP KEEPS THE FOOTER'S HEIGHT. The lock-up is drawn 30px tall, and the footer's text line is
+# 18.75px, 12.5px at line-height 1.5. Without a margin the 30px box sets the height of the row it
+# stands in and grows every sticky footer by 11.25px; the anchor's negative block margin makes its
+# margin box exactly one text line, so the row is as tall as its text and the artwork overhangs into
+# the footer's own 7px padding. Measured in Chrome at a device scale factor of 1, in both themes: a
+# lock-up footer is 33.75px on one row (1458px of viewport and up) and 56.5px on two (557px to
+# 1457px), the heights it had with an empty right zone. Below 557px the footer has returned to flow
+# and its zones stack, so the lock-up's row adds one text line there.
+_LOCKUP_RULE_RE = re.compile(r"(?m)^\s*\.orglockup\{([^}]*)\}")
+
+
+def _texts():
+    return {where: _text(where) for where in SURFACES}
+
+
+def test_the_lockup_rules_ride_every_surface_whose_footer_draws_it():
+    """FAILS IF a lock-up footer's two rules drift by a character, go missing or are declared twice,
+    or if the SPA declares them: its footer draws no lock-up, so a rule there would style nothing."""
+    for where, text in _texts().items():
+        for rule in LOCKUP_RULES:
+            want = 1 if where in LOCKUP_FOOTERS else 0
+            assert text.count(rule) == want, (
+                f"{where}: expected {want} {rule!r}, found {text.count(rule)}")
+    assert ".orglockup" not in _index_text(), "index.html draws no .orglockup and declares no rule for one"
+
+
+@pytest.mark.parametrize("where", LOCKUP_FOOTERS)
+def test_the_lockups_margin_box_is_one_footer_text_line(where):
+    """THE LOCK-UP KEEPS THE FOOTER'S HEIGHT, as arithmetic over the surface's own rules. FAILS IF the
+    lock-up's declared height, its anchor's block margins, or the footer's font size or line height
+    move apart, so that the lock-up's margin box stops being one footer text line: taller and it sets
+    the row's height, 11.25px taller than the text at the 30px lock-up with no margin."""
+    text = _text(where)
+    footer = _footer_rule(where, text)
+    size = float(re.search(r"(?:^|;)font-size:([\d.]+)px", footer).group(1))
+    line = float(re.search(r"(?:^|;)line-height:([\d.]+)(?:;|$)", footer).group(1))
+    assert size * line == FOOTER_LINE, f"{where}: the footer's text line is {FOOTER_LINE}px: {footer!r}"
+    anchor = _LOCKUP_RULE_RE.findall(_outside_queries(text))
+    assert len(anchor) == 1, f"{where}: one .orglockup rule, found {len(anchor)}"
+    margin = re.search(r"(?:^|;)margin:(-?[\d.]+)px 0(?:;|$)", anchor[0])
+    assert margin, f"{where}: the lock-up's anchor takes a block margin and no inline one: {anchor[0]!r}"
+    img = re.findall(r"(?m)^\s*\.orglockup img\{([^}]*)\}", text)
+    height = re.search(r"(?:^|;)height:(\d+)px", img[0]) if len(img) == 1 else None
+    assert height and int(height.group(1)) == LOCKUP_HEIGHT, f"{where}: the lock-up is {LOCKUP_HEIGHT}px tall"
+    assert LOCKUP_HEIGHT + 2 * float(margin.group(1)) == size * line, (
+        f"{where}: the lock-up's margin box must be one footer text line, {size * line}px; got "
+        f"{LOCKUP_HEIGHT}px with {margin.group(1)}px margins")
+    assert "line-height:0" in anchor[0] and "display:inline-block" in anchor[0], (
+        f"{where}: the anchor takes no line box of its own, so the image box is its whole height")

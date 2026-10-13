@@ -13,15 +13,14 @@ Each assertion states its failure criterion:
     about.html's. (tests/test_theme_tokens.py pins every page against the contract; this holds the two
     sibling pages against each other from this page's own module.)
   * HEADER PARITY - FAILS if releases.html's header is not the same three-zone header about.html
-    carries: the same nav ids in the same order, the same four centre items in the same order, exactly
-    one AuScope and NCRIS lock-up in the right zone and no counts. Non-vacuous: a page with a
-    hand-rolled header trips every line.
+    carries: the same nav ids in the same order, the same four centre items in the same order, the
+    AuScope mark pair as its only images, the tagline in the right zone, no lock-up and no counts.
+    Non-vacuous: a page with a hand-rolled header trips every line.
   * NO APP STATE - FAILS if the page carries index's live map-state ids (nVis/nSel/nTot), which have no
     meaning on a page with no map, no filter and no selection.
   * FOOTER CHROME - FAILS if the footer keeps the retired About-this-build popover or a version
-    chip, loses the bottom-left MTCAT link, carries an image (the lock-up moved to the header), or
-    carries anything in its right region (the page has no status, and no footer carries a
-    control).
+    chip, loses the bottom-left MTCAT link, or carries anything in its right region but the AuScope
+    and NCRIS lock-up pair (the page has no status, and no footer carries a control).
   * NO INLINE SCRIPT - FAILS if the page carries an inline <script> block. The deployed CSP for every
     page except add-survey.html is script-src 'self' with no 'unsafe-inline' (@strictPages in
     deploy/docker/caddy/Caddyfile is a `not path /add-survey.html` matcher, so a NEW page picks up the
@@ -168,9 +167,13 @@ def test_header_parity_releases_matches_about():
     assert _centre_order(RELEASES) == expected, (
         f"releases.html header items must run {expected}; got {_centre_order(RELEASES)}")
 
+    imgs = [a.get("src") for (t, a, _n) in _header(RELEASES) if t == "img"]
+    assert imgs == ["/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg"], (
+        f"the header's only images are the AuScope mark pair that opens it; found {imgs}")
     lockups = [a for (_t, a, _n) in _header(RELEASES) if "orglockup" in _classes(a)]
-    assert len(lockups) == 1, (
-        f"the header's right zone carries exactly one AuScope and NCRIS lock-up; found {len(lockups)}")
+    assert not lockups, f"the lock-up left the header for the footer; found {len(lockups)}"
+    taglines = [a for (_t, a, _n) in _header(RELEASES) if "tagline" in _classes(a)]
+    assert len(taglines) == 1, f"the header's right zone carries the tagline once; found {len(taglines)}"
     counts = [a for (_t, a, _n) in _header(RELEASES) if "counts" in _classes(a)]
     assert not counts, f"the header carries no counts block; found {len(counts)}"
 
@@ -188,13 +191,14 @@ def test_no_live_app_state_ids():
 
 
 def test_footer_chrome_matches_the_other_pages():
-    """The one-footer rule emptied the right region of Releases and About this build; the lock-up
-    that once sat there is in the header. The footer carries no control; the appearance choice is
-    in the map's welcome dialog and in About's section 9.
+    """The one-footer rule took Releases and About this build out of the right region, and the
+    AuScope and NCRIS lock-up closes it. The footer carries no control; the appearance choice is in
+    the map's welcome dialog and in About's section 9.
     FAILS if the popover or a version chip comes back here, if the MTCAT link leaves the bottom-left,
-    if the footer names an image, or if the right region holds any element at all. The strings and
-    the targets are held for all six documents at once in tests/test_footer_regions.py; this is the
-    same shape asserted from this page's own parsed DOM."""
+    if the footer names any image but the lock-up pair, or if the right region holds anything but
+    the lock-up's anchor and its two images. The strings and the targets are held for all six
+    documents at once in tests/test_footer_regions.py; this is the same shape asserted from this
+    page's own parsed DOM."""
     els = _footer(RELEASES)
     details = [a for (t, a, _ab) in els if t == "details" and "aboutbuild" in _classes(a)]
     assert not details, f"the About-this-build popover is retired from the footer; found {len(details)}"
@@ -208,16 +212,23 @@ def test_footer_chrome_matches_the_other_pages():
     assert len(apilinks) == 1 and apilinks[0].get("href") == "data/mtcat.json", (
         "the machine-readable MTCAT link is pinned bottom-left in the footer on every page")
 
-    imgs = [a for (t, a, _ab) in els if t == "img"]
-    assert not imgs, f"the footer fetches no image; the lock-up is in the header, found {imgs}"
+    imgs = [(a.get("class"), a.get("src")) for (t, a, _ab) in els if t == "img"]
+    assert imgs == [("theme-light", "/vendor/auscope-ncris-colour.png"),
+                    ("theme-dark", "/vendor/auscope-ncris-white.png")], (
+        f"the footer's only images are the lock-up pair, colour then white; found {imgs}")
     zones = [_classes(a) for (t, a, _ab) in els if "fzone" in _classes(a)]
     assert zones == [{"fzone", "fleft"}, {"fzone", "fcenter"}, {"fzone", "fright"}], (
         f"the footer is the three zones in order; found {zones}")
     # The right zone is the footer's last child, so every element after it in document order sits
-    # inside it or follows it, and either is content the zone must not hold.
+    # inside it or follows it, and all of them must be the lock-up's anchor and its two images.
     after = els[[i for i, (t, a, _ab) in enumerate(els) if "fright" in _classes(a)][0] + 1:]
-    assert after == [], (
-        f"the footer's right region is empty on a page with no status; found {after}")
+    assert [(t, a.get("class")) for (t, a, _ab) in after] == [
+        ("a", "orglockup"), ("img", "theme-light"), ("img", "theme-dark")], (
+        f"the footer's right region is the lock-up alone on a page with no status; found {after}")
+    anchor = after[0][1]
+    assert anchor.get("href") == "https://www.auscope.org.au" and anchor.get("target") == "_blank" \
+        and anchor.get("rel") == "noopener noreferrer", (
+        f"the lock-up links AuScope in a new tab with no opener and no referrer; got {anchor}")
 
 
 # --- deployed-CSP and link safety -----------------------------------------------------------------
