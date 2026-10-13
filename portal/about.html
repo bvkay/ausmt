@@ -109,6 +109,10 @@
   .toc a:hover{color:var(--text)}
   .pill{display:inline-block;font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin:2px 4px 2px 0}
   .cta{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:700;text-decoration:none;padding:9px 16px;border-radius:5px;margin-top:4px}
+  .appearance{border:0;margin:0 0 12px;padding:0;font-size:14px;color:var(--muted)}
+  .appearance legend{margin:0 0 6px;padding:0;font-weight:600;color:var(--muted)}
+  .appearance label{display:inline-flex;align-items:center;gap:5px;margin:0 14px 0 0;cursor:pointer}
+  .appearance input{accent-color:var(--accent)}
   /* The AuScope-NCRIS lock-up in the body, the pair the header carries, drawn larger. See docs: portal
      internals, about.html. */
   .bodylockup{margin:0 0 12px;line-height:0}
@@ -152,14 +156,15 @@
   <p class="sub">Australia's national discovery and access portal for magnetotelluric data,
   connecting transfer functions with their provenance, licences, citations and source archives.</p>
 
-  <!-- About is the two-minute front door: it answers seven questions and then hands off. Every deeper topic
-       is a link into the docs site, and every target was fetched and returned 200 before it was written
-       here. See docs: portal internals, about.html. -->
+  <!-- About is the two-minute front door: it answers seven questions, hands off, then offers the appearance
+       choice. Every deeper topic is a link into the docs site, and every target was fetched and returned
+       200 before it was written here. See docs: portal internals, about.html. -->
   <div class="toc">
     <a href="#what">What AusMT is</a><a href="#who">Who enables AusMT</a>
     <a href="#howto">What you can do</a><a href="#access">Licence and access</a>
     <a href="#cite">Citing and credit</a><a href="#contribute">Contributing</a>
     <a href="#api">Fetching data via API</a><a href="#docs">Documentation</a>
+    <a href="#appearance">Appearance</a>
   </div>
 
   <section id="what">
@@ -364,6 +369,14 @@ open(f"{slug}-edi.zip", "wb").write(body)</pre>
     <p>Quarterly citable snapshots of the corpus are listed on the
     <a class="link" href="releases.html">releases page</a>; each one is a frozen tree with its own
     identifier.</p>
+  </section>
+
+  <section id="appearance">
+    <h2>9 · Appearance</h2>
+    <p>Light is the house style. Dark keeps the portal's earlier palette. Follow system takes the
+    choice from your device. The choice is kept in this browser; the welcome panel on the map offers
+    the same choice on a first visit.</p>
+    <fieldset class="appearance"><legend>Appearance</legend><label><input type="radio" name="appearance" value="light"> Light</label><label><input type="radio" name="appearance" value="dark"> Dark</label><label><input type="radio" name="appearance" value="system"> Follow system</label></fieldset>
   </section>
 
 </main>
