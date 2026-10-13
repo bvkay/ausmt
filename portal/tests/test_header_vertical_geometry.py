@@ -17,10 +17,11 @@ and TWO of the zones can grow. The identity zone, once its content wraps, is
 
     hleft  = line-box(first line) + row-gap + line-box(tagline)
 
-where a line box is font-size x line-height and the first line is the taller of the mark box and the
-wordmark's own line box. WHETHER it wraps at a given viewport is the other half:
+where a line box is font-size x line-height and the first line is the wordmark's own line box: the
+zone carries no mark, so nothing else stands on that line. WHETHER it wraps at a given viewport is the
+other half:
 
-    wraps  <=>  mark-width + gap + wordmark-width + gap + tagline-width  >  zone-width
+    wraps  <=>  wordmark-width + gap + tagline-width  >  zone-width
 
 The tab group's zone grows the same way, in whole tab rows:
 
@@ -59,10 +60,11 @@ content is held separately: tests/test_header_geometry_parity.py compares every 
 markup with the contract token by token, and with the contextual counts moved to the footer no zone
 of the header varies by page any more.
 
-NO CARVE-OUT. Every surface opens its header with the same AuScope mark pair under the same
-.brandmark rule, so there is one rule to read and every surface must carry it. The height is the only
-thing a mark contributes to the header's height, and every surface declares it as 30px; the theme
-switch shows one variant of the pair, so the pair contributes one box, not two.
+NO MARK, ON ANY SURFACE. The identity zone is the wordmark and the tagline alone, so the expressions
+above have no mark term, and the fingerprint holds that no surface declares the sizing rule a mark in
+that zone would need: a rule with nothing to style is how a mark comes back, and the box it sized
+would be a new term of the first line. tests/test_header_geometry_parity.py holds the markup half,
+that no identity zone carries an image of any kind.
 """
 import re
 from pathlib import Path
@@ -70,8 +72,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
-# The identity mark rule. One spelling, on every surface: the AuScope mark opens every header.
-MARK_RULE = ".brandmark"
+# The sizing rule an identity mark would need. No surface declares it, because no identity zone carries
+# a mark.
+RETIRED_MARK_RULE = ".brandmark"
 
 
 def _rule(text, pattern, where, what, must_contain=None):
@@ -127,11 +130,10 @@ def _fingerprint(where, text, is_pages):
     tab = _rule(text, tab_sel, where, "nav tab")
     lockup = _rule(text, r"(?m)^\s*\.orglockup img\{([^}]*)\}", where, ".orglockup img")
 
-    found = re.findall(r"(?m)^\s*" + re.escape(MARK_RULE) + r"\{([^}]*)\}", text)
-    assert len(found) == 1, (
-        f"{where}: expected exactly one {MARK_RULE} rule, found {len(found)}; it is where the "
-        "header's first line takes its height from")
-    mark = re.sub(r"\s*\n\s*", "", found[0])
+    found = re.findall(re.escape(RETIRED_MARK_RULE) + r"\b[^{]*\{", text)
+    assert not found, (
+        f"{where}: declares {len(found)} {RETIRED_MARK_RULE} rule(s); the identity zone carries no "
+        "mark, so the header's first line takes its height from the wordmark alone")
 
     return {
         # The header box itself: the padding and the border are added to the tallest zone, the
@@ -150,9 +152,8 @@ def _fingerprint(where, text, is_pages):
         "hzone align-items": _decl(hzone, "align-items", where, ".hzone"),
         "hzone gap": _decl(hzone, "gap", where, ".hzone"),
         "hzone flex-wrap": _decl(hzone, "flex-wrap", where, ".hzone"),
-        # The three identity items. Their font metrics set the line boxes, and their widths are
-        # what decide the wrap in the first place.
-        "mark height": _decl(mark, "height", where, "identity mark"),
+        # The two identity items. Their font metrics set the line boxes, and their widths are what
+        # decide the wrap in the first place.
         "wordmark font-size": _decl(wordmark, "font-size", where, ".wordmark"),
         "wordmark font-weight": _decl(wordmark, "font-weight", where, ".wordmark"),
         "wordmark letter-spacing": _decl(wordmark, "letter-spacing", where, ".wordmark"),
@@ -174,11 +175,11 @@ def _fingerprint(where, text, is_pages):
 def test_every_chrome_surface_shares_one_vertical_fingerprint():
     """One set of declared chrome terms, carried by every surface that wears the chrome. FAILS IF
     any surface drifts on any declared term of the header's height, of its identity block's wrap or
-    of its tab group's row count: a line-height, a font size, a gap, the mark's height, the padding,
-    the border's width, the tab boxes' floor or the nav container's wrap. This is the pin the
-    57.00px to 82.47px reflow needed and did not have, and it fails on the TERM rather than on a
-    pixel count, so it means the same thing on a CI runner and on a laptop with different fonts
-    installed.
+    of its tab group's row count: a line-height, a font size, a gap, the padding, the border's
+    width, the tab boxes' floor or the nav container's wrap; or if any surface declares a sizing
+    rule for an identity mark. This is the pin the 57.00px to 82.47px reflow needed and did not
+    have, and it fails on the TERM rather than on a pixel count, so it means the same thing on a CI
+    runner and on a laptop with different fonts installed.
 
     Because every term is a declared constant, one comparison covers every viewport: what agrees at
     1280px agrees at 375px. What it does NOT cover is zone content, which is contextual by design

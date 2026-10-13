@@ -46,11 +46,11 @@ ICON_BLOCK = ('<link rel="icon" href="/favicon.ico" sizes="any">\n'
               '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">\n'
               '<link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">')
 
+# The AuScope mark pair. No header names it: the identity zone is AusMT's wordmark and tagline alone,
+# and the lock-up at the right is the header's only AuScope presence. The files stay committed for
+# the map's corner, the collection figures and the icons.
 MARK_LIGHT = "/vendor/auscope/auscope-mark.svg"
 MARK_DARK = "/vendor/auscope/auscope-mark-white.svg"
-MARK_PAIR = (f'<img class="brandmark theme-light" src="{MARK_LIGHT}" alt="AuScope" width="30" height="30">'
-             f'<img class="brandmark theme-dark" src="{MARK_DARK}" alt="AuScope" width="30" height="30">')
-MARK_RULE = ".brandmark{height:30px;width:30px;display:block;flex:none}"
 
 # The lock-up is the AuScope brand kit's own colour and white PNGs, named at their intrinsic 1919 by 325
 # and drawn 40px tall, the height of the view tabs, with the width following the artwork. Where the
@@ -64,8 +64,9 @@ LOCKUP = ('<a class="orglockup" href="https://www.auscope.org.au" target="_blank
 LOCKUP_RULES = (".orglockup{display:block;line-height:0}",
                 ".orglockup img{height:40px;width:auto;max-width:100%;object-fit:contain}")
 
-# The switch, verbatim on every surface. Its first rule ties on specificity with any one-class rule
-# that also sets display, so it must follow them; nothing that selects a variant may outrank it.
+# The switch, verbatim on every surface and in this order. Its first rule is one class, so it would tie
+# on specificity with any one-class rule that also set display on a variant; no surface carries such a
+# rule, and nothing that selects a variant may outrank the switch.
 THEME_RULES = ('.theme-dark{display:none}',
                ':root[data-theme="dark"] .theme-light{display:none}',
                ':root[data-theme="dark"] .theme-dark{display:block}')
@@ -80,7 +81,11 @@ THEMECTL = ('<div class="themectl" role="group" aria-label="Appearance"><button 
             'data-theme-choice="light" aria-pressed="true">Light</button><span class="themesep">·</span>'
             '<button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div>')
 
-FOOTER_CENTRE = ("AusMT is enabled by AuScope · www.auscope.org.au · Data licences vary by survey")
+# The centre line as a reader sees it, and as markup: the organisation's name is its one link, to the
+# parent organisation's address, opening in a new tab that is handed no opener and no referrer.
+FOOTER_CENTRE = "AusMT is enabled by AuScope · Data licences vary by survey"
+FOOTER_CENTRE_MARKUP = ('AusMT is enabled by <a href="https://www.auscope.org.au" target="_blank" '
+                        'rel="noopener noreferrer">AuScope</a> · Data licences vary by survey')
 FOOTER_LEFT = "MTCAT JSON ↗"
 
 
@@ -119,7 +124,8 @@ def _decls(body):
 
 # The header, by zone. index.html writes exactly this; every other surface differs only where the
 # contract says it may: the identity is a link with no heading, Map is a link, the current page's
-# control carries class="active", and the engine's pages root-anchor About.
+# control carries class="active", and the engine's pages root-anchor About. The identity zone is the
+# wordmark and the tagline and nothing else.
 def header_markup(surface, active=None):
     """The header's inner markup for `surface` ("index", "page" or "engine"), active control named."""
     def cls(name, base=None):
@@ -130,7 +136,7 @@ def header_markup(surface, active=None):
     else:
         identity, nav_map = PAGE_IDENTITY, f'<a id="navMap"{cls("navMap")} href="/">Map</a>'
     about = "/about.html" if surface == "engine" else "about.html"
-    return ('<div class="hzone hleft">' + MARK_PAIR + identity + f'<div class="tagline">{TAGLINE}</div></div>'
+    return ('<div class="hzone hleft">' + identity + f'<div class="tagline">{TAGLINE}</div></div>'
             '<div class="hzone hcenter"><nav>' + nav_map +
             f'<a id="navSurveys"{cls("navSurveys")} href="/surveys">Surveys</a>'
             f'<a id="navCollections"{cls("navCollections")} href="/collections">Collections</a></nav>'

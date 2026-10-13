@@ -1,8 +1,10 @@
 """The AuScope mark as a watermark in the SPA map's bottom-right corner.
 
-WHY THE MAP CARRIES IT AS WELL AS THE HEADER. The map is the surface people screenshot into talks and
-reports, and a screenshot of the map carries no header and no footer with it. A corner mark is
-attribution that travels with the image.
+WHY THE MAP CARRIES IT. The map is the surface people screenshot into talks and reports, and a
+screenshot of the map carries no header and no footer with it. A corner mark is attribution that
+travels with the image. It is the one place the site chrome of the map page draws the AuScope mark:
+the header's identity zone carries none, and the lock-up at the header's right is the header's only
+AuScope presence.
 
 TWO VARIANTS, ONE SHOWN. The mark ships in Royal Blue for the light basemap and in white for the dark
 one, and the theme switch shows exactly one: the white mark sits only on a dark ground. The files are
@@ -14,8 +16,10 @@ THE STYLE GUIDE'S RULES, APPLIED AS NUMBERS (AuScope Style Guide, Identity):
     sides. The mark is 48px tall, so its inset is 48px from the map's bottom and right edges, and the
     corner holds nothing else: the collapsed attribution control moved to the top-right corner for
     exactly that reason (tests/test_map_attribution.py) and the legend sits bottom-left.
-  * OPACITY AND TINTING. The guide sets no rule permitting either, so the mark renders at full opacity
-    and in its own colours. FAILS here if an opacity, a filter or a blend is introduced.
+  * OPACITY, AND NOTHING ELSE. The mark renders at 80 per cent opacity, opacity:.8 exactly, and in
+    its own colours: opacity is the one change permitted on it, so both files of the pair keep the
+    fills they were committed with. FAILS here if the opacity drifts from .8 or is declared twice, or
+    if a filter, a blend or any other rule that recolours the mark is introduced.
   * MINIMUM SIZE. The guide states none, so the specified 44px to 48px band stands and the mark takes
     the top of it, which is what a screenshot needs to stay legible after scaling.
 
@@ -53,6 +57,12 @@ PNG_PIXELS = (281, 288)
 # space expressed as a number on the two sides that have an edge near it.
 PLACEMENT = ("position:absolute;right:48px;bottom:48px;height:48px;width:auto;"
              "z-index:500;pointer-events:none")
+# The one change permitted on the mark, and its value: 80 per cent, written as the shortest literal.
+OPACITY = "opacity:.8"
+# The whole rule, placement then opacity, as index.html declares it.
+RULE = f".mapmark{{{PLACEMENT};{OPACITY}}}"
+# What may never touch the mark: anything that recolours it rather than fading it.
+NEVER = ("filter", "mix-blend-mode", "background-blend-mode", "mask", "isolation", "color-scheme")
 # Below the footer's own breakpoint the map is a phone-width strip and a corner mark costs more map
 # than it buys attribution, so it is not drawn at all. The id is what lets the rule outrank the theme
 # switch's display:block on the dark variant.
@@ -107,8 +117,7 @@ def test_the_placement_honours_the_style_guide_clear_space_and_intercepts_nothin
     guide's clear space), if the height leaves the specified 44px to 48px band, if pointer-events:none
     goes, or if the narrow-width rule that hides both variants below 560px goes."""
     text = _text(INDEX)
-    assert f".mapmark{{{PLACEMENT}}}" in text, (
-        f"the watermark must carry the shared placement {PLACEMENT!r}")
+    assert text.count(RULE) == 1, f"the watermark must carry the shared placement, as {RULE!r}"
     assert "top:" not in PLACEMENT and "left:" not in PLACEMENT, "the mark sits in the bottom-right corner"
     assert NARROW in text, "the mark must not be drawn below the 560px breakpoint the footer uses"
     container = re.search(r"#map\{([^}]*)\}", text)
@@ -136,18 +145,37 @@ def test_nothing_else_is_placed_in_the_marks_corner():
     assert "right:" not in legend.group(1), "the legend must not be anchored to the right edge"
 
 
-def test_the_mark_renders_at_full_opacity_and_is_never_tinted():
-    """The style guide sets no rule permitting an opacity or a tint on the icon, and the contract
-    requires full opacity unless it does. FAILS IF an opacity, a filter or a mix-blend-mode is added to
-    the mark: a faded trademark is a modified trademark, and the whole point of the mark is that it
-    survives being screenshotted and rescaled."""
+def _rules_selecting_the_mark(text):
+    """Every rule in index.html's stylesheets whose selector names the watermark, as (selector, body),
+    the narrow-width query's inner rule included."""
+    css = "".join(re.findall(r"<style>(.*?)</style>", text, re.S))
+    return [(sel.strip(), body) for sel, body in re.findall(r"([^{}]*mapmark[^{}]*)\{([^{}]*)\}", css)]
+
+
+def test_the_mark_renders_at_eighty_percent_opacity_and_is_never_tinted():
+    """Opacity is the one change permitted on the mark, and its value is .8 exactly. FAILS IF the
+    .mapmark rule loses the declaration, declares it twice or at any other value (1, .80 written as
+    80%, .75), or if any rule that selects the watermark adds a filter, a blend, a mask or a second
+    opacity: a mark that is faded stays the mark, a mark that is recoloured does not. FAILS too if
+    either image carries an inline style, which would outrank the rule."""
     text = _text(INDEX)
-    block = re.search(r"\.mapmark\{[^}]*\}", text)
-    assert block, "index.html must declare the .mapmark rule"
-    for banned in ("opacity", "filter", "mix-blend-mode"):
-        assert banned not in block.group(0), (
-            f"the mark renders as committed: {banned} is not permitted by the style guide, got "
-            f"{block.group(0)!r}")
+    block = re.findall(r"(?m)^\s*\.mapmark\{([^}]*)\}", text)
+    assert len(block) == 1, f"index.html must declare the .mapmark rule exactly once, found {len(block)}"
+    decls = [d.strip() for d in block[0].split(";") if d.strip()]
+    opacity = [d for d in decls if d.split(":", 1)[0].strip() == "opacity"]
+    assert opacity == [OPACITY], (
+        f"the mark renders at {OPACITY} and nothing else; the rule declares {opacity!r}")
+    rules = _rules_selecting_the_mark(text)
+    assert len(rules) >= 2, f"the base rule and the narrow-width rule must both be read, got {rules!r}"
+    for sel, body in rules:
+        for banned in NEVER:
+            assert banned not in body, (
+                f"the mark keeps its own colours: {banned} is not permitted, got {sel}{{{body}}}")
+        if sel != ".mapmark":
+            assert "opacity" not in body, (
+                f"the mark's opacity is declared once, on .mapmark; {sel} restates it: {body!r}")
+    for img in re.findall(r'<img class="mapmark[^>]*>', text):
+        assert "style=" not in img, f"a watermark image carries an inline style: {img!r}"
 
 
 def test_the_mark_sits_below_leaflets_controls_and_popups():

@@ -1562,10 +1562,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!doc.getElementById("howToUse"), "#howToUse was retired with the 'How AusMT works' panel");
   ok(doc.getElementById("welcomeTour"), "#welcomeTour (the welcome popup's tour button) is missing");
 
-  // THE SPA HEADER'S AuScope MARKS. The header opens with the AuScope mark pair and its right zone is the
-  // AuScope and NCRIS lock-up pair, linked to AuScope; the icon PNG that once closed the right zone stays
-  // withdrawn. Asserted against the REAL index.html DOM rather than its source text, so a mark restored
-  // under different markup is caught by the slot it lands in and not only by the literal it was written as.
+  // THE SPA HEADER'S AuScope PRESENCE. The identity zone is the h1-wrapped wordmark and the tagline and
+  // carries no mark, and the right zone is the AuScope and NCRIS lock-up pair, linked to AuScope; the icon
+  // PNG that once closed the right zone stays withdrawn. Asserted against the REAL index.html DOM rather
+  // than its source text, so a mark restored under different markup is caught by the slot it lands in and
+  // not only by the literal it was written as.
   const _hdr = doc.querySelector("header");
   ok(_hdr, "index.html must carry the site header");
   ok(_hdr.querySelectorAll(".orgmark").length === 0,
@@ -1573,9 +1574,13 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok([..._hdr.querySelectorAll("img")].every(i => (i.getAttribute("src") || "").indexOf("auscope-icon") < 0),
     "no header image may name the AuScope icon PNG: " +
     JSON.stringify([..._hdr.querySelectorAll("img")].map(i => i.getAttribute("src"))));
-  const _brand = [..._hdr.querySelectorAll(".hleft img.brandmark")].map(i => i.getAttribute("src"));
-  ok(JSON.stringify(_brand) === JSON.stringify(["/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg"]),
-    "the identity zone opens with the AuScope mark pair, got " + JSON.stringify(_brand));
+  const _left = _hdr.querySelector(".hleft");
+  const _drawn = _left ? [..._left.querySelectorAll("img, svg, picture, object, embed, canvas")] : [];
+  ok(_left && _drawn.length === 0,
+    "the identity zone carries no mark of any kind, got " + JSON.stringify(_drawn.map(e => e.outerHTML)));
+  const _items = _left ? [..._left.children].map(e => e.tagName.toLowerCase() + "." + e.className) : [];
+  ok(JSON.stringify(_items) === JSON.stringify(["h1.brandh1", "div.tagline"]),
+    "the identity zone is the heading-wrapped wordmark and the tagline alone, got " + JSON.stringify(_items));
   const _right = _hdr.querySelector(".hright");
   ok(_right, "the header keeps its right zone");
   const _outbound = [..._hdr.querySelectorAll("a")].filter(a => (a.getAttribute("href") || "").indexOf("auscope.org.au") >= 0);

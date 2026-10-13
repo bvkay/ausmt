@@ -130,15 +130,19 @@ def test_the_full_artwork_is_offered_separately_from_the_mark():
 
 def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
     """FAILS IF brand.html is an orphan page. It carries the same three-zone header (with the zero
-    basis sides), the AuScope mark that opens every header, and the standard footer."""
+    basis sides), the identity zone every header carries (AusMT's name and tagline, and no mark), and
+    the standard footer."""
     text = _text()
     for zone, rule in ((".hleft", "flex:1 1 0"), (".hcenter", "flex:0 1 auto"), (".hright", "flex:1 1 0")):
         m = re.search(re.escape(zone) + r"\{([^}]*)\}", text)
         assert m and rule in m.group(1), f"brand.html: {zone} must carry {rule}"
-    assert ('<img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" '
-            'width="30" height="30"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" '
-            'alt="AuScope" width="30" height="30">') in text, \
-        "brand.html must open its header with the AuScope mark pair, like every other surface"
+    header = re.sub(r"<!--.*?-->", "", text.split("<header>", 1)[1].split("</header>", 1)[0], flags=re.S)
+    zone = header.split('<div class="hzone hleft">', 1)[1].split('<div class="hzone hcenter">', 1)[0]
+    assert " ".join(zone.split()) == ('<a class="wordmark" href="/">AusMT</a> <div class="tagline">'
+                                      "Australia's Magnetotelluric Data Portal</div> </div>"), \
+        f"brand.html's identity zone is AusMT's name and tagline and no mark, like every other surface: {zone!r}"
+    assert "auscope-mark" not in header and "brandmark" not in text, \
+        "brand.html's header names no AuScope mark; the lock-up at the right is its AuScope presence"
     for nav_id, href in (("navMap", "/"), ("navSurveys", "/surveys"), ("navCollections", "/collections")):
         assert re.search(rf'<a id="{nav_id}" href="{re.escape(href)}"', text), \
             f"brand.html: {nav_id} must point at {href}"

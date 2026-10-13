@@ -155,14 +155,13 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 # no OTHER path may either. The lists below are EXACT and ORDERED, so an extra asset, or the same
 # asset in the wrong slot, fails.
 #
-# The header carries two marks, each as a PAIR of files: the AuScope mark opening the left zone, as
-# two SVGs, and the AuScope and NCRIS lock-up closing the right zone, as the brand kit's colour and
-# white PNGs. Each pair has a file for the light ground and a white one for the dark ground
-# (portal/vendor/auscope/PROVENANCE.md: the white files sit on dark grounds only). The theme rules
-# show one file of each pair, but the markup names all four. The footer fetches nothing: its right
-# region is the page's status and the appearance control, both inline.
-ALLOWED_HEADER_SRCS = ["/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg",
-                       "/vendor/auscope-ncris-colour.png", "/vendor/auscope-ncris-white.png"]
+# The header carries one image, as a PAIR of files: the AuScope and NCRIS lock-up closing the right
+# zone, the brand kit's colour and white PNGs, one for the light ground and one for the dark
+# (portal/vendor/auscope/PROVENANCE.md: the white files sit on dark grounds only). The identity zone
+# carries no mark, so the lock-up is the header's only AuScope presence. The theme rules show one
+# file of the pair, but the markup names both. The footer fetches nothing: its right region is the
+# page's status and the appearance control, both inline.
+ALLOWED_HEADER_SRCS = ["/vendor/auscope-ncris-colour.png", "/vendor/auscope-ncris-white.png"]
 ALLOWED_FOOTER_SRCS = []
 ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
 
@@ -214,7 +213,7 @@ def _page_scripts(page):
 
 def _allowed_srcs(rel, page=""):
     """The exact, ordered src list this page kind may carry, in DOCUMENT order: the head's
-    appearance script, the four header files, then whatever body mark the kind is named for, then
+    appearance script, the two header files, then whatever body mark the kind is named for, then
     the footer's (none), then the scripts the page's body earns (the dialog's three, the hub's one).
     The order is the assertion, so the body mark has to be spliced between the chrome groups rather
     than appended after them."""
@@ -257,12 +256,12 @@ def _assert_scripts_are_files(page, rel):
         f"{rel}: no inline event handler may appear: {_INLINE_HANDLER.search(page).group(0)!r}"
 
 
-def test_index_pages_carry_no_script_and_only_the_identity_mark(built):
+def test_index_pages_carry_no_script_and_only_the_header_lockup(built):
     """FAILS IF an index page grows an inline script or handler, a stylesheet link, or any fetched
-    asset beyond the allow-listed header marks, the appearance script in the head and, on the
+    asset beyond the allow-listed header lock-up pair, the appearance script in the head and, on the
     surveys hub alone, its one same-origin controls script. The entity pages' determinism posture
     (stdlib-only build, everything else inline, no network at build) is inherited, not
-    re-litigated; the marks and the scripts are the named exceptions and every one is same-origin.
+    re-litigated; the lock-up and the scripts are the named exceptions and every one is same-origin.
 
     A ld+json block is data, not code: nothing in it executes, and the hub pages carry one so a
     search result can show the trail back to the root. It is stripped before the guard rather than
@@ -273,7 +272,8 @@ def test_index_pages_carry_no_script_and_only_the_identity_mark(built):
         srcs = _page_srcs(page, rel)
         assert srcs == _allowed_srcs(rel, page), \
             f"{rel}: the only fetched assets may be {_allowed_srcs(rel, page)}, got {srcs}"
-        assert HEADER_MARKS in page, f"{rel}: the header must open with the AuScope mark pair"
+        assert HEADER_LOCKUP in _header(page), f"{rel}: the header's right zone carries the lock-up pair"
+        assert "auscope-mark" not in _header(page), f"{rel}: the header names no AuScope mark"
         assert "rel=\"stylesheet\"" not in page, f"{rel}: styles stay inline"
         assert not any(d in page for d in _DASHES), f"{rel}: no en/em dashes"
 
@@ -853,10 +853,14 @@ AUSCOPE_URL = "https://www.auscope.org.au"
 # navigate the tab it came from. One literal in one order, the portal documents' own spelling.
 NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
 
-# The header's two image pairs, each exactly as portal/index.html writes it.
-HEADER_MARKS = ('<img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" '
-                'alt="AuScope" width="30" height="30"><img class="brandmark theme-dark" '
-                'src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="30" height="30">')
+# The header's identity zone, the wordmark linking the root and the tagline and nothing else, and its
+# one image pair, the lock-up; each exactly as the pages write it.
+HEADER_IDENTITY = ('<div class="hzone hleft">\n'
+                   '    <a class="wordmark" href="/">AusMT</a>\n'
+                   "    <div class=\"tagline\">Australia's Magnetotelluric Data Portal</div>\n"
+                   "  </div>\n")
+# The mark pair's files. No header names them; the collection figure is their one consumer here.
+MARK_FILES = ("/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg")
 HEADER_LOCKUP = (f'<a class="orglockup" href="{AUSCOPE_URL}" {NEW_TAB}>'
                  '<img class="theme-light" src="/vendor/auscope-ncris-colour.png" '
                  'alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" '
@@ -871,7 +875,8 @@ THEMECTL = ('<div class="themectl" role="group" aria-label="Appearance">'
             '<button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div>')
 
 # The theme switch, verbatim on every surface and in this order: the dark file of each pair hidden
-# by default, then the pair swapped under <html data-theme="dark">.
+# by default, then the pair swapped under <html data-theme="dark">. No one-class rule in the sheet
+# sets display on a variant, so nothing ties with the first rule.
 THEME_RULES = ('.theme-dark{display:none}',
                ':root[data-theme="dark"] .theme-light{display:none}',
                ':root[data-theme="dark"] .theme-dark{display:block}')
@@ -949,11 +954,7 @@ def _expected_header(active):
                    for i, lbl, h in (("navMap", "Map", "/"), ("navSurveys", "Surveys", "/surveys"),
                                      ("navCollections", "Collections", "/collections")))
     return ('<header class="site">\n'
-            '  <div class="hzone hleft">\n'
-            f"    {HEADER_MARKS}\n"
-            '    <a class="wordmark" href="/">AusMT</a>\n'
-            "    <div class=\"tagline\">Australia's Magnetotelluric Data Portal</div>\n"
-            "  </div>\n"
+            f"  {HEADER_IDENTITY}"
             '  <div class="hzone hcenter">\n'
             "    <nav>\n"
             f"{tabs}"
@@ -995,10 +996,10 @@ def _kinds(built):
 
 
 def test_every_static_page_carries_the_one_global_header(built):
-    """The SPA header is the site's ONE header: the AuScope mark pair, the AusMT wordmark linking
-    the root and the tagline on the left; the three filled application tabs in the centre with the
-    CURRENT page's tab active and About beside them as the smaller outlined control; the AuScope and
-    NCRIS lock-up on the right. The whole element is held character for character, so a page kind
+    """The SPA header is the site's ONE header: the AusMT wordmark linking the root and the tagline on
+    the left, and no mark; the three filled application tabs in the centre with the CURRENT page's
+    tab active and About beside them as the smaller outlined control; the AuScope and NCRIS lock-up
+    on the right, the header's only AuScope presence. The whole element is held character for character, so a page kind
     that activates the wrong tab, points a tab elsewhere, grows a control or loses one fails here.
 
     Contribute is not a header control on any surface: add-survey.html stays served, and About links
@@ -1101,13 +1102,18 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
         # the new-tab behaviour reads as "this link leaves AusMT" and nothing else.
         assert "target=" not in left, f"{rel}: an in-site footer link stays in this tab: {left!r}"
 
-        # CENTRE. The string, carrying exactly one link: the AuScope address under its own URL text.
+        # CENTRE. The string, carrying exactly one link: the AuScope address under the
+        # organisation's name, which is never printed as an address.
         centre = foot.split('<div class="fzone fcenter">', 1)[1].split("</div>", 1)[0]
-        assert centre == ("AusMT is enabled by AuScope &#183; "
-                          f'<a href="{AUSCOPE_URL}" {NEW_TAB}>www.auscope.org.au</a> &#183; '
+        assert centre == ("AusMT is enabled by "
+                          f'<a href="{AUSCOPE_URL}" {NEW_TAB}>AuScope</a> &#183; '
                           "Data licences vary by survey"), \
             f"{rel}: centre region is not the acknowledgement line: {centre!r}"
         assert centre.count("<a") == 1, f"{rel}: the centre region carries exactly one link"
+        assert foot.count(f'href="{AUSCOPE_URL}"') == 1, \
+            f"{rel}: the footer carries exactly one anchor to {AUSCOPE_URL}"
+        assert "www.auscope.org.au" not in re.sub(r"<[^>]+>", "", foot), \
+            f"{rel}: the address is the link's target, never printed as text: {centre!r}"
         assert "&#169;" not in foot and "contributors" not in foot, \
             f"{rel}: the copyright clause stays out of the footer: {foot!r}"
 
@@ -1302,23 +1308,26 @@ def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
             f"{rel}: icon links must be same-origin portal paths, got {hrefs}"
 
 
-def test_every_page_kind_carries_the_auscope_mark_pair_beside_the_wordmark(built):
-    """The identity block. Every surface of the site opens with the same mark: the SPA header and
-    every generated page. FAILS IF a page kind renders the wordmark without the mark pair, puts the
-    pair anywhere but the header's left identity zone, sizes it off the shared rule, or loses a theme
-    rule: without them both files of each pair would paint at once, the white one on the light
-    ground. The rules must FOLLOW .brandmark, which states display:block at the same specificity,
-    and no rule that selects a variant image may set display at a specificity above the switch."""
+def test_every_page_kind_opens_its_identity_zone_with_the_wordmark_and_no_mark(built):
+    """The identity block. Every surface of the site carries the same identity zone: AusMT's wordmark
+    linking the root, then the tagline, and nothing else. FAILS IF a page kind puts an image of any
+    kind in the zone, names either AuScope mark file anywhere in its header, keeps a .brandmark rule
+    in its sheet (nothing carries the class, and a rule left behind invites the element back), or
+    loses a theme rule: without the switch both files of the lock-up pair would paint at once, the
+    white one on the light ground. The three theme rules are each declared once and in order, and
+    no rule that selects a variant image may set display at a specificity above the switch."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        assert ('<div class="hzone hleft">\n'
-                f"    {HEADER_MARKS}\n"
-                '    <a class="wordmark" href="/">AusMT</a>\n') in _header(page), \
-            f"{rel}: the mark pair must open the header's identity zone, beside the wordmark"
-        assert page.count(HEADER_MARKS) == 1, f"{rel}: the mark pair appears once, in the header"
+        head = _header(page)
+        assert HEADER_IDENTITY in head, \
+            f"{rel}: the identity zone is the wordmark and the tagline, and nothing else"
+        zone = head.split('<div class="hzone hleft">', 1)[1].split('<div class="hzone hcenter">', 1)[0]
+        for tag in ("<img", "<svg", "<picture", "<object", "<embed", "<canvas", "style="):
+            assert tag not in zone, f"{rel}: the identity zone carries no mark, found {tag!r}: {zone!r}"
+        for src in MARK_FILES:
+            assert src not in head, f"{rel}: the header names no AuScope mark, found {src}"
         css = _css(page)
-        assert css.count(".brandmark{height:30px;width:30px;display:block;flex:none}") == 1, \
-            f"{rel}: the mark must carry the shared sizing rule the SPA header uses"
+        assert ".brandmark" not in css, f"{rel}: the .brandmark rule has nothing to style"
         # Anchored to the line: the lock-up's own default, below, carries the first rule's text
         # inside a longer selector and must not answer for it.
         found = [[m.start() for m in re.finditer(r"(?m)^[ \t]*" + re.escape(rule) + r"$", css)]
@@ -1327,13 +1336,11 @@ def test_every_page_kind_carries_the_auscope_mark_pair_beside_the_wordmark(built
             f"{rel}: each of the three theme rules is declared exactly once: {found}"
         at = [f[0] for f in found]
         assert at == sorted(at), f"{rel}: the three theme rules must be in order: {at}"
-        assert at[0] > css.index(".brandmark{"), \
-            f"{rel}: the theme rules must follow .brandmark, which ties with them on specificity"
         sizing = re.search(r"\.orglockup img\{([^}]*)\}", css)
         assert sizing and "display" not in sizing.group(1), \
             f"{rel}: the lock-up sizing rule must not set display, or it outranks the theme switch"
         assert "/vendor/brand/ausmt-mark.svg" not in page, \
-            f"{rel}: the AuScope mark opens the header; the AusMT mark is not chrome on this tier"
+            f"{rel}: the AusMT mark is not chrome on this tier"
 
 
 # The parent-organisation mark that closed a header's right zone as an icon, WITHDRAWN on every
@@ -1373,8 +1380,8 @@ def test_no_page_kind_carries_the_auscope_org_mark_in_its_header(built):
 
 
 # The site's raster AuScope icon. It stays committed for the consumers that need it (the docs
-# sidebar copy and the social card are made from it), and no page in this tier names it: the chrome
-# and the collection figure draw the vector mark pair under /vendor/auscope/.
+# sidebar copy and the social card are made from it), and no page in this tier names it: the header
+# draws the lock-up PNGs and the collection figure the vector mark pair under /vendor/auscope/.
 LEGACY_ORG_ASSETS = ("auscope-icon-white.png",)
 
 # The raster colour icon, which this tier must NOT grow either. It is committed and unreferenced by
@@ -1392,14 +1399,15 @@ def test_no_page_kind_draws_the_spa_maps_colour_watermark(built):
             f"{rel}: the AuScope colour icon is unreferenced by the site chrome and belongs to no "
             "page in this tier; the collection figure draws the vector mark pair")
 
-# How often each AuScope file is NAMED per page kind: once in the header for every kind, and the mark
-# pair once more on the collection page, whose member-footprint figure carries it as a caption.
-# The mark pin above counts the whole literal and the src allow-list holds each kind's src
-# attributes exactly and in order; neither bounds how often a file is NAMED, so a url() in the inline
-# CSS or a preload link would carry it a second time and pass both.
+# How often each AuScope file is NAMED per page kind. The mark pair is named by no header, so never on
+# most kinds, and once on the collection page, whose member-footprint figure carries it as a caption.
+# The identity pin above reads the header and the src allow-list holds each kind's src attributes
+# exactly and in order; neither bounds how often a file is NAMED, so a url() in the inline CSS or a
+# preload link would carry it a second time and pass both.
 VECTOR_ASSETS = ("auscope/auscope-mark.svg", "auscope/auscope-mark-white.svg")
-VECTOR_ASSET_PER_KIND = {"collections/idxcoll.html": {"auscope/auscope-mark.svg": 2,
-                                                      "auscope/auscope-mark-white.svg": 2}}
+VECTOR_ASSET_DEFAULT = 0
+VECTOR_ASSET_PER_KIND = {"collections/idxcoll.html": {"auscope/auscope-mark.svg": 1,
+                                                      "auscope/auscope-mark-white.svg": 1}}
 # The lock-up pair, the brand kit's PNGs, named exactly once on every page kind: in the header and
 # nowhere else. Counted by file name, so a url() or a preload in any quoting form counts too.
 RASTER_ASSETS = ("auscope-ncris-colour.png", "auscope-ncris-white.png")
@@ -1420,14 +1428,15 @@ def test_no_page_kind_names_the_raster_auscope_icon(built):
 
 def test_no_page_kind_names_an_auscope_file_beyond_the_slots_that_keep_it(built):
     """FAILS IF a page kind names an AuScope file, a vector mark or a lock-up PNG, more often than
-    the slots it is entitled to, or loses one. The figure mark is drawn into a panel and the header
-    marks into zones, so on either surface a careless edit adds rather than replaces, and a page
-    naming a file again is a mark returning by some other markup while every spelling-scoped pin
-    above still passes."""
+    the slots it is entitled to, or loses one. The figure mark is drawn into a panel and the
+    lock-up into the header's right zone, so on either surface a careless edit adds rather than
+    replaces, and a page naming a file again is a mark returning by some other markup while every
+    spelling-scoped pin above still passes. A mark file named on a kind with no figure is the
+    header's mark coming back."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         for asset in VECTOR_ASSETS:
-            want = VECTOR_ASSET_PER_KIND.get(rel, {}).get(asset, 1)
+            want = VECTOR_ASSET_PER_KIND.get(rel, {}).get(asset, VECTOR_ASSET_DEFAULT)
             got = len(re.findall(re.escape(asset) + r'"', page))
             assert got == want, (
                 f"{rel}: {asset} may be named {want} time(s) on this page kind; found {got}")

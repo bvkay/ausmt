@@ -22,9 +22,10 @@ Each assertion states its failure criterion:
 
   * REGIONS - FAILS if a surface does not carry exactly three footer regions, or if a region holds
     something belonging to another.
-  * STRINGS - FAILS if a surface's centre line drifts from the wording, if the copyright clause comes
-    back, if the left link's label stops being "MTCAT JSON" with the leaves-the-site arrow, or if a
-    portal page's left link loses class="apilink" or its title.
+  * STRINGS - FAILS if a surface's centre line drifts from the wording or from its markup (the
+    organisation's name is the line's one link, and the address never appears as text), if the
+    copyright clause comes back, if the left link's label stops being "MTCAT JSON" with the
+    leaves-the-site arrow, or if a portal page's left link loses class="apilink" or its title.
   * TARGETS - FAILS if the surfaces stop agreeing on where the MTCAT link points. The SPA is served
     from the portal root and writes it relative, the generated pages cannot, so the pin holds the
     ROOT-RELATIVE form of both against each other.
@@ -60,7 +61,7 @@ from pathlib import Path
 
 import pytest
 
-from chrome_contract import FOOTER_CENTRE, THEMECTL, entities, flat
+from chrome_contract import FOOTER_CENTRE, FOOTER_CENTRE_MARKUP, THEMECTL, entities, flat
 from engine_chrome import function_source, site_footer
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
@@ -71,12 +72,15 @@ DOT = "·"
 
 # The three regions, as the strings a reader sees.
 CENTRE = FOOTER_CENTRE
+# The centre's one link reads as the organisation's name; the address it opens is never printed.
+CENTRE_LINK_TEXT = "AuScope"
+ADDRESS_TEXT = "www.auscope.org.au"
 LEFT_LABEL = "MTCAT JSON"
 ARROW = "↗"
 MTCAT = "/data/mtcat.json"
 
-# THE ONE EXTERNAL TARGET. The centre's URL text navigates here, and it is the footer's only link off
-# the site. It governs NAVIGATION ONLY: _no_external_fetch below holds the other half, that no footer
+# THE ONE EXTERNAL TARGET. The organisation's name in the centre line navigates here, and it is the
+# footer's only link off the site. It governs NAVIGATION ONLY: _no_external_fetch below holds the other half, that no footer
 # on any surface FETCHES anything, from any host.
 _EXTERNAL_NAV = ("https://www.auscope.org.au",)
 
@@ -308,9 +312,9 @@ def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(
     label or the centre line drifts, or if the right region is anything but the surface's status
     followed by the appearance control.
 
-    Non-vacuous in every half: the previous footer fails the left label (it read "Machine-readable
-    record (MTCAT JSON)"), the centre (it carried the copyright clause) and the right region (it held
-    the lock-up)."""
+    Non-vacuous in every half: the earlier footers fail the left label (it read "Machine-readable
+    record (MTCAT JSON)"), the centre (it carried the copyright clause, and then the address as the
+    link's text) and the right region (it held the lock-up)."""
     regions = _regions(where, _foot(where))
     link = re.fullmatch(_ENGINE_LEFT_LINK if where == ENGINE else _LEFT_LINK, regions["left"], re.S)
     assert link, f"{where}: the left zone holds the MTCAT link and nothing else: {regions['left']!r}"
@@ -325,9 +329,14 @@ def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(
     assert centre == CENTRE, f"{where}: centre must read {CENTRE!r}, got {centre!r}"
     clinks = re.findall(r'<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', regions["centre"], re.S)
     assert [(h, " ".join(t.split())) for h, t in clinks] == [
-        (_EXTERNAL_NAV[0], "www.auscope.org.au")], (
-        f"{where}: the acknowledgement carries exactly one link, the AuScope address under its "
-        f"own URL text: {regions['centre']!r}")
+        (_EXTERNAL_NAV[0], CENTRE_LINK_TEXT)], (
+        f"{where}: the acknowledgement carries exactly one link, the AuScope address under the "
+        f"organisation's name: {regions['centre']!r}")
+    assert flat(regions["centre"]) == FOOTER_CENTRE_MARKUP, (
+        f"{where}: the centre must be the contract's markup, character for character once "
+        f"references are resolved:\n  got  {flat(regions['centre'])!r}\n  want {FOOTER_CENTRE_MARKUP!r}")
+    assert ADDRESS_TEXT not in re.sub(r"<[^>]+>", "", regions["centre"]), (
+        f"{where}: the address is the link's target, never printed as text: {regions['centre']!r}")
 
     right = flat(regions["right"])
     assert right == flat(_expected_right(where)), (
@@ -662,9 +671,11 @@ def test_every_surface_returns_the_footer_to_flow_below_the_measured_width():
 
 @pytest.mark.parametrize("where", SURFACES)
 def test_the_centre_line_is_bold_on_every_surface(where):
-    """THE BOLD CENTRE, as ONE declaration on the zone. FAILS if any surface's centre zone loses the
-    weight, or if another zone rule (or the link rule) takes a weight of its own. The control's
-    pressed state carries a weight too, and that one is the control's state, not the line's."""
+    """THE BOLD CENTRE, as ONE declaration on the zone. The linked organisation's name inherits it,
+    so the whole line reads at one weight. FAILS if any surface's centre zone loses the weight, or if
+    another zone rule (or the link rule) takes a weight of its own, which would set the name apart
+    from its sentence. The control's pressed state carries a weight too, and that one is the
+    control's state, not the line's."""
     rules = _rule_set(where, _text(where))
     assert _CENTRE_WEIGHT in rules[".fcenter"], (
         f"{where}: the centre zone must declare {_CENTRE_WEIGHT}: {rules['.fcenter']!r}")
@@ -687,8 +698,8 @@ def _anchors(where, footer_html):
 
 @pytest.mark.parametrize("where", SURFACES)
 def test_the_auscope_anchor_opens_in_a_new_tab_on_every_surface(where):
-    """THE EXTERNAL ANCHOR LEAVES THE TAB, and hands the opened page nothing. The centre sentence's
-    URL text is the footer's one link to the AuScope address, and it carries
+    """THE EXTERNAL ANCHOR LEAVES THE TAB, and hands the opened page nothing. The organisation's
+    name in the centre sentence is the footer's one link to the AuScope address, and it carries
     target="_blank" rel="noopener noreferrer" in that one spelling on all seven surfaces.
 
     FAILS if a surface loses either attribute, spells the pair differently, links the address more
@@ -697,8 +708,8 @@ def test_the_auscope_anchor_opens_in_a_new_tab_on_every_surface(where):
     anchors = _anchors(where, _foot(where))
     external = [tag for href, tag in anchors if href in _EXTERNAL_NAV]
     assert len(external) == 1, (
-        f"{where}: the footer carries exactly one anchor to {_EXTERNAL_NAV[0]}, the centre "
-        f"sentence's URL text; found {len(external)}: {external!r}")
+        f"{where}: the footer carries exactly one anchor to {_EXTERNAL_NAV[0]}, the "
+        f"organisation's name in the centre sentence; found {len(external)}: {external!r}")
     assert _NEW_TAB in external[0], (
         f"{where}: an anchor that leaves the site opens in a new tab and hands it no opener; "
         f"expected {_NEW_TAB!r} in {external[0]!r}")
