@@ -102,9 +102,8 @@ INDEX_STATUS = ('<div class="counts" id="footerCounts"><span id="countSlot" titl
 # A generated page's status, as a probe the engine's footer must carry verbatim before the control.
 ENGINE_STATUS = '<span class="counts">probe status</span>'
 
-# The white lock-up that once filled the right region. It is now the header's theme-dark lock-up,
-# committed as its rights holder published it, and no footer names it; portal/vendor/README.md records
-# the same facts.
+# The white lock-up, the header's theme-dark variant, committed as its rights holder published it; no
+# footer names it, and portal/vendor/README.md records the same facts.
 LOGO_SRC = "/vendor/auscope-ncris-white.png"
 LOGO_SHA256 = "595a564ece1151d94347331c1521381df987da437aa3080cff47a5280cf818f6"
 LOGO_BYTES = 35628
@@ -358,10 +357,9 @@ def test_the_surfaces_agree_on_where_the_footer_points():
 
 
 def test_the_white_lockup_png_stays_committed_unaltered_and_out_of_every_footer():
-    """The white PNG lock-up left the footer for the header's right zone, where it is the theme-dark
-    variant, and it is committed as its rights holder published it. FAILS if the file is missing or
-    its bytes change (a resize, a re-encode, a recolour, a metadata strip), or if any footer names it
-    again."""
+    """The white PNG lock-up is the header's theme-dark variant and is committed as its rights holder
+    published it. FAILS if the file is missing or its bytes change (a resize, a re-encode, a
+    recolour, a metadata strip), or if any footer names it again."""
     path = ROOT / LOGO_SRC.lstrip("/")
     assert path.is_file(), f"{LOGO_SRC} stays committed"
     raw = path.read_bytes()

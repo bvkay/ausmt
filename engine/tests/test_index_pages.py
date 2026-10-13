@@ -1408,8 +1408,8 @@ RASTER_ASSETS = ("auscope-ncris-colour.png", "auscope-ncris-white.png")
 def test_no_page_kind_names_the_raster_auscope_icon(built):
     """FAILS IF any generated page names the raster AuScope icon, in any slot. It would also fail the
     src allow-list, but only as an unexplained count; this says which file and why it may not be
-    here. The white lock-up PNG, which this pin once kept off every page as well, is now the header's
-    theme-dark lock-up on every page, held below by its count and by the header literal."""
+    here. The white lock-up PNG is the header's theme-dark lock-up on every page, held below by its
+    count and by the header literal."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         for asset in LEGACY_ORG_ASSETS:
@@ -1420,9 +1420,10 @@ def test_no_page_kind_names_the_raster_auscope_icon(built):
 
 def test_no_page_kind_names_an_auscope_file_beyond_the_slots_that_keep_it(built):
     """FAILS IF a page kind names an AuScope file, a vector mark or a lock-up PNG, more often than
-    the slots it is entitled to, or loses one. The figure mark is drawn into a panel and the header marks into zones, so on
-    either surface a careless edit adds rather than replaces, and a page naming a file again is a
-    mark returning by some other markup while every spelling-scoped pin above still passes."""
+    the slots it is entitled to, or loses one. The figure mark is drawn into a panel and the header
+    marks into zones, so on either surface a careless edit adds rather than replaces, and a page
+    naming a file again is a mark returning by some other markup while every spelling-scoped pin
+    above still passes."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         for asset in VECTOR_ASSETS:
