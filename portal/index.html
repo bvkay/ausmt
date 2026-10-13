@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AusMT - Australia's Magnetotelluric (MT) Data Portal</title>
+<title>AusMT: Magnetotelluric Data Discovery &amp; Access</title>
 <script src="/src/theme.js"></script>
 <!-- og:url and og:image must be ABSOLUTE: preview crawlers resolve nothing relative. The card is a
      static 1200x630 PNG in vendor/, regenerated alongside any rebrand. -->
@@ -12,7 +12,7 @@
 <link rel="canonical" href="https://ausmt.auscope.org.au/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AusMT">
-<meta property="og:title" content="AusMT - Australia's Magnetotelluric Data Portal">
+<meta property="og:title" content="AusMT: Magnetotelluric Data Discovery &amp; Access">
 <meta property="og:description" content="Discover, explore and access magnetotelluric data from across Australia, with survey and station metadata, provenance and links to available datasets.">
 <meta property="og:url" content="https://ausmt.auscope.org.au/">
 <meta property="og:image" content="https://ausmt.auscope.org.au/vendor/social-card.png">
@@ -46,7 +46,7 @@
 }
 </script>
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="AusMT - Australia's Magnetotelluric Data Portal">
+<meta name="twitter:title" content="AusMT: Magnetotelluric Data Discovery &amp; Access">
 <meta name="twitter:image" content="https://ausmt.auscope.org.au/vendor/social-card.png">
 <script src="src/analytics-shim.js"></script><!-- external (not inline) so CSP stays script-src 'self' -->
 <link rel="icon" href="/favicon.ico" sizes="any">
@@ -120,7 +120,7 @@
   #map .leaflet-tile-pane{filter:saturate(.35) brightness(1.04)}
   .maplock{position:absolute;right:44px;bottom:44px;height:44px;width:auto;z-index:500;pointer-events:none;opacity:.8}
   /* Anchored on the map's id so it outranks the theme switch that shows the dark variant. */
-  @media(max-width:560px){#map .maplock{display:none}}
+  @media(max-width:900px){#map .maplock{display:none}}
   .mapattrib{position:relative;z-index:900;display:flex;flex-direction:row-reverse;align-items:flex-start;gap:4px}
   .mapattrib-toggle{flex:none;width:20px;height:20px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--text);font-family:var(--sans);font-size:12px;font-style:italic;line-height:1;cursor:pointer}
   .mapattrib-toggle:hover{border-color:var(--accent)}
@@ -587,7 +587,7 @@
     <!-- The AuScope mark, then AusMT's name set at the AuScope logo's proportions. See docs: portal
          internals, index.html. -->
     <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="36" height="36">
-    <h1 class="brandh1"><span class="wordmark"><b>Aus</b>MT</span><span class="visually-hidden"> - Australia's Magnetotelluric (MT) Data Portal</span></h1>
+    <h1 class="brandh1"><span class="wordmark"><b>Aus</b>MT</span><span class="visually-hidden">: Magnetotelluric Data Discovery &amp; Access</span></h1>
   </div>
   <div class="hzone hcenter">
     <nav>
@@ -601,7 +601,7 @@
          into the guided tour, which About links. -->
     <a class="about" href="about.html">About</a>
   </div>
-  <div class="hzone hright"><div class="tagline">Australia's Magnetotelluric Data Portal</div></div>
+  <div class="hzone hright"><div class="tagline">Magnetotelluric Data Discovery &amp; Access</div></div>
 </header>
 
 <main>
@@ -784,7 +784,7 @@
        aria-labelledby="introWelcomeHeading" aria-describedby="introWelcomeText">
     <div class="introwelcome-box" tabindex="-1">
       <h2 class="introwelcome-heading" id="introWelcomeHeading">Welcome to AusMT</h2>
-      <p class="introwelcome-text" id="introWelcomeText">Explore Australia's national magnetotelluric data portal</p>
+      <p class="introwelcome-text" id="introWelcomeText">Discover and access magnetotelluric data from Australia and from Australian surveys abroad</p>
       <div class="introwelcome-actions">
         <button type="button" class="primary" id="welcomeTour">Take the 2-minute tour (recommended)</button>
         <button type="button" id="welcomeBrowse">Browse immediately</button>

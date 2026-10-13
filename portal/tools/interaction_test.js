@@ -1334,7 +1334,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // Verbatim copy.
   ok(doc.getElementById("introWelcomeHeading").textContent.trim() === "Welcome to AusMT",
     "welcome heading copy wrong, got: " + JSON.stringify(doc.getElementById("introWelcomeHeading").textContent));
-  ok(doc.getElementById("introWelcomeText").textContent.trim() === "Explore Australia's national magnetotelluric data portal",
+  ok(doc.getElementById("introWelcomeText").textContent.trim() === "Discover and access magnetotelluric data from Australia and from Australian surveys abroad",
     "welcome body copy wrong, got: " + JSON.stringify(doc.getElementById("introWelcomeText").textContent));
   // The "How AusMT works" panel (#introOverlay), its three tiles and the header item that opened them are all gone.
   // Nothing on the page may carry those ids or classes: an orphaned panel is dead markup a reader can
@@ -5732,7 +5732,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     const _m = sel => { const el = doc.querySelector(sel); return el ? (el.getAttribute("content") || "") : null; };
     ok((_m('meta[name="description"]') || "").length > 60,
       "og: index.html must ship a real meta description, got " + JSON.stringify(_m('meta[name="description"]')));
-    ok(_m('meta[property="og:title"]') === "AusMT - Australia's Magnetotelluric Data Portal",
+    ok(_m('meta[property="og:title"]') === "AusMT: Magnetotelluric Data Discovery & Access",
       "og: og:title must carry the portal title, got " + JSON.stringify(_m('meta[property="og:title"]')));
     ok((_m('meta[property="og:description"]') || "").length > 60,
       "og: og:description must be a real sentence, got " + JSON.stringify(_m('meta[property="og:description"]')));

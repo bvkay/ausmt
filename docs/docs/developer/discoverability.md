@@ -128,7 +128,7 @@ active.
   never sits on the light ground. These two files are the header's only fetched assets.
 - Centre: Map, Surveys and Collections, then About. There is no Contribute control in any header;
   `add-survey.html` stays served and About links it from its body.
-- Right: the tagline, "Australia's Magnetotelluric Data Portal", at 14px on one line. Where its
+- Right: the tagline, "Magnetotelluric Data Discovery & Access", at 14px on one line. Where its
   zone is narrower than the line, from 761px to about 976px of viewport, it ends in an ellipsis
   inside the zone rather than spilling over the About control.
 

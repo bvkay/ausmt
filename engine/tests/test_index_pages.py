@@ -863,8 +863,8 @@ HEADER_IDENTITY = ('<div class="hzone hleft">\n'
                    f"    {HEADER_MARKS}\n"
                    '    <a class="wordmark" href="/"><b>Aus</b>MT</a>\n'
                    "  </div>\n")
-HEADER_RIGHT = ('<div class="hzone hright"><div class="tagline">Australia\'s Magnetotelluric Data '
-                'Portal</div></div>')
+HEADER_RIGHT = ('<div class="hzone hright"><div class="tagline">Magnetotelluric Data Discovery &amp; Access'
+                '</div></div>')
 # The footer's lock-up, after the page's status in its right region.
 FOOTER_LOCKUP = (f'<a class="orglockup" href="{AUSCOPE_URL}" {NEW_TAB}>'
                  '<img class="theme-light" src="/vendor/auscope-ncris-colour.png" '

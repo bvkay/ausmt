@@ -15,6 +15,7 @@ for the crawler and clutter for the reader.
   * THE TOUR URL IS THE SAME DOCUMENT. /?tour=1 is a query on the root, read by the application from
     location.search; it selects no second file, so the one heading covers both URLs.
 """
+import html
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -25,9 +26,9 @@ ROOT = Path(__file__).resolve().parents[1]          # portal/
 INDEX = ROOT / "index.html"
 MAIN_JS = ROOT / "src" / "main.js"
 
-H1_TEXT = "AusMT - Australia's Magnetotelluric (MT) Data Portal"
+H1_TEXT = "AusMT: Magnetotelluric Data Discovery & Access"
 WORDMARK = '<span class="wordmark"><b>Aus</b>MT</span>'
-HIDDEN_REST = " - Australia's Magnetotelluric (MT) Data Portal"
+HIDDEN_REST = ": Magnetotelluric Data Discovery &amp; Access"
 OTHER_PAGES = ("about.html", "add-survey.html", "brand.html", "releases.html", "404.html")
 
 _VOID = {"img", "br", "hr", "input", "meta", "link", "source", "area", "base", "col", "embed",
@@ -103,7 +104,7 @@ def test_the_h1_wraps_the_wordmark_and_hides_the_rest_of_its_text():
 def test_the_title_and_the_heading_agree():
     """FAILS IF the title and the h1 name the page differently. The acronym is in both or in
     neither: two names for one document is what a crawler reports as a conflict."""
-    title = re.search(r"<title>(.*?)</title>", INDEX.read_text(encoding="utf-8")).group(1)
+    title = html.unescape(re.search(r"<title>(.*?)</title>", INDEX.read_text(encoding="utf-8")).group(1))
     assert title == H1_TEXT, f"the title must read {H1_TEXT!r}, got {title!r}"
 
 

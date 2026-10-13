@@ -828,7 +828,7 @@ def _site_header(active="") -> str:
             '    </nav>\n'
             '    <a class="about" href="/about.html">About</a>\n'
             '  </div>\n'
-            '  <div class="hzone hright"><div class="tagline">Australia\'s Magnetotelluric Data Portal</div></div>\n'
+            '  <div class="hzone hright"><div class="tagline">Magnetotelluric Data Discovery &amp; Access</div></div>\n'
             "</header>\n")
 
 

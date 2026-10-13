@@ -41,7 +41,7 @@ the light theme and in white on the dark. The name beside it is set at the AuSco
 proportions, scaled to that mark: the gap from mark to name is the logo's, 12px; the type is 24.5px,
 so its capitals stand 0.48 of the mark's height; and "Aus" is heavy against a light "MT", as "Au" is
 heavy against "Scope" in AuScope's own logo. The two read as a pair, an AuScope service and its name.
-The tagline, "Australia's Magnetotelluric Data Portal", sits on one line at the right of the header;
+The tagline, "Magnetotelluric Data Discovery & Access", sits on one line at the right of the header;
 where a narrow window leaves it less room than that line, it ends in an ellipsis rather than running
 under the controls. The header is 57px tall on any window wider than 760px, the height its tabs set.
 

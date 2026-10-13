@@ -61,10 +61,10 @@ MARK_PAIR = (f'<img class="brandmark theme-light" src="{MARK_LIGHT}" alt="AuScop
 # font file, so a reader without the face installed sees the --sans stack.
 WORDMARK_FAMILY = "'Calibre',var(--sans)"
 NAME = "<b>Aus</b>MT"
-TAGLINE = "Australia's Magnetotelluric Data Portal"
-H1_TEXT = "AusMT - Australia's Magnetotelluric (MT) Data Portal"
+TAGLINE = "Magnetotelluric Data Discovery &amp; Access"
+H1_TEXT = "AusMT: Magnetotelluric Data Discovery & Access"
 INDEX_IDENTITY = (f'<h1 class="brandh1"><span class="wordmark">{NAME}</span>'
-                  '<span class="visually-hidden"> - Australia\'s Magnetotelluric (MT) Data Portal</span></h1>')
+                  '<span class="visually-hidden">: Magnetotelluric Data Discovery &amp; Access</span></h1>')
 PAGE_IDENTITY = f'<a class="wordmark" href="/">{NAME}</a>'
 
 # The identity zone's rules, verbatim on every surface. The mark's rule sets display, so it ties with

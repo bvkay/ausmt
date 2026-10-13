@@ -70,7 +70,7 @@ NEVER = ("filter", "mix-blend-mode", "background-blend-mode", "mask", "isolation
 # Below the footer's own breakpoint the map is a phone-width strip and a corner lock-up costs more map
 # than it buys attribution, so it is not drawn at all. The id is what lets the rule outrank the theme
 # switch's display:block on the dark variant.
-NARROW = "@media(max-width:560px){#map .maplock{display:none}}"
+NARROW = "@media(max-width:900px){#map .maplock{display:none}}"
 # The class the corner's mark pair carried. It is retired from every surface.
 RETIRED_CLASS = "mapmark"
 

@@ -73,7 +73,7 @@ engine's sheets.
 #### The right zone is the tagline, on one line
 
 ```text
-The right zone is the tagline, "Australia's Magnetotelluric Data Portal", at 14px in --muted, on
+The right zone is the tagline, "Magnetotelluric Data Discovery & Access", at 14px in --muted, on
 one line. The zone is zero-basis, so a nowrap line wider than the zone would spill out of its left
 edge and paint over the centre zone's right end, 92px of it at 761px of viewport: all of the About
 control and the end of the Collections tab. The tagline also takes min-width:0, overflow:hidden and
@@ -119,7 +119,7 @@ with no filter, tint or blend. pointer-events:none and a z-index below Leaflet's
 layers keep it out of hit testing, and the legend stacks above it. The lock-up is about 260px wide,
 so a narrow map brings the expanded legend to it: measured with the rail open, the legend overlaps
 the lock-up's left end from 761px to about 852px of viewport, and the clear space against the
-legend holds from about 897px. Below 560px neither variant is drawn, by a rule anchored on #map so
+legend holds from about 897px. Below 900px neither variant is drawn, so the two never meet, by a rule anchored on #map so
 it outranks the theme switch. The map page's footer carries no lock-up of its own.
 ```
 
