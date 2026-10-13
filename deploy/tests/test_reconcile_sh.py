@@ -1218,3 +1218,179 @@ def test_prune_keeps_the_newest_named_build_when_mtimes_disagree(tmp_path):
     assert "20260109T000000Z" in left, f"the name-newest build was pruned; left={left}"
     assert r.returncode == 1, f"the hold must still fire; got {r.returncode}: {r.stdout}{r.stderr}"
     assert not tree["marker"].exists(), "the hold's target was pruned and the loop resumed"
+
+
+# --------------------------------------------------------------------------------------------------
+# The serving replica. With AUSMT_PUBLISH_TARGET set, a pass that settles what the box serves
+# (rebuilt, noop, paused, pinned) ends by handing the served build to the publish step
+# (AUSMT_RECONCILE_PUBLISH is its shim), and the status document says how that went: ok, failed, or
+# skipped when no replica is configured or the pass settled nothing (sync_failed, failed,
+# untracked_blocked). A replica that already serves the build answers the sender with a no-op, so
+# publishing on a noop pass is what lets a replica that missed a publish catch up, and publishing on
+# a pinned pass is what carries a curator rollback to the public replica.
+# --------------------------------------------------------------------------------------------------
+
+_PUBLISH_TARGET = "publish@ausmt-serve"
+
+
+def _publish_shim(tree: dict, tmp_path: Path) -> dict:
+    """A publish shim that appends a line to the same order file the make shim writes, so the
+    publish is observed happening AFTER the rebuild; PUBLISH_FAIL=1 makes it fail loudly."""
+    order = tree["marker"]
+    shim = tmp_path / "publish-shim.sh"
+    shim.write_text(
+        "#!/bin/sh\n"
+        f'echo publish >> "{order.as_posix()}"\n'
+        'echo "publish: target=$AUSMT_PUBLISH_TARGET"\n'
+        'if [ "${PUBLISH_FAIL:-0}" = "1" ]; then\n'
+        '  echo "publish: FAILED at step rsync-build: connection refused" >&2; exit 1\n'
+        "fi\n"
+        'echo "publish: done"\n',
+        encoding="utf-8")
+    shim.chmod(0o755)
+    return {"AUSMT_RECONCILE_PUBLISH": f"sh {shim.as_posix()}",
+            "AUSMT_PUBLISH_TARGET": _PUBLISH_TARGET}
+
+
+def _order(tree: dict) -> list[str]:
+    m = tree["marker"]
+    return m.read_text(encoding="utf-8").split() if m.exists() else []
+
+
+def _at_head(tree: dict) -> None:
+    head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
+    (tree["site"] / "build.json").write_text(json.dumps(
+        {"build_id": "bid-noop", "engine_commit": "eng0000", "source_commit": head}),
+        encoding="utf-8")
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_publish_is_skipped_without_a_target(tmp_path):
+    """No AUSMT_PUBLISH_TARGET => nothing is published and the status says skipped, on a noop and on
+    a rebuild alike. FAILS IF the field is missing or the publish step runs."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    extra = _publish_shim(tree, tmp_path)
+    extra.pop("AUSMT_PUBLISH_TARGET")
+    env = {"SHIM_REBUILD": "1", **extra}
+    tree["env"].pop("AUSMT_PUBLISH_TARGET", None)
+    r = _run(tree, env_extra=env)
+    assert r.returncode == 0, r.stderr
+    assert "publish" not in _order(tree)
+    assert _status(tree)["publish"] == "skipped"
+    r = _run(tree, env_extra=env)
+    assert _status(tree)["action"] == "noop" and _status(tree)["publish"] == "skipped"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_a_successful_rebuild_is_published_after_the_swap(tmp_path):
+    """FAILS IF the publish runs before the rebuild, does not run, or the status does not say ok."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1", **_publish_shim(tree, tmp_path)})
+    assert r.returncode == 0, r.stderr
+    assert _order(tree) == ["invoked", "publish"], _order(tree)
+    st = _status(tree)
+    assert st["action"] == "rebuilt" and st["publish"] == "ok", st
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_a_failed_publish_exits_1_and_leaves_the_local_current_alone(tmp_path):
+    """The rebuild stands and keeps serving locally; the replica is behind, which needs an operator,
+    so the pass exits 1 and the status carries the publish's own words. FAILS IF the pass exits 0,
+    the action is rewritten, the status hides the failure, or the local build.json moves."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    extra = _publish_shim(tree, tmp_path)
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1", "PUBLISH_FAIL": "1", **extra})
+    assert r.returncode == 1, r.stdout + r.stderr
+    st = _status(tree)
+    assert st["action"] == "rebuilt" and st["publish"] == "failed", st
+    assert "rsync-build" in (st.get("publish_detail") or ""), st
+    head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
+    assert json.loads((tree["site"] / "build.json").read_text())["source_commit"] == head
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_a_noop_pass_lets_a_behind_replica_catch_up(tmp_path):
+    """head == built: nothing to build, but the served build still goes to the publish step, which
+    is a no-op on a replica that already has it. FAILS IF a noop pass never publishes (a replica
+    that missed one publish would stay behind until the next rebuild, with a status that says ok)."""
+    tree = _make_tree(tmp_path, source_commit="placeholder")
+    _at_head(tree)
+    r = _run(tree, env_extra=_publish_shim(tree, tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert _order(tree) == ["publish"]
+    st = _status(tree)
+    assert st["action"] == "noop" and st["publish"] == "ok", st
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_a_failed_publish_on_a_noop_pass_still_exits_1(tmp_path):
+    tree = _make_tree(tmp_path, source_commit="placeholder")
+    _at_head(tree)
+    r = _run(tree, env_extra={"PUBLISH_FAIL": "1", **_publish_shim(tree, tmp_path)})
+    assert r.returncode == 1
+    assert _status(tree)["publish"] == "failed"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_dry_run_never_publishes(tmp_path):
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    r = _run(tree, "--dry-run", env_extra={"SHIM_REBUILD": "1", **_publish_shim(tree, tmp_path)})
+    assert r.returncode == 0, r.stderr
+    assert _order(tree) == []
+    assert _status(tree) is None
+    assert _PUBLISH_TARGET in r.stdout
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_the_build_prune_takes_a_pruned_builds_sidecar_along(tmp_path):
+    """The publish sidecar sits beside its build in builds/. FAILS IF pruning a build leaves its
+    sidecar behind, or a kept build loses its sidecar."""
+    tree = _make_tree(tmp_path, source_commit="placeholder")
+    _at_head(tree)
+    served = _seed_served_build_dir(tree, "20260101T000000Z")
+    builds = served.parent
+    for name in ("20260102T000000Z", "20260103T000000Z", "20260104T000000Z"):
+        _make_build_dir(tree, name, source_commit="bbbbbbb")
+        (builds / f"{name}.sha256").write_text("", encoding="utf-8")
+    r = _run(tree, env_extra={"AUSMT_RECONCILE_KEEP_BUILDS": "1"})
+    assert r.returncode == 0, r.stderr
+    left = sorted(p.name for p in builds.iterdir())
+    assert left == ["20260101T000000Z", "20260104T000000Z", "20260104T000000Z.sha256"], left
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_a_pinned_pass_publishes_the_rolled_back_build(tmp_path):
+    """A curator rollback repoints the box's current and pins it; the public replica must follow.
+    FAILS IF a pinned pass never publishes (the replica would keep serving the build the curator
+    rolled back from)."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    _advance_head(tree)
+    (tree["state"] / "rollback.pin").write_text(
+        json.dumps({"pinned_build": "20260101T000000Z"}), encoding="utf-8")
+    r = _run(tree, env_extra=_publish_shim(tree, tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert _order(tree) == ["publish"], _order(tree)
+    st = _status(tree)
+    assert st["action"] == "pinned" and st["publish"] == "ok", st
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_a_failed_rebuild_is_not_published(tmp_path):
+    """A failed rebuild leaves the box on its previous build and says so; the publish step does not
+    run and the status says skipped. FAILS IF the publish runs or the field is missing."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    r = _run(tree, env_extra={"SHIM_FAIL": "1", **_publish_shim(tree, tmp_path)})
+    assert r.returncode == 1
+    assert "publish" not in _order(tree), _order(tree)
+    st = _status(tree)
+    assert st["action"] == "failed" and st["publish"] == "skipped", st
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_the_publish_step_receives_the_target_from_the_environment(tmp_path):
+    """The default publish command is the sender in this checkout; the shim stands in for it and
+    must see the target the unit's EnvironmentFile provides. FAILS IF the target does not reach it."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1", **_publish_shim(tree, tmp_path)})
+    assert r.returncode == 0, r.stderr
+    assert f"publish: target={_PUBLISH_TARGET}" in r.stdout, r.stdout

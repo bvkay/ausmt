@@ -117,16 +117,20 @@ def _bindir(tmp_path: Path) -> Path:
     return b
 
 
-def _env(tmp_path: Path, caddyfile: Path, *, legacy: str | None = "ausmt.au", **extra) -> dict:
+def _env(tmp_path: Path, caddyfile: Path, *, legacy: str | None = "ausmt.au",
+         gateway: str | None = None, **extra) -> dict:
     """The doctor's .env fixture mirrors the canonical-name deploy: the AuScope name is canonical
     and (by default) ausmt.au is the legacy redirect name, so the legacy legs RUN in the default
-    fixtures. Pass legacy=None for the canonical-only deploy (the legs must then SKIP)."""
+    fixtures. Pass legacy=None for the canonical-only deploy (the legs must then SKIP), and gateway
+    for a deploy whose public gateway routes have their own upstream."""
     b = _bindir(tmp_path)
     envf = tmp_path / ".env"
     lines = ["AUSMT_PUBLIC_NAME=ausmt.auscope.org.au",
              "AUSMT_BOX_READER_UPSTREAM=http://ausmt-box:8445"]
     if legacy is not None:
         lines.append(f"AUSMT_LEGACY_REDIRECT_NAME={legacy}")
+    if gateway is not None:
+        lines.append(f"AUSMT_GATEWAY_UPSTREAM={gateway}")
     envf.write_text("\n".join(lines) + "\n", encoding="utf-8")
     tsmap = tmp_path / "ts-routes.map"
     tsmap.write_text(_TS_MAP, encoding="utf-8")
@@ -327,12 +331,15 @@ def test_unset_legacy_var_skips_both_legs_cleanly(tmp_path):
 def test_config_check_agrees_with_the_installers_rendering(tmp_path):
     """CROSS-IMPLEMENTATION DRIFT GUARD. install-frontdoor.sh renders Caddyfile.rendered; doctor.sh
     independently re-renders the repo template for its hash compare. Run the REAL installer (docker
-    stubbed) over the REAL repo Caddyfile in both var states, then feed each rendering's hash to the
-    doctor as the container-mounted file: the config leg must PASS both ways. FAILS IF the two
-    renderers ever diverge (the sed ranges are meant to be identical)."""
+    stubbed) over the REAL repo Caddyfile in every state of the legacy name and the gateway upstream,
+    then feed each rendering's hash to the doctor as the container-mounted file: the config leg must
+    PASS every way. FAILS IF the two renderers ever diverge (the sed expressions are meant to be
+    identical)."""
     real_cf = _REPO / "deploy" / "frontdoor" / "Caddyfile"
     install = _REPO / "deploy" / "frontdoor" / "install-frontdoor.sh"
-    for label, legacy in (("unset", None), ("set", "ausmt.au")):
+    for label, legacy, gateway in (("unset", None, None), ("set", "ausmt.au", None),
+                                   ("gw-unset", None, ""),
+                                   ("gw-set", "ausmt.au", "http://ausmt-curate.example:8445")):
         work = tmp_path / f"install-{label}"
         work.mkdir(parents=True)
         shutil.copy(install, work / "install-frontdoor.sh")
@@ -343,6 +350,8 @@ def test_config_check_agrees_with_the_installers_rendering(tmp_path):
                    "AUSMT_ACME_EMAIL=x@y.org\n")
         if legacy:
             envtext += f"AUSMT_LEGACY_REDIRECT_NAME={legacy}\n"
+        if gateway is not None:
+            envtext += f"AUSMT_GATEWAY_UPSTREAM={gateway}\n"
         (work / ".env").write_text(envtext, encoding="utf-8")
         bindir = work / "bin"
         bindir.mkdir()
@@ -358,7 +367,7 @@ def test_config_check_agrees_with_the_installers_rendering(tmp_path):
         rendered_hash = hashlib.sha256((work / "Caddyfile.rendered").read_bytes()).hexdigest()
         doctor_root = tmp_path / f"doctor-{label}"
         doctor_root.mkdir()
-        denv = _env(doctor_root, real_cf, legacy=legacy, FAKE_HASH=rendered_hash)
+        denv = _env(doctor_root, real_cf, legacy=legacy, gateway=gateway, FAKE_HASH=rendered_hash)
         rd = _run(denv, "report")
         assert any(ln.startswith("PASS config:") for ln in rd.stdout.splitlines()), (
             f"doctor's fresh render ({label}) must hash-match the installer's rendering:\n{rd.stdout}")
@@ -618,3 +627,43 @@ def test_tailnet_path_direct_passes_and_derp_fails(tmp_path):
     assert "DERP" in line[0] and "restart tailscaled" in line[0], \
         f"the FAIL must name the relay and the remediation: {line[0]}"
     assert r2.returncode != 0, "a relayed path must make the doctor exit non-zero"
+
+
+def test_a_loopback_upstream_skips_the_tailnet_peer_legs(tmp_path):
+    """On the serving replica the front door and the reader share a host, so the upstream is
+    http://127.0.0.1:8445 and there is no box peer on the tailnet to find or to ping. Both tailnet
+    legs report that they were skipped and why; the run stays green. FAILS IF either leg FAILs or
+    WARNs on a loopback upstream, or the skip does not say loopback."""
+    cf = _caddyfile(tmp_path)
+    env = _hash_env(tmp_path, cf)
+    envf = Path(env["AUSMT_DOCTOR_ENV"])
+    envf.write_text(envf.read_text(encoding="utf-8").replace(
+        "http://ausmt-box:8445", "http://127.0.0.1:8445"), encoding="utf-8")
+    r = _run(env, "report")
+    lines = [ln for ln in r.stdout.splitlines() if ln.split(" ", 1)[-1].startswith(("tailscale:", "tailnet-path:"))]
+    assert len(lines) == 2, r.stdout
+    for ln in lines:
+        assert ln.startswith("PASS ") and "loopback" in ln, ln
+    assert r.returncode == 0, r.stdout
+
+
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root reads a mode-000 file, so unreadability cannot be staged")
+@pytest.mark.parametrize("shell", [s for s in (_SH, shutil.which("dash")) if s],
+                         ids=lambda s: Path(s).name)
+def test_an_unreadable_env_file_fails_by_name_and_points_at_sudo(tmp_path, shell):
+    """The .env is root-only on a provisioned host and dash dies on the `.` of a file it cannot
+    read, so a run without sudo must say so and still reach its summary. FAILS IF the run aborts,
+    exits zero, or the FAIL line names neither the file nor sudo."""
+    cf = _caddyfile(tmp_path)
+    env = _env(tmp_path, cf, FAKE_HASH=hashlib.sha256(cf.read_bytes()).hexdigest())
+    envf = Path(env["AUSMT_DOCTOR_ENV"])
+    envf.chmod(0)
+    try:
+        r = subprocess.run([shell, str(_DOCTOR), "report"], capture_output=True, text=True, env=env)
+    finally:
+        envf.chmod(0o600)
+    assert "RESULT: FAIL" in r.stdout, r.stdout + r.stderr
+    assert r.returncode != 0
+    assert any(ln.startswith("FAIL") and str(envf) in ln and "sudo" in ln
+               for ln in r.stdout.splitlines()), r.stdout

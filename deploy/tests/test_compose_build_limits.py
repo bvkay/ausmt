@@ -74,6 +74,28 @@ def test_the_memory_ceiling_is_an_operator_knob_that_never_aborts_config():
         f"{MEM_KNOB} must never be a hard :? guard")
 
 
+GW_MEM_KNOB = "AUSMT_GW_MEM_LIMIT"
+
+
+def test_the_gw_runner_ceiling_is_the_same_kind_of_knob():
+    """The gateway's parsing runner carries the other memory ceiling on the host, and the two must
+    sum below the host's RAM. A curation host smaller than the box can only keep that rule if this
+    ceiling is a knob too. FAILS IF gw-runner's mem_limit is hard-coded, is not the ${VAR:-DEFAULT}
+    pattern, defaults to anything but 4g, is a :? guard, or is undocumented in .env.example."""
+    block = _service_block("gw-runner")
+    m = re.search(r"^    mem_limit:\s*(\S+)", block, re.M)
+    assert m, "gw-runner declares no mem_limit"
+    assert m.group(1) == f"${{{GW_MEM_KNOB}:-4g}}", (
+        f"gw-runner's mem_limit must be ${{{GW_MEM_KNOB}:-4g}}, got {m.group(1)!r}")
+    minimal = {"AUSMT_DATA_DIR": "/srv/ausmt", "OWNER": "someowner"}
+    trips = find_guard_trips(COMPOSE.read_text(encoding="utf-8"), minimal)
+    assert not any(t.var == GW_MEM_KNOB for t in trips), (
+        f"{GW_MEM_KNOB} must never be a hard :? guard")
+    env_text = ENV_EXAMPLE.read_text(encoding="utf-8")
+    assert f"# {GW_MEM_KNOB}=4g" in env_text, (
+        f".env.example must document {GW_MEM_KNOB} with its 4g default")
+
+
 def test_the_memory_knob_is_documented_for_the_operator():
     """FAILS IF the knob exists in compose but not in .env.example. An undocumented cap is a cap the
     operator discovers by having a build killed."""

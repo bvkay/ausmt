@@ -35,6 +35,10 @@ services:
       # job is a permanent 301 to the canonical name. When empty, install-frontdoor.sh renders the
       # legacy site block out entirely, so its placeholder never appears in the mounted file.
       AUSMT_LEGACY_REDIRECT_NAME: ${AUSMT_LEGACY_REDIRECT_NAME:-}
+      # OPTIONAL (empty default): the upstream of the four public gateway routes. When empty,
+      # install-frontdoor.sh renders the reader upstream in its place, so its placeholder never
+      # appears in the mounted file.
+      AUSMT_GATEWAY_UPSTREAM: ${AUSMT_GATEWAY_UPSTREAM:-}
     # Health = Caddy is up and answering locally on :80 (the ACME/redirect listener). Uses the image's
     # BusyBox wget, like the box portal healthcheck.
     healthcheck:

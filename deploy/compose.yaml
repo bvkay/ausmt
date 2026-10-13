@@ -342,7 +342,9 @@ services:
     read_only: true                     # immutable rootfs
     tmpfs:
       - /tmp                            # mt_metadata scratch (the only writable path it needs)
-    mem_limit: 4g                       # resource caps (hostile/huge EDI => killed at limits)
+    mem_limit: ${AUSMT_GW_MEM_LIMIT:-4g} # resource caps (hostile/huge EDI => killed at limits); the
+                                        # ceiling is a knob so a smaller curation host can keep this
+                                        # and the build ceiling summing below its RAM
     cpus: 2
     pids_limit: 256
     entrypoint: ["python", "-m", "gateway.runner"]

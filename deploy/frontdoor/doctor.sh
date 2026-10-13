@@ -29,8 +29,9 @@
 #       edge).
 #   4d. the TIME-SERIES HAND-OFF TABLE: map hash parity, open-302, unlisted-404. Detail at
 #       the check itself; skips cleanly on a routeless table or an unresponsive edge.
-#   5. tailscale is up and the box peer is visible
-#   5b. the tailnet path to the box is DIRECT, not DERP-relayed (the relay trap: a
+#   5. tailscale is up and the box peer is visible (on a loopback upstream, the serving replica's
+#      case, there is no box peer and the peer match is skipped)
+#   5b. the tailnet path to the box is DIRECT, not DERP-relayed (skipped on a loopback upstream; the relay trap: a
 #       relayed path serves the whole portal through a shared third-party relay with multi-second
 #       TTFB outliers and capped throughput, and nothing else surfaces it)
 #   6. the zombie-process count is under the warn threshold (see the `zombies` subcommand for the kit)
@@ -45,6 +46,7 @@
 # CONFIG (env; every external command + path is overridable so the checks are testable and portable):
 #   AUSMT_DOCTOR_ENV         path to the front-door .env (default: ./.env) - sources AUSMT_PUBLIC_NAME,
 #                            AUSMT_BOX_READER_UPSTREAM and (optional) AUSMT_LEGACY_REDIRECT_NAME
+#                            and AUSMT_GATEWAY_UPSTREAM
 #   AUSMT_DOCTOR_CADDYFILE   the repo Caddyfile to hash the running config against (default: ./Caddyfile)
 #   AUSMT_DOCTOR_COMPOSE     the compose file (default: ./compose.yaml)
 #   AUSMT_DOCTOR_TS_MAP      the repo time-series route table (default: ./ts-routes.map)
@@ -105,7 +107,12 @@ _sha256() {
 
 # Load AUSMT_PUBLIC_NAME + AUSMT_BOX_READER_UPSTREAM from the front-door .env if present (best effort;
 # the checks that need them WARN honestly when a value is missing rather than dying).
-if [ -f "$ENV_FILE" ]; then
+# A root-only .env read without sudo is reported by the report's config line: dash exits on the `.`
+# of a file it cannot read, which would end the run before its first check.
+ENV_UNREADABLE=""
+if [ -f "$ENV_FILE" ] && [ ! -r "$ENV_FILE" ]; then
+	ENV_UNREADABLE=1
+elif [ -f "$ENV_FILE" ]; then
 	set -a
 	# shellcheck disable=SC1090
 	. "$ENV_FILE"
@@ -187,15 +194,20 @@ check_running_config() {
 		return
 	fi
 	# The container mounts the RENDERED Caddyfile (install-frontdoor.sh templates the legacy redirect
-	# block in or out between the legacy-redirect markers), so the expected hash is a FRESH render of
-	# the repo template under the current .env state, not the raw repo file. Keep this sed identical
-	# to the installer's render step: the cross-check test drives both and fails on drift.
+	# block in or out between the legacy-redirect markers, and renders the reader upstream in place of
+	# an empty gateway upstream), so the expected hash is a FRESH render of the repo template under the
+	# current .env state, not the raw repo file. Keep these sed expressions identical to the
+	# installer's render step: the cross-check test drives both and fails on drift.
 	tmp_render="$(mktemp)" || { warn "config: mktemp failed (cannot render the expected config)"; return; }
 	if [ -n "${AUSMT_LEGACY_REDIRECT_NAME:-}" ]; then
-		cat "$CADDYFILE_REPO" > "$tmp_render"
+		cat "$CADDYFILE_REPO"
 	else
-		sed '/^# >>> legacy-redirect/,/^# <<< legacy-redirect/d' "$CADDYFILE_REPO" > "$tmp_render"
-	fi
+		sed '/^# >>> legacy-redirect/,/^# <<< legacy-redirect/d' "$CADDYFILE_REPO"
+	fi | if [ -n "${AUSMT_GATEWAY_UPSTREAM:-}" ]; then
+		cat
+	else
+		sed 's/{\$AUSMT_GATEWAY_UPSTREAM}/{$AUSMT_BOX_READER_UPSTREAM}/g'
+	fi > "$tmp_render"
 	want="$(_sha256 "$tmp_render")"
 	rm -f "$tmp_render"
 	if [ -z "$want" ]; then
@@ -447,6 +459,15 @@ check_ts_routes() {
 	fi
 }
 
+# On the serving replica the front door and the reader share one host (upstream 127.0.0.1:8445), so
+# the two tailnet legs have no box peer to examine; they say so instead of failing on the address.
+_is_loopback() {
+	case "$1" in
+		127.*|localhost|::1|\[::1\]) return 0 ;;
+	esac
+	return 1
+}
+
 check_tailscale() {
 	if ! $TAILSCALE status >/dev/null 2>&1; then
 		fail "tailscale: not up (tailscale status failed) - the edge cannot reach the box"
@@ -456,7 +477,9 @@ check_tailscale() {
 	# generic 'peer visible' check if we cannot.
 	up="${AUSMT_BOX_READER_UPSTREAM:-}"
 	peer="$(printf '%s' "$up" | sed -e 's#^[a-z]*://##' -e 's#[:/].*$##')"
-	if [ -n "$peer" ]; then
+	if _is_loopback "$peer"; then
+		pass "tailscale: up; the upstream is loopback ($peer), the reader is on this host, so there is no box peer to find"
+	elif [ -n "$peer" ]; then
 		if $TAILSCALE status 2>/dev/null | grep -qi "$peer"; then
 			pass "tailscale: up and the box peer ($peer) is visible"
 		else
@@ -477,6 +500,10 @@ check_tailnet_path() {
 	peer="$(printf '%s' "$up" | sed -e 's#^[a-z]*://##' -e 's#[:/].*$##')"
 	if [ -z "$peer" ]; then
 		warn "tailnet-path: box peer name not derivable from upstream; skipped"
+		return
+	fi
+	if _is_loopback "$peer"; then
+		pass "tailnet-path: skipped; the upstream is loopback ($peer), so no reader traffic crosses the tailnet"
 		return
 	fi
 	verdict="$($TAILSCALE ping -c 3 "$peer" 2>/dev/null | grep 'pong from' | tail -1)"
@@ -536,6 +563,9 @@ check_dns() {
 run_report() {
 	printf 'AusMT front-door doctor (VPS edge) - %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	printf '=====================================================\n'
+	if [ -n "$ENV_UNREADABLE" ]; then
+		fail "config: $ENV_FILE is not readable by this user, so the public name and the upstreams are unknown; run the doctor as root (sudo)"
+	fi
 	check_container_up
 	check_running_config
 	check_upstream
@@ -566,6 +596,6 @@ run_report() {
 case "${1:-report}" in
 	report) run_report ;;
 	zombies) zombie_kit ;;
-	-h|--help) sed -n '2,68p' "$0" ;;
+	-h|--help) sed -n '2,69p' "$0" ;;
 	*) printf 'doctor: unknown subcommand: %s (try: report | zombies | --help)\n' "$1" >&2; exit 2 ;;
 esac

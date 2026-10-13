@@ -31,6 +31,7 @@ frozen text. A change that contradicts a frozen decision starts with an amendmen
 | [UX4-MapAuslampScaling.md](UX4-MapAuslampScaling.md) | Map presentation: programme-based clustering, zoom-scaled markers |
 | [UX5-TreeCollections.md](UX5-TreeCollections.md) | Survey tree: collections group and disclosure controls |
 | [C47-PublicBridge.md](C47-PublicBridge.md) | Public demo bridge: a VPS front door on the tailnet exposing the reader only, with two independent walls keeping curator/admin surfaces private |
+| [C48-NectarTopology.md](C48-NectarTopology.md) | Nectar topology: a public serving replica fed by publish from a tailnet-only curation host, and the cutover from the front-door VPS |
 
 This table indexes every record in this directory. A file present here but missing from the table
 is an error in the table, not a record of lesser standing; the table listed 15 of 20 until

@@ -1,0 +1,136 @@
+// AusMT on Nectar - tailnet policy entries to MERGE into the existing policy in the Tailscale admin
+// console (Access controls). Merge them beside the front-door stanza (deploy/frontdoor/acl-policy.hujson);
+// never replace the whole policy with this file. Design: maintainer/C48-NectarTopology.md.
+//
+// The tailnet is the identity layer: the curation host reaches the serving host only over it (the
+// publish channel and the log pull), the serving host's front door reaches the curation host's reader
+// listener only over it (the four public gateway routes), people reach both hosts only over it
+// (Tailscale SSH), and curators reach the curation workbench only over it. Neither host opens SSH to
+// the internet.
+//
+// Placeholders in <> are filled in the admin console, never committed:
+//   <ADMIN_TAG_OWNER>     the admin user or group that may apply the tags (e.g. "autogroup:admin")
+//   <CURATOR_n>           each curator's tailnet login (invited through the Tailscale admin console)
+//   <BOX_NODE_USER>       the login that owns the home box's node (see the phase-one rule below)
+//   <BOX_TAILNET_IP>      the box's tailnet address, the same alias the front-door stanza defines
+
+{
+  "tagOwners": {
+    // Applied when each host joins: `tailscale up --ssh --advertise-tags=tag:ausmt-serve` on the
+    // serving host, `--advertise-tags=tag:ausmt-curate` on the curation host once it exists.
+    "tag:ausmt-serve":  ["<ADMIN_TAG_OWNER>"],
+    "tag:ausmt-curate": ["<ADMIN_TAG_OWNER>"],
+  },
+
+  "groups": {
+    // Curators reach the curation workbench and nothing else. Each is a tailnet invite signed in
+    // with a passkey or institutional single sign-on, then a named entry in AUSMT_CURATOR_KEYS and a
+    // TOTP enrolment on the gateway; the tailnet login is the first factor, the gateway the second.
+    "group:curators": ["<CURATOR_1>", "<CURATOR_2>"],
+  },
+
+  "hosts": {
+    // Defined once in the front-door stanza; repeat it here only if that stanza is not merged.
+    "ausmt-box": "<BOX_TAILNET_IP>",
+  },
+
+  "acls": [
+    // The curation host to the serving host, port 22 only: the publish account (rsync and the
+    // receiver, behind its gate) and the log account (read-only pull of the masked access log).
+    // Phase one: the home box curates. Once the curation host is lifted to Nectar, drop ausmt-box.
+    {
+      "action": "accept",
+      "src":    ["ausmt-box", "tag:ausmt-curate"],
+      "dst":    ["tag:ausmt-serve:22"],
+    },
+    // The serving host's front door to the curation host's reader listener, port 8445 only: the
+    // tailscale-serve reader port (`tailscale serve --bg --tcp=8445 tcp://127.0.0.1:8445`), the same
+    // grant the front-door stanza gives tag:ausmt-frontdoor. The front door sends it the four public
+    // gateway routes (AUSMT_GATEWAY_UPSTREAM); wall 2 on that listener admits only the public subset,
+    // so this grant reaches nothing the internet cannot. Drop ausmt-box once the curation host is lifted.
+    {
+      "action": "accept",
+      "src":    ["tag:ausmt-serve"],
+      "dst":    ["ausmt-box:8445", "tag:ausmt-curate:8445"],
+    },
+    // Curators reach the workbench on the curation host and no other port on any host. The workbench
+    // is the portal listener, which `tailscale serve --bg https / http://127.0.0.1:8443` publishes on
+    // port 443 under the host's MagicDNS name, and which proxies /gateway/* to the gateway. Port 8444
+    // is the gateway's loopback debug bind and is never granted.
+    {
+      "action": "accept",
+      "src":    ["group:curators"],
+      "dst":    ["ausmt-box:443", "tag:ausmt-curate:443"],
+    },
+    // Administrators reach both Nectar hosts for Tailscale SSH.
+    {
+      "action": "accept",
+      "src":    ["autogroup:admin"],
+      "dst":    ["tag:ausmt-serve:22", "tag:ausmt-curate:22"],
+    },
+  ],
+
+  "ssh": [
+    // The two service accounts, non-interactively (accept, no browser check), and no other account.
+    // Their login shells are the gates in deploy/nectar/, which admit the publish commands and the
+    // read-only log pull and refuse a shell. The gates confine command sessions only: Tailscale SSH
+    // serves SFTP itself as the account, so each account's file permissions are its SFTP boundary
+    // (the gates' headers state what that leaves each account).
+    {
+      "action": "accept",
+      "src":    ["tag:ausmt-curate"],
+      "dst":    ["tag:ausmt-serve"],
+      "users":  ["publish", "caddylog"],
+    },
+    // Phase one only. An SSH rule cannot name a host alias, and the box is an untagged node, so the
+    // rule names the login that owns it, which admits that login's other devices too (still only as
+    // the two gated accounts). Remove this rule at the curation lift, or tag the box earlier.
+    {
+      "action": "accept",
+      "src":    ["<BOX_NODE_USER>"],
+      "dst":    ["tag:ausmt-serve"],
+      "users":  ["publish", "caddylog"],
+    },
+    // People: a fresh sign-in check before a session on either Nectar host.
+    {
+      "action": "check",
+      "src":    ["autogroup:admin"],
+      "dst":    ["tag:ausmt-serve", "tag:ausmt-curate"],
+      "users":  ["autogroup:nonroot", "root"],
+    },
+  ],
+
+  // The fence, checked by Tailscale itself. Merge these into the policy's own "tests" and
+  // "sshTests" arrays: Tailscale evaluates them against the whole merged policy on every save and
+  // refuses a save that breaks one, so a wider rule elsewhere (the stock allow-all included) stops
+  // the save instead of quietly widening what the internet-facing host can reach. A save refused
+  // here names the rule to remove; never delete a test to get the save through. The curation host
+  // is ausmt-box while the box curates; once it is lifted, repeat each ausmt-box entry for
+  // tag:ausmt-curate and drop the box's.
+  "tests": [
+    // The serving host reaches the curation host's reader listener, and neither its SSH nor its
+    // workbench.
+    {
+      "src":    "tag:ausmt-serve",
+      "accept": ["ausmt-box:8445"],
+      "deny":   ["ausmt-box:22", "ausmt-box:443"],
+    },
+    // Curators reach the workbench on 443, never the gateway's loopback debug port.
+    {
+      "src":    "group:curators",
+      "accept": ["ausmt-box:443"],
+      "deny":   ["ausmt-box:8444"],
+    },
+  ],
+
+  "sshTests": [
+    // The box's node login reaches the serving host as the two gated accounts without a sign-in
+    // check, which the unattended publish depends on. Its other accounts are left untested: that
+    // login is normally an administrator's, whose root and personal sessions take the check above.
+    {
+      "src":    "<BOX_NODE_USER>",
+      "dst":    ["tag:ausmt-serve"],
+      "accept": ["publish", "caddylog"],
+    },
+  ],
+}
