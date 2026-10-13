@@ -1558,7 +1558,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     }
     const render=()=>{ const v=inp.value.trim();
       if(!v){ ok.textContent=""; ok.className="orcidok"; return; }
-      if(v.length>SLUG_MAX){ ok.textContent="✗ "+v.length+" characters — the limit is "+SLUG_MAX+". A longer folder name withholds every station MTH5 at build time."; ok.className="orcidok bad"; return; }
+      if(v.length>SLUG_MAX){ ok.textContent="✗ "+v.length+" characters; the limit is "+SLUG_MAX+". A longer folder name withholds every station MTH5 at build time."; ok.className="orcidok bad"; return; }
       if(!slugValid(v)){ ok.textContent="✗ lowercase letters, digits and single hyphens only (no spaces, _ or uppercase)"; ok.className="orcidok bad"; return; }
       const hit=SERVED_SLUGS[v];
       if(hit){ const n=STATION_COUNTS[hit];
