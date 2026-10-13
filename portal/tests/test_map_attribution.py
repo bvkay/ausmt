@@ -7,9 +7,9 @@ own attribution control, mounted with prefix:false in Leaflet's TOP-RIGHT corner
 a small "(i)" that opens on hover, on focus and on click.
 
 WHY TOP-RIGHT. The bottom-right corner belongs to the AuScope and NCRIS lock-up, whose clear space is
-the logo's own height on every side and holds nothing else (tests/test_map_watermark.py). The control is mounted
-there on every map this site draws, so the corner a reader looks in for the credit is the same on all
-four.
+the logo's own height on every side and holds nothing else (tests/test_map_watermark.py). The
+control is mounted there on every map this site draws, so the corner a reader looks in for the
+credit is the same on all four.
 
 WHY THE CONTROL AND NOT A LINE IN THE FOOTER. Two reasons stand behind that, and this module holds
 the second:

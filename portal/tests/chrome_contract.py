@@ -3,8 +3,8 @@
 The static pages and the engine's generated pages each carry their own copy of this chrome, because
 the portal ships as classic static pages with no template step. These literals are the contract those
 copies are compared against: the appearance tokens, the header's identity and tagline, the lock-up
-the footers and the map carry, the footer's regions and the appearance row. A pin compares a surface with these strings rather than with
-another surface, so two copies that drift together still fail.
+the footers and the map carry, the footer's regions and the appearance row. A pin compares a surface
+with these strings rather than with another surface, so two copies that drift together still fail.
 """
 import re
 
