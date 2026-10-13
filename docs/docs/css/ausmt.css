@@ -60,8 +60,7 @@
 }
 
 /* The theme renders every image in this block as a 45px circle on a tinted disc. The AuScope mark
- * is a white icon and takes no treatment: 30px tall, transparent, square, matching the portal
- * header.
+ * is a white icon and takes no treatment: 30px tall, transparent and square.
  */
 .wy-side-nav-search img.ausmt-mark,
 .wy-nav-top img.ausmt-mark {

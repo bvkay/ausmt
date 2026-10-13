@@ -66,6 +66,125 @@ link, which is what the URL contract promises.
 Every page is rendered from the already-served public documents alone, so a page can never disclose
 anything the gated products do not already publish.
 
+## Page chrome and appearance
+
+Every engine-written page wears the portal's own header, footer, icon links and appearance, so a
+reader arriving on a survey page from a search result meets the same site the map shows. The
+appearance follows Owner ruling 2026-10-12: the AuScope house style is the default appearance, and
+the navy palette the portal carried before it is the dark appearance. A reader changes it on
+`/about.html`, which every header links, or in the map's welcome dialog; no page's footer carries
+an appearance control (Owner decision 2026-10-13).
+
+### The appearance script and the token block
+
+Each page loads `/src/theme.js` as the first script in its `<head>`, before the stylesheet, so the
+first paint is already in the reader's choice. The script resolves the choice stored under the
+`ausmt_theme` key (light, dark or follow the system; light when nothing is stored) and writes it to
+`<html data-theme="light|dark">`, which is the only hook the stylesheet reads. The pages are served
+under a CSP whose `script-src` is `'self'`, so they carry no inline script and no inline event
+handler. The engine's pages carry no appearance control of their own: the script wires the radios
+named `appearance` where they appear, in About's Appearance section and in the map's welcome
+dialog.
+
+The stylesheet opens with the portal's token block: the house style in `:root` and the dark
+appearance in `:root[data-theme="dark"]`, which restates only what differs. Every chrome colour on
+a page is one of these tokens; the fetch dialog's scrim and drop shadow are the only colour values
+written outside the block.
+
+| Token | Used for |
+|---|---|
+| `--bg` | the page ground |
+| `--surface` | the header, the footer, cards and dialogs |
+| `--surface-2` | inputs, inactive tabs, chips and raised rows |
+| `--line` | rules and borders |
+| `--text`, `--muted` | body text and secondary text |
+| `--heading` | headings and the AusMT wordmark |
+| `--accent`, `--accent-ink` | links, the active tab, selection and focus rings, and text set on the accent |
+| `--lpmt`, `--bbmt`, `--amt`, `--gds` | the data-type ramp, identical in both appearances |
+| `--map-panel`, `--map-line`, `--coast-fill`, `--coast-line` | the map panels and the coastline |
+| `--dot-edge` | the edge every station mark is stroked with |
+| `--ok` | the time-series availability marks |
+| `--part` | the embargo notice's border |
+
+A card is a `--surface` box with a 1px `--line` border, a 4px corner radius and the `--shadow`
+token, which is a soft shadow in the light appearance and none in the dark. The type stack is
+`--sans`, which names Libre Franklin first; the face is not bundled, so the stack falls through to
+Inter and the system faces, which is intended.
+
+### Header
+
+The header is the portal's header with two declared differences: the identity is a link to the
+root rather than the map page's heading, and the three tabs are links with the current page's tab
+active.
+
+- Left: the AusMT wordmark, linking the root, and the tagline, and nothing else. The identity zone
+  carries no mark and fetches nothing.
+- Centre: Map, Surveys and Collections, then About. There is no Contribute control in any header;
+  `add-survey.html` stays served and About links it from its body.
+- Right: the AuScope and NCRIS lock-up, the header's only AuScope presence, as a light and a white
+  file: the brand kit's own PNGs, `/vendor/auscope-ncris-colour.png` and
+  `/vendor/auscope-ncris-white.png`, declared at their intrinsic 1919 by 325 and drawn 40px tall, the
+  height of the tabs. The `.theme-light` and `.theme-dark` rules show the file that matches
+  `data-theme`, so the white file never sits on the light ground. It links
+  `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`. These two files are the
+  header's only fetched assets.
+
+The site draws the 2025 AuScope brand kit's own files, which carry Tasmania, and the lock-up is as
+tall as the tabs (Owner decision 2026-10-13). The identity zone carries no mark, so the lock-up is
+the one AuScope image in every header (Owner decision 2026-10-13).
+
+### Footer
+
+Three regions, the same on every page apart from the status slot.
+
+- Left: `MTCAT JSON ↗`, linking `/data/mtcat.json`.
+- Centre: "AusMT is enabled by AuScope · Data licences vary by survey". "AuScope" is the region's
+  one link, opening `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`; the
+  address is not printed (Owner decision 2026-10-13).
+- Right: the page's status, and nothing else. The status is what the page can state about itself:
+  the surveys hub states its catalogue counts, and every other page leaves the zone empty. The
+  empty zone stays, because it takes its share of the row and so keeps the centre on the page's
+  axis. The footer carries no appearance control (Owner decision 2026-10-13); the choice is on
+  `/about.html` and in the map's welcome dialog.
+
+The footer fetches nothing. Its box, its regions and its narrow-width states are one rule set with
+the portal's documents, held by `portal/tests/test_footer_regions.py`.
+
+### Icons
+
+Every page links the same three icons as the portal's documents, in this order: `/favicon.ico`,
+`/vendor/favicon.svg` and the 180 px app icon `/vendor/auscope/icon-180.png`.
+
+### Maps
+
+The survey hero map, the station-grid zoom, the hub card maps and the collection map carry no
+colour of their own beyond the data. The panel is a `<rect class="mm-panel mm-rule">` (ground
+`--map-panel`, frame `--map-line`), the coast rings are `mm-coast` (`--coast-fill` and
+`--coast-line`), the state borders and the zoom's coastline are `mm-line`, and the locator ring and
+the scale bar are `mm-note` and `mm-label` in `--muted`. One map therefore serves both appearances.
+
+Station marks keep their literal fills, because the ramp is a data encoding and not chrome: LPMT
+`#3F88C8`, BBMT `#FFC14F`, AMT `#9FCB5A` and GDS `#CE348A` (`_TYPE_COL`, byte for byte the portal's
+`TYPE_COL` and the `--lpmt` to `--gds` tokens), and the collection member palette unchanged. The
+ramp is the same in both appearances, so a legend never changes meaning with the theme. Every mark
+sits in a `.mm-dots` group that strokes it in `--dot-edge`, which keeps the lighter hues legible on
+the light panel.
+
+The collection map's corner mark is the AuScope mark pair, placed and sized as before.
+
+The link-preview cards are PNGs and have no theme. They stay on the dark ground, and the collection
+card's map is drawn in exactly the dark appearance's map tokens (`_MAP_PANEL`, `_MAP_PANEL_LINE`,
+`_COAST_FILL` and `_COAST_LINE`).
+
+### Deploy order
+
+`/vendor/*` and `/src/*` are served from the portal image and the pages tree from the data volume,
+so the two can be a deploy apart. A pages tree that names a file the running image does not serve
+shows alt text in place of its images and loses its appearance script, so the portal image goes
+out first; `/vendor/auscope-ncris-colour.png` (every header's lock-up),
+`/vendor/auscope/auscope-mark.svg` (the collection map's corner mark) and `/src/theme.js` each
+answering 200 is the check before the pages tree is swapped.
+
 ## Structured data, by page kind
 
 Each node is emitted as its own `<script type="application/ld+json">` element, in the order below.
@@ -297,9 +416,10 @@ The AuScope lockup is last, on the same margin, keeping a declared clear space a
 bottom edge so the column ends on one line across every family whatever the block above it does. It
 is the AuScope half of `portal/vendor/auscope-ncris-white.png`, cut at column 1200 of that 1919 by
 325 image and trimmed to its alpha bbox: the columns to the right carry a second organisation's mark
-and a descriptor line that is unreadable at card height, and the site footer already carries the full
-acknowledgement. It is drawn no taller than the AusMT mark above it, which is how the acknowledgement
-is kept from outweighing the resource identity it acknowledges.
+and a descriptor line that is unreadable at card height, and the site header already carries the full
+lock-up. It is drawn no taller than the AusMT mark above it, which is how the acknowledgement is kept
+from outweighing the resource identity it acknowledges. The same PNG is the header's dark-theme
+lock-up on every page, so the card's crop and the chrome draw from one file.
 
 The address is set in Inter Bold on all three families. The root card's artwork is set in that face,
 so the generated cards adopting it is what makes the three addresses one line rather than three that
@@ -345,3 +465,55 @@ carries a canonical, a description and `robots noindex`.
 Descriptions are the page's own lede, word for word, and `og:title` is the page's own `<title>`. An
 invented summary is a second wording of the page that nobody maintains and that drifts the first time
 the page is edited. `portal/tests/test_page_metadata.py` pins both rules against the page bodies.
+
+### Site icons
+
+Every page, the static ones and the generated ones alike, links the same three icons in its head, in
+this order and in this form:
+
+```html
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">
+```
+
+The hrefs are root-anchored, because a generated page served at `/surveys/<slug>` cannot resolve a
+relative vendor path, and none carries a query: a search engine keeps the icon URL it found on the
+home page, so a change to an icon replaces the bytes at the same path. No web manifest and no
+pinned-tab mask icon ship. `portal/tests/test_favicon_and_app_icons.py` holds the block on every
+static page and in the engine's page shell.
+
+The icons are the AuScope mark, Royal Blue with its lighter swoosh, not the AusMT mark
+(Owner ruling 2026-10-12). `portal/tools/gen_auscope_icons.py` renders all five files from
+`portal/vendor/auscope/auscope-mark.svg` and from nothing else. That file is derived from the
+AuScope brand kit's own vector icon, with the fills the kit states, `#272472` and `#A7A2C5`
+(Owner decision 2026-10-13), so a change to the mark is a change to that file and a rerun of the
+tool:
+
+| File | What it is |
+|---|---|
+| `portal/vendor/favicon.svg` | The mark's own path elements, verbatim, in a viewBox cropped to the ink, with a title of AuScope. Transparent. |
+| `portal/favicon.ico` | 16, 32 and 48 px frames of the mark, edge to edge on its longer side, on a transparent ground. A browser that reads no SVG icon asks the site root for this file by name. |
+| `portal/vendor/auscope/icon-180.png` | The apple-touch-icon: the mark centred at 70 percent of the width on an opaque white square. A home screen fills transparency with black, so the ground is opaque. |
+| `portal/vendor/auscope/icon-192.png`, `icon-512.png` | The same at the two sizes a web manifest names, so that adding one later costs no regeneration. |
+
+The tool renders with Pillow alone: each path of the mark is flattened to a polygon (64 line pieces
+per curve), the polygons are filled in source order at eight times the icon's size, and the result is
+resampled down with Lanczos, which keeps the edges of the 16 px frame clean. Pillow is in the lock
+environment and in CI, so `python3 tools/gen_auscope_icons.py --check` and every pin in
+`portal/tests/test_favicon_and_app_icons.py` run wherever the portal tests do. The check compares
+`favicon.svg` byte for byte and each raster as its decoded picture: the PNGs by mode, size and pixels,
+and `favicon.ico` by its frame sizes and each frame's pixels. A different Pillow can encode the same
+picture as different bytes, so a byte comparison would go red on an encoder upgrade, while a
+one-pixel edit goes red under the picture comparison.
+
+The icon URLs are stable, so the edge serves them with `Cache-Control: no-cache` and revalidates the
+bytes (`@iconAssets` in `deploy/docker/caddy/Caddyfile`, which names `/vendor/favicon.svg` and
+`/vendor/auscope/icon-*.png` and excludes them from the thirty-day `vendor/` cache). A replaced mark
+reaches a home screen on its next fetch instead of a month later.
+
+The AusMT mark stays the product mark. `portal/tools/gen_brand.py` writes every AusMT export
+under `portal/vendor/brand/`, held by `gen_brand.py --check` in CI; the brand page offers them and
+the link-preview cards carry the mark. Its three app icons (`ausmt-icon-180.png`, `-192.png` and
+`-512.png`, the mark on a navy disc) remain brand-kit files for anyone placing the AusMT mark on a
+tile, and no page links them.

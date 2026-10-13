@@ -1,14 +1,14 @@
 """Fixed nav geometry: the header's tab group sits at ONE x position on every page and view.
 
 Both headers - the SPA's (portal/index.html) and the static pages' (engine/extract/_pages.py,
-_CSS) - divide into three zones: .hleft (identity), .hcenter (the tab group and its two supporting
-controls), .hright (the contextual status slot). With auto-basis sides (flex:1 1 auto) each side
-zone grew with its OWN content, so the "centred" tab group was shoved to a different x position
-wherever the identity block or the status slot changed width: the map view's live counter, the
-surveys view's workspace line, the /surveys hub's static counts and a survey page's empty slot
-each parked the tabs somewhere else. Equal ZERO-basis sides (flex:1 1 0 plus min-width:0 on BOTH
-sides) hand the leftover space out evenly whatever the sides hold, so the centre group is
-geometrically centred on every surface and the tabs stop moving between pages.
+_CSS) - divide into three zones: .hleft (AusMT's name and tagline), .hcenter (the tab group and
+the About control), .hright (the AuScope and NCRIS lock-up). With auto-basis sides (flex:1 1
+auto) each side zone grew with its OWN content, so the "centred" tab group was shoved to a different
+x position wherever a side zone changed width: while the right zone carried the contextual counts,
+the map view's live counter, the surveys view's workspace line and a survey page's empty slot each
+parked the tabs somewhere else. Equal ZERO-basis sides (flex:1 1 0 plus min-width:0 on BOTH sides)
+hand the leftover space out evenly whatever the sides hold, so the centre group is geometrically
+centred on every surface and the tabs stop moving between pages.
 
 TWO HALVES, ONE GEOMETRY. test_both_headers_pin_the_zero_basis_geometry asserts the rule itself on
 each surface (the geometry, as rendered CSS). test_the_two_headers_carry_identical_zone_rules
@@ -28,8 +28,15 @@ full-width, which is what keeps three 112px tabs from dragging a 375px page side
 sides must not cost that, so the stacking override is pinned on both surfaces too, AFTER the zone
 rules - the two selectors tie on specificity, and source order is what makes the wrap win.
 """
+import hashlib
 import re
+import struct
 from pathlib import Path
+
+from chrome_contract import (INDEX_IDENTITY, LIGHT, LOCKUP, LOCKUP_DARK, LOCKUP_LIGHT, LOCKUP_PIXELS,
+                             LOCKUP_RULES, MARK_DARK, MARK_LIGHT, PAGE_IDENTITY, TAGLINE, THEME_RULES,
+                             flat, header_inner, header_markup, token_blocks, tokens)
+from engine_chrome import site_header
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 INDEX = ROOT / "index.html"
@@ -181,113 +188,212 @@ def test_the_two_headers_share_one_box_model():
 
 
 def test_the_two_headers_measure_text_in_one_font_stack():
-    """The tab and control labels must measure identically on both surfaces, so the header on
-    the pages declares the SPA's own --sans stack. FAILS IF either side's stack moves without
-    the other: About and Contribute rendered ~2.4 and ~4.6px wider on the SPA under system-ui
-    than the pages' -apple-system-first stack, a ~3.5px centre-group offset on its own."""
+    """The tab and control labels must measure identically on both surfaces, so the header on the
+    pages declares the SPA's own --sans stack, either spelt out or as var(--sans) over a token block
+    that declares the same stack. FAILS IF either side's stack moves without the other: About rendered
+    ~2.4px wider on the SPA under system-ui than under the pages' -apple-system-first stack, a
+    centre-group offset on its own."""
     spa = re.findall(r"--sans:([^;}]*)[;}]", INDEX.read_text(encoding="utf-8"))
     assert len(spa) == 1, f"portal/index.html: expected exactly one --sans, got {len(spa)}"
-    pages_header = _rule_body(PAGES_PY.read_text(encoding="utf-8"),
-                              r"(?m)^\s*header\.site\{([^}]*)\}", "engine/extract/_pages.py")
+    assert spa[0] == LIGHT["--sans"], f"portal/index.html: --sans is {spa[0]!r}, not the contract stack"
+    pages_text = PAGES_PY.read_text(encoding="utf-8")
+    pages_header = _rule_body(pages_text, r"(?m)^\s*header\.site\{([^}]*)\}", "engine/extract/_pages.py")
     m = re.search(r"font-family:([^;}]*)", pages_header)
     assert m, ("engine/extract/_pages.py: header.site declares no font-family; the pages "
                "header would measure its labels in the page body's stack instead of the SPA's")
-    assert m.group(1) == spa[0], (
+    stack = m.group(1)
+    if stack == "var(--sans)":
+        stack = token_blocks(pages_text)[0].get("--sans", stack)
+    assert stack == spa[0], (
         "the header font stacks have drifted between the two surfaces:\n"
-        f"  portal/index.html --sans           {spa[0]!r}\n"
-        f"  engine/extract/_pages.py header.site {m.group(1)!r}")
+        f"  portal/index.html --sans             {spa[0]!r}\n"
+        f"  engine/extract/_pages.py header.site {stack!r}")
 
 
-# --------------------------------------------------------------------------- the identity mark
+# --------------------------------------------------------------------------- the identity zone
 #
-# The header identity is the AusMT mark on EVERY surface, replacing the
-# AuScope-derived symbol the SPA carried alone. The relationship with AuScope stays explicit in
-# footer and About content; it is not embedded in the lockup.
+# The identity zone is AusMT's name and tagline, and nothing else, on EVERY surface. No header carries
+# a mark of any kind there: the AuScope and NCRIS lock-up at the right is the header's only AuScope
+# presence, and the AusMT product mark is the documentation sidebar's and the social card's, not the
+# site header's.
 #
-# The mark is a fixed 30 x 30 box, which is why it can join the zero-basis .hleft zone without
-# moving the centre tabs: a flex:1 1 0 side hands its leftover space out evenly whatever it holds,
-# so a wider identity block changes the SIDE's content, never the centre group's x. The pins above
-# hold that geometry; these hold the identity itself, pairwise, for the same reason the zone rules
-# are held pairwise - an edit to one surface must not leave the other on a different mark.
-MARK_SRC = "/vendor/brand/ausmt-mark.svg"
-MARK_RULE = ".brandmark{height:30px;width:30px;display:block;flex:none}"
+# The identity block sits in the zero-basis .hleft zone, so it cannot move the centre tabs: a
+# flex:1 1 0 side hands its leftover space out evenly whatever it holds, so the identity block changes
+# the SIDE's content, never the centre group's x. The pins above hold that geometry; these hold the
+# identity itself, on every surface, for the same reason the zone rules are held on every surface: an
+# edit to one must not leave another carrying a mark the rest have dropped.
+PRODUCT_MARK = "ausmt-mark.svg"
+
+# Every way an image can be drawn into a zone: an element that fetches or paints one, or a rule that
+# paints one behind the text.
+IMAGE_TAGS = ("<img", "<svg", "<picture", "<object", "<embed", "<canvas", "<image")
+IMAGE_CSS = ("background-image", "background:url", "url(", "content:url")
+RETIRED_MARK_CLASS = "brandmark"
 
 
-def test_both_headers_carry_the_same_ausmt_mark():
-    """FAILS IF either surface loses the mark, points at a different file, or drifts to a different
-    sizing rule. Same-origin only: an http, https, protocol-relative or data src fails here, which is
-    the half of the pages' old zero-src rule that was ever load-bearing."""
-    for where, path in SURFACES:
-        text = path.read_text(encoding="utf-8")
-        assert f'<img class="brandmark" src="{MARK_SRC}" alt="AusMT" width="30" height="30">' in text, (
-            f"{where}: the header identity must be the AusMT mark at {MARK_SRC}")
-        assert MARK_RULE in text, f"{where}: the mark must carry the shared sizing rule {MARK_RULE!r}"
-        for scheme in ("http://", "https://", '"//', "data:"):
-            assert f'<img class="brandmark" src="{scheme}' not in text, (
-                f"{where}: the identity mark is same-origin only; {scheme!r} is never a mark src")
+def _identity_zones():
+    """(where, the identity zone's inner markup, the surface's full text) for every chrome page and for
+    the engine's header with each tab current, comments stripped so prose cannot satisfy a pin."""
+    out = [(f"portal/{p.name}", header_inner(p.read_text(encoding="utf-8")), p.read_text(encoding="utf-8"))
+           for p in _chrome_pages()]
+    out += [(f"engine/extract/_pages.py ({active})", header_inner(site_header(active)),
+             PAGES_PY.read_text(encoding="utf-8"))
+            for active in ("navMap", "navSurveys", "navCollections")]
+    zones = []
+    for where, header, text in out:
+        assert header is not None, f"{where}: carries no header"
+        bare = re.sub(r"<!--.*?-->", "", header, flags=re.S)
+        left = bare.split('<div class="hzone hleft">', 1)
+        assert len(left) == 2, f"{where}: the header has no identity zone"
+        zone = left[1].split('<div class="hzone hcenter">', 1)[0]
+        zones.append((where, zone, text))
+    return zones
 
 
-def test_the_mark_the_two_headers_name_is_a_real_committed_asset():
-    """FAILS IF the header points at a file the portal does not ship. Both surfaces are served from
-    the same origin by the portal image, so one missing file is a broken mark on every page of the
-    site at once."""
-    asset = ROOT / MARK_SRC.lstrip("/")
-    assert asset.is_file(), f"the header names {MARK_SRC}, which the portal does not ship"
-    assert "<circle" in asset.read_text(encoding="utf-8"), \
-        f"{MARK_SRC} must be the generated vector mark, not a placeholder"
+def test_no_header_carries_a_mark_of_any_kind_in_its_identity_zone():
+    """FAILS IF any surface draws an image of any kind inside .hleft: an img (the AuScope mark pair
+    returning in the slot it left), an inline svg, a picture, an object, an embed, a canvas, or a
+    style attribute that paints one behind the text. FAILS too if the zone holds anything but the
+    wordmark and the tagline: the homepage's heading-wrapped wordmark, or the root link elsewhere, then
+    the tagline, as the contract states them."""
+    zones = _identity_zones()
+    assert len(zones) >= 4, "fewer chrome surfaces were discovered than ship; the glob or the marker moved"
+    for where, zone, _text in zones:
+        lowered = zone.lower()
+        for tag in IMAGE_TAGS:
+            assert tag not in lowered, f"{where}: the identity zone carries no image; found {tag!r} in {zone!r}"
+        assert "style=" not in lowered, f"{where}: the identity zone takes no inline style: {zone!r}"
+        assert RETIRED_MARK_CLASS not in zone, f"{where}: the identity zone carries no mark class: {zone!r}"
+        identity = INDEX_IDENTITY if where == "portal/index.html" else PAGE_IDENTITY
+        want = tokens(f'{identity}<div class="tagline">{TAGLINE}</div></div>')
+        assert tokens(zone) == want, (
+            f"{where}: the identity zone is the wordmark and the tagline and nothing else:\n"
+            f"  got  {tokens(zone)}\n  want {want}")
 
 
-# EVERY surface, not just the pair above. The two pins above compare the SPA against the pages
-# sheet, which is where the zone geometry can drift; they cannot see releases.html or
-# add-survey.html, each of which carries its OWN copy of the chrome. Those two kept the AuScope
-# symbol after the SPA and the 2,655 generated pages had switched, so a reader following the
-# header's own "Contribute a survey" link watched the site's identity change under them.
-#
-# NO PAGE IS EXEMPT. about.html was the last one, its identity slot held open while that header
-# was still being settled; the rule is that about wears the chrome every other surface wears. There is
-# no exemption list here any more, and the pages are discovered from the filesystem, so a page cannot
-# arrive with an identity of its own. 404.html is a bare error document with no header at all.
-MARK_IMG = f'<img class="brandmark" src="{MARK_SRC}" alt="AusMT" width="30" height="30">'
+def test_no_header_names_the_mark_pair_and_no_surface_keeps_its_rule():
+    """The mark pair's files and its sizing rule, held absent from every header and every sheet.
+    FAILS IF any header names either mark file in any slot, or if any surface still declares a rule
+    for the retired .brandmark class: nothing carries the class, and a rule left behind is an
+    invitation to re-add the element it styles. FAILS too if a rule for the identity zone or its two
+    items paints a background image, which would put a mark back without a single img."""
+    for where, zone, text in _identity_zones():
+        header = header_inner(text) if where.startswith("portal/") else zone
+        for src in (MARK_LIGHT, MARK_DARK):
+            assert src not in (header or ""), f"{where}: no header names the AuScope mark {src}"
+        assert f".{RETIRED_MARK_CLASS}" not in text, (
+            f"{where}: the .{RETIRED_MARK_CLASS} rule has nothing to style and must not be declared")
+        for sel in (r"\.hleft", r"\.wordmark", r"\.tagline", r"\.brandh1"):
+            for body in re.findall(r"(?m)(?:^|\})\s*" + sel + r"\{([^}]*)\}", text):
+                for paint in IMAGE_CSS:
+                    assert paint not in body.replace(" ", ""), (
+                        f"{where}: {sel.replace(chr(92), '')} paints an image: {body!r}")
+    for active in ("navMap", "navSurveys", "navCollections"):
+        for src in (MARK_LIGHT, MARK_DARK):
+            assert src not in site_header(active), (
+                f"engine/extract/_pages.py: the generated header names the AuScope mark {src}")
 
-# The IDENTITY SLOT, by the class that expressed the one exception to it. A page's identity is
-# .brandmark; .auscope-logo was the AuScope symbol standing in for one. Keyed on the CLASS rather
-# than on the filename of the image, so the pin says which SLOT is forbidden the symbol rather than
-# which file may appear on the page at all.
-IDENTITY_CLASS = 'class="auscope-logo"'
+
+def test_the_mark_pair_stays_committed_for_the_map_the_figures_and_the_icons():
+    """No header names the two mark files, and they stay committed because three other consumers draw
+    them: the map's corner on index.html, the collection figure on both surfaces (portal/src/drawer.js
+    and the engine's collection page) and the icons tools/gen_auscope_icons.py renders. FAILS IF
+    either file goes, stops being the vector mark, or if a consumer stops naming it, which is the
+    moment the file would need a new reason to ship."""
+    for src in (MARK_LIGHT, MARK_DARK):
+        asset = ROOT / src.lstrip("/")
+        assert asset.is_file(), f"{src} is drawn by the map corner and the collection figures and must ship"
+        body = asset.read_text(encoding="utf-8")
+        assert body.lstrip().startswith("<svg") and "<path" in body, f"{src} must be the vector mark"
+        consumers = (("portal/index.html (the map corner)", INDEX),
+                     ("portal/src/drawer.js (the collection figure)", ROOT / "src" / "drawer.js"),
+                     ("engine/extract/_pages.py (the collection figure)", PAGES_PY))
+        for label, path in consumers:
+            assert path.read_text(encoding="utf-8").count(src) >= 1, f"{label} must still draw {src}"
+    icons = (ROOT / "tools" / "gen_auscope_icons.py").read_text(encoding="utf-8")
+    assert MARK_LIGHT.rsplit("/", 1)[-1] in icons, (
+        "tools/gen_auscope_icons.py renders the icons from the mark and must still read it")
+
+
+# The lock-up pair as the AuScope brand kit published it ("2025 AuScope Logos"): each file's SHA-256
+# and byte count, the colour file for the light theme and the white file for the dark.
+LOCKUP_FILES = {
+    LOCKUP_LIGHT: ("2025 AuScope-NCRIS Logo - Colour.png",
+                   "249d99861d37a8796acdd1b2eff73aaa4279436cbca31012d65bad9ce1190ec4", 39960),
+    LOCKUP_DARK: ("2025 AuScope-NCRIS Logo - White.png",
+                  "595a564ece1151d94347331c1521381df987da437aa3080cff47a5280cf818f6", 35628),
+}
+
+
+def test_the_lockup_the_headers_name_is_the_brand_kits_png_pair():
+    """FAILS IF a header's lock-up points at a file the portal does not ship, or at bytes that are not
+    the brand kit's file: a resize, a re-encode, a recolour or a metadata strip each change the digest.
+    FAILS too if a file stops being an 8-bit RGBA PNG of the 1919 by 325 the markup declares, because
+    the width and height attributes reserve the box before the image loads and must be its own
+    proportion."""
+    assert set(LOCKUP_FILES) == {LOCKUP_LIGHT, LOCKUP_DARK}
+    for src, (kit_name, digest, size) in LOCKUP_FILES.items():
+        asset = ROOT / src.lstrip("/")
+        assert asset.is_file(), f"the header names {src}, which the portal does not ship"
+        raw = asset.read_bytes()
+        assert raw[:8] == b"\x89PNG\r\n\x1a\n", f"{src} must be a PNG"
+        assert len(raw) == size and hashlib.sha256(raw).hexdigest() == digest, (
+            f"{src} must be the brand kit's {kit_name!r} byte for byte ({size} B, sha256 {digest})")
+        assert struct.unpack(">II", raw[16:24]) == LOCKUP_PIXELS, (
+            f"{src} must be {LOCKUP_PIXELS[0]}x{LOCKUP_PIXELS[1]}, got {struct.unpack('>II', raw[16:24])}")
+        assert raw[24] == 8 and raw[25] == 6, f"{src} must be 8-bit RGBA (PNG colour type 6)"
+        assert (f'src="{src}" alt="AuScope and NCRIS" '
+                f'width="{LOCKUP_PIXELS[0]}" height="{LOCKUP_PIXELS[1]}"') in LOCKUP, (
+            f"the contract lock-up must declare {src} at its intrinsic size")
+
+
+def test_the_vendor_inventory_records_the_lockup_pair():
+    """portal/vendor/README.md is where an operator answers "where did this file come from and is it
+    the one the brand kit published". FAILS IF it stops naming either lock-up file, the kit file it was
+    taken from, its digest or its byte count, the facts the pin above holds against the bytes."""
+    readme = (ROOT / "vendor" / "README.md").read_text(encoding="utf-8")
+    for src, (kit_name, digest, size) in LOCKUP_FILES.items():
+        name = src.rsplit("/", 1)[-1]
+        row = [line for line in readme.splitlines() if line.startswith(f"| `{name}` |")]
+        assert len(row) == 1, f"portal/vendor/README.md must carry one inventory row for {name}"
+        for fact in (kit_name, digest, f"{size} B", f"{LOCKUP_PIXELS[0]}x{LOCKUP_PIXELS[1]}"):
+            assert fact in row[0], f"the README's row for {name} must record {fact!r}: {row[0]!r}"
+
+
+# The cuts from the AuScope Style Guide that stood in for the brand kit's files. The guide's page
+# carried the mark without Tasmania, so they are gone from the tree and no surface may name them.
+RETIRED_CUTS = ("auscope-logo.svg", "auscope-logo-white.svg", "auscope-ncris-lockup.svg",
+                "auscope-ncris-lockup-white.svg")
+
+
+def test_no_surface_names_the_retired_style_guide_cuts():
+    """FAILS IF a cut comes back to vendor/auscope/, or if any chrome page, the engine's emitter or the
+    drawer's figure names one: a header restored from an earlier revision names two of them at once."""
+    for name in RETIRED_CUTS:
+        assert not (ROOT / "vendor" / "auscope" / name).exists(), (
+            f"vendor/auscope/{name} is retired; the header draws the brand kit's files")
+    surfaces = [(f"portal/{p.name}", p.read_text(encoding="utf-8")) for p in _chrome_pages()]
+    surfaces += [("engine/extract/_pages.py", PAGES_PY.read_text(encoding="utf-8")),
+                 ("portal/src/drawer.js", (ROOT / "src" / "drawer.js").read_text(encoding="utf-8"))]
+    for where, text in surfaces:
+        for name in RETIRED_CUTS:
+            assert name not in text, f"{where}: names the retired cut {name}"
+
+
+def test_no_header_carries_the_ausmt_product_mark():
+    """The rule that moved the identity slot, pinned as one. FAILS IF any header on any surface names
+    the AusMT product mark: it is the documentation sidebar's and the social card's mark, and a
+    header copied from a page that predates the AuScope identity is exactly how it would come back."""
+    for p in _chrome_pages():
+        header = header_inner(p.read_text(encoding="utf-8")) or ""
+        assert PRODUCT_MARK not in header, f"portal/{p.name}: the header names the AusMT product mark"
+    assert PRODUCT_MARK not in site_header("navMap"), (
+        "engine/extract/_pages.py: the generated header names the AusMT product mark")
 
 
 def _chrome_pages():
     """Every portal document that ships the site chrome, by name."""
     return [p for p in sorted(ROOT.glob("*.html")) if "<header>" in p.read_text(encoding="utf-8")]
-
-
-def test_every_static_chrome_page_carries_the_ausmt_mark():
-    """FAILS IF a portal page that wears the chrome shows anything but the AusMT mark as its
-    identity, and equally if a NEW page appears wearing the chrome without one. Discovered from the
-    filesystem rather than from a list, so adding a page cannot quietly add a sixth identity, and
-    no page is skipped."""
-    seen = []
-    for page in _chrome_pages():
-        seen.append(page.name)
-        text = page.read_text(encoding="utf-8")
-        assert MARK_IMG in text, (
-            f"portal/{page.name}: the header identity must be the AusMT mark at {MARK_SRC}")
-        assert MARK_RULE in text, (
-            f"portal/{page.name}: the mark must carry the shared sizing rule {MARK_RULE!r}")
-        assert IDENTITY_CLASS not in text, (
-            f"portal/{page.name}: the AuScope symbol is not this site's header identity, and it no "
-            "longer states the parent organisation from the right zone either; the relationship "
-            "lives in the footer and in About section 2")
-    assert seen, "no chrome page was discovered; the glob or the header marker has moved"
-
-
-# THE ONE DECLARED DIFFERENCE between the homepage's identity block and every other surface's. The
-# map page is the only document on this site whose body names it in no heading of its own, so its
-# mark is wrapped in the page's h1 and the page name rides inside it in a clipped span. The wrapper
-# is markup and not geometry: it takes the mark's own flex behaviour, the mark literal above is
-# untouched inside it, and the block renders as it does everywhere else. Declared here rather than
-# left to be invisible, so a header that grows a SECOND heading fails a pin instead of passing three.
-HOMEPAGE_H1_OPEN = '<h1 class="brandh1">'
 
 
 def _header_markup(text):
@@ -297,54 +403,143 @@ def _header_markup(text):
     return text.split("<header", 1)[1].split("</header>", 1)[0]
 
 
-def test_only_the_homepage_wraps_its_mark_in_a_heading():
-    """FAILS IF the homepage loses the wrapper, if the wrapper stops holding the mark itself, or if
-    any other header grows a heading. Every other document names itself in its own main content, and
-    a heading in one of their headers would give that document two top level names."""
-    index_header = _header_markup(INDEX.read_text(encoding="utf-8"))
-    assert HOMEPAGE_H1_OPEN + MARK_IMG in index_header, (
-        "the map page's identity mark must be wrapped in the page heading: "
-        f"{HOMEPAGE_H1_OPEN}{MARK_IMG}")
+def test_every_header_is_the_contract_header_character_for_character():
+    """One header on every surface, compared element by element, attribute by attribute and word by
+    word with the contract (tests/chrome_contract.py), apart from the differences the contract names:
+    the identity is a link with no heading off the homepage, Map is a link off the homepage, the
+    current page's control is marked active, and the engine root-anchors About. Comments may differ.
+
+    FAILS IF any surface adds, drops, reorders or rewords anything in its header: a fifth control, a
+    count in the right zone, a second mark, the retired Contribute control, a different tagline."""
+    expected = {"index.html": ("index", None), "about.html": ("page", "about")}
+    pages = _chrome_pages()
+    assert {p.name for p in pages} == {"index.html", "about.html", "add-survey.html", "brand.html",
+                                       "releases.html"}, [p.name for p in pages]
+    for p in pages:
+        surface, active = expected.get(p.name, ("page", None))
+        got = tokens(header_inner(p.read_text(encoding="utf-8")))
+        want = tokens(header_markup(surface, active))
+        assert got == want, (
+            f"portal/{p.name}: the header differs from the contract at token "
+            f"{next(i for i, (a, b) in enumerate(zip(got + [None], want + [None])) if a != b)}:\n"
+            f"  got  {got}\n  want {want}")
+    for active in ("navMap", "navSurveys", "navCollections"):
+        got = tokens(header_inner(site_header(active)))
+        want = tokens(header_markup("engine", active))
+        assert got == want, (
+            f"engine/extract/_pages.py: the header with {active} current differs from the contract:\n"
+            f"  got  {got}\n  want {want}")
+
+
+# THE ONE DECLARED DIFFERENCE between the homepage's identity block and every other surface's. The
+# map page is the only document on this site whose body names it in no heading of its own, so its
+# wordmark is wrapped in the page's h1 and the page name rides inside it in a clipped span. The
+# wrapper takes no type of its own, so its line box is the wordmark's and the block measures as it
+# does everywhere else. Declared here rather than left to be invisible, so a header that grows a
+# SECOND heading fails a pin instead of passing three.
+HOMEPAGE_H1_OPEN = '<h1 class="brandh1"><span class="wordmark">AusMT</span>'
+HOMEPAGE_H1_RULE = ".brandh1{flex:none;font-size:inherit}"
+
+
+def test_only_the_homepage_wraps_its_wordmark_in_a_heading():
+    """FAILS IF the homepage loses the wrapper, if the wrapper stops holding the wordmark, if it takes
+    a type size of its own (the h1's default 2em would set a taller line box than every other
+    surface's), or if any other header grows a heading. Every other document names itself in its own
+    main content, and a heading in one of their headers would give that document two top level names."""
+    index_text = INDEX.read_text(encoding="utf-8")
+    index_header = _header_markup(index_text)
+    assert HOMEPAGE_H1_OPEN in index_header, (
+        f"the map page's wordmark must be wrapped in the page heading: {HOMEPAGE_H1_OPEN}")
     assert index_header.count("<h1") == 1, (
         f"the map page's header carries exactly one heading, found {index_header.count('<h1')}")
+    assert HOMEPAGE_H1_RULE in index_text, f"the heading must take no type of its own: {HOMEPAGE_H1_RULE}"
     for page in _chrome_pages():
         if page.name == "index.html":
             continue
-        assert "<h1" not in _header_markup(page.read_text(encoding="utf-8")), (
+        header = _header_markup(page.read_text(encoding="utf-8"))
+        assert "<h1" not in header, (
             f"portal/{page.name}: this document names itself in its own body, so its header must "
             "carry no heading")
-    assert "<h1" not in _header_markup(PAGES_PY.read_text(encoding="utf-8")), (
+        assert PAGE_IDENTITY in header, f"portal/{page.name}: the identity is the link {PAGE_IDENTITY!r}"
+    assert "<h1" not in site_header("navMap"), (
         "engine/extract/_pages.py: the generated pages name themselves in their own body, so the "
         "shared header must carry no heading")
 
 
-def test_no_header_stands_the_auscope_symbol_in_for_an_identity():
-    """The rule that closed the carve-out, pinned as one. FAILS IF any page carries the AuScope
-    symbol in its identity slot: the AusMT mark opens every header, and nothing stands in for it.
-    A header copied from the pre-rule about.html is exactly how the old slot comes back.
-
-    Scoped to the identity CLASS rather than to the image file, which is the narrower of the two
-    statements and the one this pin owns: the whole-file ban lives below."""
-    holders = [p.name for p in sorted(ROOT.glob("*.html"))
-               if IDENTITY_CLASS in p.read_text(encoding="utf-8")]
-    assert holders == [], (
-        "no page may carry the AuScope symbol as its header identity; the AusMT mark opens every "
-        f"header on this site, got {holders}")
-
-
-# ------------------------------------------------------- the parent-organisation mark, WITHDRAWN
+# --------------------------------------------------------------- the lock-up and the switch
 #
-# No AuScope mark closes a header from the right zone. The rule moves the
-# relationship to the two places that state it in words: the footer, on every surface, and About's
-# "Who enables AusMT" section. A symbol repeated in the top-right corner of every page said nothing
-# those two do not, so it leaves EVERY header, and the right zone keeps the contextual status slot
-# alone.
+# The right zone carries the AuScope and NCRIS lock-up on every surface and nothing else: the counts
+# left it for the footer. Two variants ship for the two grounds, the white one sits only on the dark
+# ground, and the switch below shows exactly one of them.
+def _surfaces_text():
+    """Every chrome surface's text, the engine's sheet last so each portal page is checked first."""
+    out = [(f"portal/{p.name}", p.read_text(encoding="utf-8")) for p in _chrome_pages()]
+    out.append(("engine/extract/_pages.py", PAGES_PY.read_text(encoding="utf-8")))
+    return out
+
+
+def test_the_right_zone_is_the_lockup_alone_on_every_surface():
+    """FAILS IF a surface's right zone carries anything but the lock-up, including the counts that
+    moved to the footer, or if a variant's file, size or alt text drifts."""
+    headers = [(f"portal/{p.name}", header_inner(p.read_text(encoding="utf-8"))) for p in _chrome_pages()]
+    headers.append(("engine/extract/_pages.py", header_inner(site_header("navMap"))))
+    for where, header in headers:
+        right = flat(header).split('<div class="hzone hright">', 1)
+        assert len(right) == 2, f"{where}: the header has no right zone"
+        assert right[1].strip() == LOCKUP + "</div>", (
+            f"{where}: the right zone is the lock-up and nothing else: {right[1]!r}")
+        for gone in ("counts", "countSlot", "corpusCounts"):
+            assert gone not in header, f"{where}: {gone!r} left the header for the footer"
+
+
+def test_every_surface_declares_the_lockup_rules_and_the_theme_switch_verbatim():
+    """FAILS IF a surface's lock-up rules or switch rules drift by a character, if a switch rule is
+    missing or declared twice, or if the three switch rules leave their order: the default hide, then
+    the light variant hidden and the dark one shown under <html data-theme="dark">."""
+    for where, text in _surfaces_text():
+        for rule in LOCKUP_RULES + THEME_RULES:
+            assert text.count(rule) == 1, f"{where}: expected exactly one {rule!r}, found {text.count(rule)}"
+        at = [text.index(rule) for rule in THEME_RULES]
+        assert at == sorted(at), f"{where}: the three theme rules must keep their order: {at}"
+
+
+def test_no_rule_that_selects_a_variant_outranks_the_switch():
+    """The light theme shows exactly one of each pair. .theme-dark{display:none} is one class, so any
+    rule of higher specificity that sets display on a variant shows the dark lock-up in the light
+    theme as well. FAILS IF a lock-up or watermark rule that selects the images declares display."""
+    for where, text in _surfaces_text():
+        for sel in (r"\.orglockup img", r"\.collmark", r"#map \.mapmark"):
+            for body in re.findall(r"(?m)(?:^|\})\s*" + sel + r"\{([^}]*)\}", _outside_media(text)):
+                assert "display" not in body, (
+                    f"{where}: {sel.replace(chr(92), '')} sets display at a specificity the switch "
+                    f"cannot override: {body!r}")
+
+
+def _outside_media(text):
+    return re.sub(r"@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}", "", text)
+
+
+def test_the_contribute_control_has_left_every_header():
+    """FAILS IF the Contribute control or its rule comes back to any surface's header. add-survey.html
+    stays served and About links it from its own body."""
+    for where, text in _surfaces_text():
+        assert ".contribute" not in text, f"{where}: the .contribute rule is retired"
+        header = flat(_header_markup(text) if where.startswith("portal/") else site_header("navMap"))
+        assert "add-survey.html" not in header and "Contribute" not in header, (
+            f"{where}: the header no longer carries the Contribute control")
+    about = (ROOT / "about.html").read_text(encoding="utf-8").split("<main>", 1)[1]
+    assert 'href="add-survey.html"' in about, "About must keep its in-body route to add-survey.html"
+
+
+# ------------------------------------------------------- the parent-organisation icon, WITHDRAWN
+#
+# The AuScope icon PNG that once closed every header from the right zone stays withdrawn. The
+# relationship is carried by the lock-up in the right zone and stated in words in the footer and in
+# About's "Who enables AusMT" section.
 #
 # THE PINS BELOW ARE THE OLD ONES INVERTED, NOT DROPPED. What was held before was presence,
 # position, count and sizing on every surface; what is held now is ABSENCE on every surface, by the
-# anchor literal, by the class, by both CSS rules and by the image's filename. Absence by four
-# spellings is strictly more than the old set could say, because the old set was slot-scoped and
-# this one is not: no header may name the file at all, in any slot, in any quoting form.
+# anchor literal, by the class, by both CSS rules and by the image's filename.
 ORG_SRC = "/vendor/auscope-icon-white.png"
 ORG_IMG = (f'<a class="orgmark" href="https://www.auscope.org.au" target="_blank" '
            f'rel="noopener noreferrer" title="AuScope">'
@@ -354,30 +549,25 @@ ORG_RULE = ".orgmark{display:flex;align-items:center;flex:none;margin-left:16px}
 ORG_IMG_RULE = ".orgmark img{height:30px;width:auto;display:block}"
 
 
-def test_no_chrome_page_is_exempt_from_the_identity_mark():
-    """The guard over the per-surface identity pin above: it may not be hollowed out by skipping a
-    page. FAILS IF any discovered chrome page is missing the AusMT mark that opens its header.
-
-    It once held BOTH marks on every page. One of the two is gone from every header, so what is
-    left to hold is the one that remains, and the withdrawal of the other is pinned below rather
-    than folded in here: a page that lost its identity and a page that grew a parent mark back are
-    different defects and read better as different failures."""
+def test_no_chrome_page_is_exempt_from_the_markless_identity_zone():
+    """The guard over the per-surface identity pins above: they may not be hollowed out by skipping a
+    page. FAILS IF the discovered chrome pages stop being the five that ship a header, or if any of
+    them carries an image or a mark class anywhere in its header's identity zone."""
     pages = _chrome_pages()
-    assert pages, "no chrome page was discovered; the glob or the header marker has moved"
+    assert {p.name for p in pages} == {"index.html", "about.html", "add-survey.html", "brand.html",
+                                       "releases.html"}, [p.name for p in pages]
+    covered = {where for where, _zone, _text in _identity_zones()}
     for page in pages:
-        text = page.read_text(encoding="utf-8")
-        assert MARK_IMG in text, (
-            f"portal/{page.name}: the AusMT mark must open this header; no page is exempt")
+        assert f"portal/{page.name}" in covered, f"portal/{page.name}: no page is exempt"
+        header = re.sub(r"<!--.*?-->", "", header_inner(page.read_text(encoding="utf-8")), flags=re.S)
+        zone = header.split('<div class="hzone hleft">', 1)[1].split('<div class="hzone hcenter">', 1)[0]
+        assert "<img" not in zone and RETIRED_MARK_CLASS not in zone, (
+            f"portal/{page.name}: the identity zone carries no mark; no page is exempt")
 
 
 def test_no_chrome_surface_carries_the_org_mark_in_its_header():
-    """The rule, on every surface at once. FAILS IF the anchor literal, the .orgmark class or
-    either of its two CSS rules comes back to the SPA, to any static chrome page or to the engine's
-    pages sheet: those five spellings are how the mark would return, and a header copied from a
-    pre-rule page carries all four at once.
-
-    The engine surface is read from its SOURCE, the same mechanism the pins above use: the sheet
-    cannot be imported without the engine's path set up, and the emitter is one literal."""
+    """FAILS IF the anchor literal, the .orgmark class or either of its two CSS rules comes back to
+    the SPA, to any static chrome page or to the engine's pages sheet."""
     surfaces = [("engine/extract/_pages.py", PAGES_PY.read_text(encoding="utf-8"))]
     surfaces += [(f"portal/{p.name}", p.read_text(encoding="utf-8")) for p in _chrome_pages()]
     assert len(surfaces) >= 2, "no chrome surface was discovered; the glob or the marker has moved"
@@ -386,46 +576,32 @@ def test_no_chrome_surface_carries_the_org_mark_in_its_header():
                               ("the zone rule", ORG_RULE), ("the sizing rule", ORG_IMG_RULE)):
             assert needle not in text, (
                 f"{where}: the header's AuScope org-mark is withdrawn from every surface; "
-                f"{label} is back as {needle!r}. The relationship is stated in the footer and in "
-                "About's Who enables AusMT section")
+                f"{label} is back as {needle!r}")
 
 
-# The FILE, bounded per page. The pin above is scoped to SPELLINGS of the retired mark: to its
-# anchor literal, its class and its two rules. None of them says how often the IMAGE may be named,
-# so a second loose copy of it, in a body, in a url() or as a preload, satisfies the lot. Counting
-# the filename is what makes the withdrawal a statement about the image rather than about one
-# spelling of it in one slot.
 ORG_ASSET = ORG_SRC.rsplit("/", 1)[-1]
-
-# Zero appearances per chrome page. It was one while the mark closed every header; the rule took
-# that slot away and left the portal's shipped documents naming the file nowhere at all.
 ORG_ASSET_PER_PAGE = 0
 
 
 def test_no_chrome_page_names_the_auscope_image_at_all():
-    """FAILS IF a chrome page carries the AuScope image in any slot, by either spelling. The mark
-    was appended to a zone, so the way it comes back is a careless copy of a pre-rule header, and
-    a page naming the file again is that copy whatever markup it arrived in."""
+    """FAILS IF a chrome page carries the AuScope icon PNG in any slot. The header draws the lock-up
+    PNGs and the map's corner the vector mark pair; the icon PNG is a committed file that no page
+    names."""
     pages = _chrome_pages()
     assert pages, "no chrome page was discovered; the glob or the header marker has moved"
     for page in pages:
         count = page.read_text(encoding="utf-8").count(ORG_ASSET)
         assert count == ORG_ASSET_PER_PAGE, (
-            f"portal/{page.name}: no chrome page may name the AuScope image; the header slot that "
-            f"carried it is withdrawn, found {count}")
+            f"portal/{page.name}: no chrome page may name the AuScope icon PNG, found {count}")
 
 
 def test_the_withdrawn_asset_is_still_the_real_committed_file_its_other_consumers_need():
-    """The file STAYS, and this holds it to being the artefact it was. FAILS IF it is deleted,
-    replaced by a placeholder or re-encoded without its alpha channel.
-
-    Three consumers outlive the header slot and none of them is in this rule: the documentation
-    site's sidebar copy is made from these bytes (tests/test_docs_branding.py), the generated
-    collection page draws the same file as a corner mark on its member-footprint panel, and
-    tools/gen_social_card.py composites it into the social card. Deleting it because no header
-    names it any more breaks all three."""
+    """The file STAYS committed, and this holds it to being the artefact it was. FAILS IF it is
+    deleted, replaced by a placeholder or re-encoded without its alpha channel. The documentation
+    site's sidebar copy is made from these bytes (tests/test_docs_branding.py) and
+    tools/gen_social_card.py composites it into the social card."""
     asset = ROOT / ORG_SRC.lstrip("/")
-    assert asset.is_file(), f"{ORG_SRC} still has consumers outside the header and must ship"
+    assert asset.is_file(), f"{ORG_SRC} still has consumers outside the site chrome and must ship"
     data = asset.read_bytes()
     assert data[:8] == b"\x89PNG\r\n\x1a\n", f"{ORG_SRC} must be a PNG"
     # Colour type 6 is RGBA: the mark is white, so it reads on a dark ground only because it carries

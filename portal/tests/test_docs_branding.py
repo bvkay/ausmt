@@ -104,8 +104,8 @@ def test_the_stylesheet_gives_the_last_two_lines_their_own_line():
 
 def test_the_mark_is_the_portals_own_asset_byte_for_byte():
     """The docs sidebar's AuScope symbol is a COPY of the portal's vendored file, so the two must not
-    drift. It is not the mark the portal HEADER carries: the AusMT dot mark is the site identity
-    everywhere except about.html and this sidebar, both of which are waiting on the same decision."""
+    drift. No portal header carries a mark: the header's AuScope presence is the lock-up, so this
+    sidebar copy is held only against its source file."""
     assert DOCS_MARK.exists(), (
         "docs/docs/img/auscope-icon-white.png is the only brand asset the built site can reference; "
         "mkdocs copies docs/docs/, not portal/vendor/")

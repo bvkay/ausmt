@@ -845,13 +845,13 @@ function surveyLocator(ss){
   let outline="";
   if(typeof AU_OUTLINE!=="undefined"&&AU_OUTLINE){
     const pts=r=>r.map(([lo,la])=>{const p=proj(lo,la);return p[0].toFixed(1)+","+p[1].toFixed(1);}).join("L");
-    const coast=(AU_OUTLINE.coast||[]).map(r=>`<path d="M${pts(r)}Z" fill="#1d3140" stroke="#3a5266" stroke-width="1"/>`).join("");
+    const coast=(AU_OUTLINE.coast||[]).map(r=>`<path class="mm-coast" d="M${pts(r)}Z" stroke-width="1"/>`).join("");
     outline=`<g>${coast}</g>`;
   }
   const withPos=ss.filter(hasPosition);
   const r=withPos.length>200?1.6:2.2;
   const dots=withPos.map(s=>{const p=proj(s.lon,s.lat);
-    return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${r}" fill="${TYPE_COL[s.type]||"#4FC3D9"}" fill-opacity=".9"/>`;}).join("");
+    return `<circle class="mm-dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${r}" fill="${TYPE_COL[s.type]||"#4FC3D9"}" fill-opacity=".9"/>`;}).join("");
   // Compact-footprint marker: a deposit-scale survey is a lone
   // sub-pixel dot on a continent, so it gains a ring + a station-count pill at the centroid -
   // where AND how much, at a glance. State-scale footprints read on their own and get neither.
@@ -864,9 +864,9 @@ function surveyLocator(ss){
       const label=String(withPos.length);
       const pw=label.length*7+14;
       const px=Math.min(Math.max(c[0]-pw/2,4),W-pw-4),py=c[1]>36?c[1]-30:c[1]+16;
-      marker=`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="8" fill="none" stroke="#EF7256" stroke-width="1.6" opacity=".85"/>`+
-        `<rect x="${px.toFixed(1)}" y="${py.toFixed(1)}" width="${pw}" height="16" rx="8" fill="#18213D" stroke="#EF7256" stroke-width="1"/>`+
-        `<text x="${(px+pw/2).toFixed(1)}" y="${(py+11.5).toFixed(1)}" text-anchor="middle" fill="#EF7256" font-size="10" font-weight="600" font-family="ui-monospace,Menlo,monospace">${label}</text>`;
+      marker=`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="8" fill="none" style="stroke:var(--accent)" stroke-width="1.6" opacity=".85"/>`+
+        `<rect x="${px.toFixed(1)}" y="${py.toFixed(1)}" width="${pw}" height="16" rx="8" style="fill:var(--surface);stroke:var(--accent)" stroke-width="1"/>`+
+        `<text x="${(px+pw/2).toFixed(1)}" y="${(py+11.5).toFixed(1)}" text-anchor="middle" style="fill:var(--accent)" font-size="10" font-weight="600" font-family="ui-monospace,Menlo,monospace">${label}</text>`;
     }
   }
   return `<div class="card-locator"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Survey location in Australia">${outline}${dots}${marker}</svg></div>`;
@@ -1128,12 +1128,12 @@ function renderCards(){
     ? (_cardLayout==="compact"?vis.map(surveyRow).join(""):vis.map(surveyCard).join(""))
     : `<div class="emptynote">No surveys match the current search and filters. Clear the search box or the licence/type chips above to widen the results.</div>`;
   renderDiscovery(vis.length);
-  // Keep the header #nVis coherent with #surveyCount (both the discovery-filtered set) on every
+  // Keep the footer #nVis coherent with #surveyCount (both the discovery-filtered set) on every
   // grid re-render - e.g. a facet toggle, which re-renders here but has no other updateCounts path.
   if(curView==="surveys"&&typeof updateCounts==="function")updateCounts();}
 // "Clear filters": drop the discovery facets (licence + data-type chips) and the
 // discovery search query, the view-level narrowings this bar owns, then re-render the grid and the
-// header count. The map's own rail search (#find) and structural filters are a separate surface; this
+// footer count. The map's own rail search (#find) and structural filters are a separate surface; this
 // never reaches across into them.
 function clearDiscoveryFilters(){
   Object.keys(_facets).forEach(k=>_facets[k]=false);
@@ -1184,16 +1184,16 @@ function miniScatter(ss){
   const dx=(b.e-b.w)||1,dy=(b.no-b.so)||1,sc=Math.min(bw/dx,bh/dy);
   const ox=(bw-dx*sc)/2,oy=(bh-dy*sc)/2;                 // letterbox offset inside the plot box
   const px=lon=>bx0+ox+(lon-b.w)*sc,py=lat=>by1-oy-(lat-b.so)*sc;
-  const dots=pp.map(s=>`<circle cx="${px(s.lon).toFixed(1)}" cy="${py(s.lat).toFixed(1)}" r="2.6" fill="${TYPE_COL[s.type]||"#999"}" fill-opacity=".85"/>`).join("");
+  const dots=pp.map(s=>`<circle class="mm-dot" cx="${px(s.lon).toFixed(1)}" cy="${py(s.lat).toFixed(1)}" r="2.6" fill="${TYPE_COL[s.type]||"#999"}" fill-opacity=".85"/>`).join("");
   const fmtd=v=>v.toFixed(1)+"°";
   const latTicks=[b.no,(b.no+b.so)/2,b.so].map(v=>{const y=py(v).toFixed(1);
-    return `<line x1="${bx0-3}" y1="${y}" x2="${bx0}" y2="${y}" stroke="#8FA3B0" stroke-width="1"/>`+
-      `<text x="${bx0-5}" y="${(py(v)+3).toFixed(1)}" fill="#8FA3B0" font-size="9" font-family="monospace" text-anchor="end">${fmtd(v)}</text>`;}).join("");
+    return `<line x1="${bx0-3}" y1="${y}" x2="${bx0}" y2="${y}" style="stroke:var(--muted)" stroke-width="1"/>`+
+      `<text x="${bx0-5}" y="${(py(v)+3).toFixed(1)}" style="fill:var(--muted)" font-size="9" font-family="monospace" text-anchor="end">${fmtd(v)}</text>`;}).join("");
   const lonTicks=[b.w,(b.w+b.e)/2,b.e].map(v=>{const x=px(v).toFixed(1);
-    return `<line x1="${x}" y1="${by1}" x2="${x}" y2="${by1+3}" stroke="#8FA3B0" stroke-width="1"/>`+
-      `<text x="${x}" y="${by1+13}" fill="#8FA3B0" font-size="9" font-family="monospace" text-anchor="middle">${fmtd(v)}</text>`;}).join("");
+    return `<line x1="${x}" y1="${by1}" x2="${x}" y2="${by1+3}" style="stroke:var(--muted)" stroke-width="1"/>`+
+      `<text x="${x}" y="${by1+13}" style="fill:var(--muted)" font-size="9" font-family="monospace" text-anchor="middle">${fmtd(v)}</text>`;}).join("");
   const box=`<rect x="${bx0}" y="${by0}" width="${bw}" height="${bh}" fill="none" stroke="var(--line)"/>`;
-  return `<svg viewBox="0 0 ${W2} ${H2}" width="100%" role="img" style="max-width:${W2}px;background:#16242f;border:1px solid var(--line);border-radius:6px">`+
+  return `<svg viewBox="0 0 ${W2} ${H2}" width="100%" role="img" style="max-width:${W2}px;background:var(--map-panel);border:1px solid var(--line);border-radius:6px">`+
     box+latTicks+lonTicks+dots+`</svg>`;}
 // There is no "Related surveys" section and no relatedSurveys() scorer. See docs: portal internals,
 // drawer.js.
@@ -1434,8 +1434,8 @@ function collScatter(ss,maxW,mark){
   let outline="";
   if(typeof AU_OUTLINE!=="undefined"&&AU_OUTLINE){
     const pts=r=>r.map(([lo,la])=>{const p=proj(lo,la);return p[0].toFixed(1)+","+p[1].toFixed(1);}).join("L");
-    const coast=(AU_OUTLINE.coast||[]).map(r=>`<path d="M${pts(r)}Z" fill="#1d3140" stroke="#3a5266" stroke-width="1"/>`).join("");
-    const borders=(AU_OUTLINE.borders||[]).map(r=>`<path d="M${pts(r)}" fill="none" stroke="#3a5266" stroke-width=".8" stroke-dasharray="3 3"/>`).join("");
+    const coast=(AU_OUTLINE.coast||[]).map(r=>`<path class="mm-coast" d="M${pts(r)}Z" stroke-width="1"/>`).join("");
+    const borders=(AU_OUTLINE.borders||[]).map(r=>`<path d="M${pts(r)}" fill="none" style="stroke:var(--coast-line)" stroke-width=".8" stroke-dasharray="3 3"/>`).join("");
     outline=`<g class="au-outline">${coast}${borders}</g>`;
   }
   // The members that PLOT, which is the engine's `present` list (_pages.py _collection_scatter assigns
@@ -1448,10 +1448,10 @@ function collScatter(ss,maxW,mark){
   const _memberCols=memberColours(members.length);
   const col=sv=>_memberCols[members.indexOf(sv)];
   const dots=ss.filter(hasPosition).map(s=>{const p=proj(s.lon,s.lat);
-    return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="${col(s.survey)}" fill-opacity=".9"><title>${esc(s.id)} · ${esc(s.survey)}</title></circle>`;}).join("");
-  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${cap}px;background:#16242f;border:1px solid var(--line);border-radius:8px" role="img" aria-label="Member stations over Australia">${outline}${dots}</svg>`;
+    return `<circle class="mm-dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="${col(s.survey)}" fill-opacity=".9"><title>${esc(s.id)} · ${esc(s.survey)}</title></circle>`;}).join("");
+  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${cap}px;background:var(--map-panel);border:1px solid var(--line);border-radius:8px" role="img" aria-label="Member stations over Australia">${outline}${dots}</svg>`;
   const legend=`<div class="collscatter-legend">`+members.map(sv=>`<span class="csl-item"><span class="csl-dot" style="background:${col(sv)}"></span>${esc(sv)}</span>`).join("")+`</div>`;
-  const panel=mark?`<div class="collscatter-panel" style="max-width:${cap}px">${svg}<img class="collmark" src="/vendor/auscope-icon-white.png" alt="AuScope" width="27" height="28"></div>`:svg;
+  const panel=mark?`<div class="collscatter-panel" style="max-width:${cap}px">${svg}<img class="collmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="42" height="42"><img class="collmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="42" height="42"></div>`:svg;
   return `<div class="collscatter">${panel}${legend}</div>`;
 }
 function openCollectionPage(cid){
@@ -1502,7 +1502,7 @@ function openCollectionPage(cid){
   const _nc=document.getElementById("navCollections");if(_nc)_nc.classList.add("active");
   closeDrawer();
   v.style.display="block";v.scrollTop=0;curView="collection";
-  // This is the one view switch that does NOT go through setView, so it owes the header counter the
+  // This is the one view switch that does NOT go through setView, so it owes the footer counter the
   // repaint setView gives it - otherwise the slot keeps whatever the previous view left there.
   if(typeof updateCounts==="function")updateCounts();
 }
@@ -1573,7 +1573,7 @@ document.addEventListener("click",e=>{
   if(clearBtn&&clearBtn.addEventListener)clearBtn.addEventListener("click",clearDiscoveryFilters);
   // Live surveys-view search: case-insensitive substring over name/org/region/blurb
   // (surveyMatchesSearch in filters.js reads this input). Live-updates the grid + #surveyCount and the
-  // header #nVis count.
+  // footer #nVis count.
   const search=document.getElementById("surveySearch");
   if(search&&search.addEventListener)search.addEventListener("input",()=>{renderCards();if(typeof updateCounts==="function")updateCounts();});
   const fc=document.getElementById("facetChips");

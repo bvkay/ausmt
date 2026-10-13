@@ -966,7 +966,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // Colour-by is retired; the ONE marker colour is the data-type colour, membership-blind.
   ok(A.markerColor(_memberLp) === A.markerColor(_otherLp),
     "marker colour must be IDENTICAL for AusLAMP vs non-AusLAMP LPMT (no colour split), got: " + A.markerColor(_memberLp) + " / " + A.markerColor(_otherLp));
-  ok(A.markerColor(_memberLp) === "#2E8FA3", "all LPMT must render the flagship teal #2E8FA3, got " + A.markerColor(_memberLp));
+  ok(A.markerColor(_memberLp) === "#3F88C8", "all LPMT must render the long-period blue #3F88C8, got " + A.markerColor(_memberLp));
   // The hover tooltip is station name + survey name ONLY - no diagnostic Q, no
   // type/AusLAMP label. The member/non-member distinction lives only in the clustering split.
   // Asserting the diagnostic and the type/AusLAMP label are GONE is what fails on a tooltip that
@@ -1512,7 +1512,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(/px$/.test(tCard.style.left) && /px$/.test(tCard.style.top), "the centred card must be positioned in px, got left=" + JSON.stringify(tCard.style.left));
   ok(doc.getElementById("tourLeader").style.display === "none", "the leader must be hidden on the no-target step 0 (jsdom rects are zero)");
   const tNext = doc.getElementById("tourNext");
-  ok(tNext.classList.contains("tourprimary"), "the tour Next button must carry the copper .tourprimary class");
+  ok(tNext.classList.contains("tourprimary"), "the tour Next button must carry the accent .tourprimary class");
   ok(A.tourDim() === 0.78, "overlay dim must be 0.78, got " + A.tourDim());
   ok(A.tourDim() >= 0.65 + 0.10 && A.tourDim() <= 0.65 + 0.15, "overlay dim must be +10..15pp over the old 0.65, got " + A.tourDim());
   const tBack = doc.getElementById("tourBackdrop");
@@ -1562,40 +1562,49 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!doc.getElementById("howToUse"), "#howToUse was retired with the 'How AusMT works' panel");
   ok(doc.getElementById("welcomeTour"), "#welcomeTour (the welcome popup's tour button) is missing");
 
-  // NO AuScope ORG-MARK IN THE SPA HEADER. The mark closed the right zone on every surface until
-  // we moved the relationship to the two places that state it in words: the footer, on every
-  // page, and About's "Who enables AusMT" section. Asserted against the REAL index.html DOM rather
-  // than its source text, so a mark restored under different markup is caught by the slot it lands in
-  // and not only by the literal it was written as. The right zone itself must survive: it carries the
-  // contextual status slot, and a header with two zones re-floats the centre tab group.
+  // THE SPA HEADER'S AuScope PRESENCE. The identity zone is the h1-wrapped wordmark and the tagline and
+  // carries no mark, and the right zone is the AuScope and NCRIS lock-up pair, linked to AuScope; the icon
+  // PNG that once closed the right zone stays withdrawn. Asserted against the REAL index.html DOM rather
+  // than its source text, so a mark restored under different markup is caught by the slot it lands in and
+  // not only by the literal it was written as.
   const _hdr = doc.querySelector("header");
   ok(_hdr, "index.html must carry the site header");
   ok(_hdr.querySelectorAll(".orgmark").length === 0,
     "the AuScope org-mark is withdrawn from every header; found " + _hdr.querySelectorAll(".orgmark").length);
   ok([..._hdr.querySelectorAll("img")].every(i => (i.getAttribute("src") || "").indexOf("auscope-icon") < 0),
-    "no header image may name the AuScope icon: " +
+    "no header image may name the AuScope icon PNG: " +
     JSON.stringify([..._hdr.querySelectorAll("img")].map(i => i.getAttribute("src"))));
-  ok([..._hdr.querySelectorAll("a")].every(a => (a.getAttribute("href") || "").indexOf("auscope.org.au") < 0),
-    "the header carries no outbound AuScope anchor; the footer and About section 2 do");
-  ok(_hdr.querySelector(".hright"), "the right zone stays; the mark left it, the zone did not");
+  const _left = _hdr.querySelector(".hleft");
+  const _drawn = _left ? [..._left.querySelectorAll("img, svg, picture, object, embed, canvas")] : [];
+  ok(_left && _drawn.length === 0,
+    "the identity zone carries no mark of any kind, got " + JSON.stringify(_drawn.map(e => e.outerHTML)));
+  const _items = _left ? [..._left.children].map(e => e.tagName.toLowerCase() + "." + e.className) : [];
+  ok(JSON.stringify(_items) === JSON.stringify(["h1.brandh1", "div.tagline"]),
+    "the identity zone is the heading-wrapped wordmark and the tagline alone, got " + JSON.stringify(_items));
+  const _right = _hdr.querySelector(".hright");
+  ok(_right, "the header keeps its right zone");
+  const _outbound = [..._hdr.querySelectorAll("a")].filter(a => (a.getAttribute("href") || "").indexOf("auscope.org.au") >= 0);
+  ok(_outbound.length === 1 && _outbound[0].classList.contains("orglockup") && _right.contains(_outbound[0]),
+    "the header's one outbound AuScope anchor is the lock-up in the right zone, found " + _outbound.length);
+  ok(_right && _right.querySelectorAll("img").length === 2 && !_right.querySelector(".counts"),
+    "the right zone is the lock-up pair alone; the counts moved to the footer");
 
-  // THE MAP WATERMARK. The AuScope colour icon is the one place on the site the symbol survives,
-  // and it is there for a reason the chrome could not give: the map is what people screenshot into
-  // talks and reports, and a screenshot carries no footer. Driven off the REAL index.html DOM, so a
-  // mark that moved out of the map container, grew a link around it or lost its alt text fails here
-  // rather than in a source-literal pin that a re-indentation could break.
+  // THE MAP WATERMARK. The AuScope mark pair in the map's bottom-right corner, for the reason the chrome
+  // could not give: the map is what people screenshot into talks and reports, and a screenshot carries no
+  // header or footer. Driven off the REAL index.html DOM, so a mark that moved out of the map container,
+  // grew a link around it or lost its alt text fails here.
   const _mapEl = doc.getElementById("map");
   ok(_mapEl, "index.html must carry the Leaflet map container");
   const _marks = [..._mapEl.querySelectorAll("img.mapmark")];
-  ok(_marks.length === 1,
-    "the map must carry exactly one watermark inside its own container, found " + _marks.length);
-  ok(_marks[0].getAttribute("src") === "/vendor/auscope-icon-colour.png",
-    "the watermark must be the vendored AuScope colour icon, got " + JSON.stringify(_marks[0].getAttribute("src")));
-  ok(_marks[0].getAttribute("alt") === "AuScope",
-    "the watermark is attribution and must name the organisation in its alt text, got " +
-    JSON.stringify(_marks[0].getAttribute("alt")));
-  ok(!_marks[0].closest("a"),
-    "the watermark must not be a link; the footer carries the link and a link here takes a tab " +
+  ok(_marks.length === 2,
+    "the map must carry the watermark pair inside its own container, found " + _marks.length);
+  ok(_marks.length === 2 && _marks[0].getAttribute("src") === "/vendor/auscope/auscope-mark.svg" &&
+     _marks[1].getAttribute("src") === "/vendor/auscope/auscope-mark-white.svg",
+    "the watermark must be the AuScope mark pair, got " + JSON.stringify(_marks.map(m => m.getAttribute("src"))));
+  ok(_marks.every(m => m.getAttribute("alt") === "AuScope"),
+    "the watermark is attribution and must name the organisation in its alt text");
+  ok(_marks.every(m => !m.closest("a")),
+    "the watermark must not be a link; the header carries the link and a link here takes a tab " +
     "stop in the middle of the map");
   // The two properties that make it unable to intercept a zoom, a draw, a popup or the tour. Read
   // from the document's OWN stylesheet text and compared as numbers against Leaflet's, because
@@ -3896,11 +3905,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   searchInput.value = "ORGX"; fire(searchInput, "input");   // Alpha's org, matched case-insensitively
   ok(surveyOrder().length === 1 && surveyOrder()[0] === "Alpha Survey",
     "the search must match the ORG field case-insensitively (ORGX -> Alpha/OrgX), got: " + JSON.stringify(surveyOrder()));
-  // The header counter stays coherent on the Surveys view; the search handler re-runs updateCounts().
+  // The footer counter stays coherent on the Surveys view; the search handler re-runs updateCounts().
   // This pin is off #nVis: on the Surveys view the slot is the WORKSPACE LINE, not the map's three
   // station counts (contract section 1).
   ok(doc.getElementById("countSlot").textContent === "1 of 4 surveys shown",
-    "the header workspace line must track the search on the Surveys view, got: " + JSON.stringify(doc.getElementById("countSlot").textContent));
+    "the footer workspace line must track the search on the Surveys view, got: " + JSON.stringify(doc.getElementById("countSlot").textContent));
   // (h) CLEAR resets the type facets AND clears the search (count back to 4).
   clearFilters.click();
   ok(surveyCount.textContent === "4 surveys" && searchInput.value === "",
@@ -3957,15 +3966,15 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify(win.getComputedStyle(doc.getElementById("discoveryControls")).maxWidth) +
     " grid=" + JSON.stringify(_gridCss.maxWidth));
 
-  // THE CONTEXTUAL COUNTER. The header counter read
+  // THE CONTEXTUAL COUNTER. The counter read
   // "N shown / M selected / T total" on EVERY view, and only on the map was that a description of what
   // the reader was looking at. On the Surveys view it counted stations while the screen showed survey
   // cards; on the Collections views it counted something not on screen at all. The SHELL is identical
   // everywhere - same element, same place, same type - and only the SLOT's content changes; where
   // nothing true can be said about what is on screen, it says nothing.
   const slot = doc.getElementById("countSlot");
-  ok(slot, "the header counter needs a slot element (#countSlot) whose content is per-view");
-  const shell = doc.getElementById("headerCounts");
+  ok(slot, "the footer counter needs a slot element (#countSlot) whose content is per-view");
+  const shell = doc.getElementById("footerCounts");
   ok(shell && shell.classList.contains("counts") && shell.contains(slot),
     "the shell (.counts) must be the same element on every view, with the slot inside it");
   // (a) MAP: unchanged - the three station counts, with the ids the rest of the app paints.
@@ -5029,7 +5038,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.setView("surveys");
   // The header slot is the workspace line on this view, so the coherence pin reads it there.
   ok(doc.getElementById("surveyCount").textContent === "4 surveys" && /^4 of 4 surveys shown/.test(doc.getElementById("countSlot").textContent),
-    "StageB COHERENCE: #surveyCount and the header workspace line must both count 4 surveys regardless of tile scoping, got " + JSON.stringify([doc.getElementById("surveyCount").textContent, doc.getElementById("countSlot").textContent]));
+    "StageB COHERENCE: #surveyCount and the footer workspace line must both count 4 surveys regardless of tile scoping, got " + JSON.stringify([doc.getElementById("surveyCount").textContent, doc.getElementById("countSlot").textContent]));
   ok(treeChecked().length === 4, "StageB RESTORE (view switch): navigating off the map must restore the scoped tree, got " + JSON.stringify(treeChecked()));
   A.setView("map"); A.setSidebarMode("browse");
 
@@ -5075,7 +5084,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.markerCount() === 5,
     "LEG CORE: hiding a type must not destroy markers - it filters the layer set, got " + A.markerCount());
   ok(doc.getElementById("nVis").textContent === "4",
-    "LEG CORE: the header count must follow a legend toggle, got " + doc.getElementById("nVis").textContent);
+    "LEG CORE: the footer count must follow a legend toggle, got " + doc.getElementById("nVis").textContent);
   ok(lpRow.getAttribute("aria-pressed") === "false" && lpRow.classList.contains("legoff"),
     "LEG: an OFF legend row must report aria-pressed=false AND render dimmed (.legoff)");
   lpRow.click();
@@ -5621,8 +5630,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ] });
   A.openSurvey("Delta Survey");
   const sheetRules = [...doc.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch (e) { return []; } });
-  const accentRules = sheetRules.filter(r => r.style && /var\(--copper\)/.test(r.style.color || ""));
-  ok(accentRules.length > 0, "LINKCSS: no rule in index.html sets color:var(--copper) at all - the probe is broken, not the sheet");
+  const accentRules = sheetRules.filter(r => r.style && /var\(--accent\)/.test(r.style.color || ""));
+  ok(accentRules.length > 0, "LINKCSS: no rule in index.html sets color:var(--accent) at all - the probe is broken, not the sheet");
   // jsdom (like a real browser) refuses to match :visited from script, so strip the pseudo-class before
   // matching and require it in the SELECTOR TEXT instead - the two halves together are the real claim.
   const selectedBy = (el, wantVisited) => accentRules.some(r => String(r.selectorText).split(",").some(sel => {

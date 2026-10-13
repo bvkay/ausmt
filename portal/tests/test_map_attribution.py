@@ -3,8 +3,13 @@
 The corner line comes off the map. What goes is the LINE and the "Leaflet" flag beside it, which is
 a courtesy to a library; what stays is the credit, because the basemap is OpenStreetMap data under
 ODbL and every tile source this site can draw asks for credit of its own. It is met by Leaflet's
-own attribution control, mounted with prefix:false and collapsed behind a small "(i)" that opens on
-hover, on focus and on click.
+own attribution control, mounted with prefix:false in Leaflet's TOP-RIGHT corner and collapsed behind
+a small "(i)" that opens on hover, on focus and on click.
+
+WHY TOP-RIGHT. The bottom-right corner belongs to the AuScope mark, whose clear space is the logo's
+own height on every side and holds nothing else (tests/test_map_watermark.py). The control is mounted
+there on every map this site draws, so the corner a reader looks in for the credit is the same on all
+four.
 
 WHY THE CONTROL AND NOT A LINE IN THE FOOTER. Two reasons stand behind that, and this module holds
 the second:
@@ -100,6 +105,10 @@ def test_one_module_builds_the_collapsed_control_for_every_map_this_site_draws()
     assert "prefix: false" in src or "prefix:false" in src, (
         "the control is mounted with prefix:false: the Leaflet flag and word are a courtesy to a "
         "library, not a licence term, and they stay off the map")
+    assert re.search(r'attribution\(\{\s*prefix:\s*false,\s*position:\s*"topright"\s*\}\)', src), (
+        "the control is mounted in Leaflet's top-right corner: the bottom-right is the AuScope mark's "
+        "clear space")
+    assert src.count("lib.control.attribution(") == 1, "the module mounts the control in one place"
     assert not re.search(r"\bel\.innerHTML|container\.innerHTML", src), (
         "the module must not write into Leaflet's attribution container: Leaflet rewrites that "
         "container's innerHTML on every attribution update, so anything put inside it is lost the "
@@ -166,10 +175,15 @@ def test_the_spa_map_mounts_the_collapsed_control_and_credits_the_layer_it_draws
     attributions = re.findall(r"attribution:\s*([A-Za-z_0-9]+|\"[^\"]*\")", src)
     assert len(attributions) >= 2, (
         f"both basemap branches state a credit of their own, found {attributions}")
+    # The pmtiles pair is built in one function, mounted at start and remounted on a theme change, so
+    # the credit is stated where the layers are built rather than in the branch that calls it.
+    mount = re.search(r"function mountBasemap\(flavor\)\{(.*?)\n\}", src, re.S)
+    assert mount, "the pmtiles pair is built by mountBasemap(flavor)"
+    assert mount.group(1).count("attribution:_PM_CREDIT") == 2 and _PMTILES_CREDIT in src, (
+        "both pmtiles layers credit OpenStreetMap and Protomaps, the same string, so Leaflet prints it once")
     pmtiles = src.split("if(_bmCfg.provider===")[1].split("}else{")[0]
+    assert "mountBasemap(" in pmtiles, "the pmtiles branch mounts the pair through mountBasemap"
     carto = src.split("}else{")[1].split("\n}", 1)[0]
-    assert "attribution:" in pmtiles and _PMTILES_CREDIT in src, (
-        "the pmtiles layers credit OpenStreetMap and Protomaps")
     assert "attribution:" in carto, (
         "the CARTO fallback states its OWN credit; it is the branch a footer line naming Protomaps "
         "would have mis-credited")

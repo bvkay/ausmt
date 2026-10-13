@@ -1,9 +1,9 @@
-# AusMT portal image — Caddy serving the static, build-step-free portal/ tree + a mounted data volume.
+# AusMT portal image: Caddy serving the static, build-step-free portal/ tree + a mounted data volume.
 #
 # Build context is the ausmt repo root (docker build -f deploy/docker/portal.Dockerfile .), so
 # COPY portal/ below is relative to that root, matching engine.Dockerfile's convention.
 #
-# ZERO-CDN CLAIM (verified by grep against the committed tree, not assumed — re-run this grep if
+# ZERO-CDN CLAIM (verified by grep against the committed tree, not assumed; re-run this grep if
 # portal/*.html changes and this comment starts to drift):
 #   grep -n "http" portal/index.html portal/about.html portal/add-survey.html portal/brand.html \
 #                  portal/releases.html portal/404.html
@@ -11,29 +11,28 @@
 #   - No page carries an external analytics <script> tag: analytics is off and the shim in
 #     src/analytics-shim.js is a no-op. If an operator adds one to
 #     self-host Plausible, script-src in the Caddyfile will need a matching addition then.
-#   - ROR/RAiD placeholder text in <input placeholder="https://ror.org/…"> etc — not a resource
+#   - ROR/RAiD placeholder text in <input placeholder="https://ror.org/…"> etc: not a resource
 #     load, just placeholder text.
 #   - add-survey.html's real live external calls: `fetch("https://api.ror.org/...")`, the
 #     publication-DOI harvest `fetch("https://api.crossref.org/...")` / `fetch("https://api.datacite.org/...")`,
-#     and two `L.tileLayer("https://{s}.tile.openstreetmap.org/...")` calls — all allow-listed
+#     and two `L.tileLayer("https://{s}.tile.openstreetmap.org/...")` calls, all allow-listed
 #     explicitly in the Caddyfile's per-page CSP (connect-src for the fetches / img-src for the tiles
 #     on the add-survey page block).
-#   - index.html's map (portal/src/map.js) loads tiles from basemaps.cartocdn.com — allow-listed in
+#   - index.html's map (portal/src/map.js) loads tiles from basemaps.cartocdn.com, allow-listed in
 #     the default/index CSP img-src.
-#   - the auscope.org.au ANCHORS, which are now the FOOTER's alone. The header's AuScope symbol was
-#     the third one on each of the five pages above; it is withdrawn from every header on the site,
-#     so what is left is two on every one of the six pages: the acknowledgement's URL text and the
-#     AuScope-NCRIS lockup, both in the footer. about.html carries a THIRD, the "Learn more about
-#     AuScope" link in its Who enables AusMT section. 404.html is not an exception: it has no
-#     header, and no page's header has an anchor. All of them are
-#     NAVIGATION links, not resource loads: CSP does not govern <a href> targets. The images those
-#     pages fetch are vendored and served from 'self' under img-src: the AusMT identity mark
-#     (vendor/brand/ausmt-mark.svg), on the five chrome pages and not on 404.html, and the
-#     AuScope-NCRIS lockup (vendor/auscope-ncris-white.png), which about.html names twice, once in
-#     its body and once in its footer, and every other page including 404.html once.
-#     vendor/auscope-icon-white.png is fetched by no page here. The file still ships: the
-#     generated collection pages draw it on their member-footprint panels, the docs site's sidebar
-#     copy is made from it and tools/gen_social_card.py composites it.
+#   - the auscope.org.au ANCHORS. Every chrome page carries two: the AuScope-NCRIS lock-up in the
+#     header's right zone, and the organisation's name in the footer's acknowledgement, which is the
+#     footer's one anchor; 404.html has no header, so it carries the footer's one. about.html carries
+#     two more, its body lock-up and the "Learn more about AuScope" link in its Who enables AusMT
+#     section. All of them are NAVIGATION links, not resource loads: CSP does not govern <a href>
+#     targets. The images those pages fetch are vendored and served from 'self' under img-src: the
+#     AuScope mark pair (vendor/auscope/auscope-mark.svg and its white twin), fetched by index.html's
+#     map corner and by the collection figures and by no header, and the brand kit's lock-up PNG pair
+#     (vendor/auscope-ncris-colour.png and vendor/auscope-ncris-white.png), fetched by every header
+#     and by about.html's body; each pair ships both files and CSS shows the one the appearance
+#     selects. The kit's icon PNGs (vendor/auscope-icon-colour.png, auscope-icon-white.png)
+#     are fetched by no page here and still ship: the docs site's sidebar copy and
+#     tools/gen_social_card.py are made from the white icon.
 #   - the auscope.org.au METADATA, which loads nothing: the JSON-LD publisher URL and the WebSite
 #     node's own url on index.html, every page's rel=canonical, and og:url plus og:image on
 #     index.html, about.html, releases.html and add-survey.html (brand.html is noindex and

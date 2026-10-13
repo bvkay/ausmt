@@ -130,13 +130,19 @@ def test_the_full_artwork_is_offered_separately_from_the_mark():
 
 def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
     """FAILS IF brand.html is an orphan page. It carries the same three-zone header (with the zero
-    basis sides), the AusMT mark as its identity, and the standard footer."""
+    basis sides), the identity zone every header carries (AusMT's name and tagline, and no mark), and
+    the standard footer."""
     text = _text()
     for zone, rule in ((".hleft", "flex:1 1 0"), (".hcenter", "flex:0 1 auto"), (".hright", "flex:1 1 0")):
         m = re.search(re.escape(zone) + r"\{([^}]*)\}", text)
         assert m and rule in m.group(1), f"brand.html: {zone} must carry {rule}"
-    assert '<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">' \
-        in text, "brand.html must carry the site's identity mark, like every other surface"
+    header = re.sub(r"<!--.*?-->", "", text.split("<header>", 1)[1].split("</header>", 1)[0], flags=re.S)
+    zone = header.split('<div class="hzone hleft">', 1)[1].split('<div class="hzone hcenter">', 1)[0]
+    assert " ".join(zone.split()) == ('<a class="wordmark" href="/">AusMT</a> <div class="tagline">'
+                                      "Australia's Magnetotelluric Data Portal</div> </div>"), \
+        f"brand.html's identity zone is AusMT's name and tagline and no mark, like every other surface: {zone!r}"
+    assert "auscope-mark" not in header and "brandmark" not in text, \
+        "brand.html's header names no AuScope mark; the lock-up at the right is its AuScope presence"
     for nav_id, href in (("navMap", "/"), ("navSurveys", "/surveys"), ("navCollections", "/collections")):
         assert re.search(rf'<a id="{nav_id}" href="{re.escape(href)}"', text), \
             f"brand.html: {nav_id} must point at {href}"
@@ -144,14 +150,32 @@ def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
         "a page the sitemap advertises must declare its canonical"
     # The site's ONE footer. Its strings, targets and geometry are held for all six documents at once
     # in tests/test_footer_regions.py; what is asserted here is that this page carries it at all,
-    # named by the region the one-footer rule put in its right zone.
-    assert "<footer>" in text and 'class="orglogo"' in text, \
-        "brand.html must carry the standard footer, lockup and all"
+    # named by its three zones, the right one empty because this page has no status to report.
+    assert text.count("<footer>") == 1, "brand.html must carry the standard footer, once"
+    foot = text.split("<footer>", 1)[1].split("</footer>", 1)[0]
+    zones = re.findall(r'<div class="fzone (fleft|fcenter|fright)">', foot)
+    assert zones == ["fleft", "fcenter", "fright"], \
+        f"brand.html's footer is the three zones in order, got {zones}"
+    assert '<div class="fzone fright"></div>' in foot, \
+        "brand.html's right zone is empty: the page has no status and the footer carries no control"
+
+
+def test_the_page_says_which_mark_the_site_icons_carry():
+    """The Mark section once offered the AusMT symbol "for a favicon"; the site's own favicon and app
+    icons carry the AuScope mark. FAILS IF the page tells a reader the AusMT symbol is what the
+    browser tab shows, or stops saying where the symbol IS used."""
+    flat = re.sub(r"\s+", " ", _text())
+    mark = flat.split("<h2>Mark</h2>", 1)[1].split("<h2>", 1)[0]
+    assert "for a favicon" not in mark, "the AusMT symbol is not this site's favicon"
+    assert "favicon and app icons carry the AuScope mark" in mark, (
+        "the Mark section must say the site's favicon and app icons carry the AuScope mark")
+    assert "documentation sidebar" in mark and "social card" in mark, (
+        "the Mark section must say where the AusMT symbol is the product mark")
 
 
 def test_about_links_the_brand_page():
     """FAILS IF About stops pointing at the brand page. It is the only navigation into it: the page
-    is deliberately not a sixth header item (the header carries five)."""
+    is deliberately not a fifth header item (the header carries four)."""
     about = (ROOT / "about.html").read_text(encoding="utf-8")
     assert 'href="brand.html"' in about, "about.html must link the brand page"
     assert "Brand" in about, "the About link must name the brand page in words a reader can find"
@@ -159,4 +183,4 @@ def test_about_links_the_brand_page():
         page = (ROOT / name).read_text(encoding="utf-8")
         header = page.split("</header>", 1)[0]
         assert 'href="brand.html"' not in header, \
-            f"{name}: the brand page is not a sixth header item; the header carries five"
+            f"{name}: the brand page is not a fifth header item; the header carries four"

@@ -2207,8 +2207,8 @@ OBLIGATION = re.compile(r"\bcopyright\b|SPDX|CC-BY|Creative Commons|\bNOTICE\b|l
                         r"|attribution (?:obligation|term|requirement|statement)|basemap credit",
                         re.I)
 # The enumerated exceptions, at most ten, each naming the file and the reason its comment may run
-# long. Empty on purpose: the sweep left nothing that needed one, and an entry here is a claim that
-# a constraint could not be stated in two sentences with its reasoning moved.
+# long. An entry here is a claim that a constraint could not be stated in two sentences with its
+# reasoning moved.
 LENGTH_EXCEPTIONS = ()
 # A sentence ends on a full stop that is not part of an abbreviation. The list is short because the
 # shipped prose is short; a false split only ever makes this rule stricter.

@@ -4,68 +4,86 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Brand and assets - AusMT</title>
+<script src="/src/theme.js"></script>
 <meta name="description" content="AusMT logos, the standalone mark and the presentation artwork, with the terms for using them.">
 <!-- Out of the search index and out of the sitemap: this page is an asset shelf reached from About, and a
      brand page ranking beside the survey and collection pages would spend the site's own discovery surface
      on it. See docs: portal internals, brand.html. -->
 <meta name="robots" content="noindex">
-<!-- Each icon href's query is that file's content hash. -->
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">
+<link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">
 <!-- The one true URL for this page. It is substantive, linked from About and advertised in
      sitemap.xml, so it must say which address it is served at. -->
 <link rel="canonical" href="https://ausmt.auscope.org.au/brand.html">
 <style>
-  /* The same tokens index.html, about.html, add-survey.html and releases.html declare, copied rather
-     than shared because the portal ships as classic static pages with no template step. */
+  /* The token block every portal page declares verbatim, copied rather than shared because the portal
+     ships as classic static pages with no template step. */
   :root{
-    --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
-    --text:#E8EDF1; --muted:#8FA3B0; --copper:#EF7256;
-    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
-    /* The two backgrounds the variants are DRAWN FOR, taken from contract/brand.json: a preview on the
-       wrong ground is how a reader concludes the file is broken. Pinned to the generator's own values. */
-    --preview-dark:#07162F;
-    --preview-light:#FFFFFF;
+    --bg:#F2F2F1; --surface:#FFFFFF; --surface-2:#F2F3F2; --line:#CED4DA;
+    --text:#333333; --muted:#6C757D; --heading:#282572; --accent:#282572; --accent-ink:#FFFFFF;
+    --lpmt:#3F88C8; --bbmt:#FFC14F; --amt:#9FCB5A; --gds:#CE348A; --dot-edge:#231F20;
+    --ok:#598F39; --part:#9A6B00; --no:#EA1E31; --unk:#6C757D;
+    --map-bg:#DFE6E9; --map-panel:#F4F5F4; --map-line:#CED4DA; --coast-fill:#FFFFFF; --coast-line:#9AA0A6;
+    --shadow:0 1px 3px rgba(35,31,32,.12);
+    --mono:ui-monospace,'SF Mono','Cascadia Mono','Consolas',monospace;
+    --sans:'Libre Franklin',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    color-scheme:light;
   }
+  :root[data-theme="dark"]{
+    --bg:#11182D; --surface:#18213D; --surface-2:#1E2B4F; --line:#2B3557;
+    --text:#E8EDF1; --muted:#8FA3B0; --heading:#FFFFFF; --accent:#EF7256; --accent-ink:#16110B;
+    --dot-edge:#11182D;
+    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
+    --map-bg:#0F1626; --map-panel:#18213D; --map-line:#222C4E; --coast-fill:#1D3140; --coast-line:#3A5266;
+    --shadow:none;
+    color-scheme:dark;
+  }
+  /* The two backgrounds the variants are DRAWN FOR, taken from contract/brand.json: a preview on the
+     wrong ground is how a reader concludes the file is broken. Pinned to the generator's own values. */
+  :root{--preview-dark:#07162F;--preview-light:#FFFFFF}
   *{box-sizing:border-box}
-  body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);margin:0;line-height:1.6;min-height:100vh;display:flex;flex-direction:column}
-  a{color:var(--copper)}
+  body{font-family:var(--sans);font-size:16px;background:var(--bg);color:var(--text);margin:0;line-height:1.6;min-height:100vh;display:flex;flex-direction:column}
+  a{color:var(--accent)}
   /* Uniform chrome: the three-zone header with zero-basis sides, so the tab group sits at the same x
      here as on every other surface. */
-  header{display:flex;align-items:center;line-height:normal;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--ink);z-index:5}
+  header{display:flex;align-items:center;line-height:normal;gap:12px 16px;padding:8px 18px;background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;z-index:5}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
   .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
-  .brandmark{height:30px;width:30px;display:block;flex:none}
-  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px}
+  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--heading);text-decoration:none}
   .tagline{color:var(--muted);font-size:12.5px}
+  /* flex-wrap is a term of the header's HEIGHT: three 112px tabs must be free to stack on a narrow
+     viewport. See docs: portal internals, brand.html. */
   nav{display:flex;gap:6px;flex-wrap:wrap}
   nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;
-    background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;
-    padding:0 16px;border-radius:5px;text-decoration:none}
-  nav a:hover{border-color:var(--copper)}
-  .about,.contribute{color:var(--copper);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
-  .about:hover,.contribute:hover{border-color:var(--copper)}
-  .counts{font-family:var(--mono);font-size:13px;color:var(--muted)}
-  .counts b{color:var(--text)}
+    background:var(--surface-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;
+    padding:0 16px;border-radius:5px;text-decoration:none;cursor:pointer}
+  nav a:hover{border-color:var(--accent)}
+  nav a.active{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
+  .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
+  .about:hover{border-color:var(--accent)}
+  .orglockup{display:block;line-height:0}
+  .orglockup img{height:40px;width:auto;max-width:100%;object-fit:contain}
+  .theme-dark{display:none}
+  :root[data-theme="dark"] .theme-light{display:none}
+  :root[data-theme="dark"] .theme-dark{display:block}
   @media (max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
 
   main{max-width:900px;width:min(100%,900px);margin:0 auto;padding:30px 20px 80px;flex:1 0 auto}
-  h1{font-size:1.8rem;margin:.2rem 0 .4rem}
-  h2{font-size:1.15rem;margin:2.2rem 0 .3rem}
+  h1{font-size:1.8rem;margin:.2rem 0 .4rem;color:var(--heading)}
+  h2{font-size:1.15rem;margin:2.2rem 0 .3rem;color:var(--heading)}
   .sub{color:var(--muted);max-width:66ch;margin:.2rem 0 1.4rem}
   .prose{max-width:66ch}
-  .usage{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--copper);
-    border-radius:8px;padding:.9rem 1.1rem;margin:1.2rem 0 0;max-width:66ch}
+  .usage{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:4px;box-shadow:var(--shadow);padding:.9rem 1.1rem;margin:1.2rem 0 0;max-width:66ch}
 
   /* min(360px,100%) rather than a bare 360px: a grid track's MINIMUM cannot shrink, so on a 375px
      phone a bare 360px track plus main's 20px gutters would resolve 5px wider than the viewport and
      scroll the page sideways. */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr));gap:1rem;margin:.9rem 0 0}
-  .item{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .item{background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);overflow:hidden}
   .panel{margin:0;padding:22px 20px;display:flex;align-items:center;justify-content:center;min-height:130px}
   .panel.dark{background:var(--preview-dark)}
   .panel.light{background:var(--preview-light)}
@@ -77,29 +95,27 @@
   .on{color:var(--muted);font-size:.8rem;font-family:var(--mono)}
   .dl{font-size:.85rem;white-space:nowrap}
   .dl a{text-decoration:none;border-bottom:1px solid transparent}
-  .dl a:hover{border-bottom-color:var(--copper)}
+  .dl a:hover{border-bottom-color:var(--accent)}
 
   .swatches{display:flex;flex-wrap:wrap;gap:.7rem;list-style:none;padding:0;margin:.9rem 0 0}
-  .swatch{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.55rem .7rem;
+  .swatch{background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:.55rem .7rem;
     display:flex;align-items:center;gap:.55rem;font-size:.85rem}
   .swatch::before{content:"";width:26px;height:26px;border-radius:6px;background:var(--swatch);flex:none}
   .swatch code{font-family:var(--mono);font-size:.8rem;color:var(--text)}
   .swatch span{color:var(--muted);font-size:.78rem}
 
-  .hero{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:.9rem 0 0}
+  .hero{background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);overflow:hidden;margin:.9rem 0 0}
   .hero img{width:100%;height:auto;display:block}
 
-  /* One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement CENTRE,
-     the AuScope-NCRIS lockup RIGHT. See docs: portal internals, brand.html. */
-  footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}
-  footer a{color:var(--copper);text-decoration:none}
-  .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none}
-  .apilink:hover{color:var(--copper)}
+  /* One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty
+     RIGHT that keeps the centre on the page's axis. See docs: portal internals, brand.html. */
+  footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--surface);z-index:3}
+  footer a{color:var(--accent);text-decoration:none}
+  .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
+  .apilink:hover{color:var(--accent)}
   .fleft{flex:1 1 0;min-width:0}
   .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
-  .fright{flex:1 1 0;min-width:0;text-align:right}
-  .orglogo{display:inline-block;line-height:0}
-  .orglogo img{height:30.8px;width:auto;max-width:100%;object-fit:contain;display:block}
+  .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
@@ -108,8 +124,9 @@
 <body>
 <header>
   <div class="hzone hleft">
-    <img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">
-    <div class="wordmark">AusMT</div>
+    <!-- AusMT's name and tagline are the identity zone; the lock-up at the right is the header's
+         only AuScope presence. See docs: portal internals, brand.html. -->
+    <a class="wordmark" href="/">AusMT</a>
     <div class="tagline">Australia's Magnetotelluric Data Portal</div>
   </div>
   <div class="hzone hcenter">
@@ -119,15 +136,9 @@
       <a id="navCollections" href="/collections">Collections</a>
     </nav>
     <a class="about" href="about.html">About</a>
-    <a class="contribute" href="add-survey.html">Contribute a survey &rarr;</a>
   </div>
   <div class="hzone hright">
-    <!-- The corpus-totals block the other static pages carry, filled by the same corpus-stats.js. It ships
-         hidden and appears only once the documents resolve, so an unpublished deployment shows nothing
-         rather than a fabricated total. -->
-    <div class="counts corpus" id="corpusCounts" hidden
-         title="stations and surveys in the AusMT catalogue"><b id="corpusStations"></b> stations &middot;
-      <b id="corpusSurveys"></b> surveys</div>
+    <a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a>
   </div>
 </header>
 <main>
@@ -177,9 +188,10 @@
   </div>
 
   <h2>Mark</h2>
-  <p class="prose">The symbol on its own, for a favicon, an avatar, an app tile or anywhere the
-  wordmark would be unreadable. It is the same artwork on either background, so the two previews below
-  are one file shown twice.</p>
+  <p class="prose">The symbol on its own, for an avatar, a slide corner or anywhere the wordmark would
+  be unreadable. It is AusMT's product mark, carried by the documentation sidebar and the social card;
+  this site's own favicon and app icons carry the AuScope mark. It is the same artwork on either
+  background, so the two previews below are one file shown twice.</p>
   <div class="grid">
     <div class="item">
       <figure class="panel dark square"><img src="vendor/brand/ausmt-mark.svg" alt="The AusMT mark" width="104" height="104"></figure>
@@ -231,19 +243,11 @@
   </ul>
 </main>
 <footer>
-  <!-- LEFT. The machine-readable MTCAT link, the same document from every page. -->
-  <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) &#8599;</a></div>
-  <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. See docs: portal internals,
-       brand.html. -->
-  <div class="fzone fcenter">AusMT is enabled by AuScope &middot; <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> &middot; &copy; 2026 AuScope and the AusMT contributors &middot; Data licences vary by survey</div>
-  <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. See docs:
+  <!-- LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. See docs:
        portal internals, brand.html. -->
-  <div class="fzone fright"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
+  <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">MTCAT JSON ↗</a></div>
+  <div class="fzone fcenter">AusMT is enabled by <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">AuScope</a> · Data licences vary by survey</div>
+  <div class="fzone fright"></div>
 </footer>
-<script src="config.js"></script>
-<!-- Separate files, not inline blocks: the deployed CSP for every page except add-survey.html is
-     script-src 'self' with no 'unsafe-inline' (deploy/docker/caddy/Caddyfile, @strictPages), which a
-     new page picks up automatically because that matcher is a `not path /add-survey.html`. -->
-<script src="corpus-stats.js"></script>
 </body>
 </html>

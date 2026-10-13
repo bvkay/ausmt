@@ -146,68 +146,79 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
     assert not (bare / "pages").exists(), "no --sitemap-base must mean no pages tree at all"
 
 
-# The fetched assets a page in this tier may carry, restated (not weakened) per
-# LANE-CONTRACT-BRAND-ASSETS.md. The rule was "no src at all", which was the right rule while the
-# pages had no identity mark: it kept out build-time reads, inlined copies and every external fetch.
-# The marks make an exception worth stating precisely rather than loosening the rule to
-# "images are fine": same-origin files, served by the portal image, cached once for the whole site.
-# The alternative was inlining 180 circles into 2,655 documents. What stays forbidden is everything
-# the old rule was actually protecting: no http, no https, no protocol-relative and no data URI may
-# ever appear as a src, and no OTHER path may either. The lists below are EXACT and ORDERED, so a
-# third asset, or the same asset in the wrong slot, fails here.
+# The fetched assets a page in this tier may carry, restated (not weakened). The rule was "no src at
+# all", which was the right rule while the pages fetched no image: it kept out build-time reads,
+# inlined copies and every external fetch. The header's lock-up pair and the collection figure's
+# mark make an exception worth stating precisely rather than loosening the rule to "images are
+# fine": same-origin files, served by the portal image, cached once for the whole site. What stays
+# forbidden is everything the strict rule was protecting: no http, no https, no protocol-relative
+# and no data URI may ever appear as a src, and no OTHER path may either. The lists below are EXACT
+# and ORDERED, so an extra asset, or the same asset in the wrong slot, fails.
 #
-# ONE mark in the header now: the AusMT identity opening the left zone. The AuScope parent mark
-# that once closed the right zone is withdrawn from every header on the site (the relationship is
-# stated in words, in the footer and in About's Who enables AusMT section), so the header's fetched
-# set is a single file.
-# The chrome's own fetched assets, in the order a page writes them: the header identity, then the
-# footer's AuScope-NCRIS lockup. The lockup arrived with the one-footer rule, which made the parent
-# organisation's acknowledgement the footer's right region on every surface; it is the same
-# same-origin, vendored, cached-once class of asset as the header mark and is allow-listed on
-# the same terms (see LANE-CONTRACT-FOOTER-AUSCOPE.md).
-ALLOWED_HEADER_SRCS = ["/vendor/brand/ausmt-mark.svg"]
-ALLOWED_FOOTER_SRCS = ["/vendor/auscope-ncris-white.png"]
+# The header carries one image, as a PAIR of files: the AuScope and NCRIS lock-up closing the right
+# zone, the brand kit's colour and white PNGs, one for the light ground and one for the dark
+# (portal/vendor/auscope/PROVENANCE.md: the white files sit on dark grounds only). The identity zone
+# carries no mark, so the lock-up is the header's only AuScope presence. The theme rules show one
+# file of the pair, but the markup names both. The footer fetches nothing: its right region is the
+# page's status, inline, or nothing.
+ALLOWED_HEADER_SRCS = ["/vendor/auscope-ncris-colour.png", "/vendor/auscope-ncris-white.png"]
+ALLOWED_FOOTER_SRCS = []
 ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
 
 # The collection page draws the one thing in this tier that carries a mark in its BODY: the member
-# footprint map, which puts the AuScope mark in the panel's bottom-left corner. That mark is a
-# CAPTION on a figure, not chrome, and the rule that withdrew the header mark did not reach it, so
-# the entry stays and is now the ONLY generated reference to the file. Keyed by the page's own path
-# so that no OTHER page kind can quietly grow a body mark.
-ALLOWED_BODY_SRCS = {"collections/idxcoll.html": ["/vendor/auscope-icon-white.png"]}
+# footprint map, which puts the AuScope mark pair in the panel's bottom-left corner. That mark is a
+# CAPTION on a figure, not chrome. Keyed by the page's own path so that no OTHER page kind can
+# quietly grow a body mark.
+ALLOWED_BODY_SRCS = {"collections/idxcoll.html": ["/vendor/auscope/auscope-mark.svg",
+                                                  "/vendor/auscope/auscope-mark-white.svg"]}
 
-# RESTATED, WHICH MEANS THE SAME SURFACE. The old rule was `"src=" not in page`: a raw substring
+# RESTATED, WHICH MEANS THE SAME SURFACE. The strict rule was `"src=" not in page`: a raw substring
 # test, blind to nothing. An allow-list parsed from double-quoted attributes alone would be NARROWER
 # than the rule it restates, because `src='https://...'` and `src=https://...` would both slip past
-# it while failing the old one. So the restatement keeps both halves: the COUNT of the substring is
-# held to the allow-list's length (the old rule's exact reach), and the attributes are parsed in
-# every quoting form HTML permits and compared to the list itself.
+# it while failing the strict one. So the restatement keeps both halves: the COUNT of the substring
+# is held to the allow-list's length (the strict rule's exact reach), and the attributes are parsed
+# in every quoting form HTML permits and compared to the list itself.
 _SRC_ATTR = re.compile(r"""src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
 
+# The two dash glyphs no page may carry, built from their code points so this file carries neither.
+_DASHES = (chr(0x2014), chr(0x2013))
 
-# The one script family the tier loads: the terminal-dialog modules a survey page carries at the END
-# of its body, and only when a time-series card can open the dialog (engine/extract/_pages.py
-# survey_page). They are same-origin files under /src, served by the portal image, never inline: the
-# pages are served under a CSP whose script-src is 'self' alone.
+
+# The appearance script, the FIRST script in every page's head and the one script every page loads:
+# it writes <html data-theme> before the first paint, so the page opens in the reader's theme. It
+# is a same-origin file under /src like every other script here, because the pages are served under
+# a CSP whose script-src is 'self' alone.
+HEAD_SCRIPT_SRCS = ["/src/theme.js"]
+
+# The terminal-dialog modules a survey page carries at the END of its body, and only when a
+# time-series card can open the dialog (engine/extract/_pages.py survey_page). Same-origin files
+# under /src, served by the portal image, never inline.
 FETCH_SCRIPT_SRCS = ["/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js"]
 
-# The surveys hub's one script, on the same terms: same-origin under /src, at the end of the body,
-# and only on the page that renders the controls it drives.
+# The surveys hub's one body script, on the same terms: same-origin under /src, at the end of the
+# body, and only on the page that renders the controls it drives.
 HUB_SCRIPT_SRCS = ["/src/surveys-hub.js"]
 
 
-def _page_scripts(page):
-    """The script files a page may load, from what its own body carries."""
+def _body_scripts(page):
+    """The script files a page may load at the end of its body, from what its own body carries."""
     scripts = FETCH_SCRIPT_SRCS if 'id="wgetModal"' in page else []
     return scripts + (HUB_SCRIPT_SRCS if 'id="idxctl"' in page else [])
 
 
+def _page_scripts(page):
+    """Every script file a page may load, in document order: the head's one, then the body's."""
+    return HEAD_SCRIPT_SRCS + _body_scripts(page)
+
+
 def _allowed_srcs(rel, page=""):
-    """The exact, ordered src list this page kind may carry, in DOCUMENT order: the two header marks,
-    then whatever body mark the kind is named for, then the footer's lockup, then the scripts the
-    page's body earns (the dialog's three, the hub's one). The order is the assertion, so the body
-    mark has to be spliced between the two chrome groups rather than appended after them."""
-    return ALLOWED_HEADER_SRCS + ALLOWED_BODY_SRCS.get(rel, []) + ALLOWED_FOOTER_SRCS + _page_scripts(page)
+    """The exact, ordered src list this page kind may carry, in DOCUMENT order: the head's
+    appearance script, the two header files, then whatever body mark the kind is named for, then
+    the footer's (none), then the scripts the page's body earns (the dialog's three, the hub's one).
+    The order is the assertion, so the body mark has to be spliced between the chrome groups rather
+    than appended after them."""
+    return (HEAD_SCRIPT_SRCS + ALLOWED_HEADER_SRCS + ALLOWED_BODY_SRCS.get(rel, [])
+            + ALLOWED_FOOTER_SRCS + _body_scripts(page))
 
 
 def _page_srcs(page, rel):
@@ -216,33 +227,55 @@ def _page_srcs(page, rel):
     raw = page.count("src=")
     assert raw == len(allowed), (
         f"{rel}: the tier allows exactly {len(allowed)} src attribute(s) and the page "
-        f"carries {raw}; the old rule counted the substring itself and this one still does")
+        f"carries {raw}; the strict rule counted the substring itself and this one still does")
     return [m.group(1).strip("\"'") for m in _SRC_ATTR.finditer(page)]
 
 
-def test_index_pages_carry_no_script_and_only_the_identity_mark(built):
-    """FAILS IF an index page grows an inline script, a stylesheet link, or any fetched asset beyond
-    the allow-listed identity mark and, on the surveys hub alone, its one same-origin controls script.
-    The entity pages' determinism posture (stdlib-only build, everything else inline, no network at
-    build) is inherited, not re-litigated; the mark is the single named exception and it is
-    same-origin, and so is the hub's script.
+# An inline event handler is inline script by another name, and the CSP refuses it the same way:
+# an on* attribute anywhere in a start tag.
+_INLINE_HANDLER = re.compile(r"<[A-Za-z][^>]*\son[a-z]+\s*=", re.I)
+
+
+def _assert_scripts_are_files(page, rel):
+    """Every script element is a same-origin file this page may load, or a ld+json block, which is
+    data rather than code; the head's FIRST script is the appearance script, ahead of every other
+    script and of the stylesheet; and no start tag carries an inline event handler."""
+    for tag in re.findall(r"<script\b[^>]*>", page):
+        assert tag == '<script type="application/ld+json">' or \
+            tag in {f'<script src="{s}">' for s in _page_scripts(page)}, \
+            f"{rel}: no inline script may appear on a page in this tier, got {tag}"
+    head = page.split("</head>", 1)[0]
+    first = re.search(r"<script\b[^>]*>", head)
+    assert first and first.group(0) == '<script src="/src/theme.js">', \
+        f"{rel}: the head's first script must be the appearance script, got {first and first.group(0)}"
+    assert head.index('<script src="/src/theme.js">') < head.index("<style>"), \
+        f"{rel}: the appearance script must run before the stylesheet is parsed"
+    assert page.count('<script src="/src/theme.js"></script>') == 1, \
+        f"{rel}: the appearance script loads exactly once"
+    assert not _INLINE_HANDLER.search(page), \
+        f"{rel}: no inline event handler may appear: {_INLINE_HANDLER.search(page).group(0)!r}"
+
+
+def test_index_pages_carry_no_script_and_only_the_header_lockup(built):
+    """FAILS IF an index page grows an inline script or handler, a stylesheet link, or any fetched
+    asset beyond the allow-listed header lock-up pair, the appearance script in the head and, on the
+    surveys hub alone, its one same-origin controls script. The entity pages' determinism posture
+    (stdlib-only build, everything else inline, no network at build) is inherited, not
+    re-litigated; the lock-up and the scripts are the named exceptions and every one is same-origin.
 
     A ld+json block is data, not code: nothing in it executes, and the hub pages carry one so a
     search result can show the trail back to the root. It is stripped before the guard rather than
     excused, so an EXECUTABLE inline script on a hub still fails on the same line."""
     for rel in ("surveys/index.html", "collections/index.html"):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        for tag in re.findall(r"<script\b[^>]*>", page):
-            assert tag == '<script type="application/ld+json">' or \
-                tag in {f'<script src="{s}">' for s in _page_scripts(page)}, \
-                f"{rel}: no inline script may appear on an index page, got {tag}"
+        _assert_scripts_are_files(page, rel)
         srcs = _page_srcs(page, rel)
         assert srcs == _allowed_srcs(rel, page), \
             f"{rel}: the only fetched assets may be {_allowed_srcs(rel, page)}, got {srcs}"
-        assert '<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT"' in page, \
-            f"{rel}: the header must carry the AusMT mark as the site identity"
+        assert HEADER_LOCKUP in _header(page), f"{rel}: the header's right zone carries the lock-up pair"
+        assert "auscope-mark" not in _header(page), f"{rel}: the header names no AuScope mark"
         assert "rel=\"stylesheet\"" not in page, f"{rel}: styles stay inline"
-        assert "\u2014" not in page and "\u2013" not in page, f"{rel}: no en/em dashes"
+        assert not any(d in page for d in _DASHES), f"{rel}: no en/em dashes"
 
 
 def test_the_surveys_hub_renders_its_controls_hidden_from_the_rows_own_vocabulary(built):
@@ -563,6 +596,12 @@ def test_the_hub_card_draws_a_dot_for_every_member_station():
         "card and page now agree on how many stations the collection has"
 
 
+# The locator ring as the minimap writes it: the one circle in the muted annotation class. The
+# scale bar shares the class but is a <line>, and every station dot is a bare <circle> inside the
+# dot group, so this start tag is the ring and nothing else.
+LOCATOR_RING = '<circle class="mm-note"'
+
+
 def test_no_collection_map_draws_the_single_survey_locator_ring():
     """The ring that had to go: a large grey circle sitting mid-continent on a card.
 
@@ -575,14 +614,14 @@ def test_no_collection_map_draws_the_single_survey_locator_ring():
     pages = _pages_module()
     rows = _synthetic_collections()
     page = pages.collections_index_page(rows=rows, base=BASE)
-    assert 'stroke="#8FA3B0"' not in page, \
+    assert LOCATOR_RING not in page, \
         "no collection card may draw the single-survey locator ring"
     # non-vacuous: the assertion above is only worth anything if these maps drew circles at all
     assert page.count("<circle") == sum(sum(len(v) for v in r["member_points"].values())
                                         for r in rows), \
         "every circle on the collections hub is a station dot and nothing else"
     detail = _detail_page(pages, rows)
-    assert 'stroke="#8FA3B0"' not in detail and detail.count("<circle") > 0, \
+    assert LOCATOR_RING not in detail and detail.count("<circle") > 0, \
         "the collection page must not draw it either"
 
 
@@ -599,7 +638,7 @@ def test_the_locator_ring_follows_extent_not_station_count():
     FAILS IF the ring returns on a wide footprint, goes missing on a compact one, starts tracking
     how many stations were passed, or stops honouring the explicit opt-out."""
     pages = _pages_module()
-    ring = 'stroke="#8FA3B0"'
+    ring = LOCATOR_RING
     wide = [(115.0 + i * 0.8, -33.0 - (i % 7) * 0.9, "LPMT") for i in range(40)]
     tight = [(136.97 + i * 0.0004, -30.14 + i * 0.0003, "LPMT") for i in range(40)]
     assert ring not in pages._minimap_svg(wide), \
@@ -650,8 +689,9 @@ def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor(
     stays the single real anchor and a ::after on it covers the card.
 
     FAILS IF the card stops being positioned (the overlay would escape to the page), if the overlay
-    rule is dropped, if a second anchor appears in a surveys-hub card, if a <button> appears in any
-    row, or if the hover affordance goes."""
+    rule is dropped or stops following the card's own corner radius, if a second anchor appears in a
+    surveys-hub card, if a <button> appears in any row or anywhere else on the page (the footer
+    carries no control, so the page carries no button at all), or if the hover affordance goes."""
     pages = _pages_module()
     page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
     css = page.split("<style>", 1)[1].split("</style>", 1)[0]
@@ -666,7 +706,14 @@ def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor(
     assert ".idxcard:hover" in css, "the card must acknowledge the pointer"
     card = re.split(r'<article class="idxcard"[^>]*>', page, 1)[1].split("</article>", 1)[0]
     assert card.count("<a ") == 1, f"exactly one real anchor per surveys card, got {card.count('<a ')}"
-    assert "<button" not in page, "no buttons in rows, ever: the hierarchy is catalogue, survey, data"
+    main = page.split("<main>", 1)[1].split("</main>", 1)[0]
+    assert "<button" not in main, "no buttons in rows, ever: the hierarchy is catalogue, survey, data"
+    assert re.findall(r"<button\b[^>]*>", page) == [], \
+        "the surveys hub carries no button anywhere: its rows are cards and its footer has no control"
+    radius = re.search(r"border-radius:([^;}]+)", card_rule.group(1))
+    overlay = re.search(r"\.idxt a::after\{[^}]*border-radius:([^;}]+)", css)
+    assert radius and overlay and radius.group(1) == overlay.group(1) == "4px", \
+        f"the overlay must round off with the card's own house-style radius: {radius} / {overlay}"
     assert "&#8594;" in card, "the card reveals a forward arrow for the in-site action"
 
 
@@ -710,9 +757,12 @@ def test_the_surveys_hub_leads_with_the_owners_lede_and_a_forward_arrow():
 
 def test_the_hub_locator_grows_and_its_container_steps_back():
     """The locator map is the card's only picture and was too small to read at a glance;
-    it grows about ten percent. The PANEL around it steps toward the card's own fill so the
-    Australia outline reads as the object rather than as a box on a box. The shared-symbol geometry
-    is untouched, which is what keeps the budget pin honest."""
+    it grows about ten percent. The PANEL around it sits close to the card's own fill so the
+    Australia outline reads as the object rather than as a box on a box: in the dark appearance the
+    panel IS the card's fill, and in the light one it is nearer the white card than the page ground
+    is. The panel takes its colour from the theme through its class, never as a literal, so the
+    one map serves both appearances. The shared-symbol geometry is untouched, which is what keeps
+    the budget pin honest."""
     pages = _pages_module()
     page = pages.surveys_index_page(rows=_synthetic_rows(), base=BASE)
     css = page.split("<style>", 1)[1].split("</style>", 1)[0]
@@ -723,14 +773,28 @@ def test_the_hub_locator_grows_and_its_container_steps_back():
     assert page.count("<symbol") == 1 and len(page.encode("utf-8")) < 300_000, \
         "the size budget stays green"
     svg = pages._minimap_svg([], width=230)
-    assert "background:#18213D" in svg, "the map panel steps to the card's own fill"
-    assert "#16242f" not in svg, "the old darker panel shade is gone"
+    assert svg.startswith('<svg viewBox="0 0 230 192" role="img" aria-label="Survey location in '
+                          'Australia"><rect class="mm-panel mm-rule" '), \
+        f"the map panel is the SVG's first element, drawn by class: {svg[:200]!r}"
+    assert "style=" not in svg and 'fill="#' not in svg and 'stroke="#' not in svg, \
+        "the panel and the coast carry no colour of their own; the theme supplies it"
+    css = _css(page)
+    for which in ("light", "dark"):
+        tokens = _theme(css, which)
+        assert _contrast(tokens["--map-panel"], tokens["--surface"]) < \
+            _contrast(tokens["--bg"], tokens["--surface"]), \
+            f"{which}: the map panel must sit nearer the card's fill than the page ground does"
+    assert _theme(css, "dark")["--map-panel"] == _theme(css, "dark")["--surface"], \
+        "in the dark appearance the map panel is the card's own fill"
+    assert "#16242f" not in page, "the darker panel shade that read as a box on a box stays out"
 
 
 def test_the_card_names_its_organisation_more_loudly_than_its_location():
     """Organisation and location share one line with no labels, so the only thing that can tell
-    a reader which is which is weight: two muted shades, the organisation brighter. FAILS IF the two
-    collapse back to one colour or a label is introduced."""
+    a reader which is which is ink: the organisation in the body text token, the location in the
+    muted one, so the organisation reads louder against the card in BOTH appearances. FAILS IF the
+    two collapse to one token, the organisation stops out-contrasting the location on either ground,
+    or a label is introduced."""
     pages = _pages_module()
     page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
     css = page.split("<style>", 1)[1].split("</style>", 1)[0]
@@ -738,15 +802,17 @@ def test_the_card_names_its_organisation_more_loudly_than_its_location():
     assert '<span class="idxorgn">Test Org</span>' in org_line
     assert '<span class="idxloc">Tasmania</span>' in org_line
     assert "Organisation" not in org_line and "Region" not in org_line, "the org line carries no field labels"
-    orgn = re.search(r"\.idxorgn\{color:(#[0-9A-Fa-f]{6})", css)
-    loc = re.search(r"\.idxloc\{color:(#[0-9A-Fa-f]{6})", css)
-    assert orgn and loc, f"both shades must be declared; got {orgn} / {loc}"
-    assert orgn.group(1) != loc.group(1), \
-        f"the organisation must not share the location's ink ({orgn.group(1)})"
-    def _lum(hexcol):
-        return sum(int(hexcol[i:i + 2], 16) for i in (1, 3, 5))
-    assert _lum(orgn.group(1)) > _lum(loc.group(1)), \
-        f"the organisation must read BRIGHTER than the location: {orgn.group(1)} vs {loc.group(1)}"
+    orgn = re.search(r"\.idxorgn\{color:var\((--[\w-]+)\)\}", css)
+    loc = re.search(r"\.idxloc\{color:var\((--[\w-]+)\)\}", css)
+    assert orgn and loc, f"both inks must be declared as tokens; got {orgn} / {loc}"
+    assert (orgn.group(1), loc.group(1)) == ("--text", "--muted"), \
+        f"the organisation takes the body text token and the location the muted one: " \
+        f"{orgn.group(1)} / {loc.group(1)}"
+    for which in ("light", "dark"):
+        tokens = _theme(css, which)
+        assert _contrast(tokens["--text"], tokens["--surface"]) > \
+            _contrast(tokens["--muted"], tokens["--surface"]), \
+            f"{which}: the organisation must read LOUDER than the location on the card"
 
 
 def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
@@ -769,26 +835,150 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 # ONE header and ONE footer, across every page kind
 # ==================================================================================================
 # The page kinds this tier emits, with the tab that must be active, the machine-readable link the
-# footer must resolve to, and whether the header's right status slot carries anything. The footer
-# column once differed per row, which is exactly what the one-footer rule ended; it is
-# kept as a column, one value repeated, so a re-divergence shows up here as rows that disagree.
-# LANE-ADDENDUM-HUB-FEEDBACK.md. The tokens asserted below are the SPA header's own
-# (portal/index.html :root and its nav/about/contribute/counts rules); they are restated as literals
-# rather than read across, because the engine image ships engine/ and contract/ and cannot see
-# portal/ at all, and a test that reaches out of the image is a test the image cannot run.
-_FOOTER_LINK = ("Machine-readable record (MTCAT JSON)", "/data/mtcat.json")
+# footer must resolve to, and whether the footer's status slot carries anything. The link column is
+# one value repeated, kept as a column so a re-divergence shows up here as rows that disagree. The
+# markup and the tokens asserted below are the SPA's own (portal/index.html's header, footer and
+# :root); they are restated as literals rather than read across, because the engine image ships
+# engine/ and contract/ and cannot see portal/ at all, and a test that reaches out of the image is a
+# test the image cannot run.
+_FOOTER_LINK = ("MTCAT JSON", "/data/mtcat.json")
 
-# The parent organisation, as the footer states it on every page: the acknowledgement's URL text and
-# the lockup both navigate here, and the lockup itself is served from this site. The address is a
-# NAVIGATION target and nothing more; the src is the vendored file, and the src allow-list above is
-# what keeps it the only new fetch this rule introduced.
+# The parent organisation's address. The header's lock-up and the footer's acknowledgement both
+# navigate here; nothing on any page fetches from it.
 AUSCOPE_URL = "https://www.auscope.org.au"
-ORG_LOCKUP_SRC = "/vendor/auscope-ncris-white.png"
 # Both anchors to that address leave the site, so both open in a new tab and hand the opened page no
 # handle on this one: target="_blank" grants window.opener, from which the opened document can
-# navigate the tab it came from. One literal in one order, the spelling the header's own external
-# anchor carries, so the generated tier cannot drift from the portal's six documents.
+# navigate the tab it came from. One literal in one order, the portal documents' own spelling.
 NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
+
+# The header's identity zone, the wordmark linking the root and the tagline and nothing else, and its
+# one image pair, the lock-up; each exactly as the pages write it.
+HEADER_IDENTITY = ('<div class="hzone hleft">\n'
+                   '    <a class="wordmark" href="/">AusMT</a>\n'
+                   "    <div class=\"tagline\">Australia's Magnetotelluric Data Portal</div>\n"
+                   "  </div>\n")
+# The mark pair's files. No header names them; the collection figure is their one consumer here.
+MARK_FILES = ("/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg")
+HEADER_LOCKUP = (f'<a class="orglockup" href="{AUSCOPE_URL}" {NEW_TAB}>'
+                 '<img class="theme-light" src="/vendor/auscope-ncris-colour.png" '
+                 'alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" '
+                 'src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" '
+                 'width="1919" height="325"></a>')
+
+# The retired footer control, by its classes and its hook. The appearance choice lives on /about.html
+# and in the map's welcome dialog, so no generated page names any of these, in markup or in its sheet.
+RETIRED_CONTROL = ("themectl", "themesep", "data-theme-choice", "aria-pressed")
+
+# The theme switch, verbatim on every surface and in this order: the dark file of each pair hidden
+# by default, then the pair swapped under <html data-theme="dark">. No one-class rule in the sheet
+# sets display on a variant, so nothing ties with the first rule.
+THEME_RULES = ('.theme-dark{display:none}',
+               ':root[data-theme="dark"] .theme-light{display:none}',
+               ':root[data-theme="dark"] .theme-dark{display:block}')
+
+# The token block, as portal/index.html's :root states it: the house style by default and the dark
+# appearance under <html data-theme="dark">, which restates only what differs. Every chrome colour
+# on a page is one of these names; the ramp (--lpmt to --gds) is restated by neither block's
+# differences, because a legend must not change meaning with the theme.
+LIGHT_TOKENS = [
+    ("--bg", "#F2F2F1"), ("--surface", "#FFFFFF"), ("--surface-2", "#F2F3F2"), ("--line", "#CED4DA"),
+    ("--text", "#333333"), ("--muted", "#6C757D"), ("--heading", "#282572"),
+    ("--accent", "#282572"), ("--accent-ink", "#FFFFFF"),
+    ("--lpmt", "#3F88C8"), ("--bbmt", "#FFC14F"), ("--amt", "#9FCB5A"), ("--gds", "#CE348A"),
+    ("--dot-edge", "#231F20"),
+    ("--ok", "#598F39"), ("--part", "#9A6B00"), ("--no", "#EA1E31"), ("--unk", "#6C757D"),
+    ("--map-bg", "#DFE6E9"), ("--map-panel", "#F4F5F4"), ("--map-line", "#CED4DA"),
+    ("--coast-fill", "#FFFFFF"), ("--coast-line", "#9AA0A6"),
+    ("--shadow", "0 1px 3px rgba(35,31,32,.12)"),
+    ("--mono", "ui-monospace,'SF Mono','Cascadia Mono','Consolas',monospace"),
+    ("--sans", "'Libre Franklin',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif"),
+    ("color-scheme", "light"),
+]
+DARK_TOKENS = [
+    ("--bg", "#11182D"), ("--surface", "#18213D"), ("--surface-2", "#1E2B4F"), ("--line", "#2B3557"),
+    ("--text", "#E8EDF1"), ("--muted", "#8FA3B0"), ("--heading", "#FFFFFF"),
+    ("--accent", "#EF7256"), ("--accent-ink", "#16110B"),
+    ("--dot-edge", "#11182D"),
+    ("--ok", "#5BAE6A"), ("--part", "#D9A23B"), ("--no", "#E2938B"), ("--unk", "#5A6E7D"),
+    ("--map-bg", "#0F1626"), ("--map-panel", "#18213D"), ("--map-line", "#222C4E"),
+    ("--coast-fill", "#1D3140"), ("--coast-line", "#3A5266"),
+    ("--shadow", "none"),
+    ("color-scheme", "dark"),
+]
+_LIGHT_BLOCK = re.compile(r"(?m)^\s*:root\{([^}]*)\}")
+_DARK_BLOCK = re.compile(r':root\[data-theme="dark"\]\{([^}]*)\}')
+
+
+def _css(page):
+    return page.split("<style>", 1)[1].split("</style>", 1)[0]
+
+
+def _declarations(body):
+    """[(property, value)] of one rule body, in source order, whitespace between them folded."""
+    return [tuple(part.split(":", 1)) for part in
+            (d.strip() for d in " ".join(body.split()).split(";")) if part]
+
+
+def _theme(css, which):
+    """{token: value} as one appearance resolves it: the light block alone, or the light block with
+    the dark block's restatements over it, which is what the cascade does."""
+    out = dict(_declarations(_LIGHT_BLOCK.search(css).group(1)))
+    if which == "dark":
+        out.update(_declarations(_DARK_BLOCK.search(css).group(1)))
+    return out
+
+
+def _contrast(a, b):
+    """The WCAG contrast ratio of two #RRGGBB colours."""
+    def lum(h):
+        def ch(c):
+            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+        r, g, b_ = (ch(int(h[i:i + 2], 16) / 255) for i in (1, 3, 5))
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b_
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _expected_header(active):
+    """The whole header element this tier must write, character for character: portal/index.html's
+    header with its two declared differences (the identity is a link to the root and carries no
+    heading; the Map tab is a link and the CURRENT page's tab is the active one) and About
+    root-anchored, because a page served at /surveys/<slug> cannot resolve a relative path."""
+    tabs = "".join(f'      <a id="{i}" href="{h}"' + (' class="active"' if i == active else "")
+                   + f">{lbl}</a>\n"
+                   for i, lbl, h in (("navMap", "Map", "/"), ("navSurveys", "Surveys", "/surveys"),
+                                     ("navCollections", "Collections", "/collections")))
+    return ('<header class="site">\n'
+            f"  {HEADER_IDENTITY}"
+            '  <div class="hzone hcenter">\n'
+            "    <nav>\n"
+            f"{tabs}"
+            "    </nav>\n"
+            '    <a class="about" href="/about.html">About</a>\n'
+            "  </div>\n"
+            '  <div class="hzone hright">\n'
+            f"    {HEADER_LOCKUP}\n"
+            "  </div>\n"
+            "</header>")
+
+
+def _header(page):
+    return page[page.index("<header"):page.index("</header>") + len("</header>")]
+
+
+def _footer(page):
+    return page.split("\n<footer>", 1)[1].split("</footer>", 1)[0]
+
+
+def _status(foot):
+    """The footer's contextual status: the whole of the right region, which is the footer's last and
+    carries nothing after the status."""
+    right = foot.split('<div class="fzone fright">', 1)[1]
+    assert right.endswith("</div>\n"), f"the right region must close the footer: {right!r}"
+    status = right[:-len("</div>\n")]
+    for gone in RETIRED_CONTROL:
+        assert gone not in status, f"the right region holds the status alone, found {gone!r}: {right!r}"
+    return status
 
 
 def _kinds(built):
@@ -803,86 +993,99 @@ def _kinds(built):
 
 
 def test_every_static_page_carries_the_one_global_header(built):
-    """The SPA header's three-part division becomes the site's ONE header: AusMT identity on
-    the left linking the root, the three filled application tabs in the centre with the CURRENT
-    page's tab active, and the two smaller outlined supporting controls beside them. The static
-    pages had no header at all above their crumb line, so a reader who landed on a survey page from
-    a search result had no route to the map, the hubs, About or Contribute.
+    """The SPA header is the site's ONE header: the AusMT wordmark linking the root and the tagline
+    on the left, and no mark; the three filled application tabs in the centre with the CURRENT
+    page's tab active and About beside them as the smaller outlined control; the AuScope and NCRIS
+    lock-up on the right, the header's only AuScope presence. The whole element is held character
+    for character, so a page kind that activates the wrong tab, points a tab elsewhere, grows a
+    control or loses one fails here.
 
-    FAILS IF a page kind is missing the header, activates the wrong tab (or more than one), points a
-    tab somewhere else, loses a supporting control, or drifts off the SPA's tokens."""
+    Contribute is not a header control on any surface: add-survey.html stays served, and About links
+    it from its body. FAILS IF it comes back, as markup or as a .contribute rule, or if the header's
+    colours drift off the tokens the SPA header uses."""
     for rel, (active, _lbl, _href, _slot) in _kinds(built).items():
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        head = page.split("<header", 1)[1].split("</header>", 1)[0]
-        assert '<a class="wordmark" href="/">AusMT</a>' in head, f"{rel}: no identity linking the root"
-        for nav_id, href in (("navMap", "/"), ("navSurveys", "/surveys"),
-                             ("navCollections", "/collections")):
-            assert re.search(rf'<a id="{nav_id}"[^>]*href="{re.escape(href)}"', head), \
-                f"{rel}: {nav_id} must be a real link to {href}"
-        act = re.findall(r'<a id="(nav\w+)"[^>]*class="active"', head)
-        assert act == [active], f"{rel}: exactly {active} must be active, got {act}"
-        assert '<a class="about" href="/about.html">About</a>' in head, f"{rel}: no About control"
-        assert 'href="/add-survey.html">Contribute a survey' in head, f"{rel}: no Contribute control"
+        head = _header(page)
+        assert head == _expected_header(active), (
+            f"{rel}: the header is not the one global header with {active} active:\n{head}")
+        assert page.count("<header") == 1, f"{rel}: one header per page"
         assert "<header" in page.split("<main>", 1)[0], f"{rel}: the header must precede <main>"
         assert '<p class="crumb">' in page, f"{rel}: the crumb line stays beneath the header"
-        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
-        for token in ("#EF7256", "#1E2B4F", "#2B3557", "min-width:112px", "min-height:40px"):
-            assert token in css, f"{rel}: the header must carry the SPA's {token} token"
-        # Scoped, because #E8EDF1 appears elsewhere in this sheet and an unscoped search would pass
-        # on the nav tabs' own colour. The SPA's .wordmark declares no colour and so inherits
-        # --text #E8EDF1; the static header carried a plain #fff, which is the page tier's heading
-        # white and one step brighter than the identity it is meant to be the same object as.
-        mark = re.search(r"\.wordmark\{([^}]*)\}", css)
-        assert mark and "color:#E8EDF1" in mark.group(1), \
-            f"{rel}: the identity carries the SPA header's own text token: {mark}"
+        assert "contribute" not in page.lower().split("<main>", 1)[0].split("<style>", 1)[1], \
+            f"{rel}: no Contribute control and no .contribute rule may come back to the chrome"
+        css = _css(page)
+        site = re.search(r"(?m)^\s*header\.site\{([^}]*)\}", css)
+        assert site and "background:var(--surface)" in site.group(1) \
+            and "border-bottom:1px solid var(--line)" in site.group(1), \
+            f"{rel}: the header is a --surface band with a --line rule beneath: {site}"
+        for rule in (".wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;"
+                     "color:var(--heading);text-decoration:none}",
+                     ".tagline{color:var(--muted);font-size:12.5px}",
+                     "header.site nav a:hover{border-color:var(--accent)}",
+                     "header.site nav a.active{color:var(--accent-ink);background:var(--accent);"
+                     "border-color:var(--accent)}",
+                     ".about{color:var(--accent);font-size:13px;text-decoration:none;"
+                     "border:1px solid var(--line);padding:6px 11px;border-radius:4px;"
+                     "white-space:nowrap}",
+                     ".about:hover{border-color:var(--accent)}"):
+            assert css.count(rule) == 1, f"{rel}: the header must carry {rule!r} exactly once"
+        tab = re.search(r"header\.site nav a\{([^}]*)\}", css)
+        for token in ("background:var(--surface-2)", "border:1px solid var(--line)",
+                      "color:var(--text)", "min-width:112px", "min-height:40px"):
+            assert tab and token in tab.group(1), f"{rel}: the tabs must carry the SPA's {token}"
 
 
-def test_the_right_status_slot_is_contextual_and_empty_where_the_owner_ruled(built):
-    """The shell is identical everywhere; what rides in the right slot is not. The Map view
-    keeps its live counter in the SPA; the surveys hub states the static catalogue counts; every
-    other static page shows NOTHING, because a counter that cannot count the page it is on is
-    decoration pretending to be data.
+def test_the_footer_status_slot_is_contextual_and_empty_off_the_surveys_hub(built):
+    """The shell is identical everywhere; what rides in the footer's status slot is not. The Map
+    view keeps its live counter in the SPA; the surveys hub states the static catalogue counts;
+    every other static page states NOTHING there, because a counter that cannot count the page it is
+    on is decoration pretending to be data. The status is the whole of the footer's right region,
+    which is empty where there is no status and carries no control.
 
-    The right zone also closes with the parent-organisation mark, which is chrome and not status: it
-    says the same thing on every page and rides every one of them. It is discounted from the slot
-    here so that "empty" keeps meaning "no status", and pinned in its own right below."""
+    The header's right zone is the AuScope and NCRIS lock-up and nothing else: it says the same
+    thing on every page, so no count, and no count id, may ride it. FAILS IF a status leaves the
+    footer, appears where it is not earned, or the lock-up zone gains anything."""
     for rel, (_active, _lbl, _href, has_slot) in _kinds(built).items():
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        head = page.split("<header", 1)[1].split("</header>", 1)[0]
-        slot = head.split('class="hzone hright"', 1)[1].split("</div>", 1)[0].lstrip(">")
-        slot = slot.replace(ORG_MARK_IMG, "")
+        slot = _status(_footer(page))
         if has_slot:
-            assert "surveys" in slot and "stations" in slot, \
-                f"{rel}: the surveys hub must state its static counts, got {slot!r}"
-            assert re.search(r"<b>\d[\d,]*</b> surveys", slot), \
-                f"{rel}: the counts must read in the SPA's own grammar, got {slot!r}"
+            assert re.fullmatch(r'<div class="counts"><b>\d[\d,]*</b> surveys? &#183; '
+                                r'<b>\d[\d,]*</b> stations?</div>', slot), \
+                f"{rel}: the surveys hub must state its static counts in the SPA's grammar: {slot!r}"
         else:
-            assert slot.strip() == "", f"{rel}: the status slot must be empty, got {slot!r}"
+            assert slot == "", f"{rel}: the status slot must be empty, got {slot!r}"
+        right = _header(page).split('<div class="hzone hright">', 1)[1].split("</div>", 1)[0]
+        assert right.strip() == HEADER_LOCKUP, \
+            f"{rel}: the header's right zone holds the lock-up alone: {right!r}"
+        assert "counts" not in _header(page), f"{rel}: no count rides the header"
 
 
 def test_one_footer_of_three_regions_on_every_page_kind(built):
-    """The rule restated: ONE footer, three regions, byte-identical on every page.
+    """The rule restated: ONE footer, three regions, the same on every page once the contextual
+    status is set aside.
 
-    The footer must not be contextual, or a reader cannot learn it once. Left is the catalogue,
-    the same document from every page; centre is the AuScope acknowledgement with the attribution
-    and the licence note, carrying the one navigation link in the line; right is the AuScope-NCRIS
-    lockup, linked where that URL text links. The separator is U+00B7, written as the numeric
+    The footer must not be contextual beyond that slot, or a reader cannot learn it once. Left is
+    the catalogue, the same document from every page; centre is the AuScope acknowledgement and the
+    licence note, carrying the one navigation link in the line; right is the page's status and
+    nothing else. The separators are U+00B7, written in the centre as the numeric
     reference so a mis-decoded read of this file cannot smuggle a hyphen past the pin.
 
-    Releases and About this build left the footer on every surface. Nothing is lost: /about.html
-    carries the running build's identity and the route to the citable releases in its own body,
-    which the portal workflow pins (portal/tests/test_about_uniform_chrome.py). A per-page machine link
-    is not lost either: a survey and a station page each carry their own record in the body under
-    "Identifiers and provenance", which is asserted separately.
+    The footer fetches nothing: the lock-up is the header's. Releases and About this build stay out
+    of the footer on every surface; /about.html carries the running build's identity and the route
+    to the citable releases in its own body (portal/tests/test_about_uniform_chrome.py). A per-page
+    machine link is asserted separately: a survey and a station page each carry their own record in
+    the body under "Identifiers and provenance".
 
-    FAILS IF the one-line footer survives anywhere, if the three regions are not present with
-    their exact strings, if a region's links move or retarget, if the retired controls come back,
-    if the footer differs between page kinds, or if the removed build stamp comes back."""
+    FAILS IF the one-line footer survives anywhere, if the three regions are not present with their
+    exact strings, if a region's links move or retarget, if the copyright clause or the lock-up
+    comes back, if a retired control comes back (the appearance control included), or if the footer
+    differs between page kinds."""
     seen = {}
     for rel, (_active, label, href, _slot) in _kinds(built).items():
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        foot = page.split("\n<footer>", 1)[1].split("</footer>", 1)[0]
-        seen[rel] = foot
+        foot = _footer(page)
+        status = _status(foot)
+        seen[rel] = foot.replace(f'<div class="fzone fright">{status}', '<div class="fzone fright">')
         assert "AusMT - Australia's Magnetotelluric Data Portal - an AuScope service." not in page, \
             f"{rel}: the one-line footer must be replaced everywhere in pages/"
 
@@ -894,30 +1097,32 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
         # checked against the tree this same build wrote: a footer link is a promise about a file.
         assert href.startswith("/data/") and (built / href[len("/data/"):]).is_file(), \
             f"{rel}: the footer advertises {href}, which this build did not write"
-
-        # CENTRE. The string, carrying exactly one link: the AuScope address under its own
-        # URL text. The rest of the line is prose and stays prose.
-        centre = foot.split('<div class="fzone fcenter">', 1)[1].split("</div>", 1)[0]
-        assert centre == ("AusMT is enabled by AuScope &#183; "
-                          f'<a href="{AUSCOPE_URL}" {NEW_TAB}>www.auscope.org.au</a> &#183; '
-                          "&#169; 2026 AuScope and the AusMT contributors &#183; "
-                          "Data licences vary by survey"), \
-            f"{rel}: centre region is not the acknowledgement line: {centre!r}"
-        assert centre.count("<a") == 1, \
-            f"{rel}: the centre region carries exactly one link: {centre!r}"
-
-        # RIGHT. The parent organisation's full lockup, linked where the centre's URL text links.
-        # Same-origin and vendored: the rule adds a navigation anchor, not a runtime dependency.
-        right = foot.split('<div class="fzone fright">', 1)[1].split("</div>", 1)[0]
-        assert right == (f'<a class="orglogo" href="{AUSCOPE_URL}" {NEW_TAB}>'
-                         f'<img src="{ORG_LOCKUP_SRC}" alt="AuScope and NCRIS" '
-                         'width="1919" height="325"></a>'), \
-            f"{rel}: right region is not the AuScope-NCRIS lockup: {right!r}"
-
         # The MTCAT record is this site's own document: it stays in the tab the reader is in, so
         # the new-tab behaviour reads as "this link leaves AusMT" and nothing else.
-        assert "target=" not in left, \
-            f"{rel}: an in-site footer link stays in this tab: {left!r}"
+        assert "target=" not in left, f"{rel}: an in-site footer link stays in this tab: {left!r}"
+
+        # CENTRE. The string, carrying exactly one link: the AuScope address under the
+        # organisation's name, which is never printed as an address.
+        centre = foot.split('<div class="fzone fcenter">', 1)[1].split("</div>", 1)[0]
+        assert centre == ("AusMT is enabled by "
+                          f'<a href="{AUSCOPE_URL}" {NEW_TAB}>AuScope</a> &#183; '
+                          "Data licences vary by survey"), \
+            f"{rel}: centre region is not the acknowledgement line: {centre!r}"
+        assert centre.count("<a") == 1, f"{rel}: the centre region carries exactly one link"
+        assert foot.count(f'href="{AUSCOPE_URL}"') == 1, \
+            f"{rel}: the footer carries exactly one anchor to {AUSCOPE_URL}"
+        assert "www.auscope.org.au" not in re.sub(r"<[^>]+>", "", foot), \
+            f"{rel}: the address is the link's target, never printed as text: {centre!r}"
+        assert "&#169;" not in foot and "contributors" not in foot, \
+            f"{rel}: the copyright clause stays out of the footer: {foot!r}"
+
+        # RIGHT. The status (held by its own pin), no control and nothing fetched.
+        assert "<img" not in foot and "orglogo" not in foot and "src=" not in foot, \
+            f"{rel}: the footer fetches nothing; the lock-up is the header's: {foot!r}"
+        for control in ("<button", "<input", "<select", "<fieldset", " role=", "aria-pressed"):
+            assert control not in foot, \
+                f"{rel}: the footer carries no control, found {control!r}: {foot!r}"
+        assert not re.search(r"\son[a-z]+\s*=", foot), f"{rel}: the footer carries an inline handler"
 
         for gone in (">Releases<", "About this build", "aboutbuild", "/releases.html"):
             assert gone not in foot, \
@@ -930,7 +1135,7 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
             f"{rel}: the footer is exactly three regions: {foot!r}"
 
     assert len(set(seen.values())) == 1, (
-        "the footer must be identical on every page kind; it differs:\n"
+        "the footer must be identical on every page kind once its status is set aside; it differs:\n"
         + "\n".join(f"  {rel}: {foot!r}" for rel, foot in seen.items()))
 
 
@@ -958,7 +1163,7 @@ def test_the_per_page_machine_record_survives_in_the_body(built):
 
 def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
     """The three regions are a wrapping flex row in which the CENTRE is the region that gives: the
-    left link and the right links are short fixed phrases that read badly broken, and the
+    left link and the right region are short fixed phrases that read badly broken, and the
     attribution line is prose that does not.
 
     THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and that is the point of them. main
@@ -967,23 +1172,26 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
 
     THE SIDE ZONES TAKE EQUAL ZERO BASIS, which is what page-centres the acknowledgement. Zones that
     size to their own content leave the centre centred in the space LEFT OVER beside them: measured
-    in Chrome at 2560px before this, the sentence's midpoint sat 274.66px left of the viewport's on
-    this tier. flex:1 1 0 on both sides makes them the same width whatever they hold; min-width:0
-    lets a side zone go under its own content rather than force a wrap.
+    in Chrome at 2560px, the sentence's midpoint sat 274.66px left of the viewport's on this tier
+    with content-sized sides. flex:1 1 0 on both sides makes them the same width whatever they
+    hold; min-width:0 lets a side zone go under its own content rather than force a wrap. The right
+    region is itself a flex row, pushed to the footer's right edge, carrying the status, and it keeps
+    the portal's 14px gap so the rule stays one rule set with the SPA's.
 
     Below 1421px of footer CONTENT the centre takes a row of its own UNDER the two side regions,
-    where it spans the footer and is centred on its axis. Below 520px the side phrases do not
-    share a row either, so every region takes one and aligns left, which is the 375px stack. Both
-    numbers are the portal's, because this tier and the portal now carry ONE rule set: the wider
-    surface sets the number and portal/tests/test_footer_regions.py holds the two sides identical.
+    where it spans the footer and is centred on its axis. Below 520px every region takes a row of
+    its own. Both numbers are the portal's, because this tier and the portal carry ONE rule set:
+    the wider surface sets the number and portal/tests/test_footer_regions.py holds the two sides
+    identical.
 
     FAILS IF the footer stops being a wrapping flex row or stops being a query container, if a side
     zone stops taking the equal zero basis, if the centre stops being content-sized or stops
-    centring its text, if either state below one row goes, if one stops following the rules it
-    overrides (they tie on specificity, so an override placed above them does nothing at all), or if
-    a viewport rule comes back in their place."""
+    centring its text, if the right region stops being the right-aligned row, if either state below
+    one row goes, if one stops following the rules it overrides (they tie on specificity, so an
+    override placed above them does nothing at all), or if a viewport rule comes back in their
+    place."""
     page = (built / "pages" / "surveys" / "index.html").read_text(encoding="utf-8")
-    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    css = _css(page)
     rule = re.search(r"\bfooter\{([^}]*)\}", css)
     assert rule and "display:flex" in rule.group(1) and "flex-wrap:wrap" in rule.group(1), \
         f"the footer must be a wrapping flex row: {rule and rule.group(1)!r}"
@@ -994,11 +1202,15 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
         f"without it neither @container rule can ever match: {rule.group(1)!r}")
     for zone, decls in ((".fleft", ("flex:1 1 0", "min-width:0")),
                         (".fcenter", ("flex:0 1 auto", "min-width:0", "text-align:center")),
-                        (".fright", ("flex:1 1 0", "min-width:0", "text-align:right"))):
+                        (".fright", ("flex:1 1 0", "min-width:0", "display:flex",
+                                     "justify-content:flex-end", "align-items:center",
+                                     "gap:14px"))):
         m = re.search(re.escape(zone) + r"\{([^}]*)\}", css)
         assert m, f"{zone} carries no rule"
         for decl in decls:
             assert decl in m.group(1), f"{zone} must declare {decl}, got {m.group(1)!r}"
+    for gone in RETIRED_CONTROL:
+        assert gone not in css, f"the footer carries no appearance control, so no rule styles {gone!r}"
 
     centre_row = css.find("@container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}")
     assert centre_row > 0, (
@@ -1022,59 +1234,61 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
         "scroll), so main is where the space is stated")
 
 
-def test_the_footer_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
-    """The committed lockup is 1919px wide because it is the brand kit's own raster; what a reader
-    sees is a 30.8px-high mark, and the width follows from the height.
+def test_the_header_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
+    """The lock-up files are the brand kit's 1919x325 PNGs; what a reader sees is a 40px-high mark,
+    the height of the tabs beside it, and the width follows from the height. The anchor is a
+    line-height:0 block, so the image box is the zone's content and no line box adds a descender
+    under it.
 
-    FAILS IF the height rule goes (every page would then paint the file at full size and the footer
-    would be taller than the document above it), if the width stops following the height, or if the
-    max-width cap is lost. The cap is what holds the mark inside the stacked 375px row whatever the
-    committed file's own width becomes, and object-fit keeps its proportions where the cap bites."""
+    FAILS IF the height rule goes (every page would paint the file at its intrinsic size), if the
+    width stops following the height, if the max-width cap is lost (it is what holds the lock-up
+    inside the right zone once the header stacks at 375px), if object-fit:contain is lost (where
+    the cap binds, from 761px to about 953px of viewport, the box is narrower than the artwork and
+    the trademark would be squeezed sideways), or if the footer lock-up's rules come back beside
+    it."""
     for rel in _kinds(built):
-        css = (built / "pages" / rel).read_text(
-            encoding="utf-8").split("<style>", 1)[1].split("</style>", 1)[0]
-        m = re.search(r"\.orglogo img\{([^}]*)\}", css)
-        assert m, f"{rel}: the footer lockup carries no sizing rule"
-        for decl in ("height:30.8px", "width:auto", "max-width:100%", "object-fit:contain"):
-            assert decl in m.group(1), f"{rel}: the lockup rule must declare {decl}: {m.group(1)!r}"
+        css = _css((built / "pages" / rel).read_text(encoding="utf-8"))
+        assert css.count(".orglockup{display:block;line-height:0}") == 1, \
+            f"{rel}: the lock-up anchor must be one line-height:0 block"
+        m = re.search(r"\.orglockup img\{([^}]*)\}", css)
+        assert m, f"{rel}: the header lock-up carries no sizing rule"
+        assert m.group(1) == "height:40px;width:auto;max-width:100%;object-fit:contain", \
+            f"{rel}: the lock-up rule must be the SPA's own: {m.group(1)!r}"
+        assert ".orglogo" not in css, f"{rel}: the footer lock-up's rules must not come back"
 
 
-def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
-    """The tier's determinism posture, re-asserted across EVERY page kind, with the one exception this
-    workflow names. The pages share the site's identity mark with the SPA, as ONE same-origin file the
-    portal image serves and the browser caches once; every other asset stays inline and no build-time
-    read or external fetch is introduced. FAILS IF the header smuggles in a script, an external
-    stylesheet, or any src beyond the allow-list: an http, https, protocol-relative or data src
-    fails on the same line, in every quoting form, and so does an extra src of any kind."""
+def test_the_chrome_carries_only_the_allow_listed_marks_and_no_inline_script(built):
+    """The tier's determinism posture, re-asserted across EVERY page kind. The pages share the
+    site's marks with the SPA, as same-origin files the portal image serves and the browser caches
+    once; every other asset stays inline and no build-time read or external fetch is introduced.
+    FAILS IF a page smuggles in an inline script or an inline handler, an external stylesheet, or
+    any src beyond the allow-list: an http, https, protocol-relative or data src fails on the same
+    line, in every quoting form, and so does an extra src of any kind."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        # No INLINE script, ever: a script element carries a non-executable type or is one of the
-        # dialog's three same-origin files, which only a page with the dialog may load.
-        for tag in re.findall(r"<script\b[^>]*>", page):
-            assert tag == '<script type="application/ld+json">' or \
-                tag in {f'<script src="{s}">' for s in _page_scripts(page)}, \
-                f"{rel}: no inline script may appear on a static page, got {tag}"
+        _assert_scripts_are_files(page, rel)
         srcs = _page_srcs(page, rel)
         assert srcs == _allowed_srcs(rel, page), \
             f"{rel}: the only fetched assets may be {_allowed_srcs(rel, page)}, got {srcs}"
         assert 'rel="stylesheet"' not in page, f"{rel}: styles stay inline"
-        assert "\u2014" not in page and "\u2013" not in page, f"{rel}: no en/em dashes"
+        assert not any(d in page for d in _DASHES), f"{rel}: no en/em dashes"
 
 
-# The three icon paths every emitted page links, in the order the head states them. The root icon is
-# first because a browser that reads no SVG icon link asks the site root for that name and takes the
-# first answer it gets. No href carries a query: the icon URLs are stable by rule and the edge
-# revalidates their bytes; what is held HERE is the shape, which is all the engine tree can see.
-_ICON_PATHS = ("/favicon.ico", "/vendor/favicon.svg", "/vendor/brand/ausmt-icon-180.png")
+# The three icon paths every emitted page links, in the order the head states them: the block every
+# portal document carries. The root icon is first because a browser that reads no SVG icon link asks
+# the site root for that name and takes the first answer it gets. No href carries a query: the icon
+# URLs are stable by rule and the edge revalidates their bytes; what is held HERE is the shape, which
+# is all the engine tree can see.
+_ICON_PATHS = ("/favicon.ico", "/vendor/favicon.svg", "/vendor/auscope/icon-180.png")
 _ICON_LINK = re.compile(r'<link rel="(icon|apple-touch-icon)" href="([^"?]+)"')
 
 
 def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
     """Every entity page asks for /favicon.ico on every visit, so the head names it and the site root
     answers it. FAILS IF a page kind loses a link, states the three in a different order, gains a
-    query on an icon href, or points an icon at anything
-    but a same-origin portal path (an absolute URL here would be an external fetch on 2,655
-    documents, which is exactly what this tier forbids)."""
+    query on an icon href, or points an icon at anything but a same-origin portal path (an absolute
+    URL here would be an external fetch on every document in the tier, which is exactly what this
+    tier forbids)."""
     for rel in _kinds(built):
         head = (built / "pages" / rel).read_text(encoding="utf-8").split("</head>", 1)[0]
         found = _ICON_LINK.findall(head)
@@ -1084,32 +1298,54 @@ def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
         assert [rel_ for rel_, _p in found] == ["icon", "icon", "apple-touch-icon"], (
             f"{rel}: the root icon and the SVG are rel=icon and the 180 px app icon is the "
             f"apple-touch-icon; got {found}")
+        assert ('<link rel="icon" href="/favicon.ico" sizes="any">\n'
+                '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">\n'
+                '<link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">\n') in head, \
+            f"{rel}: the icon block must be the portal documents' own, attribute for attribute"
         hrefs = re.findall(r'<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"', head)
         assert all(h.startswith("/") and not h.startswith("//") and "://" not in h for h in hrefs), \
             f"{rel}: icon links must be same-origin portal paths, got {hrefs}"
 
 
-def test_every_page_kind_carries_the_ausmt_mark_beside_the_wordmark(built):
-    """The identity swap itself. Every surface of the site opens with the same mark: the SPA
-    header and every generated page. FAILS IF a page kind renders the wordmark without the mark, or
-    puts the mark anywhere but the header's left identity zone, or sizes it off the shared rule."""
+def test_every_page_kind_opens_its_identity_zone_with_the_wordmark_and_no_mark(built):
+    """The identity block. Every surface of the site carries the same identity zone: AusMT's wordmark
+    linking the root, then the tagline, and nothing else. FAILS IF a page kind puts an image of any
+    kind in the zone, names either AuScope mark file anywhere in its header, keeps a .brandmark rule
+    in its sheet (nothing carries the class, and a rule left behind invites the element back), or
+    loses a theme rule: without the switch both files of the lock-up pair would paint at once, the
+    white one on the light ground. The three theme rules are each declared once and in order, and
+    no rule that selects a variant image may set display at a specificity above the switch."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        head = page.split("<header", 1)[1].split("</header>", 1)[0]
-        assert ('<div class="hzone hleft">'
-                '<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" '
-                'width="30" height="30">'
-                '<a class="wordmark" href="/">AusMT</a>') in head, \
-            f"{rel}: the mark must open the header's identity zone, beside the wordmark: {head[:300]!r}"
-        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
-        assert ".brandmark{height:30px;width:30px;display:block;flex:none}" in css, \
-            f"{rel}: the mark must carry the shared sizing rule the SPA header uses"
+        head = _header(page)
+        assert HEADER_IDENTITY in head, \
+            f"{rel}: the identity zone is the wordmark and the tagline, and nothing else"
+        zone = head.split('<div class="hzone hleft">', 1)[1].split('<div class="hzone hcenter">', 1)[0]
+        for tag in ("<img", "<svg", "<picture", "<object", "<embed", "<canvas", "style="):
+            assert tag not in zone, f"{rel}: the identity zone carries no mark, found {tag!r}: {zone!r}"
+        for src in MARK_FILES:
+            assert src not in head, f"{rel}: the header names no AuScope mark, found {src}"
+        css = _css(page)
+        assert ".brandmark" not in css, f"{rel}: the .brandmark rule has nothing to style"
+        # Anchored to the line: the lock-up's own default, below, carries the first rule's text
+        # inside a longer selector and must not answer for it.
+        found = [[m.start() for m in re.finditer(r"(?m)^[ \t]*" + re.escape(rule) + r"$", css)]
+                 for rule in THEME_RULES]
+        assert all(len(f) == 1 for f in found), \
+            f"{rel}: each of the three theme rules is declared exactly once: {found}"
+        at = [f[0] for f in found]
+        assert at == sorted(at), f"{rel}: the three theme rules must be in order: {at}"
+        sizing = re.search(r"\.orglockup img\{([^}]*)\}", css)
+        assert sizing and "display" not in sizing.group(1), \
+            f"{rel}: the lock-up sizing rule must not set display, or it outranks the theme switch"
+        assert "/vendor/brand/ausmt-mark.svg" not in page, \
+            f"{rel}: the AusMT mark is not chrome on this tier"
 
 
-# The parent-organisation mark, WITHDRAWN. It once closed every header from the right zone; the
-# rule takes it off every surface of the site, so what this asserts is that the emitter
-# puts it on NO page kind, in no zone. The portal surface's half of the same rule is held in
-# portal/tests/test_header_geometry_parity.py, character for character.
+# The parent-organisation mark that closed a header's right zone as an icon, WITHDRAWN on every
+# surface: the right zone carries the full lock-up instead. What this asserts is that the emitter
+# puts the icon form on NO page kind, in no zone. The portal surface's half of the same rule is held
+# in portal/tests/test_header_geometry_parity.py.
 ORG_MARK_IMG = '<a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>'
 ORG_MARK_CLASS = 'class="orgmark"'
 ORG_MARK_RULE = ".orgmark{display:flex;align-items:center;flex:none;margin-left:16px}"
@@ -1118,46 +1354,38 @@ ORG_MARK_IMG_RULE = ".orgmark img{height:30px;width:auto;display:block}"
 
 def test_no_page_kind_carries_the_auscope_org_mark_in_its_header(built):
     """The withdrawal, on every page kind the tier emits. FAILS IF the anchor literal, the .orgmark
-    class or either of its two CSS rules survives on any page: those four spellings are how the mark
-    would come back, and a header restored from a pre-rule revision carries all four at once.
+    class or either of its two CSS rules survives on any page: those four spellings are how the icon
+    would come back, and a header restored from a superseded revision carries all four at once.
 
-    The header is emitted from ONE literal, so this is really one assertion made 2,655 times; that
-    is exactly the point, because the emitter is also the one place a revert would land."""
+    The header is emitted from ONE literal, so this is really one assertion made once per document
+    in the tier; that is exactly the point, because the emitter is also the one place a revert
+    would land."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        head = page.split("<header", 1)[1].split("</header>", 1)[0]
-        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        head = _header(page)
+        css = _css(page)
         for label, needle, where in (("the anchor", ORG_MARK_IMG, page),
                                      ("the class", ORG_MARK_CLASS, head),
                                      ("the zone rule", ORG_MARK_RULE, css),
                                      ("the sizing rule", ORG_MARK_IMG_RULE, css)):
             assert needle not in where, (
-                f"{rel}: the header's AuScope org-mark is withdrawn from every surface; {label} is "
+                f"{rel}: the header's AuScope icon is withdrawn from every surface; {label} is "
                 f"back as {needle!r}")
-        # The right zone survives the withdrawal and keeps the contextual status slot. FAILS IF the
-        # zone itself went with the mark: the geometry pins read three zones, and a header with two
-        # re-floats the centre tab group on every page in the tier.
-        assert 'class="hzone hright"' in head, (
-            f"{rel}: the right zone stays; the mark left it, the zone did not")
+        # The right zone stays and holds the lock-up. FAILS IF the zone itself went: the geometry
+        # pins read three zones, and a header with two re-floats the centre tab group on every page
+        # in the tier.
+        assert f'<div class="hzone hright">\n    {HEADER_LOCKUP}\n  </div>' in head, (
+            f"{rel}: the right zone stays, holding the lock-up")
 
 
-# The FILE, bounded per page kind, which is the portal surface's pin restated on this one. The mark
-# pin above counts the whole anchor literal and the src allow-list holds each kind's src attributes
-# exactly and in order; neither bounds how often the image is NAMED, so a url() in the inline CSS or
-# a preload link would carry it a second time and pass both.
-ORG_ASSET = "auscope-icon-white.png"
+# The site's raster AuScope icon. It stays committed for the consumers that need it (the docs
+# sidebar copy and the social card are made from it), and no page in this tier names it: the header
+# draws the lock-up PNGs and the collection figure the vector mark pair under /vendor/auscope/.
+LEGACY_ORG_ASSETS = ("auscope-icon-white.png",)
 
-# The collection page is now the ONE kind that names it at all: the member-footprint map's corner
-# mark, which is a caption on that figure and outside the header rule. Every other kind names the
-# file zero times, which is the withdrawal counted rather than spelled.
-ORG_ASSET_PER_KIND = {"collections/idxcoll.html": 1}
-
-
-# The SPA map's watermark, which this tier must NOT grow. The rule puts the AuScope colour
-# icon in one place on the site, the Leaflet map container on portal/index.html, because that is the
-# surface people screenshot; the generated pages have no such surface, their collection figure draws
-# the WHITE icon, and the src allow-list above is deliberately unchanged by that rule. Asserted
-# rather than assumed, because a new brand file is exactly the kind of thing that spreads.
+# The raster colour icon, which this tier must NOT grow either. It is committed and unreferenced by
+# the site chrome on every surface; asserted rather than assumed, because a brand file is exactly
+# the kind of thing that spreads.
 COLOUR_ASSET = "auscope-icon-colour.png"
 
 
@@ -1167,22 +1395,53 @@ def test_no_page_kind_draws_the_spa_maps_colour_watermark(built):
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         assert COLOUR_ASSET not in page, (
-            f"{rel}: the AuScope colour icon is the SPA map's watermark and belongs to no page in "
-            "this tier; the collection figure draws the white icon")
+            f"{rel}: the AuScope colour icon is unreferenced by the site chrome and belongs to no "
+            "page in this tier; the collection figure draws the vector mark pair")
+
+# How often each AuScope file is NAMED per page kind. The mark pair is named by no header, so never on
+# most kinds, and once on the collection page, whose member-footprint figure carries it as a caption.
+# The identity pin above reads the header and the src allow-list holds each kind's src attributes
+# exactly and in order; neither bounds how often a file is NAMED, so a url() in the inline CSS or a
+# preload link would carry it a second time and pass both.
+VECTOR_ASSETS = ("auscope/auscope-mark.svg", "auscope/auscope-mark-white.svg")
+VECTOR_ASSET_DEFAULT = 0
+VECTOR_ASSET_PER_KIND = {"collections/idxcoll.html": {"auscope/auscope-mark.svg": 1,
+                                                      "auscope/auscope-mark-white.svg": 1}}
+# The lock-up pair, the brand kit's PNGs, named exactly once on every page kind: in the header and
+# nowhere else. Counted by file name, so a url() or a preload in any quoting form counts too.
+RASTER_ASSETS = ("auscope-ncris-colour.png", "auscope-ncris-white.png")
 
 
-def test_no_page_kind_names_the_auscope_image_beyond_the_one_figure_that_keeps_it(built):
-    """FAILS IF a page kind names the AuScope image more often than the figures it is entitled to,
-    or loses the one figure that keeps it. The map mark is drawn into a panel and the retired header
-    mark was appended to a zone, so on either surface a careless edit adds rather than replaces, and
-    a page naming the file again is the header mark returning by some other markup while every
-    spelling-scoped pin above still passes."""
+def test_no_page_kind_names_the_raster_auscope_icon(built):
+    """FAILS IF any generated page names the raster AuScope icon, in any slot. It would also fail the
+    src allow-list, but only as an unexplained count; this says which file and why it may not be
+    here. The white lock-up PNG is the header's theme-dark lock-up on every page, held below by its
+    count and by the header literal."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        want = ORG_ASSET_PER_KIND.get(rel, 0)
-        assert page.count(ORG_ASSET) == want, (
-            f"{rel}: the AuScope image may be named {want} time(s) on this page kind; "
-            f"found {page.count(ORG_ASSET)}")
+        for asset in LEGACY_ORG_ASSETS:
+            assert asset not in page, (
+                f"{rel}: {asset} is unreferenced by the site chrome; this tier draws the vector "
+                "mark pair under /vendor/auscope/ and the lock-up PNGs under /vendor/")
+
+
+def test_no_page_kind_names_an_auscope_file_beyond_the_slots_that_keep_it(built):
+    """FAILS IF a page kind names an AuScope file, a vector mark or a lock-up PNG, more often than
+    the slots it is entitled to, or loses one. The figure mark is drawn into a panel and the
+    lock-up into the header's right zone, so on either surface a careless edit adds rather than
+    replaces, and a page naming a file again is a mark returning by some other markup while every
+    spelling-scoped pin above still passes. A mark file named on a kind with no figure is the
+    header's mark coming back."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        for asset in VECTOR_ASSETS:
+            want = VECTOR_ASSET_PER_KIND.get(rel, {}).get(asset, VECTOR_ASSET_DEFAULT)
+            got = len(re.findall(re.escape(asset) + r'"', page))
+            assert got == want, (
+                f"{rel}: {asset} may be named {want} time(s) on this page kind; found {got}")
+        for asset in RASTER_ASSETS:
+            got = page.count(asset)
+            assert got == 1, f"{rel}: {asset} is named once, in the header; found {got}"
 
 
 def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built):
@@ -1203,6 +1462,118 @@ def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built
         f"three 112px tabs overflow a 375px viewport; the nav row must wrap: {nav.group(1)}"
     zone = re.search(r"\.hzone\{([^}]*)\}", css)
     assert zone and "flex-wrap:wrap" in zone.group(1), "the header zones must keep wrapping"
+
+
+# ==================================================================================================
+# Appearance: one token block, and the maps drawn from it
+# ==================================================================================================
+def test_every_page_kind_carries_the_token_block_once_and_no_literal_chrome_colour(built):
+    """Every page states the token block ONCE, at the top of its stylesheet: the house style as the
+    default and the dark appearance under <html data-theme="dark">, each with exactly the names and
+    values portal/index.html's :root carries, in its order. Every chrome colour in the sheet is then
+    one of those names: outside the two blocks the stylesheet carries no colour literal at all, so an
+    appearance cannot miss a rule.
+
+    FAILS IF the block is missing, doubled, out of order, drifts by a value, sits below a rule that
+    reads it, or if a literal colour comes back anywhere else in the sheet."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        css = _css(page)
+        assert len(_LIGHT_BLOCK.findall(css)) == 1 and len(_DARK_BLOCK.findall(css)) == 1, \
+            f"{rel}: the token block appears exactly once"
+        light = _LIGHT_BLOCK.search(css)
+        dark = _DARK_BLOCK.search(css)
+        assert _declarations(light.group(1)) == LIGHT_TOKENS, \
+            f"{rel}: the light block must be the house style, name for name and value for value"
+        assert _declarations(dark.group(1)) == DARK_TOKENS, \
+            f"{rel}: the dark block must restate exactly the dark appearance's differences"
+        assert css.lstrip().startswith(":root{") and light.end() < dark.start() \
+            < css.index("body{"), f"{rel}: the two blocks open the sheet, light then dark"
+        rest = css[:light.start()] + css[light.end():dark.start()] + css[dark.end():]
+        literal = re.findall(r"#[0-9A-Fa-f]{3,8}\b", rest)
+        assert not literal, f"{rel}: chrome colours must be tokens, found literals {literal}"
+        used = set(re.findall(r"var\((--[\w-]+)\)", rest))
+        assert used <= dict(LIGHT_TOKENS).keys() | {"--collw", "--railw", "--railgap"}, \
+            f"{rel}: every var() must name a declared token: {sorted(used - dict(LIGHT_TOKENS).keys())}"
+        for inline in re.findall(r'style="([^"]*)"', page.split("<main>", 1)[1]):
+            for colour in re.findall(r"#[0-9A-Fa-f]{3,8}\b", inline):
+                assert "border-radius:50%" in inline, (
+                    f"{rel}: an inline colour in the body is a data encoding (a legend swatch) or "
+                    f"nothing: {inline!r}")
+
+
+def test_the_type_ramp_is_the_portals_and_the_same_in_both_appearances(built):
+    """The data-type ramp is a data encoding, not chrome: the page maps draw it byte for byte as the
+    portal's TYPE_COL and the --lpmt, --bbmt, --amt and --gds tokens state it, and it is the SAME in
+    both appearances, because a legend must not change meaning with the theme. The raster collection
+    card has no theme, so its map colours are the dark appearance's own map tokens.
+
+    FAILS IF a ramp value drifts, if the dark block restates a ramp token, or if the raster card's
+    colours stop being the dark map tokens."""
+    pages = _pages_module()
+    assert pages._TYPE_COL == {"LPMT": "#3F88C8", "BBMT": "#FFC14F", "AMT": "#9FCB5A",
+                               "GDS": "#CE348A"}, f"the ramp must be the portal's: {pages._TYPE_COL}"
+    css = _css((built / "pages" / "surveys" / "idx-a.html").read_text(encoding="utf-8"))
+    for which in ("light", "dark"):
+        tokens = _theme(css, which)
+        for ty, token in (("LPMT", "--lpmt"), ("BBMT", "--bbmt"), ("AMT", "--amt"), ("GDS", "--gds")):
+            assert tokens[token] == pages._TYPE_COL[ty], \
+                f"{which}: {token} is {tokens[token]}, the maps draw {ty} in {pages._TYPE_COL[ty]}"
+    assert not {"--lpmt", "--bbmt", "--amt", "--gds"} & set(dict(DARK_TOKENS)), \
+        "the dark block must not restate the ramp"
+    dark = _theme(css, "dark")
+    assert (pages._MAP_PANEL, pages._MAP_PANEL_LINE, pages._COAST_FILL, pages._COAST_LINE) == \
+        (dark["--map-panel"], dark["--map-line"], dark["--coast-fill"], dark["--coast-line"]), \
+        "the raster card's map colours are the dark appearance's map tokens"
+
+
+def test_the_maps_take_every_colour_but_the_data_from_their_classes(built):
+    """The hero minimap, the station-grid zoom, the hub card maps and the collection figure carry no
+    colour of their own beyond the data: the panel is a <rect class="mm-panel mm-rule">, the coast
+    rings are class mm-coast, the state borders and the zoom's coastline are class mm-line, the
+    locator ring and the scale bar take the muted annotation classes, and the station marks keep
+    their literal ramp or member fills inside a dot group that strokes them in var(--dot-edge).
+
+    FAILS IF a fill or stroke literal returns to the panel, the coast or an annotation, if a map
+    carries an inline style, if the dot edge goes, or if a class loses its rule."""
+    pages = _pages_module()
+    css = _css((built / "pages" / "surveys" / "index.html").read_text(encoding="utf-8"))
+    for rule in (".mm-panel{fill:var(--map-panel)}", ".mm-rule{stroke:var(--map-line)}",
+                 ".mm-coast{fill:var(--coast-fill);stroke:var(--coast-line)}",
+                 ".mm-line{fill:none;stroke:var(--coast-line)}",
+                 ".mm-dots{stroke:var(--dot-edge);stroke-width:.3}",
+                 ".mm-note{fill:none;stroke:var(--muted)}", ".mm-label{fill:var(--muted)}"):
+        assert css.count(rule) == 1, f"the map classes must carry {rule!r} exactly once"
+    compact = [(137.0 + i * 0.01, -30.0 - i * 0.01, t) for i, t in
+               enumerate(("LPMT", "BBMT", "AMT", "GDS"))]
+    wide = [(115.0 + i * 8, -20.0 - i * 4, t) for i, t in enumerate(("LPMT", "BBMT", "AMT", "GDS"))]
+    # Three degrees across the two South Australian gulfs, so the zoom has coastline to draw.
+    coastal = [(136.0 + i, -33.0 - i, t) for i, t in enumerate(("LPMT", "BBMT", "AMT", "GDS"))]
+    maps = {"minimap": pages._minimap_svg(wide), "ring minimap": pages._minimap_svg(compact),
+            "zoom": pages._footprint_svg(coastal),
+            "collection": pages._collection_scatter(["A", "B"], {"A": [(120.0, -25.0)],
+                                                                 "B": [(145.0, -35.0)]}, "T")}
+    for name, whole in maps.items():
+        svg = whole.split("</svg>", 1)[0]
+        assert re.search(r'<svg [^>]*><rect class="mm-panel mm-rule" ', svg), \
+            f"{name}: the panel is the SVG's first element, drawn by class"
+        assert "style=" not in svg, f"{name}: a map carries no inline style"
+        assert 'stroke="#' not in svg, f"{name}: no stroke literal; the theme supplies every line"
+        fills = re.findall(r'<(\w+)[^>]*\sfill="(#[0-9A-Fa-f]{6})"', svg)
+        assert all(tag in ("g", "circle") for tag, _f in fills), \
+            f"{name}: only station marks carry a literal fill: {fills}"
+        assert "mm-coast" in svg or "mm-line" in svg, f"{name}: the geography is drawn by class"
+    for name in ("minimap", "zoom", "collection"):
+        dots = re.search(r'<g class="mm-dots"[^>]*>(.*?)</g></g>|<g class="mm-dots">(.*?)</g>',
+                         maps[name], re.S)
+        assert dots and "<circle" in (dots.group(1) or dots.group(2)), \
+            f"{name}: every station mark sits inside the dot group that strokes its edge"
+    for ty, colour in pages._TYPE_COL.items():
+        assert f'fill="{colour}"' in maps["minimap"] + maps["zoom"], \
+            f"{ty}: the maps draw the type in its ramp value {colour}"
+    assert '<circle class="mm-note"' in maps["ring minimap"], "the locator ring is a muted annotation"
+    assert '<line class="mm-note"' in maps["zoom"] and '<text class="mm-label"' in maps["zoom"], \
+        "the scale bar and its label are muted annotations"
 
 
 # ==================================================================================================
@@ -1259,15 +1630,17 @@ def test_hub_card_fact_lines_copy_single_spaced(built):
 
 
 def test_the_separator_span_stays_on_the_hub_cards_alone(built):
-    """The padded span is a CARD affordance. The page-level summary line, the header's counts
-    slot, the entity pages' own fact lines and the footer all keep the bare single-spaced join.
-    FAILS IF the span leaks into any of them."""
+    """The padded span is a CARD affordance. The page-level summary line, the footer's counts
+    slot, the entity pages' own fact lines and the rest of the chrome all keep the bare
+    single-spaced join. FAILS IF the span leaks into any of them."""
     sv = (built / "pages" / "surveys" / "index.html").read_text(encoding="utf-8")
     summary = re.search(r'<p class="idxsum">(.*?)</p>', sv).group(1)
     assert " &#183; " in summary and 'class="sep"' not in summary, (
         f"the catalogue summary keeps the bare join, got {summary!r}")
-    head = sv.split("<header", 1)[1].split("</header>", 1)[0]
-    assert 'class="sep"' not in head, "the header counts slot keeps the bare join"
+    slot = _status(_footer(sv))
+    assert " &#183; " in slot and 'class="sep"' not in slot, \
+        f"the footer counts slot keeps the bare join, got {slot!r}"
+    assert 'class="sep"' not in _header(sv), "the header keeps no card separator either"
     for rel in ("surveys/idx-a.html", "collections/idxcoll.html"):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         assert 'class="sep"' not in page, f"{rel}: entity pages keep their current spacing"
@@ -1376,7 +1749,6 @@ def test_every_json_ld_block_parses_and_the_entity_node_stays_first(built):
 
 # THE CONSTANT FOOTER, over BUILT pages: the emitted document's own structure and CSS, where the
 # portal half of this pin (portal/tests/test_footer_regions.py) reads _pages.py's source text.
-# The rule and every number the two halves hold it to: LANE-CONTRACT-FOOTER-AUSCOPE.md.
 _FLOW_BELOW = 560
 _FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
 
@@ -1384,7 +1756,7 @@ _FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
 def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
     """The footer is at the bottom of the VIEWPORT on every page kind, not at the end of the scroll:
     the document is a viewport-tall column, the block above the footer takes the free space, and the
-    footer itself is sticky to the bottom edge over the page's own opaque ground.
+    footer itself is sticky to the bottom edge, painting its own opaque --surface ground.
 
     A sticky box is never pushed DOWN from its place in flow, so the column and the growing block
     are not decoration around the sticky rule: without them the Collections hub, which is shorter
@@ -1411,7 +1783,7 @@ def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
             f"a flex item with auto side margins and an auto width shrinks to its content: {grows!r}"
         foot = re.search(r"(?m)^\s*footer\{([^}]*)\}", css)
         assert foot, f"{rel}: no footer rule"
-        for decl in ("position:sticky", "bottom:0", "background:#11182D"):
+        for decl in ("position:sticky", "bottom:0", "background:var(--surface)"):
             assert decl in foot.group(1), \
                 f"{rel}: the footer must declare {decl}: {foot.group(1)!r}"
         assert re.search(r"z-index:[1-9]", foot.group(1)), \
@@ -1444,12 +1816,18 @@ def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
 def test_the_centre_line_is_bold_on_every_page_kind(built):
     """The acknowledgement renders bold, the anchor included, as ONE declaration on the
     centre zone. FAILS if the weight goes, if it is written per span in the markup, or if a second
-    declaration appears for the two surfaces to drift on."""
+    declaration appears for the two surfaces to drift on. It is the one bold declaration in the
+    sheet, so nothing else can reach the centre line."""
     for rel in _kinds(built):
-        css = (built / "pages" / rel).read_text(
-            encoding="utf-8").split("<style>", 1)[1].split("</style>", 1)[0]
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        css = _css(page)
         centre = re.search(r"(?m)^\s*\.fcenter\{([^}]*)\}", css)
         assert centre and "font-weight:700" in centre.group(1), \
             f"{rel}: the centre zone must declare font-weight:700: {centre and centre.group(1)!r}"
-        assert css.count("font-weight:700") == 1, \
-            f"{rel}: the weight is one declaration on the zone, not one per surface it reaches"
+        bold = [sel.strip() for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css)
+                if "font-weight:700" in body]
+        assert bold == [".fcenter"], \
+            f"{rel}: the weight is one declaration on the zone, not one per surface it reaches: {bold}"
+        centre_markup = _footer(page).split('<div class="fzone fcenter">', 1)[1].split("</div>", 1)[0]
+        assert "<b>" not in centre_markup and "<strong" not in centre_markup \
+            and "style=" not in centre_markup, f"{rel}: the weight is never written in the markup"
