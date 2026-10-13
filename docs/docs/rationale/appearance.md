@@ -28,10 +28,13 @@ curves and the collection colours are data too, and keep their own colours.
 
 ## AuScope's identity in the chrome
 
-Every header opens with the AuScope mark, with AusMT's name and tagline beside it, and closes with the
-AuScope and NCRIS lock-up, linked to AuScope. The AusMT symbol stays AusMT's product mark: the
-documentation sidebar and the social card carry it, and the brand page offers it for talks and papers.
-The browser tab and the home-screen icons carry the AuScope mark, like the header.
+Every header opens with AusMT's name and tagline and closes with the AuScope and NCRIS lock-up,
+linked to AuScope. The lock-up is the header's only AuScope presence: the AuScope mark that stood
+beside AusMT's name left the header (Owner decision 2026-10-13), so the identity zone holds AusMT's
+name and tagline alone and the lock-up, which names AuScope and NCRIS and links AuScope, is the one
+AuScope image in it. The AusMT symbol stays AusMT's product mark: the documentation sidebar and the
+social card carry it, and the brand page offers it for talks and papers. The browser tab and the
+home-screen icons carry the AuScope mark, and so do the map's corner and the collection maps.
 
 The files are the 2025 AuScope brand kit's own (Owner decision 2026-10-13). The kit's mark carries
 Tasmania; the cuts first taken from the style guide's page did not, so they were retired rather than
@@ -43,14 +46,17 @@ and the header is no taller than the tabs make it.
 The header carries four controls: Map, Surveys, Collections and About. Contributing a survey is
 reached from About, where a contributor reads what a submission involves before starting one.
 
-The footer states who enables AusMT and that data licences vary by survey. It carries the
-machine-readable catalogue link on the left and, on the right, the map's live counts where there is a
-map, then the appearance control.
+The footer states who enables AusMT and that data licences vary by survey: "AusMT is enabled by
+AuScope · Data licences vary by survey". AuScope's name is the line's one link and opens AuScope's
+home page in a new tab; the address is not printed beside it (Owner decision 2026-10-13). It carries
+the machine-readable catalogue link on the left and, on the right, the map's live counts where there
+is a map, then the appearance control.
 
 ## The mark on the map
 
 The map carries the AuScope mark in its bottom-right corner, because the map is what people screenshot
 into talks and reports and a screenshot keeps neither the header nor the footer. The mark keeps the
 style guide's breathing space, one logo height on every side, so the collapsed map credit moved to the
-top-right corner. The basemap follows the theme, light or dark, and the station dots take an edge that
-reads on either.
+top-right corner. It is drawn at 80 percent opacity (Owner decision 2026-10-13); opacity is the only
+change made to it, and both files keep the brand kit's own colours, with no filter, tint or blend. The
+basemap follows the theme, light or dark, and the station dots take an edge that reads on either.

@@ -46,13 +46,14 @@ each grows with its own content and the centred tabs land at a different x per v
 tests/test_header_geometry_parity.py.
 ```
 
-#### The AuScope mark pair (vendor/auscope/auscope-mark.svg and its white variant) ...
+#### The identity zone carries no mark
 
 ```text
-The AuScope mark pair (vendor/auscope/auscope-mark.svg and its white variant) is a fixed 30x30
-box, so it joins the zero-basis .hleft zone without moving the centre tabs; the theme switch shows
-one variant, so the pair contributes one box. Stated character-identically in
-engine/extract/_pages.py's sheet; pinned by tests/test_header_geometry_parity.py.
+The identity zone carries no mark on any surface: AusMT's name and tagline are its whole content,
+and the AuScope and NCRIS lock-up at the right is the header's only AuScope presence. No sheet
+declares a sizing rule for a mark there, so the first line of the zone is the wordmark's own line
+box, and the block sits in the zero-basis .hleft zone without moving the centre tabs. Pinned by
+tests/test_header_geometry_parity.py and tests/test_header_vertical_geometry.py.
 ```
 
 #### The AuScope and NCRIS lock-up is the brand kit's PNG pair, as tall as the tabs
@@ -73,8 +74,9 @@ tests/test_header_geometry_parity.py and tests/test_header_vertical_geometry.py.
 
 ```text
 The theme switch: .theme-dark is hidden, and the dark theme hides .theme-light and shows
-.theme-dark. Its first rule is one class, so it ties with .brandmark and must follow it; and no
-rule that selects a variant may set display at a higher specificity, which is why .orglockup img
+.theme-dark. The three rules keep that order on every surface. The first is one class, so it would
+tie with any one-class rule that set display on a variant, and no sheet carries one; no rule that
+selects a variant may set display at a higher specificity either, which is why .orglockup img
 states its size and not its display (a display:block there would show the white lock-up in the
 light theme as well). The white variants sit only on the dark ground.
 ```
@@ -96,9 +98,11 @@ The static header and this one must agree on the container's wrap mode: nowrap a
 The AuScope mark, bottom right of the MAP: a screenshot carries no header and no footer, so this is
 the attribution that travels with the image. Its inset equals its own 48px height, the style guide's
 breathing space, and that corner holds nothing else: the attribution control sits top right and the
-legend bottom left. Neither tint nor reduced opacity. pointer-events:none and a z-index below
-Leaflet's control and popup layers keep it out of hit testing. The white variant draws on the dark
-basemap; below 560px neither is drawn, by a rule anchored on #map so it outranks the theme switch.
+legend bottom left. It draws at 80 percent opacity, opacity:.8 exactly, the one change permitted on
+it: both files keep their own colours, with no filter, tint or blend. pointer-events:none and a
+z-index below Leaflet's control and popup layers keep it out of hit testing. The white variant draws
+on the dark basemap; below 560px neither is drawn, by a rule anchored on #map so it outranks the
+theme switch.
 ```
 
 #### The map's attribution, collapsed to one glyph
@@ -246,14 +250,15 @@ around near-white text on this dark panel. Weight drops to 500 for the same reas
 ```text
 Twin of the static collection page's .collmap/.collmark rule (engine/extract/_pages.py). The panel
 is capped at the SVG's own width, so the corner the mark is pinned to is the MAP's, not the
-column's. The mark is the AuScope pair the header carries, and the panel behind it is --map-panel.
+column's. The mark is the AuScope pair the map's corner carries, and the panel behind it is
+--map-panel.
 ```
 
-#### The AuScope mark opens every header on this site; AusMT and its tagline ...
+#### AusMT's name and tagline are the identity zone; the lock-up at the right ...
 
 ```text
-The AuScope mark opens every header on this site; AusMT and its tagline stand beside it, and the
-AuScope and NCRIS lock-up takes the right zone. On this page alone the wordmark sits inside the
+AusMT's name and tagline are the identity zone, which carries no mark; the AuScope and NCRIS lock-up
+at the right is the header's only AuScope presence. On this page alone the wordmark sits inside the
 page's h1, whose clipped remainder carries the page name for a crawler and a screen reader. Same
 markup on every surface apart from that heading, the Map control (a button here, a link elsewhere)
 and the current page's active state; pinned by tests/test_header_geometry_parity.py.
@@ -380,9 +385,11 @@ than another page; the href and the title are kept verbatim.
 #### CENTRE
 
 ```text
-CENTRE. Who enables AusMT, then the licence note. The URL text is the one link in the line, so it
-says where it goes without a title attribute. The line carries no copyright clause: the
-documentation site states the software's, and each survey carries its own data licence.
+CENTRE. Who enables AusMT, then the licence note. The organisation's name is the one link in the
+line, opening https://www.auscope.org.au in a new tab with rel="noopener noreferrer"; the address
+is never printed, so the footer carries one anchor to it and no address as text. The line carries
+no copyright clause: the documentation site states the software's, and each survey carries its
+own data licence.
 ```
 
 #### RIGHT
@@ -420,13 +427,13 @@ Three-zone header. The side zones must take equal ZERO-basis shares (flex:1 1 0,
      grows with its own content and the centred tabs land at a different x per view; pinned by
      tests/test_header_geometry_parity.py. See docs: portal internals, index.html.
 
-The AuScope mark pair is a fixed 30x30 box, so it joins the zero-basis .hleft zone without moving the
-     centre tabs. See docs: portal internals, index.html.
+The identity zone carries no mark, so no sheet sizes one. See docs: portal internals, index.html.
 
 The heading wraps the wordmark and takes no type of its own, so its line box is the wordmark's and the
      identity block measures as it does on every other surface; the page name is clipped.
 
-The theme switch follows .brandmark, which it ties on specificity. See docs: portal internals, index.html.
+The theme switch, three rules in this order, outranked by nothing that selects a variant. See docs:
+     portal internals, index.html.
 
 The AuScope and NCRIS lock-up is the brand kit's PNG pair, drawn 40px tall, the height of the view tabs.
      See docs: portal internals, index.html.
@@ -441,8 +448,8 @@ The MTCAT link lives in the footer's bottom-left; the footer's flex gap handles 
 
 Mute the basemap only: station overlays render outside the tile pane, so they keep full colour.
 
-The AuScope mark, bottom right of the MAP, inset by its own height. See docs: portal internals,
-     index.html.
+The AuScope mark, bottom right of the MAP, inset by its own height and drawn at 80 percent
+     opacity. See docs: portal internals, index.html.
 
 Anchored on the map's id so it outranks the theme switch that shows the dark variant.
 
@@ -650,8 +657,8 @@ nothing relative, so og:url and og:image are absolute.
 
 ```text
 Uniform chrome: the three-zone header below is index.html's, so About carries the same chrome as
-the portal: the AuScope mark and AusMT's name at the left, the tabs and About in the centre, the
-AuScope and NCRIS lock-up at the right. This page is STATIC, so the centre items are links rather
+the portal: AusMT's name and tagline at the left, the tabs and About in the centre, the AuScope
+and NCRIS lock-up at the right. This page is STATIC, so the centre items are links rather
 than app buttons; the sticky positioning is shared with the other scrolling pages. The rules are
 the shared header rule set, colours in tokens.
 ```
@@ -670,7 +677,7 @@ instead of stacking. Character-identical on every surface wearing the chrome.
 THE IN-PAGE ANCHOR OFFSET FOLLOWS THE HEADER. The header is sticky, so an anchor that scrolls its
 section to y=0 puts the heading underneath it and scroll-margin-top is the clearance. One number
 will not do: the header WRAPS as the viewport narrows (with every zone stacked under 760px the
-lock-up takes a 40px row of its own) and is 260px tall at 375px against 57px at 1280px, so each
+lock-up takes a 40px row of its own) and is 229px tall at 375px against 57px at 1280px, so each
 band below carries the TALLEST header in its own range (overshooting drops a heading a few pixels
 low, undershooting hides it). These are measurements of this header's content at this font stack:
 anything that changes its wording, its nav or its zones moves the wrap points and the ladder must be
@@ -701,13 +708,13 @@ viewport-tall column and main takes its free space. Below 560px of viewport it w
 phone screen, so it returns to flow.
 ```
 
-#### The AuScope mark opens every header on this site
+#### AusMT's name and tagline are the identity zone
 
 ```text
-The AuScope mark opens every header on this site, and AusMT's name, a link to the portal root,
-stands beside it. About marks itself current on its own .about control, because none of the three
-tabs is this page. The page carries no counts anywhere: it has no map, filter or selection to
-report, so the live ids (nVis/nSel/nTot) stay off it.
+AusMT's name and tagline are the identity zone, and the name links the portal root; the lock-up at
+the right is the header's only AuScope presence. About marks itself current on its own .about
+control, because none of the three tabs is this page. The page carries no counts anywhere: it has no
+map, filter or selection to report, so the live ids (nVis/nSel/nTot) stay off it.
 ```
 
 #### About is the two-minute front door: it answers seven questions and then ...
@@ -753,9 +760,9 @@ contentinfo landmark.
 #### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The acknowledgement's
-URL text is the one link in the line and carries no copyright clause. The control's buttons carry
-data-theme-choice and src/theme.js, the one script this page loads, wires them.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The organisation's
+name is the acknowledgement's one link, and the line carries no copyright clause. The control's
+buttons carry data-theme-choice and src/theme.js, the one script this page loads, wires them.
 ```
 
 ## portal/add-survey.html
@@ -813,12 +820,12 @@ character with index.html, because these three maps wear the same control in the
 pinned by tests/test_map_attribution.py.
 ```
 
-#### The AuScope mark opens every header on this site
+#### AusMT's name and tagline are the identity zone
 
 ```text
-The AuScope mark opens every header on this site, AusMT's name links the portal root beside it and
-the AuScope and NCRIS lock-up takes the right zone. None of the tabs is this page, so none is
-active.
+AusMT's name and tagline are the identity zone, and the name links the portal root; the AuScope and
+NCRIS lock-up at the right is the header's only AuScope presence. None of the tabs is this page, so
+none is active.
 ```
 
 #### Options are populated at runtime from the generated contract (LICENSES ...
@@ -888,9 +895,9 @@ is never asked here.
 #### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The acknowledgement's
-URL text is the one link in the line and carries no copyright clause; the control's buttons are
-wired by src/theme.js.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The organisation's
+name is the acknowledgement's one link, and the line carries no copyright clause; the control's
+buttons are wired by src/theme.js.
 ```
 
 #### INFO-block coords, decimal (Geotools style) or DMS ('LATITUDE ...
@@ -1720,7 +1727,7 @@ The description is the first three sentences of this page's own lede, verbatim a
 
 --no carries the danger red that clears WCAG AA as text; see index.html.
 
-The AuScope mark pair opens the header on every surface of the site, under the same .brandmark rule. See docs: portal internals, add-survey.html.
+The identity zone is AusMT's name and tagline on every surface of the site, and carries no mark. See docs: portal internals, add-survey.html.
 
 originalname.edi → ROX000.edi rename preview
 
@@ -1744,7 +1751,7 @@ The map's attribution, collapsed to one glyph in the top-right corner. The credi
 
 DATAID auto-derived from filename (curator-flagged, not blocking)
 
-The AuScope mark opens every header on this site. See docs: portal internals, add-survey.html.
+AusMT's name and tagline are the identity zone; the lock-up at the right is the header's only AuScope presence. See docs: portal internals, add-survey.html.
 
 ============================ TIER 0, the only required screen ============================
 
@@ -2130,11 +2137,12 @@ identical. STICKY, not fixed, so it keeps its box in flow and body is a viewport
 560px of viewport it returns to ordinary flow.
 ```
 
-#### The AuScope mark opens every header on this site
+#### AusMT's name and tagline are the identity zone
 
 ```text
-The AuScope mark opens every header on this site; none of the three tabs is this page, so none is
-active, and the right zone is the AuScope and NCRIS lock-up.
+AusMT's name and tagline are the identity zone, which carries no mark; none of the three tabs is
+this page, so none is active, and the right zone is the AuScope and NCRIS lock-up, the header's only
+AuScope presence.
 ```
 
 #### The site's ONE footer
@@ -2147,9 +2155,9 @@ main, not a child of it: only a body-level footer is a contentinfo landmark.
 #### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The acknowledgement's
-URL text is the one link in the line and carries no copyright clause; the control's buttons are
-wired by src/theme.js.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The organisation's
+name is the acknowledgement's one link, and the line carries no copyright clause; the control's
+buttons are wired by src/theme.js.
 ```
 
 ## portal/brand.html
@@ -2182,21 +2190,21 @@ viewport-tall column and main takes its free space. Below 560px of viewport it w
 phone screen, so it returns to flow.
 ```
 
-#### The AuScope mark opens every header on this site
+#### AusMT's name and tagline are the identity zone
 
 ```text
-The AuScope mark opens every header on this site. The AusMT symbol this page offers for download is
-AusMT's product mark, carried by the documentation sidebar and the social card; the site's own
-favicon and app icons, like its header, carry the AuScope mark, and the page says so in its Mark
-section.
+AusMT's name and tagline are the identity zone, which carries no mark; the lock-up at the right is
+the header's only AuScope presence. The AusMT symbol this page offers for download is AusMT's
+product mark, carried by the documentation sidebar and the social card; the site's own favicon and
+app icons carry the AuScope mark, and the page says so in its Mark section.
 ```
 
 #### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The acknowledgement's
-URL text is the one link in the line and carries no copyright clause; the control's buttons are
-wired by src/theme.js.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the appearance control. The organisation's
+name is the acknowledgement's one link, and the line carries no copyright clause; the control's
+buttons are wired by src/theme.js.
 ```
 
 ## portal/404.html

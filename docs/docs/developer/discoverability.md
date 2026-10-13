@@ -114,27 +114,30 @@ The header is the portal's header with two declared differences: the identity is
 root rather than the map page's heading, and the three tabs are links with the current page's tab
 active.
 
-- Left: the AuScope mark, then the AusMT wordmark and the tagline. The mark is a pair of SVGs under
-  `/vendor/auscope/`, derived from the AuScope brand kit's own vector icon, one inked for the light
-  ground and one in white for the dark ground; the `.theme-light` and `.theme-dark` rules show the
-  file that matches `data-theme`, so the white file never sits on the light ground.
+- Left: the AusMT wordmark, linking the root, and the tagline, and nothing else. The identity zone
+  carries no mark and fetches nothing.
 - Centre: Map, Surveys and Collections, then About. There is no Contribute control in any header;
   `add-survey.html` stays served and About links it from its body.
-- Right: the AuScope and NCRIS lock-up, again as a light and a white file: the brand kit's own PNGs,
-  `/vendor/auscope-ncris-colour.png` and `/vendor/auscope-ncris-white.png`, declared at their
-  intrinsic 1919 by 325 and drawn 40px tall, the height of the tabs. It links
-  `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`.
+- Right: the AuScope and NCRIS lock-up, the header's only AuScope presence, as a light and a white
+  file: the brand kit's own PNGs, `/vendor/auscope-ncris-colour.png` and
+  `/vendor/auscope-ncris-white.png`, declared at their intrinsic 1919 by 325 and drawn 40px tall, the
+  height of the tabs. The `.theme-light` and `.theme-dark` rules show the file that matches
+  `data-theme`, so the white file never sits on the light ground. It links
+  `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`. These two files are the
+  header's only fetched assets.
 
 The site draws the 2025 AuScope brand kit's own files, which carry Tasmania, and the lock-up is as
-tall as the tabs (Owner decision 2026-10-13).
+tall as the tabs (Owner decision 2026-10-13). The identity zone carries no mark, so the lock-up is
+the one AuScope image in every header (Owner decision 2026-10-13).
 
 ### Footer
 
 Three regions, the same on every page apart from the status slot.
 
 - Left: `MTCAT JSON ↗`, linking `/data/mtcat.json`.
-- Centre: "AusMT is enabled by AuScope · www.auscope.org.au · Data licences vary by survey", the
-  address being the region's one link.
+- Centre: "AusMT is enabled by AuScope · Data licences vary by survey". "AuScope" is the region's
+  one link, opening `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`; the
+  address is not printed (Owner decision 2026-10-13).
 - Right: the page's status, then the appearance control (Light · Dark). The status is what the page
   can state about itself: the surveys hub states its catalogue counts, and every other page leaves
   the slot empty. The control is the portal footer's own block, two buttons that the appearance
@@ -173,9 +176,10 @@ card's map is drawn in exactly the dark appearance's map tokens (`_MAP_PANEL`, `
 
 `/vendor/*` and `/src/*` are served from the portal image and the pages tree from the data volume,
 so the two can be a deploy apart. A pages tree that names a file the running image does not serve
-shows alt text in place of the marks and loses its appearance script, so the portal image goes out
-first; `/vendor/auscope/auscope-mark.svg`, `/vendor/auscope-ncris-colour.png` and `/src/theme.js`
-each answering 200 is the check before the pages tree is swapped.
+shows alt text in place of its images and loses its appearance script, so the portal image goes
+out first; `/vendor/auscope-ncris-colour.png` (every header's lock-up),
+`/vendor/auscope/auscope-mark.svg` (the collection map's corner mark) and `/src/theme.js` each
+answering 200 is the check before the pages tree is swapped.
 
 ## Structured data, by page kind
 

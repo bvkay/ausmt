@@ -56,9 +56,10 @@ Generated, not hand-edited: `tools/gen_auscope_icons.py` writes it from
 
 ## auscope/
 
-The AuScope mark, as the site chrome draws it, and the icons made from it. The mark pair is derived
-from the AuScope brand kit's own vector icon, `2025 AuScope Logo Icon.ai`; `auscope/PROVENANCE.md`
-records the derivation and the guide's rules for using it.
+The AuScope mark, as the map's corner and the collection figures draw it (no header carries it), and
+the icons made from it. The mark pair is derived from the AuScope brand kit's own vector icon,
+`2025 AuScope Logo Icon.ai`; `auscope/PROVENANCE.md` records the derivation and the guide's rules for
+using it.
 
 | File | What it is |
 |---|---|
