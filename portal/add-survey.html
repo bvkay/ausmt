@@ -163,6 +163,8 @@
   .fleft{flex:1 1 0;min-width:0}
   .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
   .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
+  .orglockup{display:inline-block;line-height:0;margin:-5.625px 0}
+  .orglockup img{height:30px;width:auto;max-width:100%;object-fit:contain}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
@@ -554,11 +556,11 @@
   </fieldset>
 </main>
 <footer>
-  <!-- LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. See docs:
+  <!-- LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. See docs:
        portal internals, add-survey.html. -->
   <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">MTCAT JSON ↗</a></div>
   <div class="fzone fcenter">AusMT is enabled by <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">AuScope</a> · Data licences vary by survey</div>
-  <div class="fzone fright"></div>
+  <div class="fzone fright"><a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
 </footer>
 
 <div class="modal" id="modal"><div class="box">
