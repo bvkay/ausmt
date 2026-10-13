@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>About AusMT - Australia's Magnetotelluric (MT) Data Portal</title>
+<title>About AusMT: Magnetotelluric Data Discovery &amp; Access</title>
 <script src="/src/theme.js"></script>
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">
@@ -16,7 +16,7 @@
 <meta name="description" content="Australia's national discovery and access portal for magnetotelluric data, connecting transfer functions with their provenance, licences, citations and source archives.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AusMT">
-<meta property="og:title" content="About AusMT - Australia's Magnetotelluric (MT) Data Portal">
+<meta property="og:title" content="About AusMT: Magnetotelluric Data Discovery &amp; Access">
 <meta property="og:description" content="Australia's national discovery and access portal for magnetotelluric data, connecting transfer functions with their provenance, licences, citations and source archives.">
 <meta property="og:url" content="https://ausmt.auscope.org.au/about.html">
 <meta property="og:image" content="https://ausmt.auscope.org.au/vendor/social-card.png">
@@ -53,8 +53,10 @@
   .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
-  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--heading);text-decoration:none}
-  .tagline{color:var(--muted);font-size:12.5px}
+  .brandmark{height:36px;width:36px;display:block;flex:none}
+  .wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;letter-spacing:.02em;line-height:1;color:var(--heading);text-decoration:none}
+  .wordmark b{font-weight:900}
+  .tagline{color:var(--muted);font-size:14px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
   /* flex-wrap is a term of the header's HEIGHT: three 112px tabs must be free to stack on a narrow
      viewport. See docs: portal internals, about.html. */
   nav{display:flex;gap:6px;flex-wrap:wrap}
@@ -66,8 +68,6 @@
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
   .about.active{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
-  .orglockup{display:block;line-height:0}
-  .orglockup img{height:40px;width:auto;max-width:100%;object-fit:contain}
   .theme-dark{display:none}
   :root[data-theme="dark"] .theme-light{display:none}
   :root[data-theme="dark"] .theme-dark{display:block}
@@ -78,14 +78,10 @@
   /* THE IN-PAGE ANCHOR OFFSET FOLLOWS THE HEADER. The header is sticky, so an anchor that scrolls its
      section to y=0 puts the heading underneath it and scroll-margin-top is the clearance. See docs: portal
      internals, about.html. */
-  :root{--about-anchor-offset:256px}
-  @media (min-width:344px){:root{--about-anchor-offset:229px}}
-  @media (min-width:384px){:root{--about-anchor-offset:183px}}
-  @media (min-width:451px){:root{--about-anchor-offset:147px}}
-  @media (min-width:761px){:root{--about-anchor-offset:100px}}
-  @media (min-width:794px){:root{--about-anchor-offset:85px}}
-  @media (min-width:932px){:root{--about-anchor-offset:70px}}
-  @media (min-width:1098px){:root{--about-anchor-offset:57px}}
+  :root{--about-anchor-offset:216px}
+  @media (min-width:384px){:root{--about-anchor-offset:170px}}
+  @media (min-width:451px){:root{--about-anchor-offset:134px}}
+  @media (min-width:761px){:root{--about-anchor-offset:57px}}
   section{margin:0 0 30px;scroll-margin-top:var(--about-anchor-offset)}
   h2{font-size:15px;text-transform:uppercase;letter-spacing:.1em;color:var(--heading);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
   h3{font-size:14px;color:var(--heading);margin:16px 0 6px}
@@ -113,12 +109,12 @@
   .appearance legend{margin:0 0 6px;padding:0;font-weight:600;color:var(--muted)}
   .appearance label{display:inline-flex;align-items:center;gap:5px;margin:0 14px 0 0;cursor:pointer}
   .appearance input{accent-color:var(--accent)}
-  /* The AuScope-NCRIS lock-up in the body, the pair the header carries, drawn larger. See docs: portal
+  /* The AuScope-NCRIS lock-up in the body, the pair the footer carries, drawn larger. See docs: portal
      internals, about.html. */
   .bodylockup{margin:0 0 12px;line-height:0}
   .bodylockup img{width:320px;max-width:100%;height:auto}
-  /* One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, an empty
-     RIGHT that keeps the centre on the page's axis. See docs: portal internals, about.html. */
+  /* One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope
+     and NCRIS lock-up RIGHT. See docs: portal internals, about.html. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--surface);z-index:3}
   footer a{color:var(--accent);text-decoration:none}
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
@@ -126,6 +122,8 @@
   .fleft{flex:1 1 0;min-width:0}
   .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
   .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
+  .orglockup{display:inline-block;line-height:0;margin:-5.625px 0}
+  .orglockup img{height:30px;width:auto;max-width:100%;object-fit:contain}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
@@ -134,10 +132,10 @@
 <body>
 <header>
   <div class="hzone hleft">
-    <!-- AusMT's name and tagline are the identity zone; the lock-up at the right is the header's
-         only AuScope presence. See docs: portal internals, about.html. -->
-    <a class="wordmark" href="/">AusMT</a>
-    <div class="tagline">Australia's Magnetotelluric Data Portal</div>
+    <!-- The AuScope mark, then AusMT's name set at the AuScope logo's proportions. See docs: portal
+         internals, about.html. -->
+    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="36" height="36">
+    <a class="wordmark" href="/"><b>Aus</b>MT</a>
   </div>
   <div class="hzone hcenter">
     <nav>
@@ -147,9 +145,7 @@
     </nav>
     <a class="about active" href="about.html">About</a>
   </div>
-  <div class="hzone hright">
-    <a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a>
-  </div>
+  <div class="hzone hright"><div class="tagline">Magnetotelluric Data Discovery &amp; Access</div></div>
 </header>
 <main>
   <h1>About AusMT</h1>
@@ -386,11 +382,11 @@ open(f"{slug}-edi.zip", "wb").write(body)</pre>
   <!-- The site's ONE footer. A sibling of main, not a child of it: only a body-level footer is a
        contentinfo landmark. See docs: portal internals, about.html. -->
   <footer>
-    <!-- LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT empty. See docs:
+    <!-- LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. See docs:
          portal internals, about.html. -->
     <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">MTCAT JSON ↗</a></div>
     <div class="fzone fcenter">AusMT is enabled by <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">AuScope</a> · Data licences vary by survey</div>
-    <div class="fzone fright"></div>
+    <div class="fzone fright"><a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
   </footer>
 </body>
 </html>

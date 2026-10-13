@@ -16,8 +16,8 @@ Each assertion states its failure criterion:
     (nVis/nSel/nTot) or any counts block at all. Those three report the current map's filter and
     selection state, and About has neither. Non-vacuous: index.html HAS these ids, in its footer's
     right zone, so a naive copy-the-whole-footer would trip this. The corpus-totals block About once
-    carried in its header's right zone left with the counts: the header's right zone is the lock-up on
-    every surface, and the footer's on About is empty.
+    carried in its header's right zone left with the counts: the header's right zone is the tagline on
+    every surface, and the footer's on About is the AuScope and NCRIS lock-up.
   * NO version chip, anywhere. FAILS if any element carrying data-ver-chip survives on any of the
     four documents. The chip was the last of the About-this-build popover's copy: the popover left
     every footer with the one-footer rule, the chip followed it into about.html's #build section,
@@ -278,8 +278,9 @@ def test_header_parity_about_matches_index():
         Map, Surveys, Collections, About. "How to use AusMT" is cut from every header (the welcome tour
         and About cover it) and so is "Contribute a survey" (About links it from its own body); a
         header that grows a fifth centre item, or takes either back, fails here.
-      * THE RIGHT ZONE: FAILS if either page's right zone is not exactly one AuScope and NCRIS
-        lock-up, or still carries a counts block.
+      * THE TWO SIDE ZONES: FAILS if either page's identity zone is not the AuScope mark pair, two
+        images and no anchor to AuScope, or if its right zone is not exactly the tagline, or still
+        carries a counts block or the lock-up.
       * ACTIVE-PAGE HIGHLIGHT NOT REGRESSED: FAILS if adding the ids also made a view button active on
         About (only the current page may be highlighted) or dropped index's active Map button."""
     idx, abt = _header_shape(INDEX), _header_shape(ABOUT)
@@ -312,10 +313,16 @@ def test_header_parity_about_matches_index():
             f"{name}: header items must run {expected}; got {centre_order(items)}")
 
     for name, items in (("index.html", idx), ("about.html", abt)):
-        lockups = [a for (tag, a, in_nav) in items if "orglockup" in _classes(a)]
-        assert len(lockups) == 1, (
-            f"{name}: the header's right zone carries exactly one AuScope and NCRIS lock-up; "
-            f"found {len(lockups)}")
+        marks = [a.get("src") for (tag, a, in_nav) in items if tag == "img" and "brandmark" in _classes(a)]
+        assert marks == ["/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg"], (
+            f"{name}: the header opens with the AuScope mark pair; found {marks}")
+        assert len([1 for (tag, a, in_nav) in items if tag == "img"]) == 2, (
+            f"{name}: the mark pair is the header's only image")
+        lockups = [a for (tag, a, in_nav) in items if "orglockup" in _classes(a)
+                   or "auscope.org.au" in a.get("href", "")]
+        assert not lockups, f"{name}: the lock-up left the header for the footer; found {lockups}"
+        taglines = [a for (tag, a, in_nav) in items if "tagline" in _classes(a)]
+        assert len(taglines) == 1, f"{name}: the right zone carries the tagline once; found {len(taglines)}"
         counts = [a for (tag, a, in_nav) in items if "counts" in _classes(a)]
         assert not counts, f"{name}: the counts left the header for the footer; found {len(counts)}"
 
@@ -425,21 +432,20 @@ def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_i
 # to y=0 puts the heading underneath it. scroll-margin-top is the clearance, and it was ONE number,
 # 74px, measured at 1280px and applied at every width.
 #
-# One number is only right in one band. The header WRAPS as the viewport narrows, in several ways at
-# once (the identity block drops its tagline onto a second line, the tab group stacks into more rows,
-# and under 760px the three zones each take a full-width row, the lock-up's included). It is
-# measured on this document in Chrome at a device scale factor of 1, with the AuScope lock-up 40px
-# tall in the right zone and the identity zone carrying the wordmark and the tagline alone, by
-# sweeping the viewport one pixel at a time from 320px to 1600px and reading the header's box. Its
-# height runs 256px below 344, 229px to 383, 183px to 450, 147px to 760, 100px to 793, 85px to 931,
-# 70px to 1097 and 57px above that. At 375px a 74px clearance would leave a heading 155px under the
-# header, which is off the screen.
+# One number is only right in one band. The header WRAPS as the viewport narrows: under 760px the
+# three zones each take a full-width row (the mark and the name, the tab group, the tagline) and the
+# tab group stacks into more rows as the viewport narrows further. It is measured on this document in
+# Chrome at a device scale factor of 1, in both themes, with the 36px AuScope mark and the name in the
+# identity zone and the one-line tagline in the right zone, by sweeping the viewport one pixel at a
+# time from 320px to 1600px and reading the header's box. Its height runs 216px below 384, 170px to
+# 450, 134px to 760 and 57px above that. At 375px a 74px clearance would leave a heading 142px under
+# the header, which is off the screen.
 #
 # THE LADDER IS THE MAXIMUM PER BAND, NOT THE EXACT HEIGHT. Overshooting drops the heading a few
 # pixels lower than it needs to be, which a reader will not notice; undershooting hides it, which is
 # the defect. So each band carries the tallest header in its own range. Every measured band above is
 # a band of its own in the ladder, so here the maximum is also the exact height, and the same sweep
-# read each section's resolved scroll-margin-top against the header at every width and found no gap.
+# read the header against the ladder at every width and found no gap.
 #
 # THE FAILURE MODE OF DRIFT IS STATED because it cannot be pinned from source alone: these are
 # measurements of THIS header's content at THIS font stack, and a change to the header's wording or
@@ -452,9 +458,8 @@ ANCHOR_VAR = "--about-anchor-offset"
 # The measured header height at each pinned width, from the same sweep the ladder was built from: both
 # edges of every band, then the two reference widths.
 MEASURED_HEADER = {
-    320: 256, 343: 256, 344: 229, 383: 229, 384: 183, 450: 183, 451: 147, 760: 147,
-    761: 100, 793: 100, 794: 85, 931: 85, 932: 70, 1097: 70, 1098: 57, 1600: 57,
-    375: 229, 1280: 57,
+    320: 216, 383: 216, 384: 170, 450: 170, 451: 134, 760: 134, 761: 57, 1600: 57,
+    375: 216, 1280: 57,
 }
 
 
@@ -509,7 +514,7 @@ def _resolve(ladder, width):
 
 def test_the_in_page_anchor_offset_is_a_variable_and_not_one_number():
     """FAILS if the retired static 74px comes back, or if the sections stop reading the ladder.
-    One number cannot follow a header that is 229px tall at 375px and 57px tall at 1440px, and the
+    One number cannot follow a header that is 216px tall at 375px and 57px tall at 1440px, and the
     direction it is wrong in at the narrow end is the one that hides the heading."""
     text = ABOUT.read_text(encoding="utf-8")
     assert "scroll-margin-top:74px" not in text, (
@@ -537,7 +542,7 @@ def test_the_anchor_offset_ladder_descends_and_is_declared_in_px():
 
 def test_the_ladder_resolves_to_the_measured_header_height_at_the_pinned_widths():
     """The ladder against the ruler. FAILS if the value a browser would use at any pinned width is
-    smaller than the header measured there: at 375px that is a heading scrolled under 229px of
+    smaller than the header measured there: at 375px that is a heading scrolled under 216px of
     header, and the reader sees the section below the one they asked for. The pinned widths are both
     edges of every measured band, so a band that starts late or reads short fails at its own edge.
 

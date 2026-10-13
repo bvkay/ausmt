@@ -688,16 +688,16 @@ _CSS = """
   .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
-  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--heading);text-decoration:none}
-  .tagline{color:var(--muted);font-size:12.5px}
+  .brandmark{height:36px;width:36px;display:block;flex:none}
+  .wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;letter-spacing:.02em;line-height:1;color:var(--heading);text-decoration:none}
+  .wordmark b{font-weight:900}
+  .tagline{color:var(--muted);font-size:14px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
   header.site nav{display:flex;gap:6px;flex-wrap:wrap}
   header.site nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;text-decoration:none}
   header.site nav a:hover{border-color:var(--accent)}
   header.site nav a.active{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
-  .orglockup{display:block;line-height:0}
-  .orglockup img{height:40px;width:auto;max-width:100%;object-fit:contain}
   .theme-dark{display:none}
   :root[data-theme="dark"] .theme-light{display:none}
   :root[data-theme="dark"] .theme-dark{display:block}
@@ -714,6 +714,8 @@ _CSS = """
   .fleft{flex:1 1 0;min-width:0}
   .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
   .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
+  .orglockup{display:inline-block;line-height:0;margin:-5.625px 0}
+  .orglockup img{height:30px;width:auto;max-width:100%;object-fit:contain}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
@@ -782,39 +784,43 @@ _NAV_TABS = (("navMap", "Map", "/"),
 def _site_header(active="") -> str:
     """The ONE header, everywhere: portal/index.html's header with the tabs rendered as links.
 
-    Left is the AusMT wordmark linking the root, then the tagline, and nothing else: the identity
-    zone carries no mark. The centre carries the three filled application tabs with the CURRENT
-    page's tab in the active state, and About beside them as the smaller outlined supporting
-    control. The right zone is the AuScope and NCRIS lock-up, linking the parent organisation in a
-    new tab; it is the header's only AuScope presence, the same on every page, and a page's
-    contextual status rides the footer instead.
+    Left is the AuScope mark, then the AusMT wordmark linking the root, set at the AuScope logo's
+    own proportions scaled to a 36px mark: the zone's 12px gap from mark to name, a cap height 0.48
+    of the mark, and "Aus" heavy against a light "MT" as "Au" is heavy against "Scope". The centre
+    carries the three filled application tabs with the CURRENT page's tab in the active state, and
+    About beside them as the smaller outlined supporting control. The right zone is the tagline,
+    the same on every page; a page's contextual status rides the footer instead.
 
-    THE FETCHED ASSETS ARE NAMED. The lock-up is a PAIR of same-origin files, the AuScope brand
-    kit's own colour and white PNGs, drawn 40px tall, the height of the tabs. The .theme-light and
+    THE FETCHED ASSETS ARE NAMED. The mark is a PAIR of same-origin files, the AuScope brand kit's
+    vector icon in the kit's colours and in white, drawn 36px square. The .theme-light and
     .theme-dark rules show the one that matches <html data-theme>, and the white file never sits on
     the light ground. Both are served by the portal image beside these pages: not a build-time read
     and not an external fetch. engine/tests/test_index_pages.py holds the header's src allow-list
     to these two files.
 
+    THE WORDMARK'S FAMILY. 'Calibre' leads the wordmark's stack because AuScope's licence covers
+    this site. No sheet declares an @font-face for it, so a reader without the face installed sees
+    the --sans stack the rest of the header is set in.
+
     VERSION SKEW. /vendor/* and /src/* are served from the portal image and the pages tree from the
     data volume, so the two can be a deploy apart. A pages tree that names a file the running image
     does not serve renders alt text in place of an image and loses its appearance script, so the
-    portal image goes out first, and /vendor/auscope-ncris-colour.png, /src/theme.js and
-    /vendor/auscope/auscope-mark.svg (the collection figure's corner mark) each answering 200 is the
-    check before the pages tree is swapped.
+    portal image goes out first, and /vendor/auscope/auscope-mark.svg (every header's mark and the
+    collection figure's corner mark), /vendor/auscope-ncris-colour.png (every footer's lock-up) and
+    /src/theme.js each answering 200 is the check before the pages tree is swapped.
 
     The identity block sits inside the zero-basis .hleft zone, so it cannot move the centre tab
     group: a zero-basis side hands its leftover space out evenly whatever it holds
-    (portal/tests/test_header_geometry_parity.py). The lock-up anchor and the About control are
-    each one unbroken literal, because that pin reads this file's SOURCE against portal/index.html's
-    header, character for character."""
+    (portal/tests/test_header_geometry_parity.py). The mark pair, the tagline and the About control
+    are each one unbroken literal, because that pin reads this emitter against portal/index.html's
+    header, element for element."""
     tabs = "".join(
         f'      <a id="{i}" href="{h}"' + (' class="active"' if i == active else "") + f">{lbl}</a>\n"
         for i, lbl, h in _NAV_TABS)
     return ('<header class="site">\n'
             '  <div class="hzone hleft">\n'
-            '    <a class="wordmark" href="/">AusMT</a>\n'
-            '    <div class="tagline">Australia\'s Magnetotelluric Data Portal</div>\n'
+            '    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="36" height="36">\n'
+            '    <a class="wordmark" href="/"><b>Aus</b>MT</a>\n'
             '  </div>\n'
             '  <div class="hzone hcenter">\n'
             '    <nav>\n'
@@ -822,9 +828,7 @@ def _site_header(active="") -> str:
             '    </nav>\n'
             '    <a class="about" href="/about.html">About</a>\n'
             '  </div>\n'
-            '  <div class="hzone hright">\n'
-            '    <a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a>\n'
-            '  </div>\n'
+            '  <div class="hzone hright"><div class="tagline">Magnetotelluric Data Discovery &amp; Access</div></div>\n'
             "</header>\n")
 
 
@@ -843,19 +847,25 @@ def _site_footer(status="") -> str:
     target, so a new tab means one thing in this footer: the link leaves AusMT.
 
     The centre states who enables AusMT and carries the licence note. The organisation's name is the
-    only link in the line, to https://www.auscope.org.au, so the footer carries one anchor to that
-    address and no address as text. It opens in a new tab and hands the opened page no handle on
-    this one: target="_blank" grants window.opener, from which the opened document could navigate
-    the tab it came from, and noreferrer keeps a reader's path through the catalogue out of a third
-    party's logs. The build identity is not printed here; build_provenance.json and /about.html
-    carry it.
+    only link in the line, to https://www.auscope.org.au, and the address is never printed as text.
+    The build identity is not printed here; build_provenance.json and /about.html carry it.
 
-    The right region is the page's contextual `status` and nothing else. The status is what the
-    page can actually state (the surveys hub's catalogue counts) and is empty elsewhere, because a
-    counter that cannot count the page it is on is decoration pretending to be data. An empty
-    region still takes its zone's share of the row, which keeps the acknowledgement on the page's
-    axis. The footer carries no appearance control: the choice lives on /about.html and in the
-    map's welcome dialog, both wired by /src/theme.js.
+    The right region is the page's contextual `status`, then the AuScope and NCRIS lock-up, so the
+    lock-up sits at the bottom right of every page in this tier. The status is what the page can
+    actually state (the surveys hub's catalogue counts) and is empty elsewhere, because a counter
+    that cannot count the page it is on is decoration pretending to be data. The lock-up is the
+    brand kit's colour and white PNG pair, which the theme switch shows one of, linking the same
+    address as the centre's name, so the footer carries two anchors to it.
+    engine/tests/test_index_pages.py holds the footer's src allow-list to those two files. Its
+    rules draw it 30px tall, and a negative block margin makes its margin box one footer text line
+    (12.5px at line-height 1.5), so the lock-up never sets a row's height and the sticky footer is
+    as tall as its text makes it. The footer carries no appearance control: the choice lives on
+    /about.html and in the map's welcome dialog, both wired by /src/theme.js.
+
+    Both anchors to the parent organisation open in a new tab and hand the opened page no handle
+    on this one: target="_blank" grants window.opener, from which the opened document could
+    navigate the tab it came from, and noreferrer keeps a reader's path through the catalogue out
+    of a third party's logs.
 
     IT IS WRITTEN AFTER </main>, as the page's own bottom edge rather than the reading column's: a
     footer inside main is not a contentinfo landmark, and set in the 840px measure it could not hold
@@ -867,7 +877,8 @@ def _site_footer(status="") -> str:
             '<a href="https://www.auscope.org.au" target="_blank" '
             'rel="noopener noreferrer">AuScope</a> &#183; '
             "Data licences vary by survey</div>\n"
-            f'<div class="fzone fright">{status}</div>\n'
+            f'<div class="fzone fright">{status}'
+            '<a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>\n'
             "</footer>\n")
 
 

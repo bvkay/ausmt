@@ -6,10 +6,10 @@ ODbL and every tile source this site can draw asks for credit of its own. It is 
 own attribution control, mounted with prefix:false in Leaflet's TOP-RIGHT corner and collapsed behind
 a small "(i)" that opens on hover, on focus and on click.
 
-WHY TOP-RIGHT. The bottom-right corner belongs to the AuScope mark, whose clear space is the logo's
-own height on every side and holds nothing else (tests/test_map_watermark.py). The control is mounted
-there on every map this site draws, so the corner a reader looks in for the credit is the same on all
-four.
+WHY TOP-RIGHT. The bottom-right corner belongs to the AuScope and NCRIS lock-up, whose clear space is
+the logo's own height on every side and holds nothing else (tests/test_map_watermark.py). The
+control is mounted there on every map this site draws, so the corner a reader looks in for the
+credit is the same on all four.
 
 WHY THE CONTROL AND NOT A LINE IN THE FOOTER. Two reasons stand behind that, and this module holds
 the second:
@@ -106,8 +106,8 @@ def test_one_module_builds_the_collapsed_control_for_every_map_this_site_draws()
         "the control is mounted with prefix:false: the Leaflet flag and word are a courtesy to a "
         "library, not a licence term, and they stay off the map")
     assert re.search(r'attribution\(\{\s*prefix:\s*false,\s*position:\s*"topright"\s*\}\)', src), (
-        "the control is mounted in Leaflet's top-right corner: the bottom-right is the AuScope mark's "
-        "clear space")
+        "the control is mounted in Leaflet's top-right corner: the bottom-right is the AuScope and "
+        "NCRIS lock-up's clear space")
     assert src.count("lib.control.attribution(") == 1, "the module mounts the control in one place"
     assert not re.search(r"\bel\.innerHTML|container\.innerHTML", src), (
         "the module must not write into Leaflet's attribution container: Leaflet rewrites that "

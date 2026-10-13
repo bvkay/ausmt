@@ -1,7 +1,7 @@
 "use strict";
 // The map's attribution, collapsed to one glyph in the top-right corner, which leaves the bottom-right to
-// the AuScope mark and its clear space. Shared by every map this site draws. See docs: portal internals,
-// mapattrib.js.
+// the AuScope and NCRIS lock-up and its clear space. Shared by every map this site draws. See docs:
+// portal internals, mapattrib.js.
 (function (global) {
   var OPEN = "mapattrib-open";
   var LABEL = "Map data attribution";

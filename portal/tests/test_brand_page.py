@@ -26,6 +26,8 @@ import json
 import re
 from pathlib import Path
 
+from chrome_contract import LOCKUP, MARK_PAIR, PAGE_IDENTITY, RIGHT_ZONE, flat
+
 ROOT = Path(__file__).resolve().parents[1]          # portal/
 REPO = ROOT.parent
 PAGE = ROOT / "brand.html"
@@ -130,19 +132,20 @@ def test_the_full_artwork_is_offered_separately_from_the_mark():
 
 def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
     """FAILS IF brand.html is an orphan page. It carries the same three-zone header (with the zero
-    basis sides), the identity zone every header carries (AusMT's name and tagline, and no mark), and
-    the standard footer."""
+    basis sides), the identity zone every header carries (the AuScope mark pair and AusMT's name),
+    the tagline in the right zone, and the standard footer with the lock-up at its right."""
     text = _text()
     for zone, rule in ((".hleft", "flex:1 1 0"), (".hcenter", "flex:0 1 auto"), (".hright", "flex:1 1 0")):
         m = re.search(re.escape(zone) + r"\{([^}]*)\}", text)
         assert m and rule in m.group(1), f"brand.html: {zone} must carry {rule}"
     header = re.sub(r"<!--.*?-->", "", text.split("<header>", 1)[1].split("</header>", 1)[0], flags=re.S)
     zone = header.split('<div class="hzone hleft">', 1)[1].split('<div class="hzone hcenter">', 1)[0]
-    assert " ".join(zone.split()) == ('<a class="wordmark" href="/">AusMT</a> <div class="tagline">'
-                                      "Australia's Magnetotelluric Data Portal</div> </div>"), \
-        f"brand.html's identity zone is AusMT's name and tagline and no mark, like every other surface: {zone!r}"
-    assert "auscope-mark" not in header and "brandmark" not in text, \
-        "brand.html's header names no AuScope mark; the lock-up at the right is its AuScope presence"
+    assert flat(zone) == f"{MARK_PAIR}{PAGE_IDENTITY}</div>", \
+        f"brand.html's identity zone is the mark pair and AusMT's name, like every other surface: {zone!r}"
+    right = flat(header).split('<div class="hzone hright">', 1)[1]
+    assert '<div class="hzone hright">' + right == RIGHT_ZONE, \
+        f"brand.html's right zone is the tagline alone, like every other surface: {right!r}"
+    assert "auscope-ncris" not in header, "brand.html's header names no lock-up; its footer carries it"
     for nav_id, href in (("navMap", "/"), ("navSurveys", "/surveys"), ("navCollections", "/collections")):
         assert re.search(rf'<a id="{nav_id}" href="{re.escape(href)}"', text), \
             f"brand.html: {nav_id} must point at {href}"
@@ -150,14 +153,14 @@ def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
         "a page the sitemap advertises must declare its canonical"
     # The site's ONE footer. Its strings, targets and geometry are held for all six documents at once
     # in tests/test_footer_regions.py; what is asserted here is that this page carries it at all,
-    # named by its three zones, the right one empty because this page has no status to report.
+    # named by its three zones, the right one the AuScope and NCRIS lock-up and nothing else.
     assert text.count("<footer>") == 1, "brand.html must carry the standard footer, once"
     foot = text.split("<footer>", 1)[1].split("</footer>", 1)[0]
     zones = re.findall(r'<div class="fzone (fleft|fcenter|fright)">', foot)
     assert zones == ["fleft", "fcenter", "fright"], \
         f"brand.html's footer is the three zones in order, got {zones}"
-    assert '<div class="fzone fright"></div>' in foot, \
-        "brand.html's right zone is empty: the page has no status and the footer carries no control"
+    assert f'<div class="fzone fright">{LOCKUP}</div>' in flat(foot), \
+        "brand.html's right zone is the lock-up: the page has no status and the footer carries no control"
 
 
 def test_the_page_says_which_mark_the_site_icons_carry():

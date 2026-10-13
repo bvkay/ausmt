@@ -2,8 +2,8 @@
 
 This face exists so that `portal/tools/gen_brand.py` renders the AusMT wordmark to PNG the same way on
 every machine. It is **not** the AusMT typeface and must never be presented as one. The web and SVG
-wordmark render in the site's own system UI stack (`system-ui,-apple-system,'Segoe UI',Roboto,sans-serif`
-at weight 800, the same stack and weight the portal header uses), which is what a reader actually sees.
+wordmark render in a system UI stack (`system-ui,-apple-system,'Segoe UI',Roboto,sans-serif` at
+weight 800), which is what a reader actually sees.
 A raster export cannot depend on the viewer's fonts, so the exports are rendered from this bundled file
 instead: a deterministic substitute for the raster pipeline, nothing more. Nothing in `contract/brand.json`,
 `portal/brand.html` or any served page names it, links it or fetches it, and no page loads it as a web font.

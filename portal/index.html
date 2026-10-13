@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AusMT - Australia's Magnetotelluric (MT) Data Portal</title>
+<title>AusMT: Magnetotelluric Data Discovery &amp; Access</title>
 <script src="/src/theme.js"></script>
 <!-- og:url and og:image must be ABSOLUTE: preview crawlers resolve nothing relative. The card is a
      static 1200x630 PNG in vendor/, regenerated alongside any rebrand. -->
@@ -12,7 +12,7 @@
 <link rel="canonical" href="https://ausmt.auscope.org.au/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AusMT">
-<meta property="og:title" content="AusMT - Australia's Magnetotelluric Data Portal">
+<meta property="og:title" content="AusMT: Magnetotelluric Data Discovery &amp; Access">
 <meta property="og:description" content="Discover, explore and access magnetotelluric data from across Australia, with survey and station metadata, provenance and links to available datasets.">
 <meta property="og:url" content="https://ausmt.auscope.org.au/">
 <meta property="og:image" content="https://ausmt.auscope.org.au/vendor/social-card.png">
@@ -46,7 +46,7 @@
 }
 </script>
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="AusMT - Australia's Magnetotelluric Data Portal">
+<meta name="twitter:title" content="AusMT: Magnetotelluric Data Discovery &amp; Access">
 <meta name="twitter:image" content="https://ausmt.auscope.org.au/vendor/social-card.png">
 <script src="src/analytics-shim.js"></script><!-- external (not inline) so CSP stays script-src 'self' -->
 <link rel="icon" href="/favicon.ico" sizes="any">
@@ -84,12 +84,14 @@
   .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
-  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--heading);text-decoration:none}
-  /* The heading wraps the wordmark and takes no type of its own, so its line box is the wordmark's and
-     the identity block measures as it does on every other surface; the page name is clipped. */
+  .brandmark{height:36px;width:36px;display:block;flex:none}
+  .wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;letter-spacing:.02em;line-height:1;color:var(--heading);text-decoration:none}
+  .wordmark b{font-weight:900}
+  /* The heading wraps the wordmark and takes no type of its own, so the identity block measures as it
+     does on every other surface; the page name is clipped. */
   .brandh1{flex:none;font-size:inherit}
   .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%)}
-  .tagline{color:var(--muted);font-size:12.5px}
+  .tagline{color:var(--muted);font-size:14px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
   nav{display:flex;gap:6px;flex-wrap:wrap}
   nav button{flex:1;min-width:112px;min-height:40px;background:var(--surface-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;cursor:pointer}
   nav button:hover{border-color:var(--accent)}
@@ -102,8 +104,6 @@
   nav button.active:hover{border-color:var(--accent)}
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
-  .orglockup{display:block;line-height:0}
-  .orglockup img{height:40px;width:auto;max-width:100%;object-fit:contain}
   .theme-dark{display:none}
   :root[data-theme="dark"] .theme-light{display:none}
   :root[data-theme="dark"] .theme-dark{display:block}
@@ -118,9 +118,9 @@
   .content{flex:1;min-width:0;position:relative;display:flex}
   #map{flex:1;background:var(--map-bg);position:relative}
   #map .leaflet-tile-pane{filter:saturate(.35) brightness(1.04)}
-  .mapmark{position:absolute;right:48px;bottom:48px;height:48px;width:auto;z-index:500;pointer-events:none;opacity:.8}
+  .maplock{position:absolute;right:44px;bottom:44px;height:44px;width:auto;z-index:500;pointer-events:none;opacity:.8}
   /* Anchored on the map's id so it outranks the theme switch that shows the dark variant. */
-  @media(max-width:560px){#map .mapmark{display:none}}
+  @media(max-width:900px){#map .maplock{display:none}}
   .mapattrib{position:relative;z-index:900;display:flex;flex-direction:row-reverse;align-items:flex-start;gap:4px}
   .mapattrib-toggle{flex:none;width:20px;height:20px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--text);font-family:var(--sans);font-size:12px;font-style:italic;line-height:1;cursor:pointer}
   .mapattrib-toggle:hover{border-color:var(--accent)}
@@ -584,10 +584,10 @@
 <body>
 <header>
   <div class="hzone hleft">
-    <!-- AusMT's name and tagline are the identity zone; the lock-up at the right is the header's
-         only AuScope presence. See docs: portal internals, index.html. -->
-    <h1 class="brandh1"><span class="wordmark">AusMT</span><span class="visually-hidden"> - Australia's Magnetotelluric (MT) Data Portal</span></h1>
-    <div class="tagline">Australia's Magnetotelluric Data Portal</div>
+    <!-- The AuScope mark, then AusMT's name set at the AuScope logo's proportions. See docs: portal
+         internals, index.html. -->
+    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="36" height="36">
+    <h1 class="brandh1"><span class="wordmark"><b>Aus</b>MT</span><span class="visually-hidden">: Magnetotelluric Data Discovery &amp; Access</span></h1>
   </div>
   <div class="hzone hcenter">
     <nav>
@@ -601,9 +601,7 @@
          into the guided tour, which About links. -->
     <a class="about" href="about.html">About</a>
   </div>
-  <div class="hzone hright">
-    <a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a>
-  </div>
+  <div class="hzone hright"><div class="tagline">Magnetotelluric Data Discovery &amp; Access</div></div>
 </header>
 
 <main>
@@ -712,7 +710,7 @@
 </aside>
 <div class="resizer" id="resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
 <div class="content" id="content">
-  <div id="map"><img class="mapmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="42" height="42"><img class="mapmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="42" height="42"></div>
+  <div id="map"><img class="maplock theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="maplock theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></div>
   <div id="surveysview">
     <!-- Discovery controls: search, sort, live count, facet chips, a compact-list toggle and clear-filters,
          all wired in drawer.js where the state lives. See docs: portal internals, index.html. -->
@@ -786,7 +784,7 @@
        aria-labelledby="introWelcomeHeading" aria-describedby="introWelcomeText">
     <div class="introwelcome-box" tabindex="-1">
       <h2 class="introwelcome-heading" id="introWelcomeHeading">Welcome to AusMT</h2>
-      <p class="introwelcome-text" id="introWelcomeText">Explore Australia's national magnetotelluric data portal</p>
+      <p class="introwelcome-text" id="introWelcomeText">Discover and access magnetotelluric data from Australia and from Australian surveys abroad</p>
       <div class="introwelcome-actions">
         <button type="button" class="primary" id="welcomeTour">Take the 2-minute tour (recommended)</button>
         <button type="button" id="welcomeBrowse">Browse immediately</button>
