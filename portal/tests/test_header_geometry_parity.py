@@ -329,7 +329,8 @@ def test_the_mark_pair_ships_for_every_header_the_figures_and_the_icons():
                       (ROOT / "src" / "drawer.js").read_text(encoding="utf-8")),
                      ("engine/extract/_pages.py (the header)", site_header("navMap")),
                      ("engine/extract/_pages.py (the collection figure)",
-                      PAGES_PY.read_text(encoding="utf-8").replace(site_header("navMap"), "")))
+                      "".join(re.findall(r'<img class="collmark [^>]*>',
+                                         PAGES_PY.read_text(encoding="utf-8")))))
         for label, text in consumers:
             assert text.count(src) >= 1, f"{label} must still draw {src}"
     corner = re.search(r'<div id="map">(.*?)</div>', INDEX.read_text(encoding="utf-8"), re.S)
