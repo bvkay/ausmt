@@ -21,6 +21,10 @@ Each assertion states its failure criterion:
     --panel-2 or --copper.
   * THE SCRIPT - FAILS if a page does not load /src/theme.js, loads it anywhere but first in <head>,
     loads it after its <style>, or inlines it.
+  * THE CONTROL - FAILS if the appearance row is not the contract row, once, in index.html's welcome
+    dialog and in about.html's Appearance section, if any other page or the engine's sheet carries
+    it, if src/theme.js stops wiring and checking the radios named "appearance", if it keeps a hook
+    for a control no page carries, or if its window.AusmtTheme interface changes.
   * ONE CARD STYLE - FAILS if a card on the page ground loses the --line border, the 4px radius
     or the --shadow token in its base rule. Non-vacuous: the add-survey advisory (6px, no shadow), its
     fieldset and panels and the compact survey list (8px, no shadow) fail before the house style.
@@ -34,7 +38,8 @@ from pathlib import Path
 
 import pytest
 
-from chrome_contract import DARK, LIGHT, RAMP, RETIRED_TOKENS, THEME_SCRIPT, token_blocks
+from chrome_contract import (ABOUT_APPEARANCE, DARK, LIGHT, RAMP, RETIRED_TOKENS, THEME_SCRIPT,
+                             WELCOME_APPEARANCE, flat, token_blocks)
 from engine_chrome import PAGES_PY, function_source
 
 ROOT = Path(__file__).resolve().parent.parent   # portal/
@@ -201,3 +206,64 @@ def test_the_appearance_script_ships_and_is_never_inlined():
         inline = re.findall(r"<script(?![^>]*\bsrc=)(?![^>]*application/ld\+json)[^>]*>(.*?)</script>",
                             _text(name), re.S)
         assert not [b for b in inline if b.strip()], f"{name}: carries an inline script"
+
+
+# The appearance row's two homes, and what src/theme.js must do with it. The radios are read on
+# change, through one listener on document, and checked to match the stored choice whenever it is
+# applied; nothing on any page carries another kind of appearance control.
+_HOMES = {"index.html": WELCOME_APPEARANCE, "about.html": ABOUT_APPEARANCE}
+_WIRING = ("document.querySelectorAll('input[name=\"appearance\"]')",
+           'r.name === "appearance" && r.checked',
+           "radios[i].checked = radios[i].value === c")
+_RETIRED_HOOKS = ("data-theme-choice", "aria-pressed", "welcomeTheme", '"click"')
+_INTERFACE = ("window.AusmtTheme = { get: choice, resolved: function () { return resolve(choice()); }, "
+              "set: set };")
+
+
+@pytest.mark.parametrize("name", PAGES)
+def test_the_appearance_row_lives_in_the_welcome_dialog_and_on_about_alone(name):
+    """THE CONTROL, page by page. FAILS if index.html's welcome dialog or about.html's Appearance
+    section stops carrying the contract row exactly once, or if any other page carries a radio named
+    "appearance": the row has two homes, and the footer is not one of them."""
+    text = _text(name)
+    if name in _HOMES:
+        assert flat(text).count(flat(_HOMES[name])) == 1, (
+            f"{name}: the appearance row must be the contract row, once:\n  want {_HOMES[name]!r}")
+        assert text.count('name="appearance"') == 3, (
+            f"{name}: the page carries the three appearance radios and no others")
+    else:
+        assert 'name="appearance"' not in text, f"{name}: the appearance row lives in two places only"
+    if name == "index.html":
+        dialog = text.split('<div id="introWelcome"', 1)[1].split("</fieldset>", 1)[0]
+        assert flat(WELCOME_APPEARANCE).rsplit("</fieldset>", 1)[0] in flat(dialog), (
+            "index.html: the appearance row sits inside the welcome dialog")
+    if name == "about.html":
+        section = text.split('<section id="appearance">', 1)[1].split("</section>", 1)[0]
+        assert flat(ABOUT_APPEARANCE) in flat(section), (
+            "about.html: the appearance row sits inside the Appearance section")
+
+
+def test_the_engine_pages_carry_no_appearance_row():
+    """The engine's pages reach the choice through the header's About link. FAILS if the engine's
+    source writes a radio named "appearance" or the retired button hook."""
+    source = PAGES_PY.read_text(encoding="utf-8")
+    for gone in ('name="appearance"', "data-theme-choice", "themectl"):
+        assert gone not in source, f"engine/extract/_pages.py: carries {gone!r}"
+
+
+def test_the_appearance_script_wires_the_radios_and_nothing_else():
+    """THE CONTROL, script side. FAILS if src/theme.js stops reading a change on the radios named
+    "appearance" or stops checking the one that matches the stored choice, if it keeps a hook for a
+    control no page carries (a data-theme-choice element, a pressed state, a click listener, the
+    radios' earlier name), or if the window.AusmtTheme interface its callers use changes."""
+    script = (ROOT / "src" / "theme.js").read_text(encoding="utf-8")
+    for wire in _WIRING:
+        assert wire in script, f"src/theme.js: the radios must be wired by {wire!r}"
+    for gone in _RETIRED_HOOKS:
+        assert gone not in script, f"src/theme.js: {gone!r} serves a control no page carries"
+    assert script.count(_INTERFACE) == 1, f"src/theme.js: the interface must stay {_INTERFACE!r}"
+    accepted = re.search(r'if \(c !== "light" && c !== "dark" && c !== "system"\) return;', script)
+    assert accepted, "src/theme.js: set() must accept exactly light, dark and system"
+    values = re.findall(r'name="appearance" value="([a-z]+)"', WELCOME_APPEARANCE)
+    assert values == ["light", "dark", "system"], (
+        f"the row offers exactly the three choices set() accepts, in order: {values}")

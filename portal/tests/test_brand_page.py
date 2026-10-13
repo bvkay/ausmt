@@ -150,9 +150,14 @@ def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
         "a page the sitemap advertises must declare its canonical"
     # The site's ONE footer. Its strings, targets and geometry are held for all six documents at once
     # in tests/test_footer_regions.py; what is asserted here is that this page carries it at all,
-    # named by the control the one-footer rule puts in its right zone.
-    assert "<footer>" in text and 'class="themectl"' in text, \
-        "brand.html must carry the standard footer, appearance control and all"
+    # named by its three zones, the right one empty because this page has no status to report.
+    assert text.count("<footer>") == 1, "brand.html must carry the standard footer, once"
+    foot = text.split("<footer>", 1)[1].split("</footer>", 1)[0]
+    zones = re.findall(r'<div class="fzone (fleft|fcenter|fright)">', foot)
+    assert zones == ["fleft", "fcenter", "fright"], \
+        f"brand.html's footer is the three zones in order, got {zones}"
+    assert '<div class="fzone fright"></div>' in foot, \
+        "brand.html's right zone is empty: the page has no status and the footer carries no control"
 
 
 def test_the_page_says_which_mark_the_site_icons_carry():

@@ -3,7 +3,7 @@
 The static pages and the engine's generated pages each carry their own copy of this chrome, because
 the portal ships as classic static pages with no template step. These literals are the contract those
 copies are compared against: the appearance tokens, the header's identity and lock-up, the footer's
-regions and the appearance control. A pin compares a surface with these strings rather than with
+regions and the appearance row. A pin compares a surface with these strings rather than with
 another surface, so two copies that drift together still fail.
 """
 import re
@@ -77,9 +77,16 @@ INDEX_IDENTITY = ('<h1 class="brandh1"><span class="wordmark">AusMT</span>'
                   '<span class="visually-hidden"> - Australia\'s Magnetotelluric (MT) Data Portal</span></h1>')
 PAGE_IDENTITY = '<a class="wordmark" href="/">AusMT</a>'
 
-THEMECTL = ('<div class="themectl" role="group" aria-label="Appearance"><button type="button" '
-            'data-theme-choice="light" aria-pressed="true">Light</button><span class="themesep">·</span>'
-            '<button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div>')
+# The appearance choice: three radios named "appearance", which src/theme.js reads on change and
+# checks to match the stored choice. The same row has two homes, the map page's welcome dialog and
+# About's Appearance section, and differs between them only by the fieldset's class. No footer
+# carries it.
+APPEARANCE_CHOICES = ('<label><input type="radio" name="appearance" value="light"> Light</label>'
+                      '<label><input type="radio" name="appearance" value="dark"> Dark</label>'
+                      '<label><input type="radio" name="appearance" value="system"> Follow system</label>')
+WELCOME_APPEARANCE = ('<fieldset class="introwelcome-appearance"><legend>Appearance</legend>'
+                      f'{APPEARANCE_CHOICES}</fieldset>')
+ABOUT_APPEARANCE = f'<fieldset class="appearance"><legend>Appearance</legend>{APPEARANCE_CHOICES}</fieldset>'
 
 # The centre line as a reader sees it, and as markup: the organisation's name is its one link, to the
 # parent organisation's address, opening in a new tab that is handed no opener and no referrer.

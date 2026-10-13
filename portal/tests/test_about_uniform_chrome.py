@@ -17,7 +17,7 @@ Each assertion states its failure criterion:
     selection state, and About has neither. Non-vacuous: index.html HAS these ids, in its footer's
     right zone, so a naive copy-the-whole-footer would trip this. The corpus-totals block About once
     carried in its header's right zone left with the counts: the header's right zone is the lock-up on
-    every surface, and the footer's on About is the appearance control alone.
+    every surface, and the footer's on About is empty.
   * NO version chip, anywhere. FAILS if any element carrying data-ver-chip survives on any of the
     four documents. The chip was the last of the About-this-build popover's copy: the popover left
     every footer with the one-footer rule, the chip followed it into about.html's #build section,

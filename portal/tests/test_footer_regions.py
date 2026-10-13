@@ -2,11 +2,12 @@
 emits.
 
 The rule is one footer: LEFT the machine-readable catalogue, CENTRE the AuScope acknowledgement with
-the licence note, RIGHT the page's status and the appearance control. The SPA's status is its live
-station counts; a generated page's is whatever its contextual status markup is; the other static
-pages have none and carry the appearance control alone. The AuScope and NCRIS lock-up left the footer
-for the header's right zone, and the copyright clause left the acknowledgement, so the footer fetches
-nothing at all and carries exactly one outbound link.
+the licence note, RIGHT the page's status. The SPA's status is its live station counts; a generated
+page's is whatever its contextual status markup is; the other static pages have none and keep the
+zone empty, because the empty zone still takes its share of the row and so holds the centre on the
+page's axis. The AuScope and NCRIS lock-up left the footer for the header's right zone, the copyright
+clause left the acknowledgement and the appearance control left for the welcome dialog and About, so
+the footer fetches nothing at all, carries exactly one outbound link and holds no control.
 
 WHY THE ENGINE HALF LIVES HERE rather than in engine/tests: portal-ci runs on portal/** AND on
 engine/extract/_pages.py, so an edit to either surface fires this module, where the engine workflow
@@ -32,15 +33,17 @@ Each assertion states its failure criterion:
   * THE ONE EXTERNAL TARGET - FAILS if a footer reaches any external host other than the single
     allow-listed AuScope navigation address, and FAILS if a footer FETCHES anything at all: with the
     lock-up gone it names no image, no stylesheet and no url().
-  * THE RIGHT ZONE - FAILS if a surface's right zone is anything but its status followed by the
-    contract's appearance control, or if the control grows an inline handler the CSP would block.
+  * THE RIGHT ZONE - FAILS if a surface's right zone is anything but its status: exactly the live
+    counts on index.html, exactly the status on the engine's pages, nothing on the other five.
+  * NO CONTROL - FAILS if any footer carries a button, an input or any other control, a control
+    group, a pressed state or an inline handler the CSP would block.
   * GEOMETRY - FAILS if any surface stops being a wrapping flex row or a query container, if a side
     zone stops taking the equal zero basis, if the centre stops being content-sized or centred, if
     either state below one row goes, or if a 375px viewport collides instead of stacking.
   * ONE FOOTER RULE SET, ON ALL SEVEN SURFACES - FAILS if any surface's footer rule set drifts from
     portal/index.html's by a character, or reaches for a literal colour instead of a token.
   * THE RETIRED CONTENT STAYS RETIRED - FAILS if Releases, About this build, the disclosure popover,
-    the copyright clause or the footer lock-up comes back to any footer.
+    the copyright clause, the footer lock-up or the appearance control comes back to any footer.
   * THE EXTERNAL ANCHOR OPENS IN A NEW TAB - FAILS if the AuScope anchor on any surface loses
     target="_blank" or rel="noopener noreferrer", or if an in-site footer link takes a target.
 
@@ -61,7 +64,7 @@ from pathlib import Path
 
 import pytest
 
-from chrome_contract import FOOTER_CENTRE, FOOTER_CENTRE_MARKUP, THEMECTL, entities, flat
+from chrome_contract import FOOTER_CENTRE, FOOTER_CENTRE_MARKUP, entities, flat
 from engine_chrome import function_source, site_footer
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
@@ -103,7 +106,8 @@ INDEX_STATUS = ('<div class="counts" id="footerCounts"><span id="countSlot" titl
                 'current filters · stations selected · total stations in the catalogue">'
                 '<b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> '
                 'total</span></div>')
-# A generated page's status, as a probe the engine's footer must carry verbatim before the control.
+# A generated page's status, as a probe the engine's footer must carry verbatim as its whole right
+# zone.
 ENGINE_STATUS = '<span class="counts">probe status</span>'
 
 # The white lock-up, the header's theme-dark variant, committed as its rights holder published it; no
@@ -117,7 +121,11 @@ LOGO_PIXELS = (1919, 325)
 # time: the popover's CSS is swept as well as its markup, because a rule left behind is an invitation
 # to re-add the element it styles.
 RETIRED = ("aboutbuild", "About this build", ">Releases<", "releases.html", "orglogo",
-           "©", "AusMT contributors", "Machine-readable record", "<img")
+           "©", "AusMT contributors", "Machine-readable record", "<img", "Light", "Dark")
+# The classes and the hook of the retired footer control, swept from the whole document or the
+# engine's source with the popover's and the footer lock-up's: a rule or an attribute left behind is
+# an invitation to re-add the element it served.
+RETIRED_CLASSES = ("aboutbuild", "orglogo", "themectl", "themesep", "data-theme-choice")
 
 _ZONE_CLASSES = {"left": "fzone fleft", "centre": "fzone fcenter", "right": "fzone fright"}
 
@@ -285,11 +293,13 @@ def _text(where):
 
 
 def _expected_right(where):
+    """The whole right zone: the live counts on the SPA, the probe status on the engine's footer,
+    nothing on the other five pages."""
     if where == "index.html":
-        return INDEX_STATUS + THEMECTL
+        return INDEX_STATUS
     if where.startswith("engine/"):
-        return ENGINE_STATUS + THEMECTL
-    return THEMECTL
+        return ENGINE_STATUS
+    return ""
 
 
 def test_the_pin_enumerates_every_page_the_portal_ships():
@@ -309,12 +319,11 @@ _ENGINE_LEFT_LINK = r'<a (?:class="apilink" )?href="([^"]+)"(?: title="[^"]*")?>
 def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(where):
     """REGIONS and STRINGS, on all seven surfaces. FAILS if a region is missing, out of order or holds
     another's content, if a portal page's left link loses class="apilink" or its title, if the left
-    label or the centre line drifts, or if the right region is anything but the surface's status
-    followed by the appearance control.
+    label or the centre line drifts, or if the right region is anything but the surface's status.
 
     Non-vacuous in every half: the earlier footers fail the left label (it read "Machine-readable
     record (MTCAT JSON)"), the centre (it carried the copyright clause, and then the address as the
-    link's text) and the right region (it held the lock-up)."""
+    link's text) and the right region (it held the lock-up, and then the appearance control)."""
     regions = _regions(where, _foot(where))
     link = re.fullmatch(_ENGINE_LEFT_LINK if where == ENGINE else _LEFT_LINK, regions["left"], re.S)
     assert link, f"{where}: the left zone holds the MTCAT link and nothing else: {regions['left']!r}"
@@ -340,15 +349,16 @@ def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(
 
     right = flat(regions["right"])
     assert right == flat(_expected_right(where)), (
-        f"{where}: the right region must be the status then the appearance control, and nothing "
-        f"else:\n  got  {right!r}\n  want {flat(_expected_right(where))!r}")
+        f"{where}: the right region must be the surface's status and nothing else:\n"
+        f"  got  {right!r}\n  want {flat(_expected_right(where))!r}")
 
 
-def test_a_generated_page_without_status_carries_the_control_alone():
-    """The engine's status is contextual and may be empty; the control is not. FAILS IF an empty
-    status leaves a placeholder behind or drops the control with it."""
+def test_a_generated_page_without_status_keeps_an_empty_right_zone():
+    """The engine's status is contextual and may be empty. FAILS IF an empty status leaves a
+    placeholder behind, or takes the zone with it: _regions requires all three zones, because the
+    empty right zone is what keeps the acknowledgement on the page's axis."""
     right = _regions("engine/extract/_pages.py", _engine_footer(""))["right"]
-    assert flat(right) == flat(THEMECTL), f"an empty status must leave the control alone: {right!r}"
+    assert right == "", f"an empty status must leave the right zone empty: {right!r}"
 
 
 def test_the_surfaces_agree_on_where_the_footer_points():
@@ -419,24 +429,44 @@ def test_the_retired_content_has_left_every_footer(where):
     foot = _foot(where)
     for gone in RETIRED:
         assert gone not in entities(foot), f"{where}: {gone!r} left the footer and must not come back"
-    for cls in ("aboutbuild", "orglogo"):
-        assert cls not in _text(where), f"{where}: the .{cls} markup and its CSS are retired"
+    for cls in RETIRED_CLASSES:
+        assert cls not in _text(where), f"{where}: the {cls} markup and its CSS are retired"
+
+
+# What makes an element a control, by tag and by attribute. A footer carries text and links only:
+# the appearance choice lives in the map's welcome dialog and in About's Appearance section.
+_CONTROL_TAGS = {"button", "input", "select", "textarea", "fieldset", "details", "summary", "label",
+                 "form"}
+_CONTROL_ATTRS = ("aria-pressed", "aria-checked", "role", "tabindex", "contenteditable")
+
+
+class _Tags(HTMLParser):
+    """(tag, attrs) for every start tag in a fragment, comments excluded by the parser."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tags = []
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.append((tag, dict(attrs)))
 
 
 @pytest.mark.parametrize("where", SURFACES)
-def test_the_appearance_control_is_the_contract_control_on_every_surface(where):
-    """THE RIGHT ZONE's fixed half. The control is two real buttons in a labelled group, each naming
-    the theme it chooses, and src/theme.js keeps aria-pressed in step; it carries no handler of its
-    own because the deployed CSP runs no inline script. FAILS if a surface carries the control more
-    or less than once, renames a choice, drops the group's label or adds an inline handler."""
+def test_no_footer_carries_a_control(where):
+    """NO CONTROL, on all seven surfaces. FAILS if a footer carries a button, an input or any other
+    form control, a control group or a pressed state, or an inline handler, which the deployed CSP
+    would block. Non-vacuous: every surface's footer carried a labelled group of two buttons with
+    aria-pressed until the control left for the welcome dialog and About."""
     foot = _foot(where)
-    assert flat(foot).count(flat(THEMECTL)) == 1, f"{where}: the footer carries the control once"
-    assert not re.search(r"\son[a-z]+=", foot), f"{where}: the footer carries an inline handler"
-    for choice in ("light", "dark"):
-        assert f'data-theme-choice="{choice}"' in THEMECTL
-    script = (ROOT / "src" / "theme.js").read_text(encoding="utf-8")
-    assert "data-theme-choice" in script and "aria-pressed" in script, (
-        "src/theme.js must wire the control and keep its pressed state in step")
+    parser = _Tags()
+    parser.feed(foot)
+    assert parser.tags, f"{where}: the footer parsed to no elements, so this pin would hold nothing"
+    controls = [(tag, attrs) for tag, attrs in parser.tags
+                if tag in _CONTROL_TAGS or any(a in attrs for a in _CONTROL_ATTRS)]
+    assert not controls, f"{where}: a footer carries text and links only, found {controls}"
+    handlers = [(tag, a) for tag, attrs in parser.tags for a in attrs if a.startswith("on")]
+    assert not handlers, f"{where}: the footer carries an inline handler: {handlers}"
+    assert not re.search(r"\son[a-z]+\s*=", foot), f"{where}: the footer carries an inline handler"
 
 
 @pytest.mark.parametrize("where", SURFACES)
@@ -447,9 +477,9 @@ def test_every_footer_is_a_wrapping_flex_row_whose_side_zones_take_equal_zero_ba
 
     THE SIDE ZONES TAKE EQUAL ZERO BASIS, which is what page-centres the acknowledgement: zones that
     size to their own content leave the centre centred in the LEFTOVER space. flex:1 1 0 on both sides
-    makes them the same width whatever they hold; min-width:0 lets a side zone go under its own
-    content rather than force a wrap. The right zone is a row of its own, so its status and its
-    control sit side by side against the right edge.
+    makes them the same width whatever they hold, the empty right zone on five pages included;
+    min-width:0 lets a side zone go under its own content rather than force a wrap. The right zone
+    is a row of its own, so its status sits against the right edge.
 
     There are two states below one row and each is pinned. Below the width the three regions need,
     the centre takes a row of its own UNDER the other two; below the width those two need, every
@@ -478,8 +508,8 @@ def test_every_footer_is_a_wrapping_flex_row_whose_side_zones_take_equal_zero_ba
             f"takes above forces a wrap instead: {rules[side]!r}")
     for decl in ("display:flex", "justify-content:flex-end", "align-items:center"):
         assert decl in rules[".fright"], (
-            f"{where}: the right zone holds its status and control in a row against the right "
-            f"edge: {rules['.fright']!r}")
+            f"{where}: the right zone holds its status in a row against the right edge: "
+            f"{rules['.fright']!r}")
     assert "flex:0 1 auto" in rules[".fcenter"], (
         f"{where}: the centre is content-sized between the two equal side zones; growing it "
         f"too would take a third of the free space and push the axis: {rules['.fcenter']!r}")
@@ -549,14 +579,9 @@ _STACK_RULE = "@container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-al
 # The selectors that ARE the footer's rule set, longest first so the alternation cannot take the
 # short form of a longer selector.
 _SET_RE = re.compile(r"(?m)(?:^[ \t]*|(?<=\}))"
-                     r'(\.themectl button\[aria-pressed="true"\]|\.themectl button|\.themectl'
-                     r"|\.themesep|footer a|footer|\.fleft|\.fcenter|\.fright)"
+                     r"(footer a|footer|\.fleft|\.fcenter|\.fright)"
                      r"\{([^}]*)\}")
-_RULE_SET = ("footer", "footer a", ".fleft", ".fcenter", ".fright", ".themectl", ".themectl button",
-             '.themectl button[aria-pressed="true"]', ".themesep")
-# The zone rules, as against the control's own: the centre's weight belongs to the zone alone, while
-# the pressed button's weight is the control's state.
-_ZONE_RULES = ("footer", "footer a", ".fleft", ".fcenter", ".fright")
+_RULE_SET = ("footer", "footer a", ".fleft", ".fcenter", ".fright")
 
 
 def _rule_set(where, text):
@@ -673,13 +698,12 @@ def test_every_surface_returns_the_footer_to_flow_below_the_measured_width():
 def test_the_centre_line_is_bold_on_every_surface(where):
     """THE BOLD CENTRE, as ONE declaration on the zone. The linked organisation's name inherits it,
     so the whole line reads at one weight. FAILS if any surface's centre zone loses the weight, or if
-    another zone rule (or the link rule) takes a weight of its own, which would set the name apart
-    from its sentence. The control's pressed state carries a weight too, and that one is the
-    control's state, not the line's."""
+    another rule in the footer's set (the link rule included) takes a weight of its own, which would
+    set the name apart from its sentence."""
     rules = _rule_set(where, _text(where))
     assert _CENTRE_WEIGHT in rules[".fcenter"], (
         f"{where}: the centre zone must declare {_CENTRE_WEIGHT}: {rules['.fcenter']!r}")
-    for sibling in (s for s in _ZONE_RULES if s != ".fcenter"):
+    for sibling in (s for s in _RULE_SET if s != ".fcenter"):
         assert "font-weight" not in rules[sibling], (
             f"{where}: the weight belongs to the centre zone alone; a second declaration "
             f"in {sibling!r} is a second place for the surfaces to drift: {rules[sibling]!r}")

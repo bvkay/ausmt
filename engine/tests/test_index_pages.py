@@ -160,7 +160,7 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 # (portal/vendor/auscope/PROVENANCE.md: the white files sit on dark grounds only). The identity zone
 # carries no mark, so the lock-up is the header's only AuScope presence. The theme rules show one
 # file of the pair, but the markup names both. The footer fetches nothing: its right region is the
-# page's status and the appearance control, both inline.
+# page's status, inline, or nothing.
 ALLOWED_HEADER_SRCS = ["/vendor/auscope-ncris-colour.png", "/vendor/auscope-ncris-white.png"]
 ALLOWED_FOOTER_SRCS = []
 ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
@@ -185,7 +185,7 @@ _DASHES = (chr(0x2014), chr(0x2013))
 
 
 # The appearance script, the FIRST script in every page's head and the one script every page loads:
-# it writes <html data-theme> before the first paint and wires the footer's appearance control. It
+# it writes <html data-theme> before the first paint, so the page opens in the reader's theme. It
 # is a same-origin file under /src like every other script here, because the pages are served under
 # a CSP whose script-src is 'self' alone.
 HEAD_SCRIPT_SRCS = ["/src/theme.js"]
@@ -690,8 +690,8 @@ def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor(
 
     FAILS IF the card stops being positioned (the overlay would escape to the page), if the overlay
     rule is dropped or stops following the card's own corner radius, if a second anchor appears in a
-    surveys-hub card, if a <button> appears in any row (the page's only buttons are the footer's
-    appearance control), or if the hover affordance goes."""
+    surveys-hub card, if a <button> appears in any row or anywhere else on the page (the footer
+    carries no control, so the page carries no button at all), or if the hover affordance goes."""
     pages = _pages_module()
     page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
     css = page.split("<style>", 1)[1].split("</style>", 1)[0]
@@ -708,10 +708,8 @@ def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor(
     assert card.count("<a ") == 1, f"exactly one real anchor per surveys card, got {card.count('<a ')}"
     main = page.split("<main>", 1)[1].split("</main>", 1)[0]
     assert "<button" not in main, "no buttons in rows, ever: the hierarchy is catalogue, survey, data"
-    assert re.findall(r"<button\b[^>]*>", page) == [
-        '<button type="button" data-theme-choice="light" aria-pressed="true">',
-        '<button type="button" data-theme-choice="dark" aria-pressed="false">'], \
-        "the page's only buttons are the footer's two appearance controls"
+    assert re.findall(r"<button\b[^>]*>", page) == [], \
+        "the surveys hub carries no button anywhere: its rows are cards and its footer has no control"
     radius = re.search(r"border-radius:([^;}]+)", card_rule.group(1))
     overlay = re.search(r"\.idxt a::after\{[^}]*border-radius:([^;}]+)", css)
     assert radius and overlay and radius.group(1) == overlay.group(1) == "4px", \
@@ -867,12 +865,9 @@ HEADER_LOCKUP = (f'<a class="orglockup" href="{AUSCOPE_URL}" {NEW_TAB}>'
                  'src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" '
                  'width="1919" height="325"></a>')
 
-# The footer's appearance control, the SPA's own block character for character. Its separator is
-# U+00B7, built from the code point so a mis-decoded read of this file cannot pass a hyphen.
-THEMECTL = ('<div class="themectl" role="group" aria-label="Appearance">'
-            '<button type="button" data-theme-choice="light" aria-pressed="true">Light</button>'
-            f'<span class="themesep">{chr(0xB7)}</span>'
-            '<button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div>')
+# The retired footer control, by its classes and its hook. The appearance choice lives on /about.html
+# and in the map's welcome dialog, so no generated page names any of these, in markup or in its sheet.
+RETIRED_CONTROL = ("themectl", "themesep", "data-theme-choice", "aria-pressed")
 
 # The theme switch, verbatim on every surface and in this order: the dark file of each pair hidden
 # by default, then the pair swapped under <html data-theme="dark">. No one-class rule in the sheet
@@ -976,12 +971,14 @@ def _footer(page):
 
 
 def _status(foot):
-    """The footer's contextual status: whatever the right region carries ahead of the appearance
-    control, which must close the region."""
+    """The footer's contextual status: the whole of the right region, which is the footer's last and
+    carries nothing after the status."""
     right = foot.split('<div class="fzone fright">', 1)[1]
-    assert right.endswith(f"{THEMECTL}</div>\n"), \
-        f"the right region must close on the appearance control: {right!r}"
-    return right[:-len(f"{THEMECTL}</div>\n")]
+    assert right.endswith("</div>\n"), f"the right region must close the footer: {right!r}"
+    status = right[:-len("</div>\n")]
+    for gone in RETIRED_CONTROL:
+        assert gone not in status, f"the right region holds the status alone, found {gone!r}: {right!r}"
+    return status
 
 
 def _kinds(built):
@@ -1042,8 +1039,8 @@ def test_the_footer_status_slot_is_contextual_and_empty_off_the_surveys_hub(buil
     """The shell is identical everywhere; what rides in the footer's status slot is not. The Map
     view keeps its live counter in the SPA; the surveys hub states the static catalogue counts;
     every other static page states NOTHING there, because a counter that cannot count the page it is
-    on is decoration pretending to be data. The status sits ahead of the appearance control in the
-    footer's right region.
+    on is decoration pretending to be data. The status is the whole of the footer's right region,
+    which is empty where there is no status and carries no control.
 
     The header's right zone is the AuScope and NCRIS lock-up and nothing else: it says the same
     thing on every page, so no count, and no count id, may ride it. FAILS IF a status leaves the
@@ -1069,8 +1066,8 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
 
     The footer must not be contextual beyond that slot, or a reader cannot learn it once. Left is
     the catalogue, the same document from every page; centre is the AuScope acknowledgement and the
-    licence note, carrying the one navigation link in the line; right is the page's status and then
-    the appearance control. The separators are U+00B7, written in the centre as the numeric
+    licence note, carrying the one navigation link in the line; right is the page's status and
+    nothing else. The separators are U+00B7, written in the centre as the numeric
     reference so a mis-decoded read of this file cannot smuggle a hyphen past the pin.
 
     The footer fetches nothing: the lock-up is the header's. Releases and About this build stay out
@@ -1081,7 +1078,8 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
 
     FAILS IF the one-line footer survives anywhere, if the three regions are not present with their
     exact strings, if a region's links move or retarget, if the copyright clause or the lock-up
-    comes back, if a retired control comes back, or if the footer differs between page kinds."""
+    comes back, if a retired control comes back (the appearance control included), or if the footer
+    differs between page kinds."""
     seen = {}
     for rel, (_active, label, href, _slot) in _kinds(built).items():
         page = (built / "pages" / rel).read_text(encoding="utf-8")
@@ -1118,9 +1116,13 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
         assert "&#169;" not in foot and "contributors" not in foot, \
             f"{rel}: the copyright clause stays out of the footer: {foot!r}"
 
-        # RIGHT. The status (held by its own pin) and the appearance control, and nothing fetched.
+        # RIGHT. The status (held by its own pin), no control and nothing fetched.
         assert "<img" not in foot and "orglogo" not in foot and "src=" not in foot, \
             f"{rel}: the footer fetches nothing; the lock-up is the header's: {foot!r}"
+        for control in ("<button", "<input", "<select", "<fieldset", " role=", "aria-pressed"):
+            assert control not in foot, \
+                f"{rel}: the footer carries no control, found {control!r}: {foot!r}"
+        assert not re.search(r"\son[a-z]+\s*=", foot), f"{rel}: the footer carries an inline handler"
 
         for gone in (">Releases<", "About this build", "aboutbuild", "/releases.html"):
             assert gone not in foot, \
@@ -1173,8 +1175,8 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
     in Chrome at 2560px, the sentence's midpoint sat 274.66px left of the viewport's on this tier
     with content-sized sides. flex:1 1 0 on both sides makes them the same width whatever they
     hold; min-width:0 lets a side zone go under its own content rather than force a wrap. The right
-    region is itself a flex row, pushed to the footer's right edge, carrying the status and the
-    appearance control with a 14px gap between them.
+    region is itself a flex row, pushed to the footer's right edge, carrying the status, and it keeps
+    the portal's 14px gap so the rule stays one rule set with the SPA's.
 
     Below 1421px of footer CONTENT the centre takes a row of its own UNDER the two side regions,
     where it spans the footer and is centred on its axis. Below 520px every region takes a row of
@@ -1207,12 +1209,8 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
         assert m, f"{zone} carries no rule"
         for decl in decls:
             assert decl in m.group(1), f"{zone} must declare {decl}, got {m.group(1)!r}"
-    for appearance in (".themectl{display:inline-flex;align-items:center;gap:6px;font-size:12.5px}",
-                       ".themectl button{background:none;border:0;padding:0;color:var(--muted);"
-                       "font:inherit;cursor:pointer}",
-                       '.themectl button[aria-pressed="true"]{color:var(--accent);font-weight:700}',
-                       ".themesep{color:var(--line)}"):
-        assert css.count(appearance) == 1, f"the appearance control must carry {appearance!r} once"
+    for gone in RETIRED_CONTROL:
+        assert gone not in css, f"the footer carries no appearance control, so no rule styles {gone!r}"
 
     centre_row = css.find("@container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}")
     assert centre_row > 0, (
@@ -1818,9 +1816,8 @@ def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
 def test_the_centre_line_is_bold_on_every_page_kind(built):
     """The acknowledgement renders bold, the anchor included, as ONE declaration on the
     centre zone. FAILS if the weight goes, if it is written per span in the markup, or if a second
-    declaration appears for the two surfaces to drift on. The one other bold declaration in the
-    sheet is the appearance control's pressed button, which marks the current choice; no other
-    rule may declare the weight, so nothing else can reach the centre line."""
+    declaration appears for the two surfaces to drift on. It is the one bold declaration in the
+    sheet, so nothing else can reach the centre line."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         css = _css(page)
@@ -1829,7 +1826,7 @@ def test_the_centre_line_is_bold_on_every_page_kind(built):
             f"{rel}: the centre zone must declare font-weight:700: {centre and centre.group(1)!r}"
         bold = [sel.strip() for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css)
                 if "font-weight:700" in body]
-        assert bold == [".fcenter", '.themectl button[aria-pressed="true"]'], \
+        assert bold == [".fcenter"], \
             f"{rel}: the weight is one declaration on the zone, not one per surface it reaches: {bold}"
         centre_markup = _footer(page).split('<div class="fzone fcenter">', 1)[1].split("</div>", 1)[0]
         assert "<b>" not in centre_markup and "<strong" not in centre_markup \
