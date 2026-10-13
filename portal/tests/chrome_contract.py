@@ -53,7 +53,8 @@ MARK_PAIR = (f'<img class="brandmark theme-light" src="{MARK_LIGHT}" alt="AuScop
 MARK_RULE = ".brandmark{height:30px;width:30px;display:block;flex:none}"
 
 # The lock-up is the AuScope brand kit's own colour and white PNGs, named at their intrinsic 1919 by 325
-# and drawn 40px tall, the height of the view tabs, with the width following the artwork.
+# and drawn 40px tall, the height of the view tabs, with the width following the artwork. Where the
+# right zone is narrower than that, object-fit:contain keeps the artwork's proportion inside the box.
 LOCKUP_LIGHT = "/vendor/auscope-ncris-colour.png"
 LOCKUP_DARK = "/vendor/auscope-ncris-white.png"
 LOCKUP_PIXELS = (1919, 325)
@@ -61,7 +62,7 @@ LOCKUP = ('<a class="orglockup" href="https://www.auscope.org.au" target="_blank
           f'<img class="theme-light" src="{LOCKUP_LIGHT}" alt="AuScope and NCRIS" width="1919" height="325">'
           f'<img class="theme-dark" src="{LOCKUP_DARK}" alt="AuScope and NCRIS" width="1919" height="325"></a>')
 LOCKUP_RULES = (".orglockup{display:block;line-height:0}",
-                ".orglockup img{height:40px;width:auto;max-width:100%}")
+                ".orglockup img{height:40px;width:auto;max-width:100%;object-fit:contain}")
 
 # The switch, verbatim on every surface. Its first rule ties on specificity with any one-class rule
 # that also sets display, so it must follow them; nothing that selects a variant may outrank it.

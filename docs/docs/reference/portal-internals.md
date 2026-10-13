@@ -63,8 +63,9 @@ vendor/auscope-ncris-colour.png for the light theme and vendor/auscope-ncris-whi
 dark, each declared at its intrinsic 1919x325. .orglockup img draws it 40px tall, the min-height of
 the view tabs, so beside the tab row it never sets the header's height, and the width follows the
 artwork. max-width:100% keeps it inside the zero-basis .hright zone; where that zone is narrower
-than the artwork (between 761px and about 953px of viewport) the cap squeezes the image's width
-while the height stays 40px. Stated character-identically on every surface; pinned by
+than the artwork (between 761px and about 953px of viewport) the box keeps its 40px height and
+object-fit:contain draws the artwork at its own proportion inside it, smaller than 40px tall in
+that band. Stated character-identically on every surface; pinned by
 tests/test_header_geometry_parity.py and tests/test_header_vertical_geometry.py.
 ```
 

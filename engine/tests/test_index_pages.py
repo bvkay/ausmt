@@ -1237,15 +1237,17 @@ def test_the_header_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
 
     FAILS IF the height rule goes (every page would paint the file at its intrinsic size), if the
     width stops following the height, if the max-width cap is lost (it is what holds the lock-up
-    inside the right zone once the header stacks at 375px), or if the footer lock-up's rules come
-    back beside it."""
+    inside the right zone once the header stacks at 375px), if object-fit:contain is lost (where
+    the cap binds, from 761px to about 953px of viewport, the box is narrower than the artwork and
+    the trademark would be squeezed sideways), or if the footer lock-up's rules come back beside
+    it."""
     for rel in _kinds(built):
         css = _css((built / "pages" / rel).read_text(encoding="utf-8"))
         assert css.count(".orglockup{display:block;line-height:0}") == 1, \
             f"{rel}: the lock-up anchor must be one line-height:0 block"
         m = re.search(r"\.orglockup img\{([^}]*)\}", css)
         assert m, f"{rel}: the header lock-up carries no sizing rule"
-        assert m.group(1) == "height:40px;width:auto;max-width:100%", \
+        assert m.group(1) == "height:40px;width:auto;max-width:100%;object-fit:contain", \
             f"{rel}: the lock-up rule must be the SPA's own: {m.group(1)!r}"
         assert ".orglogo" not in css, f"{rel}: the footer lock-up's rules must not come back"
 
