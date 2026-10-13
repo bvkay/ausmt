@@ -84,12 +84,14 @@
   .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
-  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--heading);text-decoration:none}
-  /* The heading wraps the wordmark and takes no type of its own, so its line box is the wordmark's and
-     the identity block measures as it does on every other surface; the page name is clipped. */
+  .brandmark{height:36px;width:36px;display:block;flex:none}
+  .wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;letter-spacing:-.01em;line-height:1;color:var(--heading);text-decoration:none}
+  .wordmark b{font-weight:800}
+  /* The heading wraps the wordmark and takes no type of its own, so the identity block measures as it
+     does on every other surface; the page name is clipped. */
   .brandh1{flex:none;font-size:inherit}
   .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%)}
-  .tagline{color:var(--muted);font-size:12.5px}
+  .tagline{color:var(--muted);font-size:14px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
   nav{display:flex;gap:6px;flex-wrap:wrap}
   nav button{flex:1;min-width:112px;min-height:40px;background:var(--surface-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;cursor:pointer}
   nav button:hover{border-color:var(--accent)}
@@ -102,8 +104,6 @@
   nav button.active:hover{border-color:var(--accent)}
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
-  .orglockup{display:block;line-height:0}
-  .orglockup img{height:40px;width:auto;max-width:100%;object-fit:contain}
   .theme-dark{display:none}
   :root[data-theme="dark"] .theme-light{display:none}
   :root[data-theme="dark"] .theme-dark{display:block}
@@ -584,10 +584,10 @@
 <body>
 <header>
   <div class="hzone hleft">
-    <!-- AusMT's name and tagline are the identity zone; the lock-up at the right is the header's
-         only AuScope presence. See docs: portal internals, index.html. -->
-    <h1 class="brandh1"><span class="wordmark">AusMT</span><span class="visually-hidden"> - Australia's Magnetotelluric (MT) Data Portal</span></h1>
-    <div class="tagline">Australia's Magnetotelluric Data Portal</div>
+    <!-- The AuScope mark, then AusMT's name set at the AuScope logo's proportions. See docs: portal
+         internals, index.html. -->
+    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="36" height="36">
+    <h1 class="brandh1"><span class="wordmark"><b>Aus</b>MT</span><span class="visually-hidden"> - Australia's Magnetotelluric (MT) Data Portal</span></h1>
   </div>
   <div class="hzone hcenter">
     <nav>
@@ -601,9 +601,7 @@
          into the guided tour, which About links. -->
     <a class="about" href="about.html">About</a>
   </div>
-  <div class="hzone hright">
-    <a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a>
-  </div>
+  <div class="hzone hright"><div class="tagline">Australia's Magnetotelluric Data Portal</div></div>
 </header>
 
 <main>

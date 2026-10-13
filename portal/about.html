@@ -53,8 +53,10 @@
   .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
-  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--heading);text-decoration:none}
-  .tagline{color:var(--muted);font-size:12.5px}
+  .brandmark{height:36px;width:36px;display:block;flex:none}
+  .wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;letter-spacing:-.01em;line-height:1;color:var(--heading);text-decoration:none}
+  .wordmark b{font-weight:800}
+  .tagline{color:var(--muted);font-size:14px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
   /* flex-wrap is a term of the header's HEIGHT: three 112px tabs must be free to stack on a narrow
      viewport. See docs: portal internals, about.html. */
   nav{display:flex;gap:6px;flex-wrap:wrap}
@@ -66,8 +68,6 @@
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
   .about.active{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
-  .orglockup{display:block;line-height:0}
-  .orglockup img{height:40px;width:auto;max-width:100%;object-fit:contain}
   .theme-dark{display:none}
   :root[data-theme="dark"] .theme-light{display:none}
   :root[data-theme="dark"] .theme-dark{display:block}
@@ -78,14 +78,10 @@
   /* THE IN-PAGE ANCHOR OFFSET FOLLOWS THE HEADER. The header is sticky, so an anchor that scrolls its
      section to y=0 puts the heading underneath it and scroll-margin-top is the clearance. See docs: portal
      internals, about.html. */
-  :root{--about-anchor-offset:256px}
-  @media (min-width:344px){:root{--about-anchor-offset:229px}}
-  @media (min-width:384px){:root{--about-anchor-offset:183px}}
-  @media (min-width:451px){:root{--about-anchor-offset:147px}}
-  @media (min-width:761px){:root{--about-anchor-offset:100px}}
-  @media (min-width:794px){:root{--about-anchor-offset:85px}}
-  @media (min-width:932px){:root{--about-anchor-offset:70px}}
-  @media (min-width:1098px){:root{--about-anchor-offset:57px}}
+  :root{--about-anchor-offset:216px}
+  @media (min-width:384px){:root{--about-anchor-offset:170px}}
+  @media (min-width:451px){:root{--about-anchor-offset:134px}}
+  @media (min-width:761px){:root{--about-anchor-offset:57px}}
   section{margin:0 0 30px;scroll-margin-top:var(--about-anchor-offset)}
   h2{font-size:15px;text-transform:uppercase;letter-spacing:.1em;color:var(--heading);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
   h3{font-size:14px;color:var(--heading);margin:16px 0 6px}
@@ -134,10 +130,10 @@
 <body>
 <header>
   <div class="hzone hleft">
-    <!-- AusMT's name and tagline are the identity zone; the lock-up at the right is the header's
-         only AuScope presence. See docs: portal internals, about.html. -->
-    <a class="wordmark" href="/">AusMT</a>
-    <div class="tagline">Australia's Magnetotelluric Data Portal</div>
+    <!-- The AuScope mark, then AusMT's name set at the AuScope logo's proportions. See docs: portal
+         internals, about.html. -->
+    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="36" height="36">
+    <a class="wordmark" href="/"><b>Aus</b>MT</a>
   </div>
   <div class="hzone hcenter">
     <nav>
@@ -147,9 +143,7 @@
     </nav>
     <a class="about active" href="about.html">About</a>
   </div>
-  <div class="hzone hright">
-    <a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a>
-  </div>
+  <div class="hzone hright"><div class="tagline">Australia's Magnetotelluric Data Portal</div></div>
 </header>
 <main>
   <h1>About AusMT</h1>
