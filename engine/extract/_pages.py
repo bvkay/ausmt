@@ -846,12 +846,13 @@ def _site_footer(status="") -> str:
     because the link hands over a JSON document rather than another page of the site. It takes no
     target, so a new tab means one thing in this footer: the link leaves AusMT.
 
-    The centre states who enables AusMT and carries the licence note. The URL text is the only link
-    in the line: it is the reader-legible form of the address, so it says where it goes without a
-    title attribute. It opens in a new tab and hands the opened page no handle on this one:
-    target="_blank" grants window.opener, from which the opened document could navigate the tab it
-    came from, and noreferrer keeps a reader's path through the catalogue out of a third party's
-    logs. The build identity is not printed here; build_provenance.json and /about.html carry it.
+    The centre states who enables AusMT and carries the licence note. The organisation's name is the
+    only link in the line, to https://www.auscope.org.au, so the footer carries one anchor to that
+    address and no address as text. It opens in a new tab and hands the opened page no handle on
+    this one: target="_blank" grants window.opener, from which the opened document could navigate
+    the tab it came from, and noreferrer keeps a reader's path through the catalogue out of a third
+    party's logs. The build identity is not printed here; build_provenance.json and /about.html
+    carry it.
 
     The right region is the page's contextual `status`, then the appearance control. The status is
     what the page can actually state (the surveys hub's catalogue counts) and is empty elsewhere,
@@ -866,9 +867,9 @@ def _site_footer(status="") -> str:
     _CSS beside the ones that lay its regions out."""
     return ("\n<footer>\n"
             f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">MTCAT JSON {_ARROW_OUT}</a></div>\n'
-            '<div class="fzone fcenter">AusMT is enabled by AuScope &#183; '
+            '<div class="fzone fcenter">AusMT is enabled by '
             '<a href="https://www.auscope.org.au" target="_blank" '
-            'rel="noopener noreferrer">www.auscope.org.au</a> &#183; '
+            'rel="noopener noreferrer">AuScope</a> &#183; '
             "Data licences vary by survey</div>\n"
             f'<div class="fzone fright">{status}'
             '<div class="themectl" role="group" aria-label="Appearance"><button type="button" data-theme-choice="light" aria-pressed="true">Light</button><span class="themesep">·</span><button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div>'
