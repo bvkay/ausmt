@@ -1048,8 +1048,8 @@ def test_the_footer_status_slot_is_contextual_and_empty_off_the_surveys_hub(buil
     """The shell is identical everywhere; what rides in the footer's status slot is not. The Map
     view keeps its live counter in the SPA; the surveys hub states the static catalogue counts;
     every other static page states NOTHING there, because a counter that cannot count the page it is
-    on is decoration pretending to be data. The status is the whole of the footer's right region,
-    which is empty where there is no status and carries no control.
+    on is decoration pretending to be data. The status heads the footer's right region, before the
+    lock-up that closes it, and is empty where there is no status; the region carries no control.
 
     The header's right zone is the tagline and nothing else: it says the same thing on every page,
     so no count, and no count id, may ride it. FAILS IF a status leaves the footer, appears where it

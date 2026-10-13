@@ -335,7 +335,8 @@ _ENGINE_LEFT_LINK = r'<a (?:class="apilink" )?href="([^"]+)"(?: title="[^"]*")?>
 def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(where):
     """REGIONS and STRINGS, on all seven surfaces. FAILS if a region is missing, out of order or holds
     another's content, if a portal page's left link loses class="apilink" or its title, if the left
-    label or the centre line drifts, or if the right region is anything but the surface's status.
+    label or the centre line drifts, or if the right region is anything but the surface's contents:
+    its status, then the lock-up on every surface without the big map.
 
     Non-vacuous in every half: the earlier footers fail the left label (it read "Machine-readable
     record (MTCAT JSON)"), the centre (it carried the copyright clause, and then the address as the
@@ -365,7 +366,8 @@ def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(
 
     right = flat(regions["right"])
     assert right == flat(_expected_right(where)), (
-        f"{where}: the right region must be the surface's status and nothing else:\n"
+        f"{where}: the right region must be the surface's status and lock-up as its contents call "
+        "for, and nothing else:\n"
         f"  got  {right!r}\n  want {flat(_expected_right(where))!r}")
 
 
@@ -443,9 +445,9 @@ def test_no_footer_fetches_anything_but_the_lockup_pair(where):
 @pytest.mark.parametrize("where", SURFACES)
 def test_the_retired_content_has_left_every_footer(where):
     """THE RETIRED CONTENT STAYS RETIRED. FAILS if Releases, About this build, the disclosure popover,
-    the copyright clause, the old left label or the footer lock-up comes back to a footer on any
-    surface. Swept from the whole document for the popover's class and the lock-up's, because a rule
-    left behind styles an element someone will re-add."""
+    the copyright clause, the old left label or the retired footer logo (orglogo) comes back to a
+    footer on any surface. Swept from the whole document for the popover's class and the retired
+    logo's, because a rule left behind styles an element someone will re-add."""
     foot = _foot(where)
     for gone in RETIRED:
         assert gone not in entities(foot), f"{where}: {gone!r} left the footer and must not come back"
@@ -498,9 +500,9 @@ def test_every_footer_is_a_wrapping_flex_row_whose_side_zones_take_equal_zero_ba
 
     THE SIDE ZONES TAKE EQUAL ZERO BASIS, which is what page-centres the acknowledgement: zones that
     size to their own content leave the centre centred in the LEFTOVER space. flex:1 1 0 on both sides
-    makes them the same width whatever they hold, the empty right zone on five pages included;
-    min-width:0 lets a side zone go under its own content rather than force a wrap. The right zone
-    is a row of its own, so its status sits against the right edge.
+    makes them the same width whatever they hold, the lock-up on six surfaces and the live counts on
+    the map page included; min-width:0 lets a side zone go under its own content rather than force a
+    wrap. The right zone is a row of its own, so what it holds sits against the right edge.
 
     There are two states below one row and each is pinned. Below the width the three regions need,
     the centre takes a row of its own UNDER the other two; below the width those two need, every
