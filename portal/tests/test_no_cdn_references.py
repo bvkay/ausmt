@@ -39,14 +39,15 @@ def test_leaflet_and_jszip_assets_are_vendored():
 
 
 def test_vendor_files_present_and_nonempty():
-    # The libraries, then the brand assets the site's own surfaces fetch: the AusMT identity mark's
-    # source, the parent organisation's white icon (the docs sidebar copy, the collection figure and
-    # the social card composite it), the AuScope-NCRIS lockup every footer carries, and the colour
-    # icon the SPA map draws as its watermark. The bytes of the last one are held in
-    # tests/test_map_watermark.py; what this inventory says is that the portal ships it at all.
+    # The libraries, then the AuScope brand kit's own PNGs: the white icon (the docs sidebar copy and
+    # the social card are made from it), the AuScope and NCRIS lock-up pair every header draws, colour
+    # for the light theme and white for the dark, and the colour icon, which no surface draws. Their
+    # bytes are held in tests/test_header_geometry_parity.py, tests/test_footer_regions.py and
+    # tests/test_map_watermark.py; what this inventory says is that the portal ships them at all.
     for name in ("leaflet.js", "leaflet.css", "jszip.min.js",
                  "leaflet.draw.js", "leaflet.draw.css",
-                 "auscope-icon-white.png", "auscope-ncris-white.png", "auscope-icon-colour.png"):
+                 "auscope-icon-white.png", "auscope-ncris-colour.png", "auscope-ncris-white.png",
+                 "auscope-icon-colour.png"):
         p = ROOT / "vendor" / name
         assert p.exists(), f"missing vendored asset {p}"
         assert p.stat().st_size > 0, f"vendored asset {p} is empty"

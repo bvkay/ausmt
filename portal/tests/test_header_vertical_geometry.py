@@ -17,10 +17,11 @@ and TWO of the zones can grow. The identity zone, once its content wraps, is
 
     hleft  = line-box(first line) + row-gap + line-box(tagline)
 
-where a line box is font-size x line-height and the first line is the taller of the mark box and the
-wordmark's own line box. WHETHER it wraps at a given viewport is the other half:
+where a line box is font-size x line-height and the first line is the wordmark's own line box: the
+zone carries no mark, so nothing else stands on that line. WHETHER it wraps at a given viewport is the
+other half:
 
-    wraps  <=>  mark-width + gap + wordmark-width + gap + tagline-width  >  zone-width
+    wraps  <=>  wordmark-width + gap + tagline-width  >  zone-width
 
 The tab group's zone grows the same way, in whole tab rows:
 
@@ -31,8 +32,14 @@ The tab group's zone grows the same way, in whole tab rows:
 That second expression is why the nav container's flex-wrap is a term of the HEIGHT and not a detail
 of the nav's own layout. A nowrap container pins rows at 1 and holds the header short while the tabs
 overrun the zone sideways instead; a wrapping one stacks them and the header grows by a whole tab
-row. Measured at 375px, one declaration apart: 220px with the wrap, 174px without it, and without it
+row. Measured at 375px, one declaration apart: 260px with the wrap, 214px without it, and without it
 the tab group's right edge lands at 366px against a 357px content edge.
+
+The third zone cannot grow: it is the AuScope and NCRIS lock-up alone, at a DECLARED height equal to
+the tabs' floor, so beside the tab row it is never the tallest zone, and under 760px, where the zones
+stack, its row is exactly that declared height:
+
+    hright  = lock-up height = tab min-height
 
 Every term in these expressions is a DECLARED constant except the intrinsic text widths, which are a
 property of the font stack and are already pinned pairwise next door. This file pins the declared
@@ -47,18 +54,17 @@ z-index are surface-local and carry no vertical geometry, exactly as the horizon
 leave them alone. The border-bottom is compared by its WIDTH only, for the same reason: the width is
 a term of the height, the colour is not.
 
-Zone CONTENT is not compared either, and that is the honest limit of this pin. Agreement here means
-two surfaces resolve the same height from the chrome they DECLARE; it is not a promise that two
-headers measure the same number of pixels, because the right zone is contextual by design. The SPA's
-status slot carries a live counter, and at 375px that one 15px line renders index.html's header at
-235px against brand.html's 220px with every term in this file in agreement. That is the pin working
-as intended, not a drift: the chrome is shared, the contents of the contextual slot are not.
+Zone CONTENT is not compared here, and that is the honest limit of this pin. Agreement here means
+two surfaces resolve the same height from the chrome they DECLARE; it is not a pixel measurement. The
+content is held separately: tests/test_header_geometry_parity.py compares every surface's header
+markup with the contract token by token, and with the contextual counts moved to the footer no zone
+of the header varies by page any more.
 
-NO CARVE-OUT. about.html carried the AuScope symbol as its identity mark, under a rule of its own,
-while that header was still being settled; this file once read the mark's height from whichever of
-the two rules a surface happened to use. The rule put the AusMT mark in that slot like everywhere
-else, so there is one rule to read and every surface must carry it. The height is the only thing a
-mark contributes to the header's height, and every surface declares it as 30px.
+NO MARK, ON ANY SURFACE. The identity zone is the wordmark and the tagline alone, so the expressions
+above have no mark term, and the fingerprint holds that no surface declares the sizing rule a mark in
+that zone would need: a rule with nothing to style is how a mark comes back, and the box it sized
+would be a new term of the first line. tests/test_header_geometry_parity.py holds the markup half,
+that no identity zone carries an image of any kind.
 """
 import re
 from pathlib import Path
@@ -66,8 +72,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
-# The identity mark rule. One spelling, on every surface: the AusMT mark opens every header.
-MARK_RULE = ".brandmark"
+# The sizing rule an identity mark would need. No surface declares it, because no identity zone carries
+# a mark.
+RETIRED_MARK_RULE = ".brandmark"
 
 
 def _rule(text, pattern, where, what, must_contain=None):
@@ -121,12 +128,12 @@ def _fingerprint(where, text, is_pages):
     wordmark = _rule(text, r"(?m)^\s*\.wordmark\{([^}]*)\}", where, ".wordmark")
     tagline = _rule(text, r"(?m)^\s*\.tagline\{([^}]*)\}", where, ".tagline")
     tab = _rule(text, tab_sel, where, "nav tab")
+    lockup = _rule(text, r"(?m)^\s*\.orglockup img\{([^}]*)\}", where, ".orglockup img")
 
-    found = re.findall(r"(?m)^\s*" + re.escape(MARK_RULE) + r"\{([^}]*)\}", text)
-    assert len(found) == 1, (
-        f"{where}: expected exactly one {MARK_RULE} rule, found {len(found)}; it is where the "
-        "header's first line takes its height from")
-    mark = re.sub(r"\s*\n\s*", "", found[0])
+    found = re.findall(re.escape(RETIRED_MARK_RULE) + r"\b[^{]*\{", text)
+    assert not found, (
+        f"{where}: declares {len(found)} {RETIRED_MARK_RULE} rule(s); the identity zone carries no "
+        "mark, so the header's first line takes its height from the wordmark alone")
 
     return {
         # The header box itself: the padding and the border are added to the tallest zone, the
@@ -145,9 +152,8 @@ def _fingerprint(where, text, is_pages):
         "hzone align-items": _decl(hzone, "align-items", where, ".hzone"),
         "hzone gap": _decl(hzone, "gap", where, ".hzone"),
         "hzone flex-wrap": _decl(hzone, "flex-wrap", where, ".hzone"),
-        # The three identity items. Their font metrics set the line boxes, and their widths are
-        # what decide the wrap in the first place.
-        "mark height": _decl(mark, "height", where, "identity mark"),
+        # The two identity items. Their font metrics set the line boxes, and their widths are what
+        # decide the wrap in the first place.
         "wordmark font-size": _decl(wordmark, "font-size", where, ".wordmark"),
         "wordmark font-weight": _decl(wordmark, "font-weight", where, ".wordmark"),
         "wordmark letter-spacing": _decl(wordmark, "letter-spacing", where, ".wordmark"),
@@ -155,6 +161,9 @@ def _fingerprint(where, text, is_pages):
         # The floor under the whole header: while the identity block fits on one line, the tab
         # boxes are the tallest thing in the header and this is the number that shows.
         "tab min-height": _decl(tab, "min-height", where, "nav tab"),
+        # The right zone's one item: its declared height is the zone's height, and under 760px the
+        # height of a stacked row of its own.
+        "lockup height": _decl(lockup, "height", where, ".orglockup img"),
         # The nav CONTAINER's wrap, which decides how many ROWS of tab boxes the centre zone
         # holds. Each row is a tab min-height, so at any viewport too narrow for one row this is
         # the term that sets max(zone heights), and it is declared rather than left to the
@@ -166,11 +175,11 @@ def _fingerprint(where, text, is_pages):
 def test_every_chrome_surface_shares_one_vertical_fingerprint():
     """One set of declared chrome terms, carried by every surface that wears the chrome. FAILS IF
     any surface drifts on any declared term of the header's height, of its identity block's wrap or
-    of its tab group's row count: a line-height, a font size, a gap, the mark's height, the padding,
-    the border's width, the tab boxes' floor or the nav container's wrap. This is the pin the
-    57.00px to 82.47px reflow needed and did not have, and it fails on the TERM rather than on a
-    pixel count, so it means the same thing on a CI runner and on a laptop with different fonts
-    installed.
+    of its tab group's row count: a line-height, a font size, a gap, the padding, the border's
+    width, the tab boxes' floor or the nav container's wrap; or if any surface declares a sizing
+    rule for an identity mark. This is the pin the 57.00px to 82.47px reflow needed and did not
+    have, and it fails on the TERM rather than on a pixel count, so it means the same thing on a CI
+    runner and on a laptop with different fonts installed.
 
     Because every term is a declared constant, one comparison covers every viewport: what agrees at
     1280px agrees at 375px. What it does NOT cover is zone content, which is contextual by design
@@ -207,3 +216,15 @@ def test_the_identity_block_can_still_wrap_on_every_surface():
         assert "nowrap" not in tagline, (
             f"{where}: the tagline must not be pinned to one line with white-space:nowrap; on a "
             f"narrow viewport it would overflow the header instead of wrapping, got {tagline!r}")
+
+
+def test_the_lockup_is_as_tall_as_the_tabs_on_every_surface():
+    """The lock-up's declared height is the tabs' floor, 40px, on every surface. FAILS IF the two part:
+    a taller lock-up becomes the tallest zone and grows the header at every width, and a shorter one
+    stops matching the tab row it sits beside. The width is not a term of the height and follows the
+    artwork."""
+    for where, text, is_pages in _surfaces():
+        print_ = _fingerprint(where, text, is_pages)
+        assert print_["lockup height"] == print_["tab min-height"] == "40px", (
+            f"{where}: the lock-up is drawn as tall as the tabs, 40px; got lock-up "
+            f"{print_['lockup height']!r} against tabs {print_['tab min-height']!r}")

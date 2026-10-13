@@ -1,6 +1,5 @@
 "use strict";
-// Map + layers + markers. Data-dependent work (markers, footprints) is in buildMarkers()/
-// buildFootprints(), called by main after ST is built. See docs: portal internals, map.js.
+// Map + layers + markers. See docs: portal internals, map.js.
 const AU_HOME_BOUNDS=L.latLngBounds([[-44.5,111.5],[-10,155]]);
 // THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here. See docs: portal internals, map.js.
 const map=L.map("map",{preferCanvas:true,attributionControl:false}).fitBounds(AU_HOME_BOUNDS);
@@ -9,11 +8,24 @@ const _OSM_CREDIT='\u00a9 <a href="https://www.openstreetmap.org/copyright" targ
 const _PM_CREDIT=_OSM_CREDIT+', \u00a9 <a href="https://protomaps.com" target="_blank" rel="noopener noreferrer">Protomaps</a>';
 const _CARTO_CREDIT=_OSM_CREDIT+', \u00a9 <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>';
 var _bmCfg=(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.basemap)||{};
+// A theme token's current value, for what is drawn outside CSS (dot edges, shapes); a headless harness with
+// no stylesheet reads every token empty.
+function themeToken(name){
+  return typeof getComputedStyle==="function"?getComputedStyle(document.documentElement).getPropertyValue(name).trim():"";}
+function resolvedTheme(){return document.documentElement.getAttribute("data-theme")==="dark"?"dark":"light";}
+// The two pmtiles layers state the SAME credit and Leaflet prints it once: they are one basemap split at
+// the z7 crossover, drawn in the flavour of the resolved theme and remounted when it changes. The new pair
+// is added before the old pair leaves, or the region layer's minZoom alone would snap the view to z7.
+let _basemap=[];
+function mountBasemap(flavor){
+  const next=[
+    protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor,lang:"en",maxZoom:7,maxDataZoom:6,attribution:_PM_CREDIT}).addTo(map),
+    protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor,lang:"en",minZoom:7,maxZoom:18,maxDataZoom:15,attribution:_PM_CREDIT}).addTo(map)];
+  _basemap.forEach(l=>map.removeLayer(l));
+  _basemap=next;
+}
 if(_bmCfg.provider==="pmtiles"&&window.protomapsL){
-  // The two pmtiles layers state the SAME credit and Leaflet prints it once: they are one basemap
-  // split at the z7 crossover, not two sources.
-  protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor:"light",lang:"en",maxZoom:7,maxDataZoom:6,attribution:_PM_CREDIT}).addTo(map);
-  protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor:"light",lang:"en",minZoom:7,maxZoom:18,maxDataZoom:15,attribution:_PM_CREDIT}).addTo(map);
+  mountBasemap(resolvedTheme());
 }else{
   var _bmKey=_bmCfg.carto_api_key?("?api_key="+encodeURIComponent(_bmCfg.carto_api_key)):"";
   L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"+_bmKey,{maxZoom:18,attribution:_CARTO_CREDIT}).addTo(map);
@@ -21,20 +33,15 @@ if(_bmCfg.provider==="pmtiles"&&window.protomapsL){
 // Mounted after the basemap so the control collects the layer already on the map, which is the order
 // Leaflet's own default control is created in. See docs: portal internals, map.js.
 window.AusmtMapAttrib.mount(map,"Map data attribution");
-// SITE LOCATIONS ONLY, at every zoom: no proximity clustering and no per-survey badge bubbles, so
-// no badge, no leader tail, no decoration pane and no zoom threshold. See docs: portal internals,
-// map.js.
+// SITE LOCATIONS ONLY, at every zoom. See docs: portal internals, map.js.
 const dotLayer=L.layerGroup();
 map.addLayer(dotLayer);
-// AusLAMP membership is COLLECTION membership, not a data type - a station is AusLAMP iff its survey slug
-// is a member of the collection with id `auslamp` in collections.json. See docs: portal internals, map.js.
+// AusLAMP membership is COLLECTION membership, not a data type. See docs: portal internals, map.js.
 function isAuslampSurvey(slug,auslampSet){return !!(slug&&auslampSet&&auslampSet.has(slug));}
-// Coordinate access: a station whose custodian WITHHELD its coordinates carries null lat/lon in the served
-// catalogue - the engine masks the VALUE (there is no separate policy field; withheld => null, generalised
-// => a 0.1° cell rendered verbatim). See docs: portal internals, map.js.
+// Coordinate access: a custodian-withheld station carries null lat/lon and has no position. See docs:
+// portal internals, map.js.
 function hasPosition(s){return !!(s&&s.lat!=null&&s.lon!=null&&isFinite(s.lat)&&isFinite(s.lon));}
-// Paint the currently-visible stations into the ONE dot container. Called by refresh() (a filter changed).
-// See docs: portal internals, map.js.
+// Paint the visible stations into the ONE dot container. See docs: portal internals, map.js.
 function routeVisibleToLayers(){
   const dots=(typeof visible!=="undefined"?visible:[]).filter(hasPosition);
   dotLayer.clearLayers();
@@ -49,10 +56,12 @@ const drawn=new L.FeatureGroup().addTo(map);
 L.drawLocal.draw.toolbar.buttons.polygon="Draw polygon selection";
 L.drawLocal.draw.toolbar.buttons.rectangle="Draw rectangle selection";
 L.drawLocal.edit.toolbar.buttons.remove="Clear drawn shapes";
+// The shape colour is the --accent token, read here and again on every theme change.
+function shapeStyle(){return {color:themeToken("--accent"),weight:2};}
 // A named reference, so the SELECTION panel's
 // Draw rectangle/polygon buttons can REUSE this control's own mode handlers - see armDraw below.
 const drawControl=new L.Control.Draw({draw:{polyline:false,circle:false,circlemarker:false,marker:false,
-  polygon:{shapeOptions:{color:"#EF7256",weight:2}},rectangle:{shapeOptions:{color:"#EF7256",weight:2}}},edit:{featureGroup:drawn,edit:false,remove:true}});
+  polygon:{shapeOptions:shapeStyle()},rectangle:{shapeOptions:shapeStyle()}},edit:{featureGroup:drawn,edit:false,remove:true}});
 map.addControl(drawControl);
 // Explicit aria-labels on the draw + zoom toolbar anchors, set AFTER the controls are on the map (their DOM
 // exists by then). See docs: portal internals, map.js.
@@ -66,9 +75,8 @@ function labelToolbar(){
 }
 labelToolbar();
 
-// Discoverability: the SELECTION panel's "Draw rectangle"/"Draw polygon" buttons ARM the SAME
-// leaflet.draw handlers the map's top-left toolbar icons arm, so the panel need not point a reader at
-// a tool in the opposite corner. See docs: portal internals, map.js.
+// The SELECTION panel's draw buttons ARM the SAME handlers as the toolbar icons. See docs: portal
+// internals, map.js.
 let armedDrawMode=null;                                   // null | "rectangle" | "polygon" - the shared armed state
 // The exact handler object the matching toolbar icon enables (leaflet.draw keys _modes by handler.type).
 // Guarded navigation so a missing/stubbed control (the jsdom harness stubs L) is a no-op, never a throw.
@@ -92,12 +100,11 @@ const _drawRect=document.getElementById("drawRect"),_drawPoly=document.getElemen
 if(_drawRect)_drawRect.onclick=()=>armDraw("rectangle");
 if(_drawPoly)_drawPoly.onclick=()=>armDraw("polygon");
 
-// All LPMT renders the flagship teal (TYPE_COL.LPMT) in type mode whatever its AusLAMP membership:
-// every colour mode is membership-blind. See docs: portal internals, map.js.
+// All LPMT renders TYPE_COL.LPMT whatever its AusLAMP membership: every colour mode is membership-blind.
+// See docs: portal internals, map.js.
 function markerColor(s){return TYPE_COL[s.type]||"#999";}
 function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // Withheld-coord stations have no marker
-// ---- the survey FOCUS DIM -------------------------------------------------------- "View on map" with a
-// survey open frames that survey while the rest of the catalogue STAYS ON THE MAP, dimmed. See docs: portal
+// ---- the survey FOCUS DIM: the rest of the catalogue STAYS ON THE MAP, dimmed. See docs: portal
 // internals, map.js.
 let _dimFocusSurvey=null;
 // Full-strength values are the ones buildMarkers paints with; the dimmed pair keeps a marker legible as a
@@ -109,9 +116,7 @@ function dimStyleFor(surveyOfMarker,focus){
   return (!focus||surveyOfMarker===focus)
     ? {fillOpacity:MARKER_FILL_OPACITY,opacity:1}
     : {fillOpacity:MARKER_DIM_FILL,opacity:MARKER_DIM_STROKE};}
-// Apply the current focus to every marker. Markers are canvas circleMarkers (preferCanvas), so setStyle
-// carries their opacity; it passes ONLY the opacity keys, so it composes with recolor()/restyleForZoom()
-// (colour and radius) instead of fighting them. See docs: portal internals, map.js.
+// Apply the focus to every marker through the opacity keys ONLY. See docs: portal internals, map.js.
 function applySurveyDim(){
   ST.forEach(s=>{if(s.marker&&s.marker.setStyle)s.marker.setStyle(dimStyleFor(s.survey,_dimFocusSurvey));});}
 function setSurveyDim(sv){_dimFocusSurvey=sv||null;applySurveyDim();}
@@ -152,22 +157,19 @@ function _mapSizeDegenerate(size){return !(size&&typeof size.x==="number"&&typeo
 // primary fit was degenerate (so a healthy fit - and any later programmatic fit, such as a
 // collection framing - is left untouched). Split out so the no-fight-with-user decision is unit-testable.
 function _mapRefitGate(st){return !!st&&!st.userInteracted&&!!st.fitDegenerate;}
-function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
+function buildMarkers(){const z=curZoom(),w=weightForZoom(z),edge=themeToken("--dot-edge");ST.forEach(s=>{
   if(!hasPosition(s))return;   // A withheld-coordinate station has no position - no (0,0) phantom marker, no crash
-  s.marker=L.circleMarker([s.lat,s.lon],{radius:radiusForZoom(z),weight:w,color:"#11182D",fillColor:markerColor(s),fillOpacity:.92});
+  s.marker=L.circleMarker([s.lat,s.lon],{radius:radiusForZoom(z),weight:w,color:edge,fillColor:markerColor(s),fillOpacity:.92});
   s.marker._survey=s.survey;   // The per-survey cluster facade buckets markers by this stamp
   // A marker click OPENS that station and must never ALSO read as a background click that closes the
   // drawer. See docs: portal internals, map.js.
   s.marker.options.bubblingMouseEvents=false;
   s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // Hover shows station + survey only
   s.marker.on("click",()=>openStation(s.i));});
-  // Home frame once data is in: re-fit to the FIXED Australia box (AU_HOME_BOUNDS), NOT the tight
-  // positioned-station extent. See docs: portal internals, map.js.
+  // Home frame: the FIXED Australia box, NOT the station extent. See docs: portal internals, map.js.
   const pts=ST.filter(hasPosition).map(s=>[s.lat,s.lon]);
   if(pts.length){
-    // Reclaim the true container size BEFORE fitting: on first load the map's cached size can be stale/0x0
-    // (its container was unlaid-out at map-create), which makes fitBounds compute against a degenerate box
-    // and land at zoom 0 / the wrong centre. See docs: portal internals, map.js.
+    // Reclaim the true container size BEFORE fitting. See docs: portal internals, map.js.
     map.invalidateSize({animate:false,pan:false});
     HOME_BOUNDS=AU_HOME_BOUNDS;
     _fitWasDegenerate=_mapSizeDegenerate(typeof map.getSize==="function"?map.getSize():null);
@@ -216,6 +218,14 @@ if(_mapCont&&_mapCont.addEventListener){
 // Restyle every marker on each zoom step so radius/weight track the tier. preferCanvas is on
 // (map creation) so a full restyle of ~1200 circleMarkers per step is acceptable; registered once here.
 map.on("zoomend",restyleForZoom);
+// A theme change redraws what CSS cannot reach: the basemap flavour, every dot's edge and the shape colour.
+document.addEventListener("ausmt:theme",e=>{
+  if(_basemap.length)mountBasemap(e.detail.theme);
+  const edge=themeToken("--dot-edge"),shape=shapeStyle();
+  ST.forEach(s=>{if(s.marker)s.marker.setStyle({color:edge});});
+  drawControl.setDrawingOptions({polygon:{shapeOptions:shape},rectangle:{shapeOptions:shape}});
+  drawn.eachLayer(l=>{if(l.setStyle)l.setStyle({color:shape.color});});
+});
 
 function hull(points){const pts=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);if(pts.length<3)return pts;
   const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);const lo=[],hi=[];
@@ -246,13 +256,10 @@ L.control.layers(null,{"Survey footprints":footprints,
   "Cratons":userLayer("Cratons","cratons.geojson","#D9A23B"),
   "Major crustal boundaries":userLayer("Crustal boundaries","crustal_boundaries.geojson","#A85CC4")},{collapsed:true});
 
-// The selection-feedback toast copy. PURE (unit-tested) so the exact string - proper singular/plural, the
-// word "stations" (never "sites"), and the shape word - is pinned. See docs: portal internals, map.js.
+// The selection-feedback toast copy, PURE so the exact string is pinned. See docs: portal internals, map.js.
 function drawSelectionMsg(n,layerType){const shape=layerType==="rectangle"?"rectangle":"polygon";
   return n+" station"+(n===1?"":"s")+" selected within "+shape;}
-// One active selection shape: a new box replaces the previous one rather than stacking. refresh()
-// recomputes `selected` from the new shape, THEN we toast the fresh count and surface the exports by
-// auto-switching the rail to Select & download. See docs: portal internals, map.js.
+// One active selection shape: a new box replaces the previous one. See docs: portal internals, map.js.
 function onDrawCreated(e){e.layer.options.interactive=false;drawn.clearLayers();drawn.addLayer(e.layer);refresh();
   setArmedDraw(null);   // a completed draw disarms the mode - the panel button must not stay lit
   if(typeof toast==="function")toast(drawSelectionMsg(selected.size,e&&e.layerType));

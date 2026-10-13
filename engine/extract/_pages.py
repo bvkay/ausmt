@@ -114,29 +114,30 @@ _FETCH_DIALOG_HTML = (
 _FETCH_CSS = """
   .introwelcome{position:fixed;inset:0;z-index:950;display:flex;align-items:center;justify-content:center;background:rgba(11,15,18,.55);backdrop-filter:blur(1px);padding:24px}
   .introwelcome.hidden{display:none!important}
-  .introwelcome-box{position:relative;max-width:400px;width:100%;background:#18213D;border:1px solid #2B3557;border-radius:12px;padding:24px 26px;box-shadow:0 12px 40px rgba(0,0,0,.45);text-align:center}
+  .introwelcome-box{position:relative;max-width:400px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px 26px;box-shadow:0 12px 40px rgba(0,0,0,.45);text-align:center}
   .introwelcome-box:focus{outline:none}
   .introwelcome-box.wgetbox{max-width:560px;text-align:left}
-  .introwelcome-heading{font-size:19px;font-weight:600;color:#fff;margin:0 0 8px}
-  .wget-instructions{font-size:13px;color:#8FA3B0;line-height:1.55;margin:0 0 10px}
-  .wget-instructions code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#E8EDF1}
+  .introwelcome-heading{font-size:19px;font-weight:600;color:var(--heading);margin:0 0 8px}
+  .wget-instructions{font-size:13px;color:var(--muted);line-height:1.55;margin:0 0 10px}
+  .wget-instructions code{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--text)}
   .wgetbox .seg{margin:0 0 8px}
-  .seg{display:flex;flex:none;border:1px solid #2B3557;border-radius:4px;overflow:hidden}
-  .seg button{flex:1;font-family:inherit;background:#1E2B4F;border:0;color:#8FA3B0;font-size:12px;padding:6px;cursor:pointer}
-  .seg button.on{background:#EF7256;color:#16110b;font-weight:600}
-  .wgetcmd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;color:#E8EDF1;background:#1E2B4F;border:1px solid #2B3557;border-radius:6px;padding:10px 12px;max-height:240px;overflow:auto;white-space:pre;margin:0 0 12px}
+  .seg{display:flex;flex:none;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .seg button{flex:1;font-family:inherit;background:var(--surface-2);border:0;color:var(--muted);font-size:12px;padding:6px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+  .wgetcmd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;color:var(--text);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:10px 12px;max-height:240px;overflow:auto;white-space:pre;margin:0 0 12px}
   .introwelcome-actions{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
-  .introwelcome-actions button{font-family:inherit;font-size:13.5px;padding:10px 14px;border-radius:6px;border:1px solid #2B3557;background:#18213D;color:#E8EDF1;cursor:pointer}
-  .introwelcome-actions button.primary{background:#EF7256;border-color:#EF7256;color:#16110b;font-weight:600}
+  .introwelcome-actions button{font-family:inherit;font-size:13.5px;padding:10px 14px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--text);cursor:pointer}
+  .introwelcome-actions button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
   .lvlact-fetch{font-weight:600}
 """
 _FETCH_SCRIPTS = ("/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js")
 
-# The portal's own data-type palette (portal/src/state.js TYPE_COL), byte for byte, so the page maps
-# and the SPA map speak one colour language. BBMT's value is the one the portal MEASURED for LP/BB
-# separability and deutan-safety; the page carried a lightened variant of it, which meant the two
-# surfaces coloured the same survey differently and the one with the measurement behind it lost.
-_TYPE_COL = {"LPMT": "#2E8FA3", "BBMT": "#3730B8", "AMT": "#CDA1EC", "GDS": "#C255A0"}
+# The portal's own data-type ramp (portal/src/state.js TYPE_COL and the --lpmt, --bbmt, --amt and
+# --gds tokens), byte for byte, so the page maps and the SPA map speak one colour language. It is a
+# data encoding, not chrome: the same four values in both appearances, because a legend must not
+# change meaning with the theme. Every mark drawn in it takes a var(--dot-edge) stroke (.mm-dots),
+# which is what keeps the lighter hues legible on the light map panel.
+_TYPE_COL = {"LPMT": "#3F88C8", "BBMT": "#FFC14F", "AMT": "#9FCB5A", "GDS": "#CE348A"}
 _TYPE_FALLBACK = "#4FC3D9"
 
 # The portal collections view's member palette (portal/src/drawer.js COLL_PAL), same order. It has
@@ -144,18 +145,14 @@ _TYPE_FALLBACK = "#4FC3D9"
 # same colour and its legend could not disambiguate them (AusLAMP: 14 members, 8 colours, 6 reused).
 _COLL_PAL = ("#2E8FA3", "#EF7256", "#8A5FC0", "#5BAE6A", "#3F6FC4", "#C255A0", "#D9A23B", "#A85454")
 
-# The map panel's own ground, one step CLOSER to the card it sits on than a near-black would be. A
-# darker rectangle inside a lighter card reads as a box on a box, and the eye then finds the
-# rectangle before the coastline. Holding the fill at the card's own token and keeping the rule soft
-# leaves the Australia outline as the only object with an edge, which is what the panel is for.
+# The raster collection card's map colours. The SVG panels take the theme tokens through their
+# classes (.mm-panel, .mm-rule, .mm-coast, .mm-line); a PNG has no theme, so the card is drawn on the
+# dark ground in exactly the dark appearance's --map-panel, --map-line, --coast-fill and --coast-line,
+# and the card and the page it previews in that appearance draw one map.
 _MAP_PANEL = "#18213D"
 _MAP_PANEL_LINE = "#222C4E"
-
-# The coastline's own two colours, declared once because two surfaces draw the same outline in two
-# media: the SVG panels below and the raster collection card. A card that previewed a page whose
-# coastline was a different colour would read as a different map.
-_COAST_FILL = "#1d3140"
-_COAST_LINE = "#3a5266"
+_COAST_FILL = "#1D3140"
+_COAST_LINE = "#3A5266"
 
 # The site's own name, as the structured data and every og:site_name state it. Google labelled the
 # site by its publisher because nothing on it ever named the site itself.
@@ -378,15 +375,22 @@ def _minimap_height(width) -> int:
 
 
 def _outline_paths(p) -> str:
-    """The schematic coast rings and state borders, projected by `p`."""
+    """The schematic coast rings and state borders, projected by `p`. Colours come from the page's
+    theme through the classes, so the geometry carries no colour of its own."""
     def path(ring, close=True):
         d = "M" + "L".join(f"{x},{y}" for x, y in (p(lo, la) for lo, la in ring))
         return d + ("Z" if close else "")
-    coast = "".join(f'<path d="{path(r)}" fill="{_COAST_FILL}" stroke="{_COAST_LINE}" '
-                    f'stroke-width="1"/>' for r in au.COAST)
-    borders = "".join(f'<path d="{path(r, False)}" fill="none" stroke="{_COAST_LINE}" '
-                      f'stroke-width=".8" stroke-dasharray="3 3"/>' for r in au.BORDERS)
+    coast = "".join(f'<path class="mm-coast" d="{path(r)}" stroke-width="1"/>' for r in au.COAST)
+    borders = "".join(f'<path class="mm-line" d="{path(r, False)}" stroke-width=".8" '
+                      f'stroke-dasharray="3 3"/>' for r in au.BORDERS)
     return coast + borders
+
+
+def _map_panel(width, height) -> str:
+    """The panel a map is drawn on: its ground and its frame, as the first element of the SVG so
+    everything after it paints over it. The frame keeps a 1px stroke at any rendered size."""
+    return (f'<rect class="mm-panel mm-rule" x=".5" y=".5" width="{width - 1}" '
+            f'height="{height - 1}" rx="8" vector-effect="non-scaling-stroke"/>')
 
 
 def au_outline_defs(width):
@@ -465,25 +469,24 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
             group.append(dot(pt))
         if group:
             runs.append(f'<g fill="{fill}">{"".join(group)}</g>')
-        dots = f'<g fill-opacity=".9">{"".join(runs)}</g>'
+        dots = f'<g class="mm-dots" fill-opacity=".9">{"".join(runs)}</g>'
     marker = ""
     # The ring is the exact complement of the dot gate: its whole job is to stand in for dots too
-    # small to draw, so it is meaningful when and only when they are suppressed. Keying it off a
-    # point COUNT instead put a ring on every map that happened to be short, including one drawn
-    # from a sampled footprint, where it marked the centroid of a continent.
+    # small to draw, so it is meaningful when and only when they are suppressed. Keyed off a point
+    # COUNT, a ring would land on every short map, including one drawn from a sampled footprint,
+    # where it marks the centroid of a continent.
     if locator and points and not dots_drawn:
         clon = sum(pt[0] for pt in points) / len(points)
         clat = sum(pt[1] for pt in points) / len(points)
         mx, my = p(clon, clat)
-        # Muted, not coral: the ring is a locator hint on a map, and coral is reserved for primary
-        # actions and active states. Same ink as the footprint panel's scale bar,
-        # so the two map annotations read as one layer over the geography.
-        marker = (f'<circle cx="{mx}" cy="{my}" r="9" fill="none" stroke="#8FA3B0" '
+        # Muted ink, never the accent: the ring is a locator hint on a map, and the accent is
+        # reserved for links, active states and focus. The footprint panel's scale bar takes the
+        # same class, so the two map annotations read as one layer over the geography.
+        marker = (f'<circle class="mm-note" cx="{mx}" cy="{my}" r="9" '
                   f'stroke-width="1.4" opacity=".75"/>')
     return (f'<svg viewBox="0 0 {width} {height}"{xlink_ns} role="img" '
-            f'aria-label="{_e(label)}" '
-            f'style="background:{_MAP_PANEL};border:1px solid {_MAP_PANEL_LINE};border-radius:8px">'
-            f'{outline}{dots}{marker}</svg>')
+            f'aria-label="{_e(label)}">'
+            f'{_map_panel(width, height)}{outline}{dots}{marker}</svg>')
 
 
 def _footprint_svg(points, *, width=230) -> str:
@@ -529,10 +532,13 @@ def _footprint_svg(points, *, width=230) -> str:
         if run:
             coast_parts.append(run)
     coast = "".join(
-        '<polyline points="' + " ".join(f"{p(lo, la)[0]},{p(lo, la)[1]}" for lo, la in part)
-        + '" fill="none" stroke="#3a5266" stroke-width="1.2"/>' for part in coast_parts)
-    dots = "".join(f'<circle cx="{p(pt[0], pt[1])[0]}" cy="{p(pt[0], pt[1])[1]}" r="2.1" '
-                   f'fill="{_TYPE_COL.get(pt[2], _TYPE_FALLBACK)}"/>' for pt in points)
+        '<polyline class="mm-line" points="'
+        + " ".join(f"{p(lo, la)[0]},{p(lo, la)[1]}" for lo, la in part)
+        + '" stroke-width="1.2"/>' for part in coast_parts)
+    dots = ('<g class="mm-dots">'
+            + "".join(f'<circle cx="{p(pt[0], pt[1])[0]}" cy="{p(pt[0], pt[1])[1]}" r="2.1" '
+                      f'fill="{_TYPE_COL.get(pt[2], _TYPE_FALLBACK)}"/>' for pt in points)
+            + "</g>")
     # scale bar: a round number close to a third of the panel width, in km at the mid latitude
     km_per_deg = 111.32 * math.cos(math.radians((la0 + la1) / 2))
     panel_km = dlo * (1 - 2 * pad) * km_per_deg
@@ -540,40 +546,59 @@ def _footprint_svg(points, *, width=230) -> str:
     nice = min((1, 2, 5, 10, 20, 50, 100, 200, 500, 1000), key=lambda n: abs(n - target))
     bar_px = nice / (dlo * km_per_deg) * width if dlo * km_per_deg else 0
     y = height - 10
-    scale = (f'<g stroke="#8FA3B0" stroke-width="1.2"><line x1="{pad * width:.1f}" y1="{y}" '
-             f'x2="{pad * width + bar_px:.1f}" y2="{y}"/></g>'
-             f'<text x="{pad * width + bar_px + 5:.1f}" y="{y + 3.5}" fill="#8FA3B0" '
+    scale = (f'<line class="mm-note" x1="{pad * width:.1f}" y1="{y}" '
+             f'x2="{pad * width + bar_px:.1f}" y2="{y}" stroke-width="1.2"/>'
+             f'<text class="mm-label" x="{pad * width + bar_px + 5:.1f}" y="{y + 3.5}" '
              f'font-size="10" font-family="ui-monospace,Menlo,monospace">{nice} km</text>')
-    return (f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Station grid detail" '
-            f'style="background:{_MAP_PANEL};border:1px solid {_MAP_PANEL_LINE};border-radius:8px">'
-            f'{coast}{dots}{scale}</svg>')
+    return (f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Station grid detail">'
+            f'{_map_panel(width, height)}{coast}{dots}{scale}</svg>')
 
 
 # --------------------------------------------------------------------------- page shell
 
 _CSS = """
-  body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:#11182D;color:#C9D4E8;font:16px/1.55 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
+  :root{
+    --bg:#F2F2F1; --surface:#FFFFFF; --surface-2:#F2F3F2; --line:#CED4DA;
+    --text:#333333; --muted:#6C757D; --heading:#282572; --accent:#282572; --accent-ink:#FFFFFF;
+    --lpmt:#3F88C8; --bbmt:#FFC14F; --amt:#9FCB5A; --gds:#CE348A; --dot-edge:#231F20;
+    --ok:#598F39; --part:#9A6B00; --no:#EA1E31; --unk:#6C757D;
+    --map-bg:#DFE6E9; --map-panel:#F4F5F4; --map-line:#CED4DA; --coast-fill:#FFFFFF; --coast-line:#9AA0A6;
+    --shadow:0 1px 3px rgba(35,31,32,.12);
+    --mono:ui-monospace,'SF Mono','Cascadia Mono','Consolas',monospace;
+    --sans:'Libre Franklin',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    color-scheme:light;
+  }
+  :root[data-theme="dark"]{
+    --bg:#11182D; --surface:#18213D; --surface-2:#1E2B4F; --line:#2B3557;
+    --text:#E8EDF1; --muted:#8FA3B0; --heading:#FFFFFF; --accent:#EF7256; --accent-ink:#16110B;
+    --dot-edge:#11182D;
+    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
+    --map-bg:#0F1626; --map-panel:#18213D; --map-line:#222C4E; --coast-fill:#1D3140; --coast-line:#3A5266;
+    --shadow:none;
+    color-scheme:dark;
+  }
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:16px/1.55 var(--sans)}
   main{max-width:840px;width:min(100% - 2.5rem,840px);margin:0 auto;padding:1.6rem 1.25rem 2.2rem;flex:1 0 auto}
   @media(min-width:1180px){main{max-width:1120px;width:min(100% - 2.5rem,1120px)}}
-  a{color:#EF7256}
+  a{color:var(--accent)}
   code{overflow-wrap:anywhere}
-  a:focus-visible,summary:focus-visible{outline:2px solid #EF7256;outline-offset:2px;border-radius:2px}
-  h1{color:#fff;font-size:1.7rem;margin:.5rem 0 .3rem}
-  h2{color:#fff;font-size:1.12rem;margin:1.7rem 0 .5rem}
-  h3{color:#fff;font-size:1rem;margin:1.2rem 0 .4rem}
+  a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+  h1{color:var(--heading);font-size:1.7rem;margin:.5rem 0 .3rem}
+  h2{color:var(--heading);font-size:1.12rem;margin:1.7rem 0 .5rem}
+  h3{color:var(--heading);font-size:1rem;margin:1.2rem 0 .4rem}
   .crumb{font-size:.85rem;opacity:.8}
   .crumb a{opacity:1}
   .pagenav{display:flex;gap:.6rem;margin:.2rem 0 .6rem}
-  .navbtn{background:#18213D;border:1px solid #2B3557;border-radius:6px;color:#C9D4E8;font-size:.85rem;padding:.35rem .9rem;text-decoration:none}
-  .navbtn.map{color:#EF7256}
-  .cite{background:#18213D;border:1px solid #2B3557;border-radius:6px;padding:.7rem .9rem;font-size:.88rem;margin:1rem 0}
-  .cite summary{cursor:pointer;color:#fff;font-weight:600}
+  .navbtn{background:var(--surface);border:1px solid var(--line);border-radius:6px;color:var(--text);font-size:.85rem;padding:.35rem .9rem;text-decoration:none}
+  .navbtn.map{color:var(--accent)}
+  .cite{background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:.7rem .9rem;font-size:.88rem;margin:1rem 0}
+  .cite summary{cursor:pointer;color:var(--heading);font-weight:600}
   .cite p{margin:.6rem 0 0}
-  .cite code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:#C9D4E8}
-  .citeack{color:#8FA3B0;font-size:.82rem}
-  .embargo{background:#3a2a1a;border:1px solid #7a5a2a;border-radius:6px;padding:.6rem .9rem;margin:.8rem 0;color:#e8d5b5;font-size:.9rem}
-  .idxchip{font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#8FA3B0}
-  .typebadge{display:inline-block;font-size:.75rem;font-weight:600;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.12rem .5rem;color:#C9D4E8;vertical-align:middle;margin-left:.55rem}
+  .cite code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:var(--text)}
+  .citeack{color:var(--muted);font-size:.82rem}
+  .embargo{background:var(--surface-2);border:1px solid var(--part);border-radius:6px;padding:.6rem .9rem;margin:.8rem 0;color:var(--text);font-size:.9rem}
+  .idxchip{font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;background:var(--surface-2);border:1px solid var(--line);border-radius:3px;padding:.05rem .4rem;color:var(--muted)}
+  .typebadge{display:inline-block;font-size:.75rem;font-weight:600;letter-spacing:.07em;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:.12rem .5rem;color:var(--text);vertical-align:middle;margin-left:.55rem}
   .lede{font-size:1.05rem;max-width:70ch;margin:.7rem 0 1rem}
   .prose{max-width:70ch}
   /* The collection page reads at the width of its own hero map, not the 70ch measure the survey pages
@@ -588,102 +613,107 @@ _CSS = """
   .hero-maps svg{width:100%;height:auto;display:block}
   .hero-maps .mapcap{grid-column:1/-1}
   .herofacts{display:flex;flex-direction:column;gap:.55rem}
-  .mapcap{font-size:.75rem;color:#8FA3B0;font-family:ui-monospace,Menlo,monospace}
+  .mapcap{font-size:.75rem;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
   @media(max-width:760px){.hero-maps.two{grid-template-columns:1fr}}
   @media(max-width:640px){.hero{grid-template-columns:1fr}}
+  .mm-panel{fill:var(--map-panel)}
+  .mm-rule{stroke:var(--map-line)}
+  .mm-coast{fill:var(--coast-fill);stroke:var(--coast-line)}
+  .mm-line{fill:none;stroke:var(--coast-line)}
+  .mm-dots{stroke:var(--dot-edge);stroke-width:.3}
+  .mm-note{fill:none;stroke:var(--muted)}
+  .mm-label{fill:var(--muted)}
   .cstats{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}
-  .cstat{background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.55rem .9rem;min-width:96px}
-  .cnum{color:#fff;font-size:1.15rem;font-weight:650;font-variant-numeric:tabular-nums}
-  .clab{color:#8FA3B0;font-size:.75rem;text-transform:uppercase;letter-spacing:.07em}
+  .cstat{background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:.55rem .9rem;min-width:96px}
+  .cnum{color:var(--heading);font-size:1.15rem;font-weight:650;font-variant-numeric:tabular-nums}
+  .clab{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.07em}
   dl{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem;margin:1rem 0}
-  dt{color:#8FA3B0}
+  dt{color:var(--muted)}
   dd{margin:0}
-  .lvl{border:1px solid #2B3557;border-radius:8px;padding:.7rem .9rem;margin:.6rem 0}
+  .lvl{background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:.7rem .9rem;margin:.6rem 0}
   .lvlhead{display:flex;align-items:center;gap:.6rem;margin-bottom:.35rem}
-  .lvlbadge{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;font-weight:600;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.1rem .45rem;color:#4FC3D9}
-  .lvlname{color:#fff;font-weight:600;font-size:.95rem}
+  .lvlbadge{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;font-weight:600;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:.1rem .45rem;color:var(--accent)}
+  .lvlname{color:var(--heading);font-weight:600;font-size:.95rem}
   .dtbl{border-collapse:collapse;font-size:.88rem;font-variant-numeric:tabular-nums;width:100%}
-  .dtbl th{text-align:left;color:#8FA3B0;font-weight:600;padding:.24rem .8rem .24rem 0;border-bottom:1px solid #2B3557}
-  .dtbl td{padding:.24rem .8rem .24rem 0;border-bottom:1px solid #1E2B4F}
+  .dtbl th{text-align:left;color:var(--muted);font-weight:600;padding:.24rem .8rem .24rem 0;border-bottom:1px solid var(--line)}
+  .dtbl td{padding:.24rem .8rem .24rem 0;border-bottom:1px solid var(--line)}
   .dtbl tr:last-child td{border-bottom:none}
-  .dtbl td:nth-child(2){font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:#8FA3B0}
+  .dtbl td:nth-child(2){font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:var(--muted)}
   .lvlcover{margin:.2rem 0;font-size:.9rem}
-  .lvlhost{margin:.15rem 0;font-size:.82rem;color:#8FA3B0}
+  .lvlhost{margin:.15rem 0;font-size:.82rem;color:var(--muted)}
   .lvlact{margin:.45rem 0 .1rem;font-size:.9rem}
   .tscroll{overflow-x:auto}
   .integrity{margin:.5rem 0 .1rem;font-size:.82rem}
-  .integrity summary{cursor:pointer;color:#8FA3B0}
-  .shacell{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:#8FA3B0;word-break:break-all}
-  .tspath{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:#8FA3B0;word-break:break-all}
+  .integrity summary{cursor:pointer;color:var(--muted)}
+  .shacell{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:var(--muted);word-break:break-all}
+  .tspath{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:var(--muted);word-break:break-all}
   .collmap{position:relative;margin:1rem 0 .4rem;max-width:var(--collw)}
   .collmap svg{width:100%;height:auto;display:block}
   .collmark{position:absolute;left:14px;bottom:14px;height:28px;width:auto;opacity:.82;pointer-events:none}
   @media(max-width:640px){.collmark{left:9px;bottom:9px;height:20px}}
-  .colllegend{font-size:.78rem;color:#8FA3B0;display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:.2rem 0 1rem}
+  .colllegend{font-size:.78rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:.2rem 0 1rem}
   .collhero{display:grid;grid-template-columns:minmax(0,1fr) minmax(190px,230px);gap:1.2rem;align-items:start}
   .collhero .cstats{flex-direction:column;margin:1rem 0 0}
   @media(max-width:860px){.collhero{grid-template-columns:1fr;gap:0}.collhero .cstats{flex-direction:row}}
   .memlist{display:flex;flex-direction:column;gap:.5rem;margin:.6rem 0 1rem}
-  .mem{border-bottom:1px solid #1E2B4F;padding-bottom:.5rem}
+  .mem{border-bottom:1px solid var(--line);padding-bottom:.5rem}
   .mem:last-child{border-bottom:none}
   .memt{margin:0 0 .1rem;font-size:.98rem;font-weight:650}
-  .memfacts{margin:0;font-size:.84rem;color:#8FA3B0;font-variant-numeric:tabular-nums}
-  .run{border:1px solid #2B3557;border-radius:8px;padding:.7rem .9rem;margin:.6rem 0}
+  .memfacts{margin:0;font-size:.84rem;color:var(--muted);font-variant-numeric:tabular-nums}
+  .run{background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:.7rem .9rem;margin:.6rem 0}
   .run dl{margin:.3rem 0 .6rem}
-  .runid{color:#fff;font-size:.95rem;margin:0}
-  .doi{font-size:.8rem;color:#8FA3B0;margin-top:.35rem}
-  .doi a{color:#4FC3D9}
+  .runid{color:var(--heading);font-size:.95rem;margin:0}
+  .doi{font-size:.8rem;color:var(--muted);margin-top:.35rem}
+  .doi a{color:var(--accent)}
   .people{display:flex;flex-direction:column;gap:.35rem;margin:.6rem 0;font-size:.88rem}
   .person{display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem}
-  .orcid{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;color:#4FC3D9}
-  .rolechip{font-size:.75rem;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#8FA3B0}
+  .orcid{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;color:var(--accent)}
+  .rolechip{font-size:.75rem;background:var(--surface-2);border:1px solid var(--line);border-radius:3px;padding:.05rem .4rem;color:var(--muted)}
   .pub{font-size:.88rem;margin:.4rem 0}
-  .pub i{color:#8FA3B0}
+  .pub i{color:var(--muted)}
   .stbl{border-collapse:collapse;width:100%;font-size:.82rem;font-variant-numeric:tabular-nums}
-  .stbl th{text-align:left;color:#8FA3B0;font-weight:600;padding:.3rem .5rem .3rem 0;border-bottom:1px solid #2B3557;position:sticky;top:0;background:#11182D}
-  .stbl td{padding:.2rem .5rem .2rem 0;border-bottom:1px solid #1E2B4F}
-  .stbl th:first-child,.stbl td:first-child{position:sticky;left:0;background:#11182D;z-index:2;padding-left:.2rem}
+  .stbl th{text-align:left;color:var(--muted);font-weight:600;padding:.3rem .5rem .3rem 0;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)}
+  .stbl td{padding:.2rem .5rem .2rem 0;border-bottom:1px solid var(--line)}
+  .stbl th:first-child,.stbl td:first-child{position:sticky;left:0;background:var(--surface);z-index:2;padding-left:.2rem}
   .stbl th:first-child{z-index:3}
   .stbl td:nth-child(2),.stbl td:nth-child(3),.stbl td:nth-child(4),.stbl td:nth-child(5){font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.76rem}
-  .pidcell,.pidcell a{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:#4FC3D9}
-  .ts-y{color:#5BAE6A;font-family:ui-monospace,Menlo,monospace;font-size:.76rem}
-  .ts-n{color:#8FA3B0}
-  .scroll{max-height:360px;overflow:auto;border:1px solid #2B3557;border-radius:6px;padding:0 .8rem}
+  .pidcell,.pidcell a{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:var(--accent)}
+  .ts-y{color:var(--ok);font-family:ui-monospace,Menlo,monospace;font-size:.76rem}
+  .ts-n{color:var(--muted)}
+  .scroll{max-height:360px;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:0 .8rem}
   ul{padding-left:1.2rem}
-  header.site{display:flex;align-items:center;line-height:normal;gap:12px 16px;padding:8px 18px;border-bottom:1px solid #2B3557;flex-wrap:wrap;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+  header.site{display:flex;align-items:center;line-height:normal;gap:12px 16px;padding:8px 18px;background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap;font-family:var(--sans)}
   header.site,header.site *{box-sizing:border-box}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
   .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
-  .brandmark{height:30px;width:30px;display:block;flex:none}
-  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:#E8EDF1;text-decoration:none}
-  .tagline{color:#8FA3B0;font-size:12.5px}
+  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--heading);text-decoration:none}
+  .tagline{color:var(--muted);font-size:12.5px}
   header.site nav{display:flex;gap:6px;flex-wrap:wrap}
-  header.site nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;background:#1E2B4F;border:1px solid #2B3557;color:#E8EDF1;font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;text-decoration:none}
-  header.site nav a:hover{border-color:#EF7256}
-  header.site nav a.active{color:#16110b;background:#EF7256;border-color:#EF7256}
-  .about,.contribute{color:#EF7256;font-size:13px;text-decoration:none;border:1px solid #2B3557;padding:6px 11px;border-radius:4px;white-space:nowrap}
-  .about:hover,.contribute:hover{border-color:#EF7256}
-  .counts{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#8FA3B0;font-variant-numeric:tabular-nums}
-  .counts b{color:#E8EDF1}
+  header.site nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;text-decoration:none}
+  header.site nav a:hover{border-color:var(--accent)}
+  header.site nav a.active{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
+  .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
+  .about:hover{border-color:var(--accent)}
+  .orglockup{display:block;line-height:0}
+  .orglockup img{height:40px;width:auto;max-width:100%;object-fit:contain}
+  .theme-dark{display:none}
+  :root[data-theme="dark"] .theme-light{display:none}
+  :root[data-theme="dark"] .theme-dark{display:block}
+  .counts{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .counts b{color:var(--text)}
   @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
-  /* The centre is the region that gives: the machine-readable link and the lockup are each a fixed
-     object that reads badly broken or badly scaled, and the acknowledgement is prose that does not.
-     THIS IS ONE RULE SET WITH portal/index.html, character for character with the four colour tokens
-     resolved to the literals this tier writes, so nothing may be tuned for this tier alone;
-     portal/tests/test_footer_regions.py holds all seven surfaces identical. The equal zero-basis side
-     zones, the queries on the FOOTER's own width, the centre-aligned regions and the lockup's
-     max-width cap are each load-bearing. The footer is STICKY rather than fixed, so it keeps its own
-     place in flow and no page owes it a padding-bottom; its stacking order is stated because a
-     station table's frozen first column declares z-index:2, and below 560px it returns to flow. */
-  footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid #2B3557;font-size:12.5px;color:#8FA3B0;line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:#11182D;z-index:3}
-  footer a{color:#EF7256;text-decoration:none}
+  /* One rule set with portal/index.html's footer, held by portal/tests/test_footer_regions.py, so
+     nothing here is tuned for this tier alone. The equal zero-basis side zones and the queries on
+     the footer's own width are load-bearing. It is sticky rather than fixed, so it keeps its place
+     in flow; its z-index clears a station table's frozen first column, and below 560px it returns
+     to flow. */
+  footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--surface);z-index:3}
+  footer a{color:var(--accent);text-decoration:none}
   .fleft{flex:1 1 0;min-width:0}
   .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
-  .fright{flex:1 1 0;min-width:0;text-align:right}
-  .orglogo{display:inline-block;line-height:0}
-  .orglogo img{height:30.8px;width:auto;max-width:100%;object-fit:contain;display:block}
+  .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
@@ -707,32 +737,32 @@ _INDEX_CSS = """
   main{max-width:920px;width:min(100% - 2.5rem,920px)}
   @media(min-width:1180px){main{max-width:920px;width:min(100% - 2.5rem,920px)}}
   .idxlede{max-width:62ch;margin:.2rem 0 .1rem}
-  .idxsum{color:#8FA3B0;font-size:.92rem;font-variant-numeric:tabular-nums;margin:.2rem 0 .2rem}
+  .idxsum{color:var(--muted);font-size:.92rem;font-variant-numeric:tabular-nums;margin:.2rem 0 .2rem}
   .idxact{font-size:.9rem;margin:.2rem 0 1.1rem}
   .idxctl{display:flex;flex-wrap:wrap;gap:.5rem .8rem;align-items:end;margin:.9rem 0 .2rem}
-  .idxctl label{display:flex;flex-direction:column;gap:.15rem;font-size:.78rem;color:#8FA3B0}
+  .idxctl label{display:flex;flex-direction:column;gap:.15rem;font-size:.78rem;color:var(--muted)}
   .idxctl .idxq{flex:1 1 16rem}
-  .idxctl input,.idxctl select{font:inherit;font-size:.9rem;color:#C9D4E8;background:#18213D;border:1px solid #2B3557;border-radius:6px;padding:.35rem .55rem;min-width:0}
-  .idxctl input:focus-visible,.idxctl select:focus-visible{outline:2px solid #EF7256;outline-offset:1px}
-  .idxctl .idxshown{flex:1 0 100%;margin:.2rem 0 .4rem;font-size:.85rem;color:#8FA3B0;font-variant-numeric:tabular-nums}
+  .idxctl input,.idxctl select{font:inherit;font-size:.9rem;color:var(--text);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:.35rem .55rem;min-width:0}
+  .idxctl input:focus-visible,.idxctl select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .idxctl .idxshown{flex:1 0 100%;margin:.2rem 0 .4rem;font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
   .idxctl .idxshown a{margin-left:.6rem}
   .idxlist{display:flex;flex-direction:column;gap:.7rem;margin:0 0 1rem}
-  .idxcard{position:relative;display:grid;grid-template-columns:115px 1fr;gap:.9rem;align-items:start;background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.7rem .9rem}
+  .idxcard{position:relative;display:grid;grid-template-columns:115px 1fr;gap:.9rem;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:.7rem .9rem}
   .idxcard svg{width:100%;height:auto;display:block}
-  .idxcard:hover,.idxccard:hover{background:#1B2547;border-color:#3E4C7D}
-  .idxt{color:#fff;font-size:1rem;font-weight:650;margin:0 0 .15rem}
+  .idxcard:hover,.idxccard:hover{background:var(--surface-2);border-color:var(--accent)}
+  .idxt{color:var(--heading);font-size:1rem;font-weight:650;margin:0 0 .15rem}
   .idxt a{text-decoration:none}
-  .idxt a::after{content:"";position:absolute;inset:0;border-radius:8px}
-  .idxgo{position:absolute;right:.9rem;bottom:.7rem;color:#EF7256;opacity:0}
+  .idxt a::after{content:"";position:absolute;inset:0;border-radius:4px}
+  .idxgo{position:absolute;right:.9rem;bottom:.7rem;color:var(--accent);opacity:0}
   .idxcard:hover .idxgo{opacity:1}
   .idxorg{font-size:.82rem;margin:0 0 .3rem}
-  .idxorgn{color:#B4C2CC}
-  .idxloc{color:#8FA3B0}
+  .idxorgn{color:var(--text)}
+  .idxloc{color:var(--muted)}
   .idxfacts{font-size:.82rem;margin:0;font-variant-numeric:tabular-nums}
   .sep{padding:0 .4em}
-  .idxdoi{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#4FC3D9}
+  .idxdoi{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;background:var(--surface-2);border:1px solid var(--line);border-radius:3px;padding:.05rem .4rem;color:var(--accent)}
   .idxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1rem;margin:0 0 1rem}
-  .idxccard{position:relative;background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.9rem 1rem}
+  .idxccard{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:.9rem 1rem}
   .idxccard svg{width:100%;height:auto;display:block;margin:.5rem 0}
   .idxccard .idxact{margin:.2rem 0 0}
   .idxccard .idxact a{position:relative;z-index:1}
@@ -748,56 +778,53 @@ _NAV_TABS = (("navMap", "Map", "/"),
              ("navSurveys", "Surveys", "/surveys"),
              ("navCollections", "Collections", "/collections"))
 
-def _site_header(active="", status="") -> str:
-    """The ONE header, everywhere: the SPA header's three-part division rendered as static links.
 
-    Left is the AusMT identity and links the root. The centre carries the three filled application
-    tabs with the CURRENT page's tab in the active state, and beside them the two smaller outlined
-    supporting controls: the three tabs are the application, About and Contribute are functions
-    around it, which is why the two groups look different. The right zone is the status slot, which is
-    CONTEXTUAL (see the callers) while the shell around it is identical.
+def _site_header(active="") -> str:
+    """The ONE header, everywhere: portal/index.html's header with the tabs rendered as links.
 
-    THE FETCHED ASSET, WHICH IS ONE AND NAMED. The identity zone opens with the AusMT mark, the same
-    file and the same markup the SPA header carries, so a reader arriving on a survey page from a
-    search result meets the site's own identity rather than a wordmark alone. It is a SAME-ORIGIN
-    path served by the portal image beside these pages: not a build-time read, not an external fetch,
-    and not 180 circles inlined into 2,655 documents. Everything else in this header stays inline,
-    and the src allow-list in engine/tests/test_index_pages.py names this path and nothing else.
+    Left is the AusMT wordmark linking the root, then the tagline, and nothing else: the identity
+    zone carries no mark. The centre carries the three filled application tabs with the CURRENT
+    page's tab in the active state, and About beside them as the smaller outlined supporting
+    control. The right zone is the AuScope and NCRIS lock-up, linking the parent organisation in a
+    new tab; it is the header's only AuScope presence, the same on every page, and a page's
+    contextual status rides the footer instead.
 
-    NO AuScope parent mark closes the right zone, on this header or any other on the site: the
-    relationship is stated in words, in the footer this sheet also emits and in About's "Who enables
-    AusMT" section, and a symbol repeated in a corner says nothing either of those does not. The right
-    zone keeps the contextual status slot alone.
+    THE FETCHED ASSETS ARE NAMED. The lock-up is a PAIR of same-origin files, the AuScope brand
+    kit's own colour and white PNGs, drawn 40px tall, the height of the tabs. The .theme-light and
+    .theme-dark rules show the one that matches <html data-theme>, and the white file never sits on
+    the light ground. Both are served by the portal image beside these pages: not a build-time read
+    and not an external fetch. engine/tests/test_index_pages.py holds the header's src allow-list
+    to these two files.
 
-    VERSION SKEW, STATED HONESTLY FOR THE FIRST DEPLOY. /vendor/* is served from the portal image and
-    the pages tree from the data volume, so the two can be a deploy apart. Once both carry the mark
-    that shows as a one-deploy-old logo, which is the acceptable failure mode for a logo and for
-    nothing else in this tier. On the FIRST deploy it is worse than that, because the file is new: a
-    pages tree rebuilt from this commit against a portal image that predates it asks for a mark the
-    image does not serve, and every page renders the alt text instead. So the portal image and the
-    data rebuild go out in the same pass, image first, and /vendor/brand/ausmt-mark.svg and the
-    footer's /vendor/auscope-ncris-white.png each answering 200 with an image type is the check
-    before the pages tree is swapped.
+    VERSION SKEW. /vendor/* and /src/* are served from the portal image and the pages tree from the
+    data volume, so the two can be a deploy apart. A pages tree that names a file the running image
+    does not serve renders alt text in place of an image and loses its appearance script, so the
+    portal image goes out first, and /vendor/auscope-ncris-colour.png, /src/theme.js and
+    /vendor/auscope/auscope-mark.svg (the collection figure's corner mark) each answering 200 is the
+    check before the pages tree is swapped.
 
-    The AusMT mark is a fixed 30x30 box inside the zero-basis .hleft zone, so the identity block
-    cannot move the centre tab group: a zero-basis side hands its leftover space out evenly whatever
-    it holds (tests/test_header_geometry_parity.py)."""
+    The identity block sits inside the zero-basis .hleft zone, so it cannot move the centre tab
+    group: a zero-basis side hands its leftover space out evenly whatever it holds
+    (portal/tests/test_header_geometry_parity.py). The lock-up anchor and the About control are
+    each one unbroken literal, because that pin reads this file's SOURCE against portal/index.html's
+    header, character for character."""
     tabs = "".join(
-        f'<a id="{i}" href="{h}"' + (' class="active"' if i == active else "") + f">{lbl}</a>"
+        f'      <a id="{i}" href="{h}"' + (' class="active"' if i == active else "") + f">{lbl}</a>\n"
         for i, lbl, h in _NAV_TABS)
     return ('<header class="site">\n'
-            # One unbroken literal on purpose: portal/tests/test_header_geometry_parity.py holds this
-            # markup character-identical against portal/index.html's own, and it reads this file's
-            # SOURCE (the pages sheet cannot be imported without the engine's path set up).
-            '<div class="hzone hleft">'
-            '<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">'
-            '<a class="wordmark" href="/">AusMT</a>'
-            '<span class="tagline">Australia\'s Magnetotelluric Data Portal</span></div>\n'
-            f'<div class="hzone hcenter"><nav>{tabs}</nav>'
-            '<a class="about" href="/about.html">About</a>'
-            f'<a class="contribute" href="/add-survey.html">Contribute a survey {_ARROW_FWD}</a>'
-            "</div>\n"
-            f'<div class="hzone hright">{status}</div>\n'
+            '  <div class="hzone hleft">\n'
+            '    <a class="wordmark" href="/">AusMT</a>\n'
+            '    <div class="tagline">Australia\'s Magnetotelluric Data Portal</div>\n'
+            '  </div>\n'
+            '  <div class="hzone hcenter">\n'
+            '    <nav>\n'
+            f'{tabs}'
+            '    </nav>\n'
+            '    <a class="about" href="/about.html">About</a>\n'
+            '  </div>\n'
+            '  <div class="hzone hright">\n'
+            '    <a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a>\n'
+            '  </div>\n'
             "</header>\n")
 
 
@@ -806,62 +833,46 @@ def _site_header(active="", status="") -> str:
 _MTCAT_HREF = "/data/mtcat.json"
 
 
-def _site_footer(build=None) -> str:
-    """The site's ONE footer, three regions, identical on every page in this tier and on the SPA.
+def _site_footer(status="") -> str:
+    """The site's ONE footer, three regions, the same on every page in this tier and on the SPA.
 
     The left link is the catalogue itself, not the machine-readable document for the page a reader
     is standing on: a per-page document belongs in the body, and a survey and a station page each
     carry their own record under "Identifiers and provenance". The arrow is the leaves-this-page one,
-    because the link hands over a JSON document rather than another page of the site.
+    because the link hands over a JSON document rather than another page of the site. It takes no
+    target, so a new tab means one thing in this footer: the link leaves AusMT.
 
-    The centre states who enables AusMT and then carries the attribution and the licence note. The
-    URL text is the only link in the line: it is the reader-legible form of the address, so it says
-    where it goes without a title attribute or a rule about link colour. The build identity is not
-    printed here: the commit sha spoke to operators, not to the readers a public footer is for, and
-    build_provenance.json still carries it. The `build` argument is kept so callers do not change
-    and a future /build page has its input.
-
-    The right region is the parent organisation's full AuScope-NCRIS lockup. It links where the
-    centre's URL text links, because a reader who clicks either has asked the same question. The
-    image is SAME-ORIGIN and vendored beside the header's two marks, so this states a relationship
-    without taking a runtime dependency on the organisation's own host. Its display height is CSS;
-    the file ships at the brand kit's own resolution.
-
-    BOTH ANCHORS TO THAT ADDRESS OPEN IN A NEW TAB, and neither hands the opened page a handle on
+    The centre states who enables AusMT and carries the licence note. The organisation's name is the
+    only link in the line, to https://www.auscope.org.au, so the footer carries one anchor to that
+    address and no address as text. It opens in a new tab and hands the opened page no handle on
     this one: target="_blank" grants window.opener, from which the opened document could navigate
     the tab it came from, and noreferrer keeps a reader's path through the catalogue out of a third
-    party's logs. The MTCAT link takes no target, so a new tab means one thing here: the link leaves
-    AusMT. The pair is spelt exactly as the portal's six documents spell it.
+    party's logs. The build identity is not printed here; build_provenance.json and /about.html
+    carry it.
 
-    Neither Releases nor About this build belongs in this region: /about.html carries the running
-    build's identity, the software licence and the route to the citable releases in its own body.
-
-    The year is a literal, the one the SPA's own footer carries. It is deliberately not a build-time
-    value: a copyright year that moves when a page is rebuilt makes every page in the tree differ
-    from the tree beside it for a reason no reader can see.
+    The right region is the page's contextual `status` and nothing else. The status is what the
+    page can actually state (the surveys hub's catalogue counts) and is empty elsewhere, because a
+    counter that cannot count the page it is on is decoration pretending to be data. An empty
+    region still takes its zone's share of the row, which keeps the acknowledgement on the page's
+    axis. The footer carries no appearance control: the choice lives on /about.html and in the
+    map's welcome dialog, both wired by /src/theme.js.
 
     IT IS WRITTEN AFTER </main>, as the page's own bottom edge rather than the reading column's: a
     footer inside main is not a contentinfo landmark, and set in the 840px measure it could not hold
     the bold acknowledgement on one line at any viewport. The rules that keep it on screen are in
     _CSS beside the ones that lay its regions out."""
     return ("\n<footer>\n"
-            f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">Machine-readable record '
-            f'(MTCAT JSON) {_ARROW_OUT}</a></div>\n'
-            '<div class="fzone fcenter">AusMT is enabled by AuScope &#183; '
+            f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">MTCAT JSON {_ARROW_OUT}</a></div>\n'
+            '<div class="fzone fcenter">AusMT is enabled by '
             '<a href="https://www.auscope.org.au" target="_blank" '
-            'rel="noopener noreferrer">www.auscope.org.au</a> &#183; '
-            "&#169; 2026 AuScope and the AusMT contributors &#183; "
+            'rel="noopener noreferrer">AuScope</a> &#183; '
             "Data licences vary by survey</div>\n"
-            '<div class="fzone fright">'
-            '<a class="orglogo" href="https://www.auscope.org.au" target="_blank" '
-            'rel="noopener noreferrer">'
-            '<img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" '
-            'width="1919" height="325"></a></div>\n'
+            f'<div class="fzone fright">{status}</div>\n'
             "</footer>\n")
 
 
 def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
-           og_image=None, base="", extra_css="", nav="", build=None,
+           og_image=None, base="", extra_css="", nav="",
            status="", scripts=()) -> str:
     # `jsonld` is ONE node or a list of nodes, emitted in order as one script element each. Order is
     # load-bearing: the entity node stays first on every page that carries one, so anything reading
@@ -907,27 +918,29 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="UTF-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+        # The appearance script is the FIRST script in the head and runs before the stylesheet is
+        # parsed, so the first paint is already in the reader's chosen theme. It is a same-origin
+        # file because the CSP's script-src is 'self' alone, and nothing on the page calls it.
+        '<script src="/src/theme.js"></script>\n'
         f"{robots}"
         f"<title>{_e(title)}</title>\n"
         f"{desc_meta}"
         f'<link rel="canonical" href="{_e(canonical)}">\n'
         # ICON LINKS. Three same-origin portal paths, absolute because a page served at
         # /surveys/<slug> cannot resolve a relative vendor path, and root-anchored on /favicon.ico
-        # because a browser that reads no SVG icon link asks the site root for that name.
-        # The version query on each href is that file's own content hash, written here by
-        # portal/tools/gen_brand.py: /vendor/* carries a thirty day cache, so a regenerated icon under
-        # an unchanged URL is answered from that cache.
+        # because a browser that reads no SVG icon link asks the site root for that name. The block
+        # is the one every portal document carries, href for href.
         '<link rel="icon" href="/favicon.ico" sizes="any">\n'
         '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">\n'
-        '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">\n'
+        '<link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">\n'
         f"{og}"
         f"{ld}"
         f"<style>{_CSS}{extra_css}</style>\n</head>\n<body>\n"
-        f"{_site_header(nav, status)}"
+        f"{_site_header(nav)}"
         "<main>\n"
         f"{body}"
         "</main>\n"
-        f"{_site_footer(build)}"
+        f"{_site_footer(status)}"
         f"{scripts_html}"
         "</body>\n</html>\n"
     )
@@ -1235,7 +1248,7 @@ def survey_dataset_stub(*, slug, base, title, kind, blurb, smeta):
 
 
 def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_access,
-                base, extent=None, discovery=None, build=None, og_image=None) -> str:
+                base, extent=None, discovery=None, og_image=None) -> str:
     """`og_image` is the absolute URL of the card the EMITTER has already written for this survey,
     or None for the portal's root card. It must never be derived from "is Pillow importable", which is
     a claim about the environment rather than about the file: a card whose write failed would leave the
@@ -1384,7 +1397,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         panels.append(
             f'<div class="lvl"><div class="lvlhead"><span class="lvlbadge">{badge}</span>'
             f'<span class="lvlname">{_e(name)}</span></div>'
-            f'<p class="lvlcover"><b style="color:#fff">{len(rows)} of {n_stations} stations'
+            f'<p class="lvlcover"><b style="color:var(--heading)">{len(rows)} of {n_stations} stations'
             f"</b>{per}</p>"
             f'<p class="lvlhost">Hosted at NCI</p>'
             f'<p class="lvlact"><a class="lvlact-fetch" href="/#/survey/{_e(slug)}?fetch={_e(level_key)}" '
@@ -1466,7 +1479,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         if c.get("pb"):
             parts.append(f"{_e(c['pb'])}.")
         cite = ('<details class="cite"><summary>Cite this survey</summary>'
-                '<p class="citeline"><span style="color:#8FA3B0">Cite as:</span> '
+                '<p class="citeline"><span style="color:var(--muted)">Cite as:</span> '
                 + " ".join(parts)
                 + f' <code>{_e(_citation_locator(smeta, url))}</code></p>'
                 + f'<p class="citeack">{_ACKNOWLEDGEMENT}</p></details>')
@@ -1685,7 +1698,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                   description=desc_meta, canonical=url, body=body,
                   jsonld=[ld, _breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys"),
                                                  (title, f"/surveys/{slug}")])],
-                  og_image=og_image, base=base, nav="navSurveys", build=build,
+                  og_image=og_image, base=base, nav="navSurveys",
                   extra_css=(_FETCH_CSS if has_fetch else ""),
                   scripts=(_FETCH_SCRIPTS if has_fetch else ()))
 
@@ -1819,7 +1832,7 @@ def _station_kind(dtype) -> str:
     return "geomagnetic depth sounding" if dtype == "GDS" else "magnetotelluric"
 
 
-def station_page(*, doc, survey_slug, base, ts_levels=None, build=None) -> str:
+def station_page(*, doc, survey_slug, base, ts_levels=None) -> str:
     aid = doc["ausmt_id"]
     st = doc.get("station") or aid
     survey = doc.get("survey") or survey_slug
@@ -1864,7 +1877,7 @@ def station_page(*, doc, survey_slug, base, ts_levels=None, build=None) -> str:
                   description=f"{kind_lead} station {st} from the {survey} survey: "
                               "transfer function data, metadata and downloads on AusMT.",
                   canonical=url, body=body, noindex=True, base=base,
-                  nav="navSurveys", build=build)
+                  nav="navSurveys")
 
 
 def _member_colours(n):
@@ -1928,11 +1941,12 @@ def _collection_scatter(member_labels, member_points, title, *, width=560, legen
     # part of this fixed-extent panel that is always open ocean (the nearest coastline in the bottom
     # 120 viewBox units is Tasmania, at x=326 of 560), so the overlay cannot reach the geography at
     # any rendered width. The legend is a sibling of the figure, so it is out of reach by structure.
-    # This is the legend=True form alone: the hub card has no panel padding to spare.
+    # This is the legend=True form alone: the hub card has no panel padding to spare. The mark is a
+    # pair, the inked file for the light map panel and the white one for the dark, and the theme
+    # rules show the one that matches the page; the white file never sits on the light panel.
     return (f'<figure class="collmap">{svg}'
-            # One unbroken literal, held character-identical against the SPA's own
-            # (portal/tests/test_collection_map_mark.py).
-            '<img class="collmark" src="/vendor/auscope-icon-white.png" alt="AuScope" width="27" height="28">'
+            # One unbroken literal: portal/tests/test_collection_map_mark.py reads this source.
+            '<img class="collmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="42" height="42"><img class="collmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="42" height="42">'
             "</figure>"
             f'<p class="colllegend">{"".join(legend_rows)}</p>')
 
@@ -1971,7 +1985,7 @@ def _prose_of(coll, key) -> str:
 
 
 def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None,
-                    member_facts=None, level_counts=None, formats=None, build=None,
+                    member_facts=None, level_counts=None, formats=None,
                     og_image=None, member_datasets=None) -> str:
     """The collection page as an EXPLORATORY layer, not a catalogue record.
 
@@ -2157,7 +2171,7 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
                   jsonld=[ld, _breadcrumb(base, [(_SITE_NAME, "/"),
                                                  ("collections", "/collections"),
                                                  (title, f"/collections/{cid}")])],
-                  og_image=og_image, nav="navCollections", build=build)
+                  og_image=og_image, nav="navCollections")
 
 
 # --------------------------------------------------------------------------- the two index pages
@@ -2311,7 +2325,7 @@ def _hub_controls(vocab, *, n_rows) -> str:
         '</form>')
 
 
-def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
+def surveys_index_page(*, rows, base, og_image=None) -> str:
     """The /surveys hub: every published survey as one linked row with the facts a reader chooses
     on. Rendered from the catalogue rollups alone (mtcat.json / surveys.json), so it states nothing
     the served documents do not already publish and needs no survey-metadata read.
@@ -2384,7 +2398,7 @@ def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
     summary = _facts_line([_plural(len(rows), "survey"), _plural(n_stations, "station")])
     desc = (f"Every magnetotelluric survey published on AusMT: {_plural(len(rows), 'survey')} and "
             f"{_plural(n_stations, 'station')}, with coverage, data types, licences and downloads.")
-    # The header's right status slot, in the SPA counter's own grammar (bold figure, muted noun,
+    # The footer's status slot, in the SPA counter's own grammar (bold figure, muted noun,
     # interpunct). The SPA's counter reports LIVE map state, which a static page has none of; this
     # hub does have a count to state, and it is the catalogue's own.
     counts = (f'<div class="counts"><b>{len(rows):,}</b> '
@@ -2403,11 +2417,11 @@ def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
                   jsonld=[_hub_catalogue(name="AusMT surveys", description=desc, url=url,
                                         base=base),
                           _breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys")])],
-                  extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts,
+                  extra_css=_INDEX_CSS, nav="navSurveys", status=counts,
                   og_image=og_image, scripts=_HUB_SCRIPTS)
 
 
-def collections_index_page(*, rows, base, build=None, og_image=None) -> str:
+def collections_index_page(*, rows, base, og_image=None) -> str:
     """The /collections hub. Rows carry: cid, title, description, n_surveys, n_stations, type,
     status, member_labels, member_points {label: [(lon, lat)]}. ONLY the fields the collections
     rollup actually carries are rendered: a collection whose record declares no type or status
@@ -2451,7 +2465,7 @@ def collections_index_page(*, rows, base, build=None, og_image=None) -> str:
                   jsonld=[_hub_catalogue(name="AusMT collections", description=desc, url=url,
                                         base=base),
                           _breadcrumb(base, [(_SITE_NAME, "/"), ("collections", "/collections")])],
-                  extra_css=_INDEX_CSS, nav="navCollections", build=build, og_image=og_image)
+                  extra_css=_INDEX_CSS, nav="navCollections", og_image=og_image)
 
 
 # --------------------------------------------------------------------------- og cards (Pillow)
@@ -3131,7 +3145,7 @@ def _og_hub_card(path, *, kind, title, lines, counts_line):
 
 def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collections,
                bundle_formats, survey_extent, survey_coll,
-               bundle_rows=None, ts_access=None, mtcat=None, build=None) -> int:
+               bundle_rows=None, ts_access=None, mtcat=None) -> int:
     """Write every entity page under <out>/pages/ (and, when Pillow is importable, the per-survey
     link-preview cards under <out>/pages/og/ and the per-collection cards under
     <out>/pages/og/collections/). Inputs are the served documents and rollups the build already
@@ -3239,7 +3253,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                                smeta=smeta, station_docs=docs,
                                bundle_rows=rows or [], ts_access=ts_access,
                                base=base, extent=(survey_extent or {}).get(label),
-                               build=build, og_image=og_image,
+                               og_image=og_image,
                                discovery={"stations": disc_stations.get(slug),
                                           "survey": disc_survey.get(slug)})
         (sdir / f"{slug}.html").write_text(htmlpage, encoding="utf-8")
@@ -3292,7 +3306,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     stdir.mkdir(parents=True, exist_ok=True)
     for doc in station_docs.values():
         (stdir / f"{doc['ausmt_id']}.html").write_text(
-            station_page(doc=doc, survey_slug=doc.get("survey_id"), base=base, build=build,
+            station_page(doc=doc, survey_slug=doc.get("survey_id"), base=base,
                          ts_levels=(ts_access or {}).get(doc["ausmt_id"])), encoding="utf-8")
         n += 1
 
@@ -3359,7 +3373,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                             level_counts=level_counts, og_image=coll_og,
                             member_datasets={s: member_datasets[s] for _lbl, s in members
                                              if s in member_datasets},
-                            formats=sorted(member_formats), build=build),
+                            formats=sorted(member_formats)),
             encoding="utf-8")
         n += 1
         coll_index_rows.append({
@@ -3391,11 +3405,11 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                                  "advertise a card that does not exist")
             hub_og[name] = f"{base}/data/pages/og/{name}.png"
     (sdir / "index.html").write_text(
-        surveys_index_page(rows=index_rows, base=base, build=build,
+        surveys_index_page(rows=index_rows, base=base,
                            og_image=hub_og.get("surveys")), encoding="utf-8")
     n += 1
     (cdir / "index.html").write_text(
-        collections_index_page(rows=coll_index_rows, base=base, build=build,
+        collections_index_page(rows=coll_index_rows, base=base,
                                og_image=hub_og.get("collections")), encoding="utf-8")
     n += 1
     return n

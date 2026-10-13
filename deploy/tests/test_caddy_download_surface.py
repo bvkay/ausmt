@@ -73,9 +73,9 @@ def test_the_icon_urls_are_stable_and_revalidate():
     vendor_blocks = re.findall(r"@vendorAssets \{(.*?)\n\t\}", text, re.S)
     assert len(vendor_blocks) == 2, "one long-lived vendor rule per listener"
     for block in vendor_blocks:
-        assert "not path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png" in block, \
+        assert "not path /vendor/favicon.svg /vendor/auscope/icon-*.png" in block, \
             "the long-lived vendor rule must exclude the icon paths"
-    assert text.count("@iconAssets path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png") == 2
+    assert text.count("@iconAssets path /vendor/favicon.svg /vendor/auscope/icon-*.png") == 2
     assert text.count('header @iconAssets Cache-Control "no-cache"') == 2
     for block in re.findall(r"@revalidate \{(.*?)\n\t\}", text, re.S):
         assert "not path /vendor/*" in block, \

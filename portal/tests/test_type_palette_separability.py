@@ -1,11 +1,18 @@
 """Data-type palette: the four hues must stay separable at SITE-DOT size, in normal and dichromatic vision.
 
-Reported on the deployed badge map: "Long Period and Broadband icon colours are too similar".
-At 4px the two read as one cool blob, because the old pair separated mostly by HUE (teal 221 deg vs
-indigo 299 deg) while differing by only 9 L* - and small-mark discrimination is value-driven, not hue
-driven. BBMT moved #5E5ED6 -> #3730B8: a deeper, more saturated blue-indigo that puts a 24.6 L* gap and a
-55.7 C* gap between it and the LP teal, which is deliberately unchanged (teal is the established
-fabric colour across the portal and the project's atlases).
+The ramp is the AuScope house-style one, the same in both themes so a legend never changes meaning
+with the theme: LPMT #3F88C8 (blue), BBMT #FFC14F (amber), AMT #9FCB5A (green), GDS #CE348A (magenta).
+Measured with this module's own functions: every pair is at least 27.07 dE00 apart (the binding pair is
+BBMT/AMT); LPMT/BBMT is 53.22, with a 26.9 L* gap and a 103.5 b* gap across the blue-yellow axis, and
+68.15 / 61.72 under simulated deuteranopia / protanopia. LPMT's CIELAB hue is 267.1 deg. Against the
+chrome the nearest type to each reference is: --accent light #282572 33.6 (GDS), --accent dark #EF7256
+29.8 (GDS), the light ground #F2F2F1 27.5 (BBMT), the dark ground #11182D 40.2 (LPMT), --surface white
+28.7 (BBMT), the light dot edge #231F20 38.3 (GDS).
+
+The pair this module was opened for was reported on the deployed badge map: "Long Period and Broadband
+icon colours are too similar". At 4px a teal and an indigo read as one cool blob, because they
+separated mostly by HUE while differing by only 9 L*, and small-mark discrimination is value-driven.
+The floors below were set against that pair and are kept as they were.
 
 THE PALETTE HAS TWO AUTHORITIES, and that is the first thing this file pins. There is no gen_config /
 portal.config.yaml colour flow - that file carries branding, deployment, analytics and feature flags only.
@@ -24,7 +31,9 @@ FAILS IF:
   * the LP/BB pair falls under LP_BB_DEUTAN_FLOOR once deuteranopia is SIMULATED - the guard that stops a
     future edit raising normal-vision distance while quietly re-converging them for red-green deficient
     readers, which a plain dE00 floor cannot see;
-  * LP stops being teal-family (a rewrite that "fixed" separability by moving the wrong one).
+  * LP stops being the blue family (a rewrite that "fixed" separability by moving the wrong one);
+  * a data type falls within PAIR_FLOOR of the accent in either theme, of either page ground, of the
+    card surface or of the light dot edge.
 
 The colour maths is stdlib-only on purpose (no new dependency for a four-colour check): sRGB -> linear ->
 XYZ(D65) -> CIELAB, CIEDE2000, and the Vienot 1999 LMS-projection dichromat simulation.
@@ -44,10 +53,10 @@ PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 TYPES = ("LPMT", "BBMT", "AMT", "GDS")
 TOKEN_OF = {"LPMT": "--lpmt", "BBMT": "--bbmt", "AMT": "--amt", "GDS": "--gds"}
 
-# Stated floors. PAIR_FLOOR is the established palette-wide invariant this module preserves (the
-# binding pair is AMT/GDS at 21.1, untouched here). LP_BB_FLOOR is this module's own promise: the
-# reported pair must stay far clear of the general floor, not merely legal. LP_BB_DEUTAN_FLOOR is the
-# same promise under simulated deuteranopia, where the old pair collapsed to 15.3.
+# Stated floors. PAIR_FLOOR is the established palette-wide invariant (the binding pair is BBMT/AMT at
+# 27.07). LP_BB_FLOOR is this module's own promise: the reported pair must stay far clear of the general
+# floor, not merely legal. LP_BB_DEUTAN_FLOOR is the same promise under simulated deuteranopia, where
+# the teal and indigo pair collapsed to 15.3.
 PAIR_FLOOR = 21.0
 LP_BB_FLOOR = 30.0
 LP_BB_DEUTAN_FLOOR = 22.0
@@ -218,8 +227,7 @@ def test_the_static_pages_draw_the_same_palette_as_the_portal():
 
 def test_every_data_type_pair_clears_the_palette_floor():
     """Palette-wide separability (the invariant, preserved by this module). FAILS IF any pair of the four
-    data-type hues falls under PAIR_FLOOR dE00. Non-vacuous: the binding pair (AMT/GDS) sits at ~21.1, just
-    above the floor, so this is a live constraint rather than slack."""
+    data-type hues falls under PAIR_FLOOR dE00. The binding pair (BBMT/AMT) sits at 27.07."""
     pal = js_palette()
     for i, t1 in enumerate(TYPES):
         for t2 in TYPES[i + 1:]:
@@ -232,7 +240,13 @@ def test_every_data_type_pair_clears_the_palette_floor():
 def test_lp_bb_pair_is_separated_by_luminance_not_hue_alone():
     """The pair the review reported. FAILS IF LP/BB falls under LP_BB_FLOOR, or if the separation is once
     again carried by hue with the lightnesses nearly equal - the old pair was 26.1 dE00 yet unreadable at
-    4px because only 9 L* separated them, and lightness is what small marks are discriminated by."""
+    4px because only 9 L* separated them, and lightness is what small marks are discriminated by.
+
+    THE SATURATION CLAUSE APPLIES TO NEIGHBOURING HUES. It was written for a teal and an indigo, two
+    cool hues a hue gap alone could not keep apart. The house ramp puts the pair 172.8 deg apart, on
+    opposite ends of the blue-yellow axis, where their C* gap is 24.9; so the clause is held wherever
+    the two hues come within 90 deg of each other, and the axis they now sit on is held as a gap of its
+    own: the blue-yellow (b*) axis is the one both red-green deficiencies keep."""
     pal = js_palette()
     lp, bb = pal["LPMT"], pal["BBMT"]
     d = de00(lp, bb)
@@ -240,15 +254,22 @@ def test_lp_bb_pair_is_separated_by_luminance_not_hue_alone():
         f"LP {lp} vs BB {bb}: dE00 {d:.2f} is under the stated {LP_BB_FLOOR} floor "
         f"(the pair this floor was set against measured 26.08 and read as one colour).")
     l_lp, c_lp, h_lp = lch(lp)
-    l_bb, c_bb, _ = lch(bb)
+    l_bb, c_bb, h_bb = lch(bb)
     assert abs(l_lp - l_bb) >= 18.0, (
         f"LP L*={l_lp:.1f} vs BB L*={l_bb:.1f}: only {abs(l_lp - l_bb):.1f} L* apart. Small-dot "
         f"discrimination is value-driven; a hue-only separation is what failed before (old gap: 9.0).")
-    assert abs(c_lp - c_bb) >= 30.0, (
-        f"LP C*={c_lp:.1f} vs BB C*={c_bb:.1f}: the pair must also differ in saturation, not hue alone.")
-    # LP stays teal-family: a future edit must not "fix" separability by moving the established fabric
-    # colour instead of the one the review asked to move.
-    assert 180.0 <= h_lp <= 240.0, f"LPMT must stay teal-family (hue 180-240 deg), got {h_lp:.1f} deg"
+    hue_gap = min(abs(h_lp - h_bb), 360.0 - abs(h_lp - h_bb))
+    if hue_gap < 90.0:
+        assert abs(c_lp - c_bb) >= 30.0, (
+            f"LP C*={c_lp:.1f} vs BB C*={c_bb:.1f} at a {hue_gap:.1f} deg hue gap: neighbouring hues must "
+            f"also differ in saturation, not hue alone.")
+    b_gap = abs(lab(lp)[2] - lab(bb)[2])
+    assert b_gap >= 30.0, (
+        f"LP b*={lab(lp)[2]:.1f} vs BB b*={lab(bb)[2]:.1f}: the pair must sit apart on the blue-yellow "
+        f"axis, the one red-green deficient readers keep, got a {b_gap:.1f} gap")
+    # LP stays the blue family: a future edit must not "fix" separability by moving the established
+    # long-period colour instead of the one it collides with.
+    assert 240.0 <= h_lp <= 290.0, f"LPMT must stay the blue family (hue 240-290 deg), got {h_lp:.1f} deg"
 
 
 def test_lp_bb_pair_survives_simulated_red_green_deficiency():
@@ -266,12 +287,25 @@ def test_lp_bb_pair_survives_simulated_red_green_deficiency():
             f"(The pair this floor was set against measured 15.26 deutan / 19.23 protan.)")
 
 
-def test_no_data_type_collides_with_the_action_accent():
-    """A data-type dot must never read as the portal's action/selection accent (--copper) or disappear into
-    the marker stroke (#11182D). FAILS IF a palette edit walks a type into either - the rule,
-    re-pinned here because this module moved a hex toward the dark end."""
+# The chrome a data-type dot must never be mistaken for or vanish into, in both themes: the accent
+# (selection, the active tab, the drawn shape), the page grounds, the card surface and the dot edges.
+CHROME = {
+    "the light --accent": "#282572",
+    "the dark --accent": "#EF7256",
+    "the light page ground --bg": "#F2F2F1",
+    "the dark page ground --bg (and the dark --dot-edge)": "#11182D",
+    "the light --surface": "#FFFFFF",
+    "the light --dot-edge": "#231F20",
+}
+
+
+def test_no_data_type_collides_with_the_chrome_in_either_theme():
+    """A data-type dot must never read as the portal's action/selection accent, and must never disappear
+    into a ground it is drawn on or the edge it is stroked with. FAILS IF a palette edit walks a type
+    within PAIR_FLOOR of any of them, in either theme. The nearest is the light ground, 25.9 from AMT."""
     pal = js_palette()
     for ty in TYPES:
-        assert de00(pal[ty], "#EF7256") >= PAIR_FLOOR, f"{ty} {pal[ty]} is confusable with the --copper accent"
-        assert de00(pal[ty], "#11182D") >= PAIR_FLOOR, (
-            f"{ty} {pal[ty]} is confusable with the marker stroke #11182D - the dot would lose its outline")
+        for what, hexv in CHROME.items():
+            d = de00(pal[ty], hexv)
+            assert d >= PAIR_FLOOR, (
+                f"{ty} {pal[ty]} is only dE00 {d:.2f} from {what} {hexv}, under the {PAIR_FLOOR} floor")

@@ -8,8 +8,8 @@
   var list = document.getElementById("relList");
   if (!loading || !empty || !failed || !list || typeof fetch !== "function") { return; }
 
-  // Same resolution as src/data.js dataUrl() and corpus-stats.js: a deployment may publish its data
-  // elsewhere (AUSMT_CONFIG.data_base_url); blank falls back to the portal's own ./data.
+  // Same resolution as src/data.js dataUrl(): a deployment may publish its data elsewhere
+  // (AUSMT_CONFIG.data_base_url); blank falls back to the portal's own ./data.
   var cfg = window.AUSMT_CONFIG || {};
   var base = String(cfg.data_base_url || "data").replace(/\/+$/, "");
 

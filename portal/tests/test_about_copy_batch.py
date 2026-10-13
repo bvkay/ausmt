@@ -20,9 +20,10 @@ to a single link, the acknowledgement being one copyable line), and by exact str
 words are what the page must carry.
 
 A SECOND COPY BATCH follows it at the foot of this module. That one adds a section rather than
-editing one, so the page's SHAPE is pinned with the words: eight numbered answers in a fixed order,
-the colophon after them, and a contents box that lists exactly those sections in exactly that order.
-A renumbering that leaves the contents box behind is the failure that shape exists to catch.
+editing one, so the page's SHAPE is pinned with the words: eight numbered answers and the Appearance
+section in a fixed order, and a contents box that lists exactly those sections in exactly that order.
+A renumbering that leaves the contents box behind is the failure that shape exists to catch. The
+Appearance section's words and its row are pinned with it.
 
 NOT COVERED HERE (deliberately, and pinned elsewhere): the #api section and its machine-contract
 paragraph, which neither batch touches (tests/test_api_docs_section.py,
@@ -32,6 +33,8 @@ import ast
 import re
 from html.parser import HTMLParser
 from pathlib import Path
+
+from chrome_contract import ABOUT_APPEARANCE, THEME_SCRIPT, flat
 
 ROOT = Path(__file__).resolve().parent.parent   # portal/
 REPO = ROOT.parent
@@ -428,15 +431,16 @@ def test_section_eight_keeps_the_only_route_to_the_releases_page():
 # words: a reader who follows contents entry N expects heading N, and a renumbering that leaves the
 # contents box behind is silent on the page and obvious to the reader.
 
-# The page in order: eight numbered answers, then the colophon. The number is part of the heading a
-# reader sees and part of what the contents box promises, so it is pinned WITH the title rather than
-# beside it.
+# The page in order: eight numbered answers, then section 9, the appearance choice, which is a
+# setting rather than an answer and so closes the page after the hand-off. The number is part of the
+# heading a reader sees and part of what the contents box promises, so it is pinned WITH the title
+# rather than beside it.
 #
-# The page is eight sections and nothing else. "This build" once closed it WITHOUT a number, as a
-# colophon rather than a ninth answer to "what is this site"; it is not on the page. Its two
-# paragraphs that were not build identity moved into the numbered sections that own their subjects,
-# and the route to the citable releases moved into section 8, so nothing the colophon carried is
-# lost except the running build's identity, which is what the rule excludes.
+# The page is these nine sections and nothing else. "This build" once closed it WITHOUT a number, as
+# a colophon to "what is this site"; it is not on the page. Its two paragraphs that were not build
+# identity moved into the numbered sections that own their subjects, and the route to the citable
+# releases moved into section 8, so nothing the colophon carried is lost except the running build's
+# identity, which is what the rule excludes.
 NUMBERED = [
     ("what", "1 \u00b7 What AusMT is"),
     ("who", "2 \u00b7 Who enables AusMT"),
@@ -446,6 +450,7 @@ NUMBERED = [
     ("contribute", "6 \u00b7 Contributing a survey"),
     ("api", "7 \u00b7 Fetching data via API"),
     ("docs", "8 \u00b7 Documentation"),
+    ("appearance", "9 \u00b7 Appearance"),
 ]
 # The lede, carried three times and identically: the page's own subtitle, the meta description and
 # og:description. tests/test_page_metadata.py holds the description to being the lede; this holds
@@ -461,8 +466,11 @@ ACKNOWLEDGEMENT = (
     "Data Portal (https://ausmt.auscope.org.au), enabled by AuScope and the Australian Government "
     "via the National Collaborative Research Infrastructure Strategy (NCRIS).")
 
-LOCKUP_SRC = "/vendor/auscope-ncris-white.png"
+# The brand kit's lock-up pair, the files every header carries, at the artwork's intrinsic size.
+LOCKUP_LIGHT = "/vendor/auscope-ncris-colour.png"
+LOCKUP_DARK = "/vendor/auscope-ncris-white.png"
 LOCKUP_ALT = "AuScope and NCRIS"
+LOCKUP_SIZE = 'width="1919" height="325"'
 
 
 def _sections():
@@ -476,18 +484,18 @@ def _sections():
     return out
 
 
-def test_the_page_is_exactly_eight_numbered_sections():
+def test_the_page_is_exactly_nine_numbered_sections():
     """The page's shape, id and heading together, in document order. FAILS IF a section is added,
     removed, reordered, renamed or renumbered without the rest of the page following it: the numbers
     are consecutive by construction here, because they are pinned inside the heading strings rather
     than derived from them, so a page that inserts an answer and forgets to renumber the ones after
-    it fails on the first heading that moved. FAILS too if the deleted colophon returns as a ninth
+    it fails on the first heading that moved. FAILS too if the deleted colophon returns as a tenth
     section, numbered or not: the list is the whole page and not a prefix of it."""
     got = _sections()
     assert got == NUMBERED, (
         "about.html's sections have drifted from the ruled order:\n"
         + "".join(f"  want {w!r}\n  got  {g!r}\n"
-                 for w, g in zip(NUMBERED, got + [None] * 9)
+                 for w, g in zip(NUMBERED, got + [None] * len(NUMBERED))
                  if w != g))
 
 
@@ -508,6 +516,40 @@ def test_the_contents_box_lists_every_section_in_order():
         f"got {[h for h, _t in entries]}")
     assert all(text for _h, text in entries), (
         f"every contents entry must carry visible text, got {entries}")
+
+
+# Section 9's paragraph as a reader sees it, and the styling that sets its row: muted text with a
+# muted legend, inline labels with a small gap and accent-coloured radios.
+APPEARANCE_COPY = ("Light is the house style. Dark keeps the portal's earlier palette. Follow system "
+                   "takes the choice from your device. The choice is kept in this browser; the welcome "
+                   "panel on the map offers the same choice on a first visit.")
+APPEARANCE_RULES = (
+    ".appearance{border:0;margin:0 0 12px;padding:0;font-size:14px;color:var(--muted)}",
+    ".appearance legend{margin:0 0 6px;padding:0;font-weight:600;color:var(--muted)}",
+    ".appearance label{display:inline-flex;align-items:center;gap:5px;margin:0 14px 0 0;cursor:pointer}",
+    ".appearance input{accent-color:var(--accent)}",
+)
+
+
+def test_section_nine_offers_the_appearance_choice():
+    """The appearance choice's home on a page every header reaches, so a reader who dismissed the
+    welcome dialog can still change it. FAILS if the section's one paragraph drifts from the
+    declared words or gains a sibling, if the section carries a link, if the row is not the contract
+    row or does not follow the paragraph, if About stops loading src/theme.js in its head (the
+    script that wires the radios), or if a rule that styles the row drifts or is declared twice."""
+    section = _section("appearance")
+    paras = [_flat(re.sub(r"<[^>]+>", "", p)).strip() for p in re.findall(r"<p>(.*?)</p>", section, re.S)]
+    assert paras == [APPEARANCE_COPY], (
+        f"section 9 carries one paragraph, the declared words: got {paras!r}")
+    assert "<a " not in section, "section 9 is a setting, not a hand-off: it carries no link"
+    assert flat(section).count(flat(ABOUT_APPEARANCE)) == 1, (
+        f"section 9 must carry the contract row once:\n  want {ABOUT_APPEARANCE!r}")
+    assert section.index("</p>") < section.index("<fieldset"), "the row follows the paragraph"
+    head = RAW.split("</head>", 1)[0]
+    assert THEME_SCRIPT in head, "About must load the script that wires the radios, in its head"
+    css = RAW.split("<style>", 1)[1].split("</style>", 1)[0]
+    for rule in APPEARANCE_RULES:
+        assert css.count(rule) == 1, f"about.html must style the row with {rule!r}, once"
 
 
 def test_the_lede_says_what_the_portal_is_for():
@@ -593,37 +635,50 @@ def test_no_auscope_anchor_on_this_page_is_left_half_paired():
             f"got {tag!r}")
 
 
-def test_section_two_carries_the_official_lockup_the_footer_already_ships():
-    """The lock-up in the body is the SAME committed file every footer on this site carries, named
-    by the same root-relative path. FAILS if it points at a second copy or at a different artwork
-    (two files are two things to keep in step, and the official mark is not ours to redraw), if it
-    loses the alt text, or if it drops the intrinsic size attributes that reserve its box before it
-    loads.
+def test_section_two_carries_the_lockup_pair_the_header_already_ships():
+    """The lock-up in the body is the SAME pair of committed files every header on this site carries,
+    named by the same root-relative paths: the brand kit's colour PNG for the light theme and its white
+    PNG for the dark, of which the theme switch shows one. FAILS if it points at a second copy or at a
+    different artwork (two files are two things to keep in step, and the official mark is not ours to
+    redraw), if the white PNG appears in any slot but the theme-dark variant, where it would sit on the
+    light ground, if a variant loses its alt text, or if either stops declaring the artwork's intrinsic
+    1919 by 325, which reserves its box at the artwork's own proportion before it loads.
 
-    The width is capped in the page rather than in the file: the committed raster is 1919px wide, so
-    without a cap the mark would be five times the reading column. max-width:100% is what keeps it
-    inside a narrow column once the declared width does not fit."""
+    The width is set in the page, 320px, and height:auto lets the height follow it: without that the
+    declared 325 would stand as the height and stretch the artwork. max-width:100% is what keeps it
+    inside a narrow column once the declared width does not fit, and the wrapper takes no line box of
+    its own, so the theme switch can show either variant without a descender gap under it."""
     who = _section("who")
-    m = re.search(r'<img class="orglockup"[^>]*>', who)
+    m = re.search(r'<p class="bodylockup">(.*?)</p>', who, re.S)
     assert m, "section 2 must carry the AuScope-NCRIS lock-up"
-    tag = m.group(0)
-    assert f'src="{LOCKUP_SRC}"' in tag, (
-        f"the body lock-up must name the committed file at {LOCKUP_SRC}, got {tag!r}")
-    assert f'alt="{LOCKUP_ALT}"' in tag, f"the lock-up must carry its alt text, got {tag!r}"
-    assert 'width="1919" height="325"' in tag, (
-        f"the lock-up must declare the committed file's own dimensions, got {tag!r}")
-    assert (ROOT / LOCKUP_SRC.lstrip("/")).is_file(), (
-        f"section 2 names {LOCKUP_SRC}, which the portal does not ship")
-    foot = RAW.split("<footer>", 1)[1].split("</footer>", 1)[0]
-    assert LOCKUP_SRC in foot, (
-        "the body lock-up and the footer's must be the same file; the footer no longer names it")
-    rule = re.search(r"(?m)^\s*\.orglockup\{([^}]*)\}", RAW)
+    imgs = re.findall(r"<img [^>]*>", m.group(1))
+    assert len(imgs) == 2, f"the body lock-up is the light and dark pair, got {imgs!r}"
+    for tag, cls, src in zip(imgs, ("theme-light", "theme-dark"), (LOCKUP_LIGHT, LOCKUP_DARK)):
+        assert f'class="{cls}"' in tag and f'src="{src}"' in tag, (
+            f"the body lock-up's {cls} variant must name {src}, got {tag!r}")
+        assert f'alt="{LOCKUP_ALT}"' in tag, f"the lock-up must carry its alt text, got {tag!r}"
+        assert LOCKUP_SIZE in tag, f"the lock-up must declare its intrinsic {LOCKUP_SIZE}, got {tag!r}"
+        assert (ROOT / src.lstrip("/")).is_file(), f"section 2 names {src}, which the portal does not ship"
+    white = [tag for tag in re.findall(r"<img [^>]*>", who) if LOCKUP_DARK in tag]
+    assert len(white) == 1 and 'class="theme-dark"' in white[0], (
+        f"the white PNG sits on dark grounds only: section 2 names it once, as the theme-dark "
+        f"variant, got {white!r}")
+    header = RAW.split("<header>", 1)[1].split("</header>", 1)[0]
+    assert LOCKUP_LIGHT in header and LOCKUP_DARK in header, (
+        "the body lock-up and the header's must be the same pair; the header no longer names it")
+    wrap = re.search(r"(?m)^\s*\.bodylockup\{([^}]*)\}", RAW)
+    assert wrap and "line-height:0" in wrap.group(1), "the body lock-up's wrapper takes no line box"
+    rule = re.search(r"(?m)^\s*\.bodylockup img\{([^}]*)\}", RAW)
     assert rule, "the body lock-up must carry its own sizing rule"
     body = rule.group(1)
-    assert re.search(r"(?:^|;)width:\d+px", body), (
-        f"the lock-up must declare a body width; the file is 1919px wide, got {body!r}")
+    assert re.search(r"(?:^|;)width:320px(?:;|$)", body), (
+        f"the lock-up must declare its 320px body width, got {body!r}")
+    assert re.search(r"(?:^|;)height:auto(?:;|$)", body), (
+        f"the height must follow the width, or the declared 325 stretches the artwork, got {body!r}")
     assert "max-width:100%" in body, (
         f"the lock-up must not outgrow a narrow reading column, got {body!r}")
+    assert "display" not in body, (
+        f"a display here would outrank the theme switch and show both variants, got {body!r}")
 
 
 def test_section_two_closes_on_operation_and_governance():

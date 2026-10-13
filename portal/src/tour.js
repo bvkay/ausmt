@@ -49,7 +49,7 @@ const TOUR_STEPS=[
    text:"Collections: related surveys grouped, such as AusLAMP and the Australia legacy GDS, each with its combined coverage.",
    enter:_tourEnterMapView},
   {sel:"#map",
-   text:"That's it: find, screen, select, download, cite. Contribute your own survey from Contribute a survey.",
+   text:"That's it: find, screen, select, download, cite. To contribute a survey of your own, follow the link in About.",
    enter:_tourEnterFinal}
 ];
 
@@ -203,8 +203,6 @@ const TOUR_RECT_GAP=0.99;
 // Phase durations: the whole demo is about two seconds, long enough to read as an action and short enough
 // not to invite Next. The fit wait resolves on the map's own moveend. See docs: portal internals, tour.js.
 const TOUR_ANIM={fit:450,glide:420,press:110,grow:780,fade:120};
-const TOUR_RECT_STYLE={color:"#EF7256",weight:2};                                  // matches a hand-drawn shape
-const TOUR_PREVIEW_STYLE={color:"#EF7256",weight:2,dashArray:"6 5",fill:false};    // the growing outline
 
 let _tourAnim={raf:0,timers:[],cursor:null,layer:null,rect:null,seq:0};
 function _tourAnimPending(){
@@ -286,7 +284,7 @@ function _tourApplyDemo(b){
   try{
     if(typeof drawn!=="undefined"&&drawn.clearLayers)drawn.clearLayers();
     if(typeof L!=="undefined"&&L.rectangle&&typeof drawn!=="undefined"&&drawn.addLayer){
-      const rect=L.rectangle([[b.south,b.west],[b.north,b.east]],TOUR_RECT_STYLE);
+      const rect=L.rectangle([[b.south,b.west],[b.north,b.east]],shapeStyle());   // matches a hand-drawn shape
       if(rect&&rect.options)rect.options.interactive=false;
       drawn.addLayer(rect);
     }
@@ -366,7 +364,7 @@ function _tourPreviewDraw(g,bb){
     if(!g)return;
     const ll=[[bb.south,bb.west],[bb.north,bb.east]];
     if(_tourAnim.rect&&_tourAnim.rect.setBounds){_tourAnim.rect.setBounds(ll);return;}
-    const r=L.rectangle(ll,TOUR_PREVIEW_STYLE);
+    const r=L.rectangle(ll,Object.assign(shapeStyle(),{dashArray:"6 5",fill:false}));   // the growing outline
     if(r&&r.options)r.options.interactive=false;
     if(g.addLayer)g.addLayer(r);
     _tourAnim.rect=r;

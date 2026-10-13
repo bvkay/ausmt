@@ -7,7 +7,7 @@
 WHAT THE MARK IS. A coarse dot rasterisation of Australia: the engine's own coastline truth
 (engine/extract/_au_outline.py, the COAST rings and EXTENT the survey minimap and the link-preview
 cards already draw) laid over a fixed lattice, one dot per cell whose centre falls on land. The pitch
-is chosen so the silhouette still reads as Australia at favicon size and so Tasmania survives as its
+is chosen so the silhouette still reads as Australia at 16 px and so Tasmania survives as its
 own cluster rather than rounding away. That is the whole geometry: ONE lattice, ONE colour mapping,
 used by every export at every size, on dark and on light alike. The brief forbids per-theme geometries
 for a plain reason - a mark that is a different shape on a white page is two marks, not one.
@@ -31,8 +31,6 @@ is the invariant that actually matters (a committed export must show exactly wha
 which does not go red when a PNG encoder or its zlib is upgraded under CI.
 """
 import argparse
-import hashlib
-import io
 import json
 import sys
 from pathlib import Path
@@ -58,7 +56,7 @@ from _au_outline import COAST, EXTENT  # noqa: E402  (sibling engine module, std
 # The lattice. The engine's drawing EXTENT (112E to 154E, 44S to 9S) divided into this many cells.
 # 21 x 18 was chosen by rendering the candidates at 16, 24, 32, 48 and 96 px on dark and on light and
 # looking at them: a coarser lattice (19 x 16) loses Tasmania to a single sub-pixel dot, and finer ones
-# (26 x 22 and up) turn the 16 px favicon into an unreadable smear because no dot is a whole pixel any
+# (26 x 22 and up) turn a 16 px render into an unreadable smear because no dot is a whole pixel any
 # more. At 21 x 18 the silhouette keeps Cape York, the Gulf of Carpentaria notch, the Top End and the
 # Bight coast at 16 px, and Tasmania survives as three dots.
 #
@@ -109,8 +107,8 @@ T_PRECISION = 6
 # SIZE-ADAPTIVE DOT RADIUS, as a ratio of the lattice pitch. The presentation ratio 0.44 is measured
 # from the established artwork (6.5 px dots on a 7.3 px pitch). Small renders get FULLER dots: below
 # about 32 px a 0.44 dot is under a pixel across and the silhouette dissolves into a haze, so the dots
-# are enlarged until they close into a solid outline. That is the favicon sheet's rule, and it is why
-# the 16 px favicon still reads as Australia without a second geometry existing anywhere.
+# are enlarged until they close into a solid outline, which is why a 16 px render still reads as
+# Australia without a second geometry existing anywhere.
 #
 # THE 16 PX BAND WAS SET BY LOOKING AT A REAL RASTERISER, NOT A PREVIEW. A supersampled Pillow render
 # flattered it: 0.62 looked solid there and washed out in headless Chrome at device-scale-factor 1,
@@ -128,9 +126,8 @@ MARK_PAD = 0.02
 # real browser at 30 px in the header and again at 120 and 200 px: at 0.46 and 0.44 the 30 px mark is
 # noticeably airy, at 0.62 the large render bloats into a solid blob, and 0.50 (the 32 px band) is the
 # one that closes the silhouette in the header while still reading as separate dots at presentation
-# size. The favicon's whole job is the browser tab, so it takes the 16 px band and simply renders as a
-# solid silhouette wherever it is drawn larger, which is what a favicon should do.
-SVG_NOMINAL_PX = {"mark": 32, "favicon": 16}
+# size.
+SVG_NOMINAL_PX = {"mark": 32}
 
 # TYPOGRAPHY. The web and SVG wordmark render in the SITE's system UI stack, character
 # for character the same stack and weight as the portal header wordmark, so the logo and the header
@@ -402,17 +399,6 @@ def svg_mark():
             + _svg_mark_group(0, 0, SVG_NOMINAL_PX["mark"]) + "</svg>\n")
 
 
-def svg_favicon():
-    """The browser-tab mark. Same lattice, same colour mapping, the 16 px radius band.
-
-    It keeps the filename vendor/favicon.svg the placeholder had, so no link tag on any page had to
-    move. Transparent, so one file serves a light and a dark browser chrome; the concept sheet's tile
-    variants are context previews of that same file, not separate assets."""
-    side = MARK_UNITS
-    return (_svg_open(side, side, "AusMT") + _SVG_NOTE
-            + _svg_mark_group(0, 0, SVG_NOMINAL_PX["favicon"]) + "</svg>\n")
-
-
 def svg_logo(dark, extended):
     lay = lockup(extended)
     mx, my, _ms = lay["mark"]
@@ -470,17 +456,17 @@ def png_mark(size):
     return im.resize((size, size), Image.LANCZOS) if ss > 1 else im
 
 
-# THE RASTER ICONS SIT ON A NAVY DISC. A search engine crops a favicon to a circle and puts its own white
-# disc behind a transparent one, which washes out the mark's pale end. So every raster icon is the mark on
-# the portal's deepest surface colour, inset to the inscribed circle, and lifted 20 percent in brightness
-# so the gradient still reads at 16 px. The SVG tab icon stays transparent: a browser tab does not crop.
+# THE APP ICONS SIT ON A NAVY DISC. A launcher or a search result crops an icon to a circle and puts its
+# own white disc behind a transparent one, which washes out the mark's pale end. So every app icon is the
+# mark on the portal's deepest surface colour, inset to the inscribed circle, and lifted 20 percent in
+# brightness so the gradient still reads at small sizes.
 RASTER_ICON_BACKGROUND = "#11182D"
 RASTER_ICON_INSET = 0.78
 RASTER_ICON_BRIGHTNESS = 1.20
 
 
 def raster_icon(size):
-    """The mark on the navy disc at `size` pixels, the form every raster icon ships in."""
+    """The mark on the navy disc at `size` pixels, the form every app icon ships in."""
     Image, _, _ = _pillow()
     from PIL import ImageEnhance
     tile = Image.new("RGBA", (size, size), RASTER_ICON_BACKGROUND)
@@ -489,21 +475,6 @@ def raster_icon(size):
     mark = Image.merge("RGBA", (*rgb.split(), mark.split()[3]))
     tile.alpha_composite(mark, ((size - mark.width) // 2, (size - mark.height) // 2))
     return tile
-
-
-def ico_bytes():
-    """The root /favicon.ico, as a multi-size icon a browser can pick a frame out of.
-
-    A browser that reads no SVG icon link asks the site root for this path by name and takes what it
-    finds, so the file has to exist and has to be the same lattice as every other export. Each entry
-    is rendered from that lattice AT ITS OWN SIZE, never resampled from a larger one, so the 16 px
-    frame carries the small-size radius band that keeps the silhouette solid in a tab. The entries
-    are PNG-compressed, which every browser since Windows Vista reads, and the render carries no
-    timestamp, so two runs write identical bytes."""
-    frames = [raster_icon(size) for size in ICO_SIZES]
-    buf = io.BytesIO()
-    frames[-1].save(buf, "ICO", sizes=[(s, s) for s in ICO_SIZES], append_images=frames[:-1])
-    return buf.getvalue()
 
 
 def png_logo(dark, extended, width=PNG_LOGO_WIDTH):
@@ -598,58 +569,22 @@ _OUTPUT_INDEX = (
     ("portal/vendor/brand/ausmt-mark.svg", "svg", "standalone mark"),
     ("portal/vendor/brand/ausmt-mark.png", "png", "standalone mark"),
     ("portal/vendor/brand/ausmt-mark-168.png", "png", "standalone mark, link-preview card corner"),
-    ("portal/vendor/favicon.svg", "svg", "browser tab icon"),
-    ("portal/favicon.ico", "ico", "root icon, multi-size"),
-    ("portal/vendor/brand/ausmt-icon-180.png", "png", "apple-touch-icon"),
+    ("portal/vendor/brand/ausmt-icon-180.png", "png", "app icon"),
     ("portal/vendor/brand/ausmt-icon-192.png", "png", "app icon"),
     ("portal/vendor/brand/ausmt-icon-512.png", "png", "app icon"),
 )
 
-# The app-icon sizes. 180 is the apple-touch-icon a home-screen shortcut uses; 192 and 512 are the
-# conventional pair a web manifest would name. No manifest ships here (architect default): an
-# installable PWA is its own decision, and these two exist so that decision costs no regeneration.
-APPLE_TOUCH_ICON_PX = 180
-APP_ICON_SIZES = (APPLE_TOUCH_ICON_PX, 192, 512)
-
-# The frames the root /favicon.ico carries. 16 is the browser tab, 32 the retina tab and the bookmark
-# bar, 48 the desktop shortcut; a browser picks the frame it wants, so all three are rendered from the
-# lattice at their own size rather than resampled from one another.
-ICO_SIZES = (16, 32, 48)
-
-
-# THE ICON URLS ARE STABLE. A search engine crawls a favicon only when it crawls the home page and
-# keeps the URL it found, so the URL must never move: the three icon paths are served with no-cache
-# (deploy/docker/caddy/Caddyfile, @iconAssets) and a rebrand replaces the bytes at the same path.
-ICON_VERSION_DIGITS = 8
-
-
-def picture_digest(href, data):
-    """The content hash of what a browser DRAWS from `data`: an SVG's text, or a raster's decoded frames.
-
-    The determinism pin compares two renders and the committed icon through this, never through encoded
-    bytes: a PNG encoder writes different bytes for the same picture under a different Python build, and
-    the picture is the same everywhere."""
-    Image, _, _ = _pillow()
-    h = hashlib.sha256()
-    if href.endswith(".svg"):
-        h.update(data)
-        return h.hexdigest()[:ICON_VERSION_DIGITS]
-    with Image.open(io.BytesIO(data)) as im:
-        sizes = sorted(s[0] for s in im.info["sizes"]) if href.endswith(".ico") else [im.size[0]]
-        for size in sizes:
-            if href.endswith(".ico"):
-                im.size = (size, size)
-            h.update(f"{size}x{size}:".encode("ascii"))
-            h.update(im.convert("RGBA").tobytes())
-    return h.hexdigest()[:ICON_VERSION_DIGITS]
+# The AusMT mark's app-icon exports, at the sizes a home-screen shortcut (180) and a web manifest (192,
+# 512) take. They are brand-kit files: the site's own tab and home-screen icons are the AuScope mark,
+# written by tools/gen_auscope_icons.py.
+APP_ICON_SIZES = (180, 192, 512)
 
 
 def artefacts():
     """[(path, kind, payload)] for everything this tool owns.
 
     kind "bytes" compares byte for byte; kind "image" compares decoded pixels, size and mode, which is
-    the invariant that matters for a raster and which survives a PNG encoder upgrade under CI; kind
-    "ico" compares the frame sizes and each frame's decoded pixels, for the same reason."""
+    the invariant that matters for a raster and which survives a PNG encoder upgrade under CI."""
     items = [(BRAND_JSON, "bytes", (json.dumps(document(), indent=2, ensure_ascii=False) + "\n")
               .encode("utf-8"))]
     for dark in (True, False):
@@ -661,8 +596,6 @@ def artefacts():
     items.append((BRAND_DIR / "ausmt-mark.png", "image", png_mark(PNG_MARK_SIZE)))
     items.append((BRAND_DIR / f"ausmt-mark-{PNG_CARD_MARK_SIZE}.png", "image",
                   png_mark(PNG_CARD_MARK_SIZE)))
-    items.append((ROOT / "vendor" / "favicon.svg", "bytes", svg_favicon().encode("utf-8")))
-    items.append((ROOT / "favicon.ico", "ico", ico_bytes()))
     for size in APP_ICON_SIZES:
         items.append((BRAND_DIR / f"ausmt-icon-{size}.png", "image", raster_icon(size)))
     return items
@@ -685,34 +618,10 @@ def _image_matches(path, want):
             and have.tobytes() == want.convert("RGBA").tobytes())
 
 
-def _ico_matches(path, want):
-    """The frame sizes and every frame's decoded pixels, against the icon the generator would write.
-
-    Read frame by frame rather than byte for byte for the reason _image_matches gives: an ICO written
-    by a newer PNG encoder can carry different bytes for the same picture, and what a browser draws is
-    the picture."""
-    Image, _, _ = _pillow()
-    if not path.is_file():
-        return False
-    try:
-        with Image.open(path) as have, Image.open(io.BytesIO(want)) as fresh:
-            if have.format != "ICO" or have.info["sizes"] != fresh.info["sizes"]:
-                return False
-            for size in sorted(fresh.info["sizes"]):
-                have.size, fresh.size = size, size
-                if have.convert("RGBA").tobytes() != fresh.convert("RGBA").tobytes():
-                    return False
-    except OSError:
-        return False
-    return True
-
-
 def _matches(path, kind, want):
     """True when the committed artefact is what the generator would write today."""
     if kind == "bytes":
         return path.is_file() and path.read_bytes() == want
-    if kind == "ico":
-        return _ico_matches(path, want)
     return _image_matches(path, want)
 
 
@@ -736,7 +645,7 @@ def main(argv=None):
         return 0
     for path, kind, data in items:
         path.parent.mkdir(parents=True, exist_ok=True)
-        if kind in ("bytes", "ico"):
+        if kind == "bytes":
             path.write_bytes(data)
         else:
             data.save(path, "PNG")

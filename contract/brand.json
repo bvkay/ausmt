@@ -80,8 +80,7 @@
       "above": 0.44
     },
     "svg_nominal_size_px": {
-      "mark": 32,
-      "favicon": 16
+      "mark": 32
     },
     "dot_count": 181,
     "dots": [
@@ -1441,19 +1440,9 @@
       "variant": "standalone mark, link-preview card corner"
     },
     {
-      "path": "portal/vendor/favicon.svg",
-      "kind": "svg",
-      "variant": "browser tab icon"
-    },
-    {
-      "path": "portal/favicon.ico",
-      "kind": "ico",
-      "variant": "root icon, multi-size"
-    },
-    {
       "path": "portal/vendor/brand/ausmt-icon-180.png",
       "kind": "png",
-      "variant": "apple-touch-icon"
+      "variant": "app icon"
     },
     {
       "path": "portal/vendor/brand/ausmt-icon-192.png",
