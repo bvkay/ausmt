@@ -118,7 +118,7 @@
   .content{flex:1;min-width:0;position:relative;display:flex}
   #map{flex:1;background:var(--map-bg);position:relative}
   #map .leaflet-tile-pane{filter:saturate(.35) brightness(1.04)}
-  .mapmark{position:absolute;right:48px;bottom:48px;height:48px;width:auto;z-index:500;pointer-events:none}
+  .mapmark{position:absolute;right:48px;bottom:48px;height:48px;width:auto;z-index:500;pointer-events:none;opacity:.8}
   /* Anchored on the map's id so it outranks the theme switch that shows the dark variant. */
   @media(max-width:560px){#map .mapmark{display:none}}
   .mapattrib{position:relative;z-index:900;display:flex;flex-direction:row-reverse;align-items:flex-start;gap:4px}
