@@ -10,13 +10,9 @@
   }
   function resolve(c) { return c === "dark" || (c === "system" && mq && mq.matches) ? "dark" : "light"; }
   function reflect() {
-    var c = choice(), t = resolve(c);
-    var buttons = document.querySelectorAll("[data-theme-choice]");
-    for (var i = 0; i < buttons.length; i++) {
-      buttons[i].setAttribute("aria-pressed", buttons[i].getAttribute("data-theme-choice") === t ? "true" : "false");
-    }
-    var radios = document.querySelectorAll('input[name="welcomeTheme"]');
-    for (var j = 0; j < radios.length; j++) radios[j].checked = radios[j].value === c;
+    var c = choice();
+    var radios = document.querySelectorAll('input[name="appearance"]');
+    for (var i = 0; i < radios.length; i++) radios[i].checked = radios[i].value === c;
   }
   function apply() {
     var t = resolve(choice());
@@ -34,13 +30,9 @@
   root.setAttribute("data-theme", resolve(choice()));
   if (mq && mq.addEventListener) mq.addEventListener("change", function () { if (choice() === "system") apply(); });
   document.addEventListener("DOMContentLoaded", function () {
-    document.addEventListener("click", function (e) {
-      var b = e.target && e.target.closest ? e.target.closest("[data-theme-choice]") : null;
-      if (b) set(b.getAttribute("data-theme-choice"));
-    });
     document.addEventListener("change", function (e) {
       var r = e.target;
-      if (r && r.name === "welcomeTheme" && r.checked) set(r.value);
+      if (r && r.name === "appearance" && r.checked) set(r.value);
     });
     reflect();
   });
