@@ -1553,8 +1553,8 @@ def test_the_maps_take_every_colour_but_the_data_from_their_classes(built):
             "zoom": pages._footprint_svg(coastal),
             "collection": pages._collection_scatter(["A", "B"], {"A": [(120.0, -25.0)],
                                                                  "B": [(145.0, -35.0)]}, "T")}
-    for name, svg in maps.items():
-        svg = svg.split("</svg>", 1)[0]
+    for name, whole in maps.items():
+        svg = whole.split("</svg>", 1)[0]
         assert re.search(r'<svg [^>]*><rect class="mm-panel mm-rule" ', svg), \
             f"{name}: the panel is the SVG's first element, drawn by class"
         assert "style=" not in svg, f"{name}: a map carries no inline style"
