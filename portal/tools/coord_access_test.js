@@ -87,12 +87,18 @@ const win = dom.window;
 const { L, calls } = makeL();
 win.L = L; win.JSZip = chain();
 win.AUSMT_CONFIG = { short_name: "AusMT" };
-// fetch serves the per-station station.json fixtures (loadStationFrameLine); anything else 404s.
+// fetch serves the per-station station.json fixtures (loadStationFrameLine) and the survey's curve file
+// (loadSurveyCurves, when a drawer opens); anything else 404s.
 win.fetch = (url) => {
   const m = /products\/([^?]+?)\/station\.json/.exec(String(url));
   if (m) {
     const fp = path.join(FIX, "products", ...m[1].split("/"), "station.json");
     if (fs.existsSync(fp)) return Promise.resolve({ ok: true, json: () => Promise.resolve(JSON.parse(fs.readFileSync(fp, "utf8"))) });
+  }
+  const c = /(?:^|\/)tf\/([^/?]+\.json)$/.exec(String(url));
+  if (c && fs.existsSync(path.join(FIX, "tf", c[1]))) {
+    const fp = path.join(FIX, "tf", c[1]);
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(JSON.parse(fs.readFileSync(fp, "utf8"))) });
   }
   return Promise.resolve({ ok: false });
 };
@@ -100,7 +106,8 @@ win.fetch = (url) => {
 const MODULES = ["contract", "security", "state", "data", "plots", "mapattrib", "map", "filters", "drawer", "exports", "main"];
 let code = MODULES.map((f) => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
 code += "\nwindow.__api={" +
-  "setup:(c,t,s,sv,coll,cp)=>{CAT=c;TFD=t;SCI=s;SMETA=sv;COLL=coll;MANIFEST=null;COORD_POLICY=cp||{};buildState();buildTree();}," +
+  "setup:(c,s,sv,coll,cp)=>{CAT=c;SCI=s;SMETA=sv;COLL=coll;MANIFEST=null;COORD_POLICY=cp||{};buildState();buildTree();}," +
+  "curvesDone:()=>Promise.all(Object.values(_CURVES)),curvesState:(slug)=>HYDR[\"tf:\"+slug]," +
   "idxOf:(id)=>ST.findIndex(s=>s.id===id)," +
   "buildMarkersRun:()=>{buildMarkers();return {marker:ST.map(s=>({id:s.id,has:s.marker!==undefined}))};}," +
   // driveRefresh runs the REAL refresh() (which paints routeVisibleToLayers() into the map layer) and
@@ -127,7 +134,7 @@ let failures = 0;
 function ok(cond, msg) { if (!cond) { console.error("  FAIL: " + msg); failures++; } }
 
 const A = win.__api;
-A.setup(readFix("catalogue.json"), readFix("tf.json"), readFix("sci.json"), readFix("surveys.json"), readFix("collections.json"), readFix("coord_policy.json"));
+A.setup(readFix("catalogue.json"), readFix("sci.json"), readFix("surveys.json"), readFix("collections.json"), readFix("coord_policy.json"));
 const iEx = A.idxOf("EXACTONE"), iGen = A.idxOf("GENFIVE"), iHid = A.idxOf("HIDENINE");
 ok(iEx >= 0 && iGen >= 0 && iHid >= 0, "all three fixture stations must load (precondition)");
 
@@ -200,5 +207,13 @@ ok(A.findByText("hidenine").includes("HIDENINE"), "PIN4: withheld station must r
 ok(A.surveyCount("Coord Access Sweep Survey") === 3, "PIN5: survey station count must include the withheld station (=3)");
 ok(A.total() === 3, "PIN5: total station count must include the withheld station");
 
-if (failures) { console.error("COORD ACCESS FAILED: " + failures + " pin(s)"); process.exit(1); }
-console.log("COORD ACCESS OK");
+// --- Pin 6: the drawer's curves come from the survey's curve file ---------------------------------------
+(async () => {
+  await A.curvesDone();
+  ok(A.curvesState("sweep-survey") === "ready",
+    "PIN6: the survey's curve file (tf/sweep-survey.json) must load when a station drawer opens, got " + A.curvesState("sweep-survey"));
+  ok(/data-plot="rho"/.test(win.document.getElementById("drawer").innerHTML),
+    "PIN6: the open drawer must re-render with the curves once the survey's file lands");
+  if (failures) { console.error("COORD ACCESS FAILED: " + failures + " pin(s)"); process.exit(1); }
+  console.log("COORD ACCESS OK");
+})();

@@ -1049,9 +1049,14 @@ def test_warm_build_byte_identical_to_populating_build(tmp_path, clean_salt):
     cw = _cache_counters(o_warm)
     assert cw["hits"] == EXPECTED_WARM_HITS and cw["misses"] == 0 and cw["writes"] == 0, cw
 
-    for name in ("manifest.json", "catalogue.json", "tf.json", "sci.json"):
+    for name in ("manifest.json", "catalogue.json", "tf.json", "sci.json", "surveys.json"):
         assert _digest(o_warm / name) == _digest(o_pop / name), \
             f"{name} differs between the warm build and its populating build (cache changed bytes)"
+    curves = sorted(p.name for p in (o_pop / "tf").glob("*.json"))
+    assert curves and curves == sorted(p.name for p in (o_warm / "tf").glob("*.json")), curves
+    for name in curves:
+        assert _digest(o_warm / "tf" / name) == _digest(o_pop / "tf" / name), \
+            f"tf/{name} differs between the warm build and its populating build (cache changed bytes)"
 
     xw, xp = _served_xml(o_warm), _served_xml(o_pop)
     assert xw and len(xw) == len(xp), (len(xw), len(xp))

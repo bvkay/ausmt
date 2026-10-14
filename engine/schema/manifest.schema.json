@@ -10,7 +10,8 @@
     "generated_count": {"type": "integer", "minimum": 0, "description": "total artifacts = len(files)+len(bundles)"},
     "base_url": {"type": "string", "description": "URL prefix applied to artifact urls; '' = portal-relative"},
     "files": {"type": "array", "items": {"$ref": "#/definitions/file"}},
-    "bundles": {"type": "array", "items": {"$ref": "#/definitions/bundle"}}
+    "bundles": {"type": "array", "items": {"$ref": "#/definitions/bundle"}},
+    "curves": {"type": "array", "items": {"$ref": "#/definitions/curve"}, "description": "One row per survey's transfer-function curve file (tf/<slug>.json, the survey's tf.json rows in catalogue order), listed for integrity. Display products, not downloads: generated_count does not count them."}
   },
   "definitions": {
     "file": {
@@ -47,6 +48,19 @@
         "canon_license": {"type": "string", "description": "C46: canonical (de-aliased, normalised) licence id of the raw license string"},
         "custodian": {"type": ["string", "null"], "description": "C46: custodian of record (attribution.custodian, else the organisation)"},
         "n_stations": {"type": "integer", "minimum": 0}
+      }
+    },
+    "curve": {
+      "type": "object",
+      "required": ["survey", "slug", "url", "size", "sha256", "n_stations"],
+      "additionalProperties": false,
+      "properties": {
+        "survey": {"type": "string"},
+        "slug": {"type": "string"},
+        "url": {"type": "string", "description": "portal-relative path, tf/<slug>.json"},
+        "size": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "n_stations": {"type": "integer", "minimum": 0, "description": "rows in the file = the survey's catalogue rows"}
       }
     }
   }

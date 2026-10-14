@@ -28,6 +28,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from curves_fixture import datamap_curves
 
 ROOT = Path(__file__).resolve().parent.parent                 # portal/
 SRC = ROOT / "src"
@@ -38,7 +39,7 @@ const fs=require("fs"),vm=require("vm"),path=require("path");
 const SRC=process.argv[2];
 const MODULES=["contract","security","state","data","plots","mapattrib","map","filters","drawer","exports","main","tour"];
 let code=MODULES.map(f=>fs.readFileSync(path.join(SRC,f+".js"),"utf8")).join("\n");
-code+="\nglobalThis.__api={boot,hydrationDone:()=>HYDRATION_DONE,openStation,openSurvey,nST:()=>ST.length,firstSurvey:()=>surveys[0]};";
+code+="\nglobalThis.__api={boot,hydrationDone:()=>HYDRATION_DONE,curvesDone:()=>Promise.all([...Object.values(_CURVES),MANIFEST_READY]),openStation,openSurvey,nST:()=>ST.length,firstSurvey:()=>surveys[0]};";
 const stub=()=>new Proxy(function(){},{get:(t,p)=>{if(p==="then")return undefined;if(p===Symbol.iterator)return function*(){};return stub();},apply:()=>stub(),construct:()=>stub()});
 function elStub(){const t={value:"",checked:true,textContent:"",innerHTML:"",scrollTop:0,disabled:false,style:{},dataset:{},children:[],classList:{toggle(){},add(){},remove(){},contains(){return false;}},appendChild(){},addEventListener(){},querySelectorAll(){return[];},querySelector(){return null;},closest(){return null;},setAttribute(){},getAttribute(){return null;},getBoundingClientRect(){return{left:0};},scrollIntoView(){},click(){},onclick:null};return new Proxy(t,{get:(o,p)=>(p in o?o[p]:stub()),set:(o,p,v)=>{o[p]=v;return true;}});}
 const elCache={};function elFor(id){if(!elCache[id])elCache[id]=elStub();return elCache[id];}
@@ -46,9 +47,10 @@ const data=JSON.parse(fs.readFileSync(process.argv[3],"utf8"));
 const ctx={document:{getElementById:id=>elFor(id),createElement:()=>elStub(),addEventListener(){},body:elStub(),querySelector:()=>null,querySelectorAll:sel=>(/typeBoxes/.test(sel)?[{value:"LPMT"},{value:"BBMT"},{value:"AMT"},{value:"GDS"},{value:"other"}]:[])},window:{addEventListener(){},open(){},innerWidth:1200,AUSMT_CONFIG:{short_name:"AusMT"}},location:{hash:"",pathname:"/",search:""},history:{replaceState(){}},navigator:{clipboard:{writeText:()=>Promise.resolve()}},localStorage:{getItem:()=>null,setItem(){},removeItem(){},clear(){}},L:stub(),JSZip:stub(),fetch:url=>Promise.resolve(data[url]?{ok:true,json:()=>Promise.resolve(data[url])}:{ok:false}),URL:{createObjectURL:()=>"x",revokeObjectURL(){}},Blob:function(){},setTimeout:f=>{try{f();}catch(e){}return 0;},clearTimeout(){},console,Math,JSON,Date,Promise,encodeURIComponent,decodeURIComponent,parseInt,parseFloat,isFinite,Set,Array,Object,String,Number};
 ctx.globalThis=ctx;ctx.self=ctx;vm.createContext(ctx);vm.runInContext(code,ctx);
 // Two-phase boot: boot() returns as soon as the FIRST-PAINT products are in (catalogue/surveys + the small
-// optionals); tf.json/sci.json/manifest.json hydrate behind it. This probe renders surfaces that read all
-// three, so it awaits hydrationDone() first; otherwise it would assert against loading states.
-(async()=>{const A=ctx.__api;await A.boot();await A.hydrationDone();if(A.nST()===0){console.error("FIXTURE EMPTY");process.exit(1);}A.openStation(0);const stationHtml=elFor("drawer").innerHTML;A.openSurvey(A.firstSurvey());const surveyHtml=elFor("drawer").innerHTML;console.log("<<<STATION>>>");console.log(stationHtml);console.log("<<<SURVEY>>>");console.log(surveyHtml);console.log("<<<END>>>");})().catch(e=>{console.error("PROBE ERROR:",(e&&e.stack)||e);process.exit(1);});
+// optionals); sci.json hydrates behind it, and opening a station loads its survey's curves and the manifest.
+// This probe renders surfaces that read all of them, so it awaits each and opens the station again (the stub
+// drawer is never "open", so nothing re-renders it); otherwise it would assert against loading states.
+(async()=>{const A=ctx.__api;await A.boot();await A.hydrationDone();if(A.nST()===0){console.error("FIXTURE EMPTY");process.exit(1);}A.openStation(0);await A.curvesDone();A.openStation(0);const stationHtml=elFor("drawer").innerHTML;A.openSurvey(A.firstSurvey());const surveyHtml=elFor("drawer").innerHTML;console.log("<<<STATION>>>");console.log(stationHtml);console.log("<<<SURVEY>>>");console.log(surveyHtml);console.log("<<<END>>>");})().catch(e=>{console.error("PROBE ERROR:",(e&&e.stack)||e);process.exit(1);});
 """
 
 
@@ -65,12 +67,14 @@ def test_drawer_copy_removals(tmp_path):
           "pt_az": [9.0, 10.0], "pt_beta": [1.0, 2.0], "rho_xy_err": [0.1, 0.2], "rho_yx_err": [0.3, 0.4],
           "phs_xy_err": [1.0, 1.1], "phs_yx_err": [1.2, 1.3], "tzx_re": [0.2, 0.25], "tzx_im": [0.01, 0.02],
           "tzy_re": [0.3, 0.35], "tzy_im": [0.02, 0.03]}
+    cat_rows, tf_rows = [[cat[c] for c in COLS["catalogue"]]], [[tf[c] for c in COLS["tf"]]]
+    surveys = {"Demo Survey": {"slug": "demo", "org": "X", "country": "Australia", "lic": "CC-BY-4.0"}}
     data = {
-        "data/catalogue.json": [[cat[c] for c in COLS["catalogue"]]],
+        "data/catalogue.json": cat_rows,
         "data/sci.json": [[sci[c] for c in COLS["sci"]]],
-        "data/tf.json": [[tf[c] for c in COLS["tf"]]],
-        "data/surveys.json": {"Demo Survey": {"slug": "demo", "org": "X", "country": "Australia",
-                                              "lic": "CC-BY-4.0"}},
+        "data/tf.json": tf_rows,
+        **datamap_curves(cat_rows, tf_rows, surveys),
+        "data/surveys.json": surveys,
         "data/build.json": {"build_id": "e-s-2026", "engine_commit": "e", "source_commit": "s",
                             "generated": "2026-07-05T00:00:00+00:00"},
     }

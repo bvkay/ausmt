@@ -305,6 +305,7 @@ function setSidebarMode(mode){
   // the tile applied. See docs: portal internals, filters.js.
   if(mode==="browse"&&sidebarMode==="select")restoreSelectLens();
   sidebarMode=mode;
+  if(mode==="select")loadManifest();
   // No map re-route on a mode switch: every station is its own dot in both modes, so which
   // stations are on the map does not depend on the mode.
   const bp=document.getElementById("browseMode"),sp=document.getElementById("selectMode"),seg=document.getElementById("modeSeg");

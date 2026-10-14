@@ -45,8 +45,12 @@ Generated outputs (consumed directly by the AusMT Portal):
 ```text
 catalogue.json  tf.json  sci.json  surveys.json  collections.json  mtcat.json  manifest.json
 build_provenance.json  build_report.json  qc_report.json  base_ids.json  coord_policy.json
-build.json
+build.json  tf/<slug>.json
 ```
+
+`tf/<slug>.json` is one file per survey holding that survey's `tf.json` rows in catalogue order; the
+portal fetches it when a station of the survey opens and reads `tf.json` only from a build that
+predates these files. `tf.json` is still written until a later change removes it.
 
 The positional shape of these files is defined in `docs` → `developer/data-files.md`.
 
@@ -57,12 +61,18 @@ The positional shape of these files is defined in `docs` → `developer/data-fil
 ```bash
 python -m venv .venv          # Python 3.12 (the tested/locked engine)
 source .venv/bin/activate
-pip install -r requirements-dev.txt -e .            # tests + the engine package (mt_metadata/mth5)
-# for the PINNED, reproducible engine (what CI uses), also install the lock:
+# the PINNED stack first (what CI and the engine image install), then the tooling constrained by it
 pip install -r environments/requirements-mtmetadata-lock.txt
+pip install -c environments/requirements-mtmetadata-lock.txt -r requirements-dev.txt
+pip install --no-deps -e .                          # the engine package itself
 pytest -q
 python -m extract.build_portal --surveys data --out portal_data --products products
 ```
+
+The order matters: the lock pins mt_metadata to a git commit that reports itself as `1.0.10`, and a
+pip that already holds PyPI's `1.0.10` keeps it and skips the pin. An env that already has
+mt_metadata installed needs `pip install --force-reinstall -r environments/requirements-mtmetadata-lock.txt`.
+A build on PyPI's `1.0.10` prints a `[mth5] WARN` line at start; see `environments/README.md`.
 
 mt_metadata/mth5 has been the sole parser since the dependency-free regex extractor was retired in
 2026-06, so it is a core dependency and the build hard-exits without it.

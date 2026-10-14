@@ -3,22 +3,17 @@
   "portal_id": "ausmt",
   "portal_name": "AusMT — Australia's Magnetotelluric Data Portal",
   "schema": "mtcat",
-  "version": "1.0",
+  "version": "2.0",
   "schema_url": "mtcat.schema.json",
   "metadata_license": "CC0-1.0",
-  "generated_at": "2026-07-12T08:31:42Z"
+  "generated_at": "2026-10-14T13:08:55Z"
  },
  "surveys": [
   {
    "survey_id": "sweep-survey",
    "title": "Coord Access Sweep Survey",
    "organisation": "AusMT CI",
-   "organisation_ror": null,
-   "raid": null,
    "country": "Australia",
-   "version": null,
-   "collection_id": null,
-   "doi": null,
    "license": "CC-BY-4.0",
    "access": "open",
    "bbox": {
@@ -30,7 +25,29 @@
    "centroid": {
     "latitude": -32.067284,
     "longitude": 136.067284
-   }
+   },
+   "n_stations": 3,
+   "data_types": {
+    "BBMT": 3
+   },
+   "period_min_s": 0.005,
+   "period_max_s": 6359.70491,
+   "n_stations_tipper": 0,
+   "description": "C42 portal fixture",
+   "coordinates_state": "generalised",
+   "contributors": [
+    {
+     "name": "AusMT",
+     "name_type": "organisation",
+     "role": "HostingInstitution"
+    }
+   ],
+   "formats": [
+    "edi",
+    "edi-zip",
+    "emtfxml",
+    "xml-zip"
+   ]
   }
  ],
  "stations": [
@@ -55,8 +72,5 @@
    "longitude": null,
    "data_type": "BBMT"
   }
- ],
- "collections": [],
- "mt_metadata_version": "1.0.9",
- "mth5_version": "0.6.8"
+ ]
 }

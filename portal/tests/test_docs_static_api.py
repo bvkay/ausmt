@@ -221,12 +221,12 @@ def test_the_data_files_page_says_the_rows_are_positional_and_names_the_map():
 def test_the_public_reference_documents_no_portal_internal_document():
     """Public-surface audit: the only public metadata contracts are mtcat.json (with its
     schema routes) and station.json, with survey-metadata.json to come; manifest.json is the download
-    index. catalogue.json, sci.json, tf.json, surveys.json, collections.json, build.json,
+    index. catalogue.json, sci.json, tf.json, tf/<slug>.json, surveys.json, collections.json, build.json,
     build_provenance.json and coord_policy.json are portal-internal and documented only under
     Developer; build_report.json, qc_report.json and base_ids.json are operator-only. FAILS if the
     data reference or the architecture page recipes or lists any of them again, or revives the
     /data/products/ mirror of the manifest."""
-    internal = ("catalogue.json", "sci.json", "tf.json", "surveys.json", "collections.json",
+    internal = ("catalogue.json", "sci.json", "tf.json", "tf/<slug>.json", "surveys.json", "collections.json",
                 "build.json", "build_provenance.json", "coord_policy.json", "build_report.json",
                 "qc_report.json", "base_ids.json", "/data/products/manifest.json")
     hits = []

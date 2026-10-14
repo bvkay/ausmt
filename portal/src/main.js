@@ -453,7 +453,6 @@ function renderBuildId(){
 let HYDRATION_DONE=Promise.resolve();
 // Late hydration must never leave a stale render standing. See docs: portal internals, main.js.
 function wireHydration(){
-  const tf=TF_READY.then(()=>{rehydrateOpenDrawer();});
   const sci=SCI_READY.then(()=>{
     applySciToStations();
     // SCI_READY settles on FAILURE too (phase 2 records the failure rather than rejecting), so
@@ -463,11 +462,6 @@ function wireHydration(){
     if(ST.length&&typeof refresh==="function")refresh();
     rehydrateOpenDrawer();
   });
-  // The selection card's zip-size estimates are read off the manifest too, and updateSel() last ran
-  // before it landed, so they would sit blank until the reader next changed the selection. Repaint them
-  // on the same gate that re-renders the drawer.
-  const man=MANIFEST_READY.then(()=>{rehydrateOpenDrawer();
-    if(typeof paintDownloadRows==="function")paintDownloadRows();});
   // ts_access.json settles the availability facet: until it lands nothing on the page knows which stations
   // this deployment can hand off, so the Download rows and the Data available options are repainted here
   // with counts and sizes. See docs: portal internals, main.js.
@@ -476,8 +470,22 @@ function wireHydration(){
     if(typeof paintAvailSelect==="function")paintAvailSelect();
     if(ST.length&&typeof refresh==="function")refresh();
     rehydrateOpenDrawer();});
-  HYDRATION_DONE=Promise.all([tf,sci,man,tsa]);
+  HYDRATION_DONE=Promise.all([sci,tsa]);
 }
+// The on-demand manifest landed: repaint what read it. See docs: portal internals, main.js.
+function manifestLanded(){
+  rehydrateOpenDrawer();
+  if(typeof paintDownloadRows==="function")paintDownloadRows();}
+// ---- the build check: offers a reload, never reloads. See docs: portal internals, main.js.
+const BUILD_CHECK_MS=5*60*1000;
+let _buildCheckedAt=Date.now(),_BUILD_CHECK=Promise.resolve();
+function checkBuild(){
+  _buildCheckedAt=Date.now();
+  _BUILD_CHECK=fetchOptional("build.json",null).then(v=>{if(buildMoved(v))announceNewBuild();});
+  return _BUILD_CHECK;}
+window.addEventListener("pageshow",e=>{if(e&&e.persisted)checkBuild();});
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible"&&Date.now()-_buildCheckedAt>BUILD_CHECK_MS)checkBuild();});
 async function boot(){
   if(typeof CAT==="undefined"||CAT===null){
     // Both phases are issued HERE, together: phase 2 does not wait for phase 1 to resolve (the heavy
@@ -486,9 +494,8 @@ async function boot(){
     // Phase 1 is the only fatal set: no catalogue or no surveys means there is nothing honest to draw.
     // A phase-2 failure is reported by the consumers that read it, not by blanking the whole portal.
     try{[CAT,SMETA,PROV,COLL,BUILDID,COORD_POLICY]=await p1;}catch(e){showLoadError();return;}
-    // Hydration starts only AFTER phase 1 has its bytes: the phase-2 products are large (tf.json alone is
-    // most of the page weight) and share one connection with the catalogue the dots need. See docs: portal
-    // internals, main.js.
+    // Hydration starts only AFTER phase 1 has its bytes: the phase-2 products share one connection with the
+    // catalogue the dots need. See docs: portal internals, main.js.
     startHydration();
   }
   // The ts_access-driven surfaces are inert and disabled until the index is known: the Download

@@ -41,9 +41,9 @@ code += "\nglobalThis.__api={boot,openStation,openSurvey,setView,refresh,routeFr
   // lets a test assert the footer VALUE binding without a real DOM (getElementById stubs below return
   // a fresh throwaway object per call, so nothing written to el.textContent would be observable).
   // Two-phase boot: boot() returns as soon as the FIRST-PAINT products (catalogue/surveys + the small
-  // optionals) are in; tf.json / sci.json / manifest.json hydrate behind it. hydrationDone settles once all
-  // three have landed AND their late-render work has run, so this smoke test can keep asserting against the
-  // fully-hydrated state a single-phase boot would hand it in one go.
+  // optionals) are in; sci.json / ts_access.json hydrate behind it. hydrationDone settles once both have
+  // landed AND their late-render work has run. A survey's curves and the download manifest load when a
+  // station drawer opens.
   "hydrationDone:()=>HYDRATION_DONE," +
   "buildIdText:()=>buildIdText()};";
 
@@ -67,6 +67,8 @@ function elStub() {
 const files = ["catalogue", "tf", "sci", "surveys", "build_provenance", "collections", "build"];
 const data = {};
 files.forEach(k => { try { data["data/" + k + ".json"] = JSON.parse(fs.readFileSync(path.join(DATA, k + ".json"))); } catch (e) {} });
+// The per-survey curve files, served at the tf/<slug>.json path each surveys.json entry names.
+try { fs.readdirSync(path.join(DATA, "tf")).forEach(f => { data["data/tf/" + f] = JSON.parse(fs.readFileSync(path.join(DATA, "tf", f))); }); } catch (e) {}
 
 // Minimal localStorage stub — main.js's intro-panel dismiss state (ausmt_intro_dismissed) reads/writes
 // it; without this it still degrades safely (try/catch around every call) but a stub lets the smoke
