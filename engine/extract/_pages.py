@@ -1267,7 +1267,10 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     a claim about the environment rather than about the file: a card whose write failed would leave the
     page advertising it, and a link preview would then fetch a 404."""
     smeta = smeta or {}
-    title = ((sm_doc or {}).get("title")) or label
+    # The DISPLAY title is the survey label (survey.yaml `name`), the string the portal's tree, cards
+    # and recently-added strip print. The formal title (`project_name`) stays in the machine record
+    # (survey-metadata.json) and in the citation line below, which reads smeta's cite.
+    title = label
     blurb = smeta.get("blurb") or ""
     org = smeta.get("org") or ""
     lic = smeta.get("lic") or ""
@@ -2123,10 +2126,9 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
                  if row.get("period_min_s") is not None and row.get("period_max_s") is not None
                  else "")]
         facts_line = _facts_line(bits)
-        # The link text is the COLLECTION's own label for this member, not the survey document's
-        # title. The two usually agree; where they differ the label is what this collection calls
-        # that member and what the map legend and every dot title above already say, so taking the
-        # doc title would put two wordings for one survey on one page.
+        # The link text is the member's label, the display title the survey page, the hub card, the
+        # map legend and every dot title above all print, never the formal title in the survey
+        # document: two wordings for one survey on one page would read as two surveys.
         rows.append(f'<div class="mem"><p class="memt">'
                     f'<a href="/surveys/{_e(slug)}">{_e(lbl or row.get("title") or slug)}</a></p>'
                     + (f'<p class="memfacts">{facts_line}</p>' if facts_line else "")
@@ -3248,8 +3250,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             period_line = (f'{_range(_fmt_period(pmin), _fmt_period(pmax))} s'
                            if pmin is not None and pmax is not None else "")
             cardpath = ogdir / f"{slug}.png"
-            _og_card(cardpath, kind="SURVEY",
-                     title=((survey_docs.get(slug) or {}).get("title")) or label,
+            _og_card(cardpath, kind="SURVEY", title=label,
                      # A raster card carries the interpunct as the CHARACTER, never as the entity
                      # the HTML slots use: nothing here goes through a markup parser.
                      subtitle=f"{len(docs)} stations · {tdesc}",
@@ -3281,8 +3282,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             (fdir / f"{slug}.json").write_text(json.dumps(fetch_doc, indent=2, ensure_ascii=False) + "\n",
                                                encoding="utf-8")
         member_datasets[slug] = survey_dataset_stub(
-            slug=slug, base=base,
-            title=((survey_docs.get(slug) or {}).get("title")) or label,
+            slug=slug, base=base, title=label,
             kind=_survey_kind(survey_served_types(
                 docs, {"stations": disc_stations.get(slug), "survey": disc_survey.get(slug)})),
             blurb=smeta.get("blurb") or "", smeta=smeta)
@@ -3299,7 +3299,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                                  _r.get("data_type")))
         index_rows.append({
             "slug": slug,
-            "title": ((survey_docs.get(slug) or {}).get("title")) or label,
+            "title": label,
             "org": _drow.get("organisation") or smeta.get("org"),
             "org_ror": smeta.get("org_ror"),
             "region": smeta.get("region") or "Australia",

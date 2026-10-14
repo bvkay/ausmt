@@ -2370,3 +2370,67 @@ def test_the_about_block_renders_one_paragraph_per_newline():
                             station_docs=[], bundle_rows=[], ts_access=None, base="https://x.example")
     assert one.count('<p class="prose">') == 1, "a one-line abstract renders exactly as before"
 
+
+
+# ---- one display title: survey.yaml name on every reader surface, project_name in the records ----
+
+def test_every_reader_surface_titles_a_survey_by_its_name_and_the_records_keep_project_name(
+        tmp_path, monkeypatch):
+    """A survey's title reaches a reader on the survey page (heading, crumb, document title, link
+    preview tags, structured data), on its link-preview card, on the /surveys hub card and in its
+    collection's member list. Every one of those prints the survey label, which is survey.yaml
+    `name`, the same string the portal's tree, cards and recently-added strip print. The formal
+    `project_name` stays where a record states the survey formally: the citation line on the page,
+    the survey-metadata document and SMETA's cite.
+
+    FAILS IF any reader surface prints the formal title, or a surface that names the survey
+    formally loses it."""
+    pages = _pages_module()
+    cards = {}
+
+    def card(path, *, title, **_kw):
+        cards[path.name] = title
+        path.write_bytes(b"card")
+        return True
+
+    monkeypatch.setattr(pages, "_og_available", lambda: True)
+    for fn in ("_og_card", "_og_collection_card", "_og_hub_card"):
+        monkeypatch.setattr(pages, fn, card)
+    name, formal = "Short Survey 2020", "Short Survey Magnetotelluric Programme 2020 (Formal Org)"
+    smeta = {"slug": "s", "org": "Org", "lic": "CC-BY-4.0", "blurb": "A survey.", "region": "Tasmania",
+             "collection": {"id": "c", "title": "C"},
+             "cite": {"au": "Org", "yr": "2020", "ti": formal, "pb": "Org"}}
+    docs = {"au.s.A1": {"ausmt_id": "au.s.A1", "station": "A1", "survey_id": "s", "survey": name,
+                        "location": {"lat": -42.0, "lon": 147.0},
+                        "data": {"type": "BBMT", "period_min_s": 0.01, "period_max_s": 1000.0}}}
+    pages.emit_pages(tmp_path, BASE, surveys_meta={name: smeta}, survey_docs={"s": {"title": formal}},
+                     station_docs=docs, collections={"c": {"title": "C", "n_stations": 1}},
+                     bundle_formats={}, survey_extent={}, survey_coll={name: "c"})
+    out = tmp_path / "pages"
+
+    survey = (out / "surveys" / "s.html").read_text(encoding="utf-8")
+    assert f"<h1>{name}" in survey, "the heading is the name"
+    assert f"/ <a href=\"/surveys\">surveys</a> / {name}</p>" in survey, "the crumb ends on the name"
+    assert f"<title>{name} - " in survey
+    assert f'<meta property="og:title" content="{name} - ' in survey
+    lds = [json.loads(b) for b in re.findall(r'<script type="application/ld\+json">([\s\S]*?)</script>', survey)]
+    dataset = next(ld for ld in lds if ld.get("@type") == "Dataset")
+    crumbs = next(ld for ld in lds if ld.get("@type") == "BreadcrumbList")
+    assert dataset["name"].startswith(f"{name} "), dataset["name"]
+    assert crumbs["itemListElement"][-1]["name"] == name
+    cite = survey[survey.index('<details class="cite">'):]
+    assert f"<i>{formal}.</i>" in cite[:cite.index("</details>")], "the citation keeps the formal title"
+    assert survey.count(formal) == 1, "the formal title appears in the citation line and nowhere else"
+
+    assert cards["s.png"] == name, "the link-preview card is titled by the name"
+    hub = (out / "surveys" / "index.html").read_text(encoding="utf-8")
+    assert f'<a href="/surveys/s">{name}</a>' in hub and formal not in hub, "the hub card is titled by the name"
+    coll = (out / "collections" / "c.html").read_text(encoding="utf-8")
+    assert f'<a href="/surveys/s">{name}</a>' in coll and formal not in coll
+    part = [d for ld in re.findall(r'<script type="application/ld\+json">([\s\S]*?)</script>', coll)
+            for d in (json.loads(ld).get("hasPart") or [])]
+    assert part and part[0]["name"] == dataset["name"], \
+        "the collection's member node states the name the survey page's own Dataset states"
+
+    y = {"name": name, "project_name": formal, "slug": "s", "organisation": "Org"}
+    assert build_portal.survey_meta_from_yaml(y)["cite"]["ti"] == formal, "SMETA's cite keeps the formal title"

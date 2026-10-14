@@ -39,7 +39,7 @@ absence is silent.
 |---|---|---|---|
 | `schema_version` | recommended | string | [1 Identity](#1-identity) |
 | `slug` | mandatory | string | [1 Identity](#1-identity) |
-| `project_name` (or `name`) | mandatory | string | [1 Identity](#1-identity) |
+| `project_name` and `name` | mandatory (either one; carry both) | string | [1 Identity](#1-identity) |
 | `version` | recommended | string | [1 Identity](#1-identity) |
 | `country` | mandatory | string | [1 Identity](#1-identity) |
 | `region` | optional | string | [1 Identity](#1-identity) |
@@ -82,7 +82,8 @@ round-trip verbatim, so hand-edited YAML is never silently dropped.
 schema_version: "0.2"                 # "0.2" or "0.3" (0.3 adds the attribution block)
 
 slug: my-survey-2026                  # REQUIRED, must equal the folder name
-project_name: "Survey Name (Org)"     # REQUIRED, human-readable name
+project_name: "Survey Name (Org)"     # REQUIRED (this or name): the formal title
+name: "Survey Name"                   # the display title every reader surface prints
 version: "1.0.0"                      # survey-package semver, not the schema version
 country: Australia                    # REQUIRED
 region: "South Australia"             # optional, a finer geographic facet than country
@@ -215,16 +216,16 @@ care:
 | Example | `my-survey-2026` |
 | Note | It becomes `au.<slug>.<station>` in every id, URL, export and product path. A mismatch with the folder name, or a character outside the set, is a `FAIL`: either would fork the survey's identity downstream. |
 
-### 1.3 project_name
+### 1.3 project_name and name
 
 | | |
 |---|---|
-| Definition | Human-readable survey name, and the key `surveys.json` is indexed by. |
-| Obligation | mandatory |
-| Occurrence | 1 |
+| Definition | The survey's two titles. `name` is the display title: the key `surveys.json` and the catalogue are indexed by, and the string every reader surface prints (the portal's survey tree, survey cards and recently-added strip, the survey page's heading, crumb and link-preview card, the `/surveys` hub card and a collection's member list). `project_name` is the formal title, carried by the survey-metadata document's `title` and by the citation. |
+| Obligation | mandatory: either key satisfies the check, and a package should carry both |
+| Occurrence | 1 each |
 | Type | string |
-| Example | `"Vulcan 2022"` |
-| Note | `name` is an accepted alias. Either key satisfies the check. |
+| Example | `name: "Vulcan 2022"`, `project_name: "Vulcan Magnetotelluric Survey 2022 (Geological Survey of Queensland)"` |
+| Note | One display title on every reader surface, `name` (Owner decision 2026-10-14), so keep it short: it is what a reader scans in a list. Where `name` is absent the display title falls back to the package folder name, not to `project_name`; where `project_name` is absent the formal title falls back to `name`. `mtcat.json`'s survey `title` is `name`. |
 
 ### 1.4 version
 
@@ -1273,7 +1274,6 @@ migration. New packages use the structured form.
 
 | Structured | Flat |
 |---|---|
-| `project_name` | `name` |
 | `organisation: { name, ror }` | `organisation: "Name"` |
 | `data_types: [ … ]` | `data_type: …` |
 | `funding: [ … ]` | `funders: [ … ]` |

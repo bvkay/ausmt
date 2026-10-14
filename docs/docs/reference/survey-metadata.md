@@ -96,7 +96,9 @@ the document is the coordinate policy: a survey whose station coordinates are wi
 `survey_id` is the survey's slug, identical to `mtcat.json`'s `surveys[].survey_id` and to the
 directory component of the document's own path. `title` is the curated `project_name`, else
 `name`; it is never derived from a directory name. `mtcat.json`'s `title` is the shorter display
-label (`name`), so the two may differ.
+label (`name`), so the two may differ. Every reader surface (the portal, the survey and hub pages,
+the link-preview cards) prints `name`; this document and the citation are where the formal title
+stays.
 
 ---
 
