@@ -91,12 +91,15 @@
       "dst":    ["tag:ausmt-serve"],
       "users":  ["publish", "caddylog"],
     },
-    // People: a fresh sign-in check before a session on either Nectar host.
+    // People: a fresh sign-in check before a session on either Nectar host, as the image's admin
+    // account or root. The accounts are named, never autogroup:nonroot, which takes in publish and
+    // caddylog: Tailscale applies the stricter of two matching actions, so a check over them would
+    // override the accept above, and the sshTests entry below refuses that save.
     {
       "action": "check",
       "src":    ["autogroup:admin"],
       "dst":    ["tag:ausmt-serve", "tag:ausmt-curate"],
-      "users":  ["autogroup:nonroot", "root"],
+      "users":  ["ubuntu", "root"],
     },
   ],
 
@@ -126,7 +129,7 @@
   "sshTests": [
     // The box's node login reaches the serving host as the two gated accounts without a sign-in
     // check, which the unattended publish depends on. Its other accounts are left untested: that
-    // login is normally an administrator's, whose root and personal sessions take the check above.
+    // login is normally an administrator's, whose ubuntu and root sessions take the check above.
     {
       "src":    "<BOX_NODE_USER>",
       "dst":    ["tag:ausmt-serve"],
