@@ -4739,8 +4739,8 @@ def _action_forms(*, submission_id: str, state: str, csrf_token: str,
 # side assembly half) so rendering and assembly cannot drift. ORCID/ROR hints are text + a plain
 # link only (the strictPages CSP has no api.ror.org connect-src - a fetch would be blocked).
 _EDIT_SCALARS = (
-    ("project_name", "Project name"),
-    ("name", "Name (backward-compatible alias)"),
+    ("project_name", "Project name (formal title, citation)"),
+    ("name", "Name (display title, required)"),
     ("region", "Region"),
     ("license", "Licence (e.g. CC-BY-4.0)"),
 )
