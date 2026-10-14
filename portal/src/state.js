@@ -48,15 +48,17 @@ const TYPE_INK={GDS:"#fff"};
 // country drives the hierarchy, so {country:"New Zealand"} surfaces NZ with zero code change.
 const CC={"Australia":"AU","New Zealand":"NZ","Antarctica":"AQ","Indonesia":"ID"};
 const TS_COLLECTION={doi:"10.25914/mtjg-jp22",name:"NCI-AuScope Magnetotelluric Collection"};
-// The time-series level vocabulary, [token, label, gloss], IN THE ORDER IT RENDERS. These tokens ARE
-// ts_access.json's keys, so the chooser, the drawer rows and the hand-off pointer file all name a level the
-// same way and none of them re-derives the list. See docs: portal internals, state.js.
+// The time-series levels the portal OFFERS, [token, label, gloss], IN THE ORDER THEY RENDER. These tokens ARE
+// ts_access.json's keys, so the chooser, the drawer rows and the Download rows name a level the same way
+// and none of them re-derives the list. See docs: portal internals, state.js.
 const TS_LEVELS=[
-  ["raw_packed","Packed raw","as recorded, packed by the custodian"],
-  ["level0","Level 0","instrument-recorded, full resolution"],
-  ["level1_mth5","Level 1 MTH5","calibrated, resampled, filtered"],
-  ["level1_netcdf","Level 1 NetCDF","the same Level 1 product, as NetCDF"],
+  ["raw_packed","Packed raw time series","as recorded, packed by the custodian"],
+  ["level0","Level 0 (Edited Time Series)","instrument-recorded, full resolution"],
+  ["level1_mth5","Level 1 MTH5 (Transformed Time Series)","calibrated, resampled, filtered"],
 ];
+// Every token the route table can carry, in render order: TS_LEVELS plus level1_netcdf, which still routes
+// and still reaches a hand-off document but is offered by no control. See docs: portal internals, state.js.
+const TS_ROUTE_LEVELS=["raw_packed","level0","level1_mth5","level1_netcdf"];
 // No AU_PLACES quick-zoom list exists here, and no "Go to place" control exists in index.html or
 // filters.js. See docs: portal internals, state.js.
 const AUSMT_SELF={au:"AusMT contributors",yr:"2026",ti:"AusMT: curated station metadata, quality and provenance for Australian magnetotelluric transfer functions",ve:(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.version)||"",pb:"AusMT"};

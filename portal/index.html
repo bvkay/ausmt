@@ -176,8 +176,9 @@
   .dltiles .prod>div{flex:1;min-width:0}
   .dltiles .prod[disabled]{opacity:.45;cursor:default}
   .dltiles .prod[disabled]:hover{border-color:var(--line)}
-  details.advanced{border:1px solid var(--line);border-radius:6px;padding:2px 10px 10px}
+  details.advanced{border:1px solid var(--line);border-radius:6px;padding:2px 10px}
   details.advanced>summary{cursor:pointer;padding:9px 0;font-size:12.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);user-select:none}
+  details.advanced[open]{padding-bottom:10px}
   details.advanced[open]>summary{border-bottom:1px solid var(--line);margin-bottom:8px}
   details.advanced h2{margin-top:12px}
   .selbox .big{font-family:var(--mono);font-size:26px;font-weight:700}
@@ -631,16 +632,16 @@
     <input type="text" id="find" placeholder="station, survey or collection…" aria-label="Find a station, survey or collection" autocomplete="off">
     <div id="findResults" class="findresults" role="listbox"></div>
     <h2>Data available</h2>
-    <!-- Availability is a single-select VIEWING filter beside data type. See docs: portal internals,
-         index.html. -->
+    <!-- Availability is a single-select VIEWING filter beside data type; Level 2 is a catalogue predicate,
+         not a route. See docs: portal internals, index.html. -->
     <select id="availSel" aria-label="Data available">
       <option value="">Any</option>
       <option value="raw_packed">Packed raw time series</option>
-      <option value="level0">Level 0 time series</option>
-      <option value="level1_mth5">Level 1 MTH5</option>
-      <option value="level1_netcdf">Level 1 NetCDF</option>
+      <option value="level0">Level 0 (Edited Time Series)</option>
+      <option value="level1_mth5">Level 1 MTH5 (Transformed Time Series)</option>
+      <option value="level2">Level 2 (Transfer Functions)</option>
     </select>
-    <div class="fieldnote">Selecting a level keeps the stations whose files are ready to fetch.</div>
+    <div class="fieldnote">A time-series level keeps the stations whose files are ready to fetch; Level 2 keeps the stations whose transfer functions AusMT serves.</div>
     </details>
   </section>
   <div class="collgroup" id="collGroup" data-views="both"></div>

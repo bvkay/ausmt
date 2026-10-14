@@ -61,20 +61,32 @@ ok(tsArchiveUrl(null) === VEC.prefix && tsArchiveUrl(undefined) === VEC.prefix,
    "a null/undefined url_path yields the bare prefix and nothing invented");
 
 // THE LEVEL SEGMENT of /go/ts/<survey>/<station>/<level>, the other half of a hand-off address.
-// state.js DECLARES this vocabulary; the engine DERIVES it (_tsindex.LEVELS minus what never
-// projects) and the route table EMITS it. Nothing re-derived it here, so a sixth routable token
-// would ship in ts_access.json and route at the front door while the chooser, the drawer
-// action rows and the pointer file stayed silent about it - an under-claim with no red anywhere.
+// state.js DECLARES this vocabulary twice: TS_ROUTE_LEVELS, every token the route table can carry,
+// and TS_LEVELS, the subset a control offers. The engine DERIVES the routable set (_tsindex.LEVELS
+// minus what never projects) and the route table EMITS it. Nothing re-derived it here, so a sixth
+// routable token would ship in ts_access.json and route at the front door while the chooser, the
+// drawer action rows and the pointer file stayed silent about it - an under-claim with no red
+// anywhere. The route list must therefore be the shared list exactly, and every routable token must
+// either take a TS_LEVELS row or be named below as one no control offers.
+const UNOFFERED = ["level1_netcdf"];   // still routes and reaches a hand-off document; no control offers it
 const stateSrc = fs.readFileSync(path.join(SRC, "state.js"), "utf8");
 const sctx = { ...ctx };
 sctx.globalThis = sctx; sctx.self = sctx; sctx.window = sctx;
 vm.createContext(sctx);
-vm.runInContext(stateSrc + "\n;globalThis.__lv = TS_LEVELS;", sctx);
+vm.runInContext(stateSrc + "\n;globalThis.__lv = TS_LEVELS;globalThis.__rl = TS_ROUTE_LEVELS;", sctx);
+const routeTokens = [...sctx.__rl];
+ok(JSON.stringify(routeTokens) === JSON.stringify(VEC.routable_levels),
+   "state.js TS_ROUTE_LEVELS must be the shared routable_levels, in render order: got "
+   + JSON.stringify(routeTokens) + ", want " + JSON.stringify(VEC.routable_levels));
 const tokens = sctx.__lv.map(r => r[0]);
-ok(JSON.stringify(tokens) === JSON.stringify(VEC.routable_levels),
-   "state.js TS_LEVELS must be the shared routable_levels, in render order: got "
-   + JSON.stringify(tokens) + ", want " + JSON.stringify(VEC.routable_levels));
-ok(!tokens.includes("level2"),
+const offered = VEC.routable_levels.filter(t => !UNOFFERED.includes(t));
+ok(JSON.stringify(tokens) === JSON.stringify(offered),
+   "state.js TS_LEVELS must be the shared routable_levels minus the unoffered "
+   + JSON.stringify(UNOFFERED) + ", in render order: got " + JSON.stringify(tokens)
+   + ", want " + JSON.stringify(offered));
+ok(UNOFFERED.every(t => VEC.routable_levels.includes(t)),
+   "an unoffered token is still a routable one: it is withdrawn from the controls, not from the route table");
+ok(!tokens.includes("level2") && !routeTokens.includes("level2"),
    "level2 is absent BY DESIGN: the archive's level_2 tree holds transfer functions");
 
 console.log(fail ? ("FAILED " + fail) : "ALL PASSED");

@@ -365,7 +365,7 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     [tsLevelRow("Raw time series","packed raw time series","raw_packed"),tsActionRows(["raw_packed"])],
     [tsLevelRow("Level 0 edited time series","instrument-recorded, full resolution","level0"),tsActionRows(["level0"])],
     [tsLevelRow("Level 1 transformed time series","calibrated, resampled, filtered","level1"),
-     tsActionRows(["level1_mth5","level1_netcdf"])],
+     tsActionRows(["level1_mth5"])],
   ].map(([lvl,acts])=>row(lvl)+acts.map(row).join("")).join("")+
     // Two-phase boot: the hand-off index is a PHASE 2 product, so before it lands the absence of an
     // action row states nothing. Say which wait it is rather than letting silence read as "no file".

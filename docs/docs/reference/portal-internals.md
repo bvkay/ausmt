@@ -312,12 +312,21 @@ The Collections group renders here as its OWN block, above the tree header. buil
 otherwise.
 ```
 
-#### Availability is a single-select VIEWING filter beside data type
+#### Availability is a single-select VIEWING filter beside data type; Level 2 ...
 
 ```text
-Availability is a single-select VIEWING filter beside data type. The four level options filter on
-ts_access.json membership and are DISABLED until the index settles (filters.js paintAvailSelect),
-because the level filter is never live over data that has not arrived.
+Availability is a single-select VIEWING filter beside data type. The three time-series options
+are state.js TS_LEVELS, label for label (tests/test_level_labels.py), filter on ts_access.json
+membership and are DISABLED until the index settles (filters.js paintAvailSelect), because the
+level filter is never live over data that has not arrived. There is no NetCDF option: the route
+table may still carry level1_netcdf (state.js TS_ROUTE_LEVELS), but no control offers it.
+
+"Level 2 (Transfer Functions)" is a catalogue predicate, not a route: it keeps the stations whose
+transfer functions AusMT itself serves (filters.js servesTransferFunction), and it is live from
+first paint because catalogue.json and surveys.json are phase-1 products. It is there for
+completeness beside the time-series levels, so the chooser names every data level AusMT handles,
+and it is the slot a Level 3 (Model Inputs and Outputs) option will sit after once survey records
+carry model DOI links.
 ```
 
 #### Discoverability: these arm the SAME rectangle/polygon draw handlers as ...
@@ -2853,8 +2862,11 @@ driven by the INDEX ALONE and never by hasLevel(); ts_levels keeps its own job, 
 "exists upstream" sub-text above, and where the two disagree the register wins the station row
 while the curator census raises the levels_available gap.
 
-Level 1 is ONE level row with TWO possible actions, format-labelled (the archive publishes MTH5
-and NetCDF of the same product); level_2 reaches none of this by design.
+Level 1 is ONE level row with ONE action, format-labelled "Level 1 MTH5 (Transformed Time
+Series)". The archive also publishes the same product as NetCDF and the route table can still carry
+it (state.js TS_ROUTE_LEVELS), but the portal offers no NetCDF action: a station's level1_netcdf
+route reaches the Pointers (JSON) export and nothing on this tab. level_2 reaches none of this by
+design.
 ```
 
 #### The Level 2 MTH5 sub-row is THIS STATION's own transfer-function h5 ...
@@ -4163,6 +4175,11 @@ can disagree eventually do.
 Shared station filter (drives both Map and Surveys) + the hierarchy tree. buildTree() is
 data-dependent and called by main after ST is built. recolor lives in map.js and is
 referenced only inside event handlers (runtime), never at load time.
+
+A survey row in the tree prints the survey's label, which is its survey.yaml `name`, whole and
+unedited: the display title every surface shows (tree, catalogue cards, recently-added strip,
+survey and hub pages, link-preview cards), so a prefix such as "AusLAMP " is part of it and is
+never stripped here. A shorter row is the curator's call, made in `name`.
 ```
 
 #### up here so renderFind() (which resets it) is never in its temporal dead ...
@@ -4208,16 +4225,33 @@ honesty). The CONTROL was promoted to the discovery bar and the predicate stayed
 the map filters on it as it always did; only where a reader sets it has changed.
 ```
 
-#### Data available: the single-select TIME-SERIES level chooser in Browse
+#### Data available: the single-select level chooser in Browse
 
 ```text
-Data available: the single-select TIME-SERIES level chooser in Browse. A level token
-filters on ts_access.json membership and is INERT until the index has landed: a route that has not
-arrived is not a missing one, and filtering on it would empty the map over data the portal does not
-have. paintAvailSelect disables the level options across the same window (belt and braces), and
-TSACC_READY re-runs refresh() so a choice made early still takes effect. Membership in the index IS
-the access decision: nothing here re-derives availability, and no filter state can surface a
-station the build gated out.
+Data available: the single-select level chooser in Browse. Level 2 reads the catalogue; a
+time-series level reads ts_access.json. A time-series token filters on ts_access.json membership
+and is INERT until the index has landed: a route that has not arrived is not a missing one, and
+filtering on it would empty the map over data the portal does not have. paintAvailSelect disables
+the time-series options across the same window (belt and braces), and TSACC_READY re-runs
+refresh() so a choice made early still takes effect. Membership in the index IS the access
+decision: nothing here re-derives time-series availability, and no filter state can surface a
+station the build gated out. Level 2 is never inert, because the catalogue it reads is a phase-1
+product, and it returns before the index is consulted.
+```
+
+#### Level 2 (Transfer Functions): a station whose transfer function AusMT ...
+
+```text
+Level 2 (Transfer Functions): a station whose transfer function AusMT serves, read from the
+catalogue. The station has periods (catalogue n_periods above zero), and its survey's access level
+is open (drawer.js isOpenAccess over surveys.json), which is the build's own display gate: for an
+embargoed or metadata-only survey the engine empties the station's tf.json curves and withholds its
+derived products, so the transfer function is not served even though the station stays in the
+catalogue. This is deliberately NOT the "Downloadable here" chip (s.ediAvail): an open survey under
+a non-redistributable licence still has its transfer functions plotted and screened here, it just
+offers no file. On a corpus with no embargoed or metadata-only survey the option keeps every
+station; it exists so the chooser names every data level AusMT handles, and as the place a Level 3
+option will follow.
 ```
 
 #### Surveys-view search: a case-insensitive substring across the survey ...
@@ -4577,8 +4611,10 @@ answerFetchDeepLink consumes the query first, with history.replaceState as the t
 removed, so a reload or a Back lands on #/survey/<slug> and the dialog does not re-open behind the
 reader. Once the hand-off index has landed (TSACC_READY), the survey's own stations at the linked
 level become the hand-off document and the dialog, and nothing else: no browser hand-off, no
-metadata pack, no snackbar chain. A level outside the TS_LEVELS vocabulary opens the survey and no
-dialog; a survey with nothing routable at that level says so in the snackbar.
+metadata pack, no snackbar chain. A level outside the TS_ROUTE_LEVELS vocabulary opens the survey
+and no dialog; level1_netcdf is inside it, because the engine still prints a card for a routed
+NetCDF file and that card's href must still open its dialog. A survey with nothing routable at that
+level says so in the snackbar.
 ```
 
 #### The PLURAL routes
@@ -5510,14 +5546,33 @@ never a blanket flip. The ink is a literal rather than a theme token because the
 ramp, which does not change with the theme.
 ```
 
-#### The time-series level vocabulary, [token, label, gloss], IN THE ORDER ...
+#### The time-series levels the portal OFFERS, [token, label, gloss], IN THE ...
 
 ```text
-The time-series level vocabulary, [token, label, gloss], IN THE ORDER IT RENDERS.
-These tokens ARE ts_access.json's keys, so the chooser, the drawer rows and the hand-off pointer
-file all name a level the same way and none of them re-derives the list. `level2` is absent BY
-DESIGN, not by omission: the archive's level_2 tree holds transfer functions,
-not time series, so it opens no route, takes no button and gets no row here.
+The time-series levels the portal OFFERS, [token, label, gloss], IN THE ORDER THEY RENDER.
+These tokens ARE ts_access.json's keys, so the chooser, the drawer rows and the Download rows name a
+level the same way and none of them re-derives the list. The labels follow the data-level bracket
+scheme ("Level 0 (Edited Time Series)") that the engine's survey and station pages print from
+engine/extract/_pages.py _TS_LEVELS; tests/test_level_labels.py holds the two tables and the Data
+available options equal. `level2` is absent BY DESIGN, not by omission: the archive's level_2 tree
+holds transfer functions, not time series, so it opens no route, takes no button and gets no row
+here. The chooser's "Level 2 (Transfer Functions)" option is a catalogue predicate (filters.js
+servesTransferFunction), not a route.
+```
+
+#### Every token the route table can carry, in render order: TS_LEVELS plus ...
+
+```text
+Every token the route table can carry, in render order: TS_LEVELS plus level1_netcdf, which still
+routes and still reaches a hand-off document but is offered by no control. The engine keeps
+level1_netcdf in its route vocabulary (engine/extract/_tsindex.py LEVELS, the build's route table,
+the front door's ts-routes), so a register row at that level stays valid; the portal stops OFFERING
+it and nothing more. The Pointers (JSON) export (exports.js tsHandoffLevels) and the survey page's
+?fetch= deep link (main.js answerFetchDeepLink) read this list, so a document built here over every
+level says what the engine's pages/fetch/<slug>.json says over the same routes
+(contract/fetch_handoff.json). tests/ts_url_vectors.test.js holds this list equal to the shared
+routable_levels and TS_LEVELS equal to it minus level1_netcdf, so a new routable token has to take
+a row in TS_LEVELS or be named in that test as unoffered.
 ```
 
 #### "Go to place" (+ its AU_PLACES quick-zoom list) ...

@@ -204,7 +204,7 @@ function answerFetchDeepLink(sv,query){
   const m=String(query||"").match(/(?:^|&)fetch=([^&]*)/);
   let level="";
   try{level=m?decodeURIComponent(m[1]):"";}catch(e){level="";}
-  if(!level||!TS_LEVELS.some(([tok])=>tok===level))return;
+  if(!level||TS_ROUTE_LEVELS.indexOf(level)<0)return;
   const ready=(typeof TSACC_READY!=="undefined"&&TSACC_READY&&TSACC_READY.then)?TSACC_READY:Promise.resolve();
   ready.then(()=>{
     if(typeof tsHandoffDocument!=="function"||typeof showWgetDialog!=="function")return;

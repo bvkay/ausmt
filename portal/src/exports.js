@@ -190,12 +190,12 @@ bindClick("dlSh",()=>{const st=scopeSel();track("DownloadGenerated",{format:"poi
 // The offer is a POINTER FILE, never a server-built zip or a fourth exportSelectionFormat. See docs: portal
 // internals, exports.js.
 var TS_HANDOFF_NOTE="AusMT hosts none of these files and fetches none of them. Each `url` is an AusMT route that answers 302 with the address of the archive holding the file; `archive_url_comment` records where that route currently points and is for reference only. Fetch the urls from your own terminal - the portal's hand-off dialog shows ready-made commands: wget -c (Linux) or curl -L -C - (macOS/Windows) resumes on a re-run.";
-// One station's routable levels, in the vocabulary's own order so two readers' files sort alike.
+// One station's routable levels, in the route vocabulary's own order so two readers' files sort alike.
 // `levels` names the level tokens on the table; empty/null means every level this station has.
 function tsHandoffLevels(s,levels,includeGaps){
   const lv=(typeof tsRoutesFor==="function")?tsRoutesFor(s&&s.ausmt_id):null;
   if(!lv)return [];
-  return TS_LEVELS.map(([tok])=>tok)
+  return TS_ROUTE_LEVELS
     .filter(tok=>lv[tok]&&(!levels||!levels.length||levels.indexOf(tok)>=0))
     .map(tok=>{const url=tsGoRoute(s,tok),okUrl=!!(url&&/^https?:/i.test(url));
       const row={level:tok,url:okUrl?url:null,bytes:lv[tok].bytes||null,
