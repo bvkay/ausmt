@@ -41,10 +41,9 @@ code += "\nglobalThis.__api={boot,openStation,openSurvey,setView,refresh,routeFr
   // lets a test assert the footer VALUE binding without a real DOM (getElementById stubs below return
   // a fresh throwaway object per call, so nothing written to el.textContent would be observable).
   // Two-phase boot: boot() returns as soon as the FIRST-PAINT products (catalogue/surveys + the small
-  // optionals) are in; sci.json / manifest.json / ts_access.json hydrate behind it. hydrationDone settles once
-  // all three have landed AND their late-render work has run, so this smoke test can keep asserting against
-  // the fully-hydrated state a single-phase boot would hand it in one go. A survey's curves load when one of
-  // its stations opens.
+  // optionals) are in; sci.json / ts_access.json hydrate behind it. hydrationDone settles once both have
+  // landed AND their late-render work has run. A survey's curves and the download manifest load when a
+  // station drawer opens.
   "hydrationDone:()=>HYDRATION_DONE," +
   "buildIdText:()=>buildIdText()};";
 

@@ -428,9 +428,12 @@ own data licence.
 #### RIGHT
 
 ```text
-RIGHT. The live counts, and nothing after them. One SHELL, a contextual SLOT: #footerCounts is the
-same element in the same place on every view and #countSlot's content is what changes
-(filters.js updateCounts); the markup here is the MAP form. The map page's footer carries no
+RIGHT. The live counts, then the data build they were counted from, and nothing after that. One
+SHELL, a contextual SLOT: #footerCounts is the same element in the same place on every view and
+#countSlot's content is what changes (filters.js updateCounts); the markup here is the MAP form.
+#buildId sits outside the slot, so no view rewrites it: main.js renderBuildId writes the short build
+id and date there at boot (" · data build <first 12 characters> · <date>", with the full id in its
+title), and leaves it empty when build.json did not load. The map page's footer carries no
 lock-up, because the map's corner does. The footer carries no control: the appearance choice is
 the welcome dialog's Appearance row and About's section 9.
 ```
@@ -2386,11 +2389,12 @@ case) => {} => no badges. Same tolerant-of-absence pattern as collections/build 
 ```text
 ---- PHASE 2: background hydration --------------------------------------------------------------
 The products every view may read, issued AFTER phase 1 settles (they would otherwise contend with the
-catalogue for the same connection) and awaited by NOBODY on the first-paint path: sci.json, the
-manifest and ts_access.json. Each assigns its global and settles its own gate, so a consumer waits only
-for the product it actually reads (the Files tab needs the manifest; the processing rows need sci).
-Returns the three gates so a caller (and the headless drivers) can observe hydration. The curves are
-not here: they are per survey and on demand.
+catalogue for the same connection) and awaited by NOBODY on the first-paint path: sci.json and
+ts_access.json. Each assigns its global and settles its own gate, so a consumer waits only for the
+product it actually reads. Returns the two gates so a caller (and the headless drivers) can observe
+hydration. Two products are not here because most visits never need them: the curves (per survey, when
+a station opens) and the download manifest (loadManifest, below). The manifest's gate is set to
+"pending" here all the same, so no surface can read its absence as "nothing is served".
 ```
 
 #### A sci FAILURE is not absence
@@ -2429,6 +2433,26 @@ hydrGate renders the same loading and could-not-load blocks it renders for every
 A file whose length differs from the survey's station count is a failure, never a partial load: there
 is no key on the wire, so a short file would put one station's curves on another. A survey with no
 tf_url fails the same way. The request carries no low-priority hint, because a reader is waiting on it.
+```
+
+#### ---- the download manifest, on demand ...
+
+```text
+---- the download manifest, on demand ----------------------------------------------------------
+manifest.json was 2,026,061 bytes encoded (14,825,691 decoded) on a first visit measured on the live
+site, and only the surfaces that offer files read it. loadManifest() fetches it once per visit, the
+first time one of them is used, and every consumer awaits that one Promise (MANIFEST_READY):
+  * switching the sidebar to Select (the Download block's rows and zip sizes);
+  * opening a station drawer (every tab renders at open, and the header Download EDI button, the Files
+    tab and the Provenance format badges and API line all read the manifest) or a survey drawer (its
+    bundle grid), and selecting the Files tab;
+  * every selection export (the EDI zip and the per-format zips await it before packaging, so no
+    station silently takes the legacy fallback path).
+Until it lands the gate reads "pending" and every one of those surfaces shows its loading state;
+because each of them is also what starts the load, a loading state is never shown with nothing in
+flight. When it lands main.js manifestLanded re-renders the open drawer and repaints the Download
+block. A 404 is the honest absence (MANIFEST=null, as before), not a failure. A harness that assigns
+MANIFEST directly leaves the gate "ready", and loadManifest then fetches nothing.
 ```
 
 #### ---- download manifest resolver: the distribution backbone ...
@@ -2678,10 +2702,10 @@ they say "embargoed"/"metadata only" instead. An OPEN survey keeps today's exact
 byte), including the "EDI (via source archive)" fallback the pins assert is ABSENT when embargoed.
 ```
 
-#### Two-phase boot: the manifest is a PHASE 2 product, so before it lands ...
+#### Two-phase boot: the manifest loads on demand, so before it lands ...
 
 ```text
-Two-phase boot: the manifest is a PHASE 2 product, so before it lands there is no honest answer here:
+Two-phase boot: the manifest loads on demand, so before it lands there is no honest answer here:
 the served-artifact branch and BOTH fallbacks ("EDI (via source archive)" / the embargo wording) are
 claims about what this deployment serves. Report the pending state with NO download affordance (d:null,
 so headerDownloadBtn renders nothing at all rather than a button that might resolve to the wrong route),
@@ -2913,7 +2937,7 @@ stays TF-only honest ("transfer functions").
 #### Two-phase boot: all three Level 2 sub-rows resolve against the download ...
 
 ```text
-Two-phase boot: all three Level 2 sub-rows resolve against the download manifest (PHASE 2), and each of
+Two-phase boot: all three Level 2 sub-rows resolve against the download manifest (loaded on demand), and each of
 them degrades to a "not currently available" / "via source archive" line, i.e. statements about what the
 build actually served. Render the loading state in place of the three rows until the manifest lands
 (the time-series rows above and the publication row below read survey metadata from phase 1, so they
@@ -2967,10 +2991,10 @@ line asserted "EDI ✓ · EMTF XML (pipeline)" unconditionally, claiming an XML 
 pipeline never produced one for and an EDI for embargoed stations.
 ```
 
-#### Two-phase boot: every input here is a manifest row (PHASE 2)
+#### Two-phase boot: every input here is a manifest row (loaded on demand)
 
 ```text
-Two-phase boot: every input here is a manifest row (PHASE 2). Pre-hydration the list would come back
+Two-phase boot: every input here is a manifest row (loaded on demand). Pre-hydration the list would come back
 empty and print "none currently served", a false claim about the corpus and exactly the overclaim in
 the other direction that this function was written to remove. Say it is loading instead.
 ```
@@ -4802,7 +4826,8 @@ for anyone who needs to trace it, via renderBuildId() below.
 
 ```text
 ---- two-phase boot ------------------------------------------------------------------------------
-HYDRATION_DONE settles once every phase-2 product has landed AND its late-render work has run. It is not
+HYDRATION_DONE settles once every phase-2 product (sci, ts_access) has landed AND its late-render work
+has run; the on-demand products (a survey's curves, the manifest) have their own Promises. It is not
 on any user-facing path (nothing awaits it to paint); it exists so a headless driver can say "now the app
 is in the state a single-phase boot produces" without racing the continuations.
 ```
@@ -4815,11 +4840,38 @@ its product, and nothing else:
   sci -> re-folds s.q/s.dim (applySciToStations), re-enables the completeness/dimensionality
               colour modes, then refresh() so the map/counts/cards reflect a completeness predicate
               that was inert until now.
-  tf -> the open station drawer (its response plots and the sci/tf-derived summary rows).
-  manifest -> the open drawer again (Files rows, format badges, download tiles), station OR survey.
+  tf:<slug> -> the open station drawer, when it still shows a station of that survey (drawer.js wires
+              this on the load it starts).
+  manifest -> manifestLanded: the open drawer again (Files rows, format badges, download tiles),
+              station OR survey, and the Download block's rows and zip-size estimates.
 Re-rendering the open drawer is the deliberate simplest correct answer: it is one innerHTML rewrite of a
 panel the user is already looking at, and rehydrateOpenDrawer preserves scroll position and the selected
 tab so the only visible change is the section that was showing a loading state.
+```
+
+#### The on-demand manifest landed: repaint what read it
+
+```text
+The on-demand manifest landed: repaint what read it. loadManifest calls this when manifest.json
+settles: the open drawer is re-rendered in place, and the Download block's rows and the selection
+card's zip-size estimates are repainted, since updateSel last ran before the manifest arrived and would
+otherwise leave them blank until the reader next changed the selection.
+```
+
+#### ---- the build check: offers a reload, never reloads ...
+
+```text
+---- the build check: offers a reload, never reloads ---------------------------------------------
+Every product is served no-cache with an ETag, so a reload always fetches the current build; the
+risk is a page that is never reloaded. A tab restored from the back-forward cache (pageshow with
+event.persisted) shows the data of whatever build it was frozen with, and a tab left open for hours
+keeps its boot data. So on such a pageshow, and on visibilitychange to visible when more than five
+minutes (BUILD_CHECK_MS) have passed since the last check, the portal re-reads build.json (a few
+hundred bytes, no-cache) and compares its build_id with the one it booted from (BUILDID). If they
+differ the snackbar says "A newer data build is available" with a Reload action; an identical id, an
+absent build.json or a boot that had no build id raise nothing. It never reloads by itself: a reader
+may be mid-selection or mid-export, and a reload would throw that state away. The boot itself counts
+as the first check, so a tab hidden and shown again within five minutes costs no request.
 ```
 
 #### ts_access.json settles the availability facet: until it lands nothing ...
@@ -5498,8 +5550,8 @@ available" / "not evaluated" / "none currently served" for a product that is mer
   HYDR[k] === "pending" -> in flight; render an unobtrusive LOADING state, NEVER absence
   HYDR[k] === "failed" -> the fetch resolved not-ok / unparseable; say THAT, never dress it as absence
 SCI_READY / MANIFEST_READY are the awaitable gates for consumers that cannot degrade (the exports read
-SCI; the bulk EDI zip reads the manifest), and loadSurveyCurves(slug) returns the one for a survey's
-curves. A survey's curve gate is HYDR["tf:<slug>"], absent until a station of the survey opens. The
+SCI; the bulk EDI zip awaits loadManifest(), which sets MANIFEST_READY), and loadSurveyCurves(slug)
+returns the one for a survey's curves. A survey's curve gate is HYDR["tf:<slug>"], absent until a station of the survey opens. The
 defaults are the SETTLED values so every harness that assigns SCI/MANIFEST directly (the coord-access
 and bundle-tile drivers do) behaves as it did before phasing: only a boot that actually starts phase 2
 flips them to pending.

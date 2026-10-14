@@ -10,7 +10,7 @@ let SCI_READY=Promise.resolve(),MANIFEST_READY=Promise.resolve();
 // never open, so a phase-1 fetch would add a blocking boot request for it; the Availability controls
 // are disabled and aria-busy across the window instead, exactly as the colour modes are.
 let TSACC_READY=Promise.resolve();
-// A survey's curve file has its own gate, "tf:<slug>", set when loadSurveyCurves first asks for it.
+// Each survey's curves add a "tf:<slug>" gate.
 const HYDR={sci:"ready",manifest:"ready",tsaccess:"ready"};
 function hydrating(k){return HYDR[k]==="pending";}
 function hydrFailed(k){return HYDR[k]==="failed";}

@@ -40,8 +40,7 @@ let _drawerSubject=null;
 // "Automated screening", "AusMT-derived". Plain muted text, no colour semantics.
 function roleChip(l){return `<span class="rolechip">${esc(l)}</span>`;}
 // ---- two-phase boot: the loading surfaces ------------------------------------------------------
-// The drawer is the densest consumer of the late products (a survey's curve file -> the response curves;
-// sci.json -> the processing/screening rows). See docs: portal internals, drawer.js.
+// The drawer is the densest consumer of the late products. See docs: portal internals, drawer.js.
 function hydrBlock(what){return `<div class="hydrating" role="status">Loading ${esc(what)}…</div>`;}
 function hydrFailBlock(what){return `<div class="hydrating hydrfail" role="status">Could not load ${esc(what)}.</div>`;}
 function hydrCell(){return `<span class="hydrating hydr-inline">loading…</span>`;}
@@ -74,6 +73,7 @@ function drawerPanel(id,content,selected){
 let _curDrawerTab="response";
 function selectDrawerTab(name){
   _curDrawerTab=name;
+  if(name==="files")loadManifest();
   if(!drawer||!drawer.querySelectorAll)return;
   const tabs=[...drawer.querySelectorAll('[role="tab"]')];
   const panels=[...drawer.querySelectorAll('[role="tabpanel"]')];
@@ -85,7 +85,7 @@ function selectDrawerTab(name){
 // The display gate, factored: the served-EDI descriptor for a station, {sub,st,d}. See docs: portal
 // internals, drawer.js.
 function ediDescriptor(s,m){
-  // Two-phase boot: the manifest is a PHASE 2 product, so before it lands there is no honest answer here:
+  // Two-phase boot: the manifest loads on demand, so before it lands there is no honest answer here:
   // the served-artifact branch and BOTH fallbacks ("EDI (via source archive)" / the embargo wording) are
   // claims about what this deployment serves. See docs: portal internals, drawer.js.
   if(hydrating("manifest"))return {sub:"loading…",st:"unk",d:null};
@@ -370,7 +370,7 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     // Two-phase boot: the hand-off index is a PHASE 2 product, so before it lands the absence of an
     // action row states nothing. Say which wait it is rather than letting silence read as "no file".
     (tsIndexKnown?"":hydrBlock("archive hand-off routes"));
-  // Two-phase boot: all three Level 2 sub-rows resolve against the download manifest (PHASE 2), and each of
+  // Two-phase boot: all three Level 2 sub-rows resolve against the download manifest (loaded on demand), and each of
   // them degrades to a "not currently available" / "via source archive" line, i.e. statements about what
   // the build actually served. See docs: portal internals, drawer.js.
   const level2Body=hydrating("manifest")?hydrBlock("served files"):level2Subs.map(row).join("");
@@ -405,7 +405,7 @@ function fileWrittenByText(fwb){
 // qualifier. It renders inside the station drawer's lineage graph, so every input must be station-scoped.
 // See docs: portal internals, drawer.js.
 function distributedFormatsText(s,m){
-  // Two-phase boot: every input here is a manifest row (PHASE 2). See docs: portal internals, drawer.js.
+  // Two-phase boot: every input here is a manifest row (loaded on demand). See docs: portal internals, drawer.js.
   if(hydrating("manifest"))return "loading…";
   const arts=(typeof artifactsFor==="function"?artifactsFor(s&&s.ausmt_id):[]);
   const out=[];
@@ -627,6 +627,7 @@ function openStation(i,opts){
   const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
   if(!rehydrate)_rememberDrawerOpener();              // Capture the invoking element before the rewrite
   _drawerSubject={kind:"station",i};                  // what rehydrateOpenDrawer re-renders when a gate settles
+  if(!rehydrate)loadManifest();
   const s=ST[i],t=tfRow(i)||[[]],m=SMETA[s.survey]||{},sc=sciRow(i);
   // The sc[SC.dim] (dimensionality) value is not surfaced in the drawer screening grid: it is inferable
   // from the phase tensor + skew, which are shown (strike/|β|/3-D-periods line below), so `dim` is
@@ -679,8 +680,7 @@ function openStation(i,opts){
   // ---- Panel content -------------------------------------------------------------------------------
   // Response (default) - the four plots FIRST, the centerpiece. See docs: portal internals, drawer.js.
   const _rspOpen=isOpenAccess(m);
-  // The curves arrive with the survey's curve file; the open drawer re-renders once it settles. See docs:
-  // portal internals, drawer.js.
+  // The curves arrive with the survey's curve file. See docs: portal internals, drawer.js.
   const _tfKey="tf:"+s.slug;
   if(_rspOpen&&!rehydrate&&HYDR[_tfKey]!=="ready"&&HYDR[_tfKey]!=="failed")loadSurveyCurves(s.slug).then(()=>{
     if(_drawerSubject&&_drawerSubject.kind==="station"&&ST[_drawerSubject.i]&&ST[_drawerSubject.i].slug===s.slug)rehydrateOpenDrawer();});
@@ -1244,7 +1244,7 @@ function releaseNotesHtml(m){
 // Pre-built per-survey download bundles from the manifest (EDI zip + EMTF-XML zip always when served;
 // survey MTH5 only when the survey_h5_enabled flag produced one). See docs: portal internals, drawer.js.
 function surveyBundleTiles(slug){
-  // Two-phase boot: the bundle rows live in the manifest (PHASE 2). "" (no tiles) reads as "this survey is
+  // Two-phase boot: the bundle rows live in the manifest (on demand). "" (no tiles) reads as "this survey is
   // not served in bundle form", an absence claim made by OMISSION, which is no more honest than making it
   // in words, so pre-hydration the grid shows a loading tile that MANIFEST_READY replaces with the real one.
   if(hydrating("manifest"))return `<div class="prod dis"><span class="pdot" style="background:var(--unk)"></span><div>Survey bundles<small>loading…</small></div></div>`;
@@ -1343,6 +1343,7 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
   const keepScroll=rehydrate?(drawer.scrollTop||0):0;
   const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
   if(!rehydrate)_rememberDrawerOpener();              // Capture the invoking element before the rewrite
+  if(!rehydrate)loadManifest();
   // The survey drawer OWNS its route, as openStation does: opening survey B over
   // survey A must replace #/survey/<A> in the address bar, just as the close path clears it. See docs:
   // portal internals, drawer.js.

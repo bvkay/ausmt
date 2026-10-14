@@ -506,6 +506,8 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "hydrationDone:()=>HYDRATION_DONE,hydrState:(k)=>HYDR[k]," +
   // A survey's curve-file gate and its memoised load, read without starting one.
   "curvesState:(slug)=>HYDR[\"tf:\"+slug],curvesLoad:(slug)=>_CURVES[slug]," +
+  // The download manifest's gate, read without starting a load; the build check's own promise and clock.
+  "manifestLoad:()=>MANIFEST_READY,buildCheckDone:()=>_BUILD_CHECK,setBuildCheckedAt:(t)=>{_buildCheckedAt=t;}," +
   "markerCount:()=>ST.filter(s=>s.marker).length,station:(id)=>ST.find(x=>x.id===id)," +
   "qMin:()=>qMin,setQMin:(v)=>{qMin=v;},closeDrawer," +
   // Availability-chooser hooks. tsLevels/setTsLevels read and drive the chosen level set without
@@ -564,7 +566,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const w = d.window;
   w.L = stub(); w.JSZip = stub();
   w.AUSMT_CONFIG = { short_name: "AusMT" };
-  w.fetch = url => Promise.resolve(dataMap[url] ? { ok: true, json: () => Promise.resolve(dataMap[url]) } : { ok: false });
+  w.__fetched = [];
+  w.fetch = url => { w.__fetched.push(String(url));
+    return Promise.resolve(dataMap[url] ? { ok: true, json: () => Promise.resolve(dataMap[url]) } : { ok: false }); };
   if (typeof preBoot === "function") preBoot(w);
   await new Promise(res => (w.document.readyState === "complete" ? res() : w.addEventListener("load", res, { once: true })));
   vm.runInContext(code, d.getInternalVMContext());
@@ -606,16 +610,19 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // ts_access.json rides PHASE 2: the Availability facet it feeds is one most visitors never open,
   // so it must never be one of the requests first paint waits on.
   // The curves are not on this list: a survey's curve file is fetched when one of its stations opens.
+  // Nor is the download manifest: it loads when a surface that renders from it is first used.
   const _bootUrls = ["catalogue.json", "surveys.json", "build_provenance.json", "collections.json",
-    "build.json", "coord_policy.json", "sci.json", "manifest.json", "ts_access.json"];
+    "build.json", "coord_policy.json", "sci.json", "ts_access.json"];
   _bootUrls.forEach(n => ok(fetchOrder.some(u => u.endsWith("/" + n)),
     "phase1/2: " + n + " must be requested during boot (the optionals must not queue behind each other); issued: " + JSON.stringify(fetchOrder)));
   ok(fetchOrder.length === _bootUrls.length,
-    "boot must issue exactly the nine data fetches, got " + JSON.stringify(fetchOrder));
+    "boot must issue exactly the eight data fetches, got " + JSON.stringify(fetchOrder));
+  ok(!fetchOrder.some(u => /(^|\/)manifest\.json$/.test(u)),
+    "boot must not request manifest.json; it loads on Select, a drawer or an export, got " + JSON.stringify(fetchOrder));
   ok(!fetchOrder.some(u => /(^|\/)tf(\.json$|\/)/.test(u)),
     "boot must request no transfer-function curves (neither tf.json nor a survey's tf/<slug>.json), got " + JSON.stringify(fetchOrder));
   ok(A.curvesState("alpha") === undefined, "no survey's curve gate may exist before a station of it opens");
-  ok(heavyHeld() === 3, "phase2: sci/manifest/ts_access must all be in flight CONCURRENTLY, held " + heavyHeld());
+  ok(heavyHeld() === 2, "phase2: sci/ts_access must both be in flight CONCURRENTLY, held " + heavyHeld());
   ["sci", "manifest", "tsaccess"].forEach(k => ok(A.hydrState(k) === "pending",
     "phase2: the " + k + " gate must read 'pending' while its fetch is held, got " + A.hydrState(k)));
   ok(A.tsRoutes("au.alpha.A1") === null,
@@ -830,6 +837,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   releaseHeavy();
   await A.hydrationDone();
   await A.curvesLoad("alpha");
+  await A.manifestLoad();
   ["sci", "manifest", "tsaccess"].forEach(k => ok(A.hydrState(k) === "ready",
     "hydration: the " + k + " gate must settle to 'ready', got " + A.hydrState(k)));
   ok(A.curvesState("alpha") === "ready", "the Alpha curve gate must settle to 'ready', got " + A.curvesState("alpha"));
@@ -5802,6 +5810,71 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     await w2.__api.hydrationDone();
     ok(order2.some(u => /sci\.json/.test(u)) && order2.some(u => /ts_access\.json/.test(u)),
       "hydration-order: hydration must still run to completion once phase 1 settles, got " + order2.join(","));
+  }
+
+  // ---- The download manifest loads on demand -----------------------------------------------------
+  // First paint does not carry it. Switching to Select requests it once; an export awaits it, so a
+  // packaged EDI comes from its manifest url rather than the legacy fallback path.
+  {
+    const MF = { generated_count: 1, bundles: [], files: [{ ausmt_id: "au.alpha.A1", survey: "Alpha Survey",
+      station: "A1", format: "edi", url: "edi/alpha/A1_served.edi", size: 10, sha256: "c".repeat(64),
+      tier: "repo", license: "CC-BY-4.0" }] };
+    const mfMap = Object.assign({}, DATAMAP, { "data/manifest.json": MF });
+    const mfReqs = w => w.__fetched.filter(u => /(^|\/)manifest\.json$/.test(u)).length;
+    const sw = await bootFreshWindow(mfMap);
+    ok(mfReqs(sw) === 0, "manifest: boot must not request manifest.json, got " + JSON.stringify(sw.__fetched));
+    sw.__api.setSidebarMode("select");
+    ok(mfReqs(sw) === 1, "manifest: switching to Select must request manifest.json once, got " + mfReqs(sw));
+    await sw.__api.manifestLoad();
+    ok(sw.__api.hydrState("manifest") === "ready", "manifest: the gate must settle once the Select switch loads it");
+    sw.__api.setSidebarMode("browse"); sw.__api.setSidebarMode("select");
+    ok(mfReqs(sw) === 1, "manifest: a second Select switch must not request it again, got " + mfReqs(sw));
+
+    const ew = await bootFreshWindow(mfMap);
+    ok(mfReqs(ew) === 0, "manifest: a fresh boot must not request manifest.json");
+    try { await ew.document.getElementById("dlZip").onclick(); } catch (e) { /* jsdom has no object-URL store */ }
+    ok(mfReqs(ew) === 1, "manifest: an export must request manifest.json, got " + mfReqs(ew));
+    const _mfAt = ew.__fetched.findIndex(u => /manifest\.json$/.test(u));
+    const _ediAt = ew.__fetched.findIndex(u => /edi\/alpha\/A1_served\.edi/.test(u));
+    ok(_ediAt > _mfAt && _mfAt >= 0,
+      "manifest: the export must await the manifest and fetch the station's EDI at its manifest url, got " + JSON.stringify(ew.__fetched));
+  }
+
+  // ---- A newer data build is announced, never auto-loaded ----------------------------------------
+  // On pageshow from the back-forward cache, and on a return to the tab after five minutes, build.json is
+  // re-read; a different build_id raises the snackbar with a Reload action, an identical one raises nothing.
+  {
+    const bMap = Object.assign({}, DATAMAP);
+    const bw = await bootFreshWindow(bMap);
+    const bReqs = () => bw.__fetched.filter(u => /(^|\/)build\.json$/.test(u)).length;
+    const snackEl = bw.document.getElementById("snackbar");
+    const pageshow = persisted => { const ev = new bw.Event("pageshow");
+      Object.defineProperty(ev, "persisted", { value: persisted }); bw.dispatchEvent(ev); };
+    const n0 = bReqs();
+    pageshow(false);
+    ok(bReqs() === n0, "build check: a fresh pageshow (not from the back-forward cache) must not re-read build.json");
+    pageshow(true);
+    ok(bReqs() === n0 + 1, "build check: pageshow from the back-forward cache must re-read build.json");
+    await bw.__api.buildCheckDone();
+    ok(snackEl.classList.contains("hidden") && !/newer data build/.test(snackEl.textContent),
+      "build check: an identical build_id must raise nothing, got " + JSON.stringify(snackEl.textContent));
+    bw.document.dispatchEvent(new bw.Event("visibilitychange"));
+    ok(bReqs() === n0 + 1, "build check: a return to the tab within five minutes of the last check must not re-read build.json");
+    bMap["data/build.json"] = Object.assign({}, bMap["data/build.json"], { build_id: "eng2-src2-2020" });
+    bw.__api.setBuildCheckedAt(Date.now() - 6 * 60 * 1000);
+    bw.document.dispatchEvent(new bw.Event("visibilitychange"));
+    ok(bReqs() === n0 + 2, "build check: a return to the tab after five minutes must re-read build.json");
+    await bw.__api.buildCheckDone();
+    ok(!snackEl.classList.contains("hidden") && /A newer data build is available/.test(snackEl.textContent),
+      "build check: a changed build_id must raise the snackbar, got " + JSON.stringify(snackEl.textContent));
+    const act = snackEl.querySelector(".snack-act");
+    ok(act && act.textContent === "Reload", "build check: the snackbar must offer a Reload action");
+    ok(bw.location.href === "http://localhost/", "build check: a newer build must never reload on its own");
+    // The short build id the footer counts line carries.
+    const slot = doc.getElementById("buildId");
+    ok(slot && slot.closest("#footerCounts"), "build id: index.html must carry #buildId inside the counts line");
+    ok(slot && slot.textContent === " · data build eng-src-2020 · 2020-01-15",
+      "build id: renderBuildId must write the short build id into #buildId, got " + JSON.stringify(slot && slot.textContent));
   }
 
   // ---- Link-preview metadata (Open Graph + Twitter card) ------------------------------------------
