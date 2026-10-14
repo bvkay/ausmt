@@ -280,7 +280,7 @@ def test_one_byte_edi_edit_moves_its_station_and_survey_files_only(tmp_path, cle
     moved = sorted(rel for rel in warm_h5 if _h5_semantic(warm_h5[rel]) != _h5_semantic(cold_h5[rel]))
     sid = [r["station"] for r in json.loads((cold / "manifest.json").read_text(encoding="utf-8"))["files"]
            if r["format"] == "edi" and r["url"].endswith(f"mc-a/{target.name}")][0]
-    assert moved == sorted([f"bundles/mc-a-tf.h5", f"h5/mc-a/{sid}.h5"]), moved
+    assert moved == sorted(["bundles/mc-a-tf.h5", f"h5/mc-a/{sid}.h5"]), moved
     by = _stations_by_survey(warm)
     ok, rep = build_portal.mth5_survey_roundtrip_ok(warm / "bundles" / "mc-a-tf.h5", by["mc-a"])
     assert ok, rep
