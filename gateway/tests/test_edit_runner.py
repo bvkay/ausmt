@@ -32,6 +32,7 @@ EXEMPLAR = """\
 schema_version: "0.2"
 slug: demo-survey-2026
 project_name: Demo Survey            # human-readable name
+name: Demo Survey
 version: 1.0.0
 country: Australia
 region: South Australia
@@ -748,6 +749,7 @@ _VALID_PACKAGE_YAML = """\
 schema_version: "0.2"
 slug: intg-survey-2026
 project_name: Integration Survey      # keep this comment
+name: Integration Survey
 version: 1.0.0
 country: Australia
 region: South Australia
