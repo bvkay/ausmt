@@ -568,7 +568,7 @@ operator pages and this section). The prune reads the cap as `max_mb * 1024 * 10
 is 17,179,869,184 B.
 
 Every figure below is from the live-corpus acceptance run: one cold build then one warm build of
-engine commit `b362918` over 15,265 stations in 161 surveys (`n_stations`, `n_surveys` in
+engine commit `b362918` (the build_id recorded in the run's build.json; after the branch was rebased onto main the same patch is `6aedf7d`) over 15,265 stations in 161 surveys (`n_stations`, `n_surveys` in
 `sm/.corpus-live-out/builds/{cold,warm}/build_provenance.json`), mt_metadata 1.0.10 and mth5 0.6.8
 (the same files' `software` block), h5py 3.16.0 and HDF5 2.0.0 (`h5py.__version__` and
 `h5py.version.hdf5_version` in `ausmt-lock`), four workers, both MTH5 flags on
