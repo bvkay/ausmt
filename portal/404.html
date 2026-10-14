@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
 <title>Page not found - AusMT</title>
-<script src="/src/theme.js"></script>
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">
@@ -20,15 +19,6 @@
     --mono:ui-monospace,'SF Mono','Cascadia Mono','Consolas',monospace;
     --sans:'Libre Franklin',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
     color-scheme:light;
-  }
-  :root[data-theme="dark"]{
-    --bg:#11182D; --surface:#18213D; --surface-2:#1E2B4F; --line:#2B3557;
-    --text:#E8EDF1; --muted:#8FA3B0; --heading:#FFFFFF; --accent:#EF7256; --accent-ink:#16110B;
-    --dot-edge:#11182D;
-    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
-    --map-bg:#0F1626; --map-panel:#18213D; --map-line:#222C4E; --coast-fill:#1D3140; --coast-line:#3A5266;
-    --shadow:none;
-    color-scheme:dark;
   }
   body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:16px/1.55 var(--sans)}
   main{max-width:760px;width:min(100% - 2.5rem,760px);margin:0 auto;padding:4rem 1.25rem 2.2rem;flex:1 0 auto}
@@ -46,9 +36,6 @@
   .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
   .orglockup{display:inline-block;line-height:0;margin:-5.625px 0}
   .orglockup img{height:30px;width:auto;max-width:100%;object-fit:contain}
-  .theme-dark{display:none}
-  :root[data-theme="dark"] .theme-light{display:none}
-  :root[data-theme="dark"] .theme-dark{display:block}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
@@ -70,7 +57,7 @@ the <a href="/surveys">survey index</a>.</p>
        portal internals, 404.html. -->
   <div class="fzone fleft"><a class="apilink" href="/data/mtcat.json" title="MTCAT discovery document (JSON)">MTCAT JSON ↗</a></div>
   <div class="fzone fcenter">AusMT is enabled by <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">AuScope</a> · Data licences vary by survey</div>
-  <div class="fzone fright"><a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
+  <div class="fzone fright"><a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
 </footer>
 </body>
 </html>

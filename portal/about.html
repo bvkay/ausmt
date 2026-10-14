@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>About AusMT: Magnetotelluric Data Discovery &amp; Access</title>
-<script src="/src/theme.js"></script>
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">
@@ -35,15 +34,6 @@
     --sans:'Libre Franklin',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
     color-scheme:light;
   }
-  :root[data-theme="dark"]{
-    --bg:#11182D; --surface:#18213D; --surface-2:#1E2B4F; --line:#2B3557;
-    --text:#E8EDF1; --muted:#8FA3B0; --heading:#FFFFFF; --accent:#EF7256; --accent-ink:#16110B;
-    --dot-edge:#11182D;
-    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
-    --map-bg:#0F1626; --map-panel:#18213D; --map-line:#222C4E; --coast-fill:#1D3140; --coast-line:#3A5266;
-    --shadow:none;
-    color-scheme:dark;
-  }
   *{box-sizing:border-box}
   body{font-family:var(--sans);font-size:16px;background:var(--bg);color:var(--text);margin:0;line-height:1.6;min-height:100vh;display:flex;flex-direction:column}
   /* Uniform chrome: the three-zone header below is index.html's, so About carries the same chrome as the
@@ -68,9 +58,6 @@
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
   .about.active{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
-  .theme-dark{display:none}
-  :root[data-theme="dark"] .theme-light{display:none}
-  :root[data-theme="dark"] .theme-dark{display:block}
   @media (max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
   main{max-width:820px;width:min(100%,820px);margin:0 auto;padding:30px 20px;flex:1 0 auto}
   h1{font-size:26px;margin:0 0 6px;color:var(--heading)}
@@ -105,10 +92,6 @@
   .toc a:hover{color:var(--text)}
   .pill{display:inline-block;font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin:2px 4px 2px 0}
   .cta{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:700;text-decoration:none;padding:9px 16px;border-radius:5px;margin-top:4px}
-  .appearance{border:0;margin:0 0 12px;padding:0;font-size:14px;color:var(--muted)}
-  .appearance legend{margin:0 0 6px;padding:0;font-weight:600;color:var(--muted)}
-  .appearance label{display:inline-flex;align-items:center;gap:5px;margin:0 14px 0 0;cursor:pointer}
-  .appearance input{accent-color:var(--accent)}
   /* The AuScope-NCRIS lock-up in the body, the pair the footer carries, drawn larger. See docs: portal
      internals, about.html. */
   .bodylockup{margin:0 0 12px;line-height:0}
@@ -134,7 +117,7 @@
   <div class="hzone hleft">
     <!-- The AuScope mark, then AusMT's name set at the AuScope logo's proportions. See docs: portal
          internals, about.html. -->
-    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="36" height="36">
+    <img class="brandmark" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36">
     <a class="wordmark" href="/"><b>Aus</b>MT</a>
   </div>
   <div class="hzone hcenter">
@@ -152,15 +135,14 @@
   <p class="sub">Australia's national discovery and access portal for magnetotelluric data,
   connecting transfer functions with their provenance, licences, citations and source archives.</p>
 
-  <!-- About is the two-minute front door: it answers seven questions, hands off, then offers the appearance
-       choice. Every deeper topic is a link into the docs site, and every target was fetched and returned
-       200 before it was written here. See docs: portal internals, about.html. -->
+  <!-- About is the two-minute front door: it answers seven questions and hands off. Every deeper topic
+       is a link into the docs site, and every target was fetched and returned 200 before it was
+       written here. See docs: portal internals, about.html. -->
   <div class="toc">
     <a href="#what">What AusMT is</a><a href="#who">Who enables AusMT</a>
     <a href="#howto">What you can do</a><a href="#access">Licence and access</a>
     <a href="#cite">Citing and credit</a><a href="#contribute">Contributing</a>
     <a href="#api">Fetching data via API</a><a href="#docs">Documentation</a>
-    <a href="#appearance">Appearance</a>
   </div>
 
   <section id="what">
@@ -201,7 +183,7 @@
     <p>AuScope is Australia's national provider of research infrastructure for the geoscience
     community. AusMT provides national digital research infrastructure for discovering, accessing and
     reusing Australian magnetotelluric data and its provenance.</p>
-    <p class="bodylockup"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></p>
+    <p class="bodylockup"><img src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"></p>
     <p>Learn more about <a class="link" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">AuScope</a>.</p>
     <h3>Operation and governance</h3>
     <p>AusMT is maintained by AuScope with contributions from Australia's magnetotelluric community.
@@ -367,16 +349,6 @@ open(f"{slug}-edi.zip", "wb").write(body)</pre>
     identifier.</p>
   </section>
 
-  <!-- The appearance choice's second home: the welcome dialog's row, on a page every header reaches. See
-       docs: portal internals, about.html. -->
-  <section id="appearance">
-    <h2>9 · Appearance</h2>
-    <p>Light is the house style. Dark keeps the portal's earlier palette. Follow system takes the
-    choice from your device. The choice is kept in this browser; the welcome panel on the map offers
-    the same choice on a first visit.</p>
-    <fieldset class="appearance"><legend>Appearance</legend><label><input type="radio" name="appearance" value="light"> Light</label><label><input type="radio" name="appearance" value="dark"> Dark</label><label><input type="radio" name="appearance" value="system"> Follow system</label></fieldset>
-  </section>
-
 </main>
 
   <!-- The site's ONE footer. A sibling of main, not a child of it: only a body-level footer is a
@@ -386,7 +358,7 @@ open(f"{slug}-edi.zip", "wb").write(body)</pre>
          portal internals, about.html. -->
     <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">MTCAT JSON ↗</a></div>
     <div class="fzone fcenter">AusMT is enabled by <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">AuScope</a> · Data licences vary by survey</div>
-    <div class="fzone fright"><a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
+    <div class="fzone fright"><a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
   </footer>
 </body>
 </html>

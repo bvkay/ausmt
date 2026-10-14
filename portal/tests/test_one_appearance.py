@@ -1,9 +1,9 @@
 """One appearance: the AuScope house style, with no alternative and no control that chooses one.
 
-The portal once carried a second, dark appearance, chosen in the map's welcome dialog or on About and
-remembered in the browser under the "ausmt_theme" key by src/theme.js. That appearance, its chooser
-and its script are gone, and these pins keep them gone on every surface: the six static pages, the
-engine's page shell (engine/extract/_pages.py) and the SPA's scripts.
+A second, dark appearance was chosen in the map's welcome dialog or on About and remembered in the
+browser under the "ausmt_theme" key by a script of its own. That appearance, its chooser and its
+script are retired, and these pins keep them out of every surface: the six static pages, the engine's
+page shell (engine/extract/_pages.py) and the SPA's scripts.
 
 A browser that stored the old preference is unaffected because nothing reads the key: no script names
 it, no stylesheet keys on an attribute a script could set, and no media query consults the system
@@ -12,8 +12,9 @@ scheme. The pages paint the house style from their stylesheet alone, so there is
 FAILS IF:
   * any page, or the engine's shell, declares a data-theme selector, a prefers-color-scheme query, a
     dark color-scheme, or a theme-light or theme-dark variant class;
-  * portal/src/theme.js exists, any surface loads it, or any portal script names the stored key, the
-    change event, the data-theme attribute or the window.AusmtTheme interface;
+  * the appearance script (theme.js under src/) ships, any surface loads it, or any portal script
+    names the stored key, the change event, the data-theme attribute or the window.AusmtTheme
+    interface;
   * any surface draws a white variant of the AuScope mark or lock-up, which only a dark ground took;
   * the welcome dialog or About carries an appearance control, or About keeps an Appearance section
     or a contents link to one;

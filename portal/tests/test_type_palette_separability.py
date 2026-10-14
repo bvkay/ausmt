@@ -1,13 +1,11 @@
 """Data-type palette: the four hues must stay separable at SITE-DOT size, in normal and dichromatic vision.
 
-The ramp is the AuScope house-style one, the same in both themes so a legend never changes meaning
-with the theme: LPMT #3F88C8 (blue), BBMT #FFC14F (amber), AMT #9FCB5A (green), GDS #CE348A (magenta).
+The ramp is the AuScope house-style one, a data encoding rather than chrome: LPMT #3F88C8 (blue), BBMT #FFC14F (amber), AMT #9FCB5A (green), GDS #CE348A (magenta).
 Measured with this module's own functions: every pair is at least 27.07 dE00 apart (the binding pair is
 BBMT/AMT); LPMT/BBMT is 53.22, with a 26.9 L* gap and a 103.5 b* gap across the blue-yellow axis, and
 68.15 / 61.72 under simulated deuteranopia / protanopia. LPMT's CIELAB hue is 267.1 deg. Against the
-chrome the nearest type to each reference is: --accent light #282572 33.6 (GDS), --accent dark #EF7256
-29.8 (GDS), the light ground #F2F2F1 27.5 (BBMT), the dark ground #11182D 40.2 (LPMT), --surface white
-28.7 (BBMT), the light dot edge #231F20 38.3 (GDS).
+chrome the nearest type to each reference is: --accent #282572 33.6 (GDS), the ground #F2F2F1 27.5
+(BBMT), --surface white 28.7 (BBMT), the dot edge #231F20 38.3 (GDS).
 
 The pair this module was opened for was reported on the deployed badge map: "Long Period and Broadband
 icon colours are too similar". At 4px a teal and an indigo read as one cool blob, because they
@@ -32,8 +30,8 @@ FAILS IF:
     future edit raising normal-vision distance while quietly re-converging them for red-green deficient
     readers, which a plain dE00 floor cannot see;
   * LP stops being the blue family (a rewrite that "fixed" separability by moving the wrong one);
-  * a data type falls within PAIR_FLOOR of the accent in either theme, of either page ground, of the
-    card surface or of the light dot edge.
+  * a data type falls within PAIR_FLOOR of the accent, of the page ground, of the card surface or of
+    the dot edge.
 
 The colour maths is stdlib-only on purpose (no new dependency for a four-colour check): sRGB -> linear ->
 XYZ(D65) -> CIELAB, CIEDE2000, and the Vienot 1999 LMS-projection dichromat simulation.
@@ -287,22 +285,20 @@ def test_lp_bb_pair_survives_simulated_red_green_deficiency():
             f"(The pair this floor was set against measured 15.26 deutan / 19.23 protan.)")
 
 
-# The chrome a data-type dot must never be mistaken for or vanish into, in both themes: the accent
-# (selection, the active tab, the drawn shape), the page grounds, the card surface and the dot edges.
+# The chrome a data-type dot must never be mistaken for or vanish into: the accent (selection, the
+# active tab, the drawn shape), the page ground, the card surface and the dot edge.
 CHROME = {
-    "the light --accent": "#282572",
-    "the dark --accent": "#EF7256",
-    "the light page ground --bg": "#F2F2F1",
-    "the dark page ground --bg (and the dark --dot-edge)": "#11182D",
-    "the light --surface": "#FFFFFF",
-    "the light --dot-edge": "#231F20",
+    "--accent": "#282572",
+    "the page ground --bg": "#F2F2F1",
+    "--surface": "#FFFFFF",
+    "--dot-edge": "#231F20",
 }
 
 
-def test_no_data_type_collides_with_the_chrome_in_either_theme():
+def test_no_data_type_collides_with_the_chrome():
     """A data-type dot must never read as the portal's action/selection accent, and must never disappear
     into a ground it is drawn on or the edge it is stroked with. FAILS IF a palette edit walks a type
-    within PAIR_FLOOR of any of them, in either theme. The nearest is the light ground, 25.9 from AMT."""
+    within PAIR_FLOOR of any of them. The nearest is the light ground, 25.9 from AMT."""
     pal = js_palette()
     for ty in TYPES:
         for what, hexv in CHROME.items():

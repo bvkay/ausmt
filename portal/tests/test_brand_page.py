@@ -26,7 +26,7 @@ import json
 import re
 from pathlib import Path
 
-from chrome_contract import LOCKUP, MARK_PAIR, PAGE_IDENTITY, RIGHT_ZONE, flat
+from chrome_contract import LOCKUP, MARK, PAGE_IDENTITY, RIGHT_ZONE, flat
 
 ROOT = Path(__file__).resolve().parents[1]          # portal/
 REPO = ROOT.parent
@@ -132,7 +132,7 @@ def test_the_full_artwork_is_offered_separately_from_the_mark():
 
 def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
     """FAILS IF brand.html is an orphan page. It carries the same three-zone header (with the zero
-    basis sides), the identity zone every header carries (the AuScope mark pair and AusMT's name),
+    basis sides), the identity zone every header carries (the AuScope mark and AusMT's name),
     the tagline in the right zone, and the standard footer with the lock-up at its right."""
     text = _text()
     for zone, rule in ((".hleft", "flex:1 1 0"), (".hcenter", "flex:0 1 auto"), (".hright", "flex:1 1 0")):
@@ -140,8 +140,8 @@ def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
         assert m and rule in m.group(1), f"brand.html: {zone} must carry {rule}"
     header = re.sub(r"<!--.*?-->", "", text.split("<header>", 1)[1].split("</header>", 1)[0], flags=re.S)
     zone = header.split('<div class="hzone hleft">', 1)[1].split('<div class="hzone hcenter">', 1)[0]
-    assert flat(zone) == f"{MARK_PAIR}{PAGE_IDENTITY}</div>", \
-        f"brand.html's identity zone is the mark pair and AusMT's name, like every other surface: {zone!r}"
+    assert flat(zone) == f"{MARK}{PAGE_IDENTITY}</div>", \
+        f"brand.html's identity zone is the mark and AusMT's name, like every other surface: {zone!r}"
     right = flat(header).split('<div class="hzone hright">', 1)[1]
     assert '<div class="hzone hright">' + right == RIGHT_ZONE, \
         f"brand.html's right zone is the tagline alone, like every other surface: {right!r}"

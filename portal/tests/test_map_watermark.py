@@ -5,9 +5,8 @@ screenshot of the map carries no header and no footer with it. A corner lock-up 
 travels with the image, naming both AuScope and NCRIS. It is the map page's one lock-up: the header
 opens with the AuScope mark, and the map page's footer carries its live counts alone.
 
-TWO VARIANTS, ONE SHOWN. The lock-up ships as the brand kit's colour PNG for the light basemap and its
-white PNG for the dark one, and the theme switch shows exactly one: the white file sits only on a dark
-ground. They are the same files the footers draw (portal/vendor/README.md records their digests).
+ONE FILE. The lock-up is the brand kit's colour PNG, on the light basemap. It is the same file the
+footers draw (portal/vendor/README.md records its digest).
 
 THE STYLE GUIDE'S RULES, APPLIED AS NUMBERS (AuScope Style Guide, Identity):
   * CLEAR SPACE. The guide asks for breathing space of at least the full height of the logo on all
@@ -15,7 +14,7 @@ THE STYLE GUIDE'S RULES, APPLIED AS NUMBERS (AuScope Style Guide, Identity):
     the corner holds nothing else: the collapsed attribution control sits in the top-right corner for
     exactly that reason (tests/test_map_attribution.py) and the legend sits bottom-left.
   * OPACITY, AND NOTHING ELSE. The lock-up renders at 80 per cent opacity, opacity:.8 exactly, and in
-    its own colours: opacity is the one change permitted on it, so both files keep the bytes the brand
+    its own colours: opacity is the one change permitted on it, so the file keeps the bytes the brand
     kit published. FAILS here if the opacity drifts from .8 or is declared twice, or if a filter, a
     blend or any other rule that recolours the lock-up is introduced.
   * MINIMUM SIZE. The guide states none, so the lock-up's height is the 44px the corner was
@@ -34,13 +33,13 @@ Leaflet's control and popup layers as well, so a stacking regression cannot put 
 control the reader is trying to press.
 
 THE COLOUR ICON PNG the corner once drew stays committed, byte for byte, and no surface names it; the
-AuScope mark pair is the header's and the collection figures', and the map's corner names neither.
+AuScope mark is the header's and the collection figures', and the map's corner names it not.
 """
 import hashlib
 import re
 from pathlib import Path
 
-from chrome_contract import LOCKUP_DARK, LOCKUP_LIGHT, MAP_LOCKUP, MARK_DARK, MARK_LIGHT
+from chrome_contract import LOCKUP_LIGHT, MAP_LOCKUP, MARK_LIGHT, WHITE_FILES
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 INDEX = ROOT / "index.html"
@@ -68,8 +67,7 @@ RULE = f".maplock{{{PLACEMENT};{OPACITY}}}"
 # What may never touch the lock-up: anything that recolours it rather than fading it.
 NEVER = ("filter", "mix-blend-mode", "background-blend-mode", "mask", "isolation", "color-scheme")
 # Below the footer's own breakpoint the map is a phone-width strip and a corner lock-up costs more map
-# than it buys attribution, so it is not drawn at all. The id is what lets the rule outrank the theme
-# switch's display:block on the dark variant.
+# than it buys attribution, so it is not drawn at all.
 NARROW = "@media(max-width:900px){#map .maplock{display:none}}"
 # The class the corner's mark pair carried. It is retired from every surface.
 RETIRED_CLASS = "mapmark"
@@ -83,10 +81,10 @@ def _text(p):
     return p.read_text(encoding="utf-8")
 
 
-def test_the_map_carries_the_lockup_pair_once_and_nothing_else_inside_its_container():
-    """FAILS IF index.html loses either variant, carries the pair twice, draws it outside the Leaflet
-    map container, or puts anything else in the container's markup, the AuScope mark pair included.
-    The container assertion is positional: the pair must BE the container's content, which is the only
+def test_the_map_carries_the_lockup_once_and_nothing_else_inside_its_container():
+    """FAILS IF index.html loses the lock-up, carries it twice, draws it outside the Leaflet map
+    container, or puts anything else in the container's markup, the AuScope mark included. The
+    container assertion is positional: the lock-up must BE the container's content, which is the only
     place a screenshot of the map includes."""
     text = _text(INDEX)
     assert text.count(MAP_LOCKUP) == 1, (
@@ -95,27 +93,26 @@ def test_the_map_carries_the_lockup_pair_once_and_nothing_else_inside_its_contai
     m = re.search(r'<div id="map">(.*?)</div>', text, re.S)
     assert m, "index.html must carry the Leaflet map container"
     assert m.group(1) == MAP_LOCKUP, (
-        f"the map container carries the lock-up pair and nothing else: {m.group(1)[:300]!r}")
-    for src in (MARK_LIGHT, MARK_DARK):
-        assert src not in m.group(1), f"the map's corner draws the lock-up, not the mark {src}"
-    for src in (LOCKUP_LIGHT, LOCKUP_DARK):
-        asset = ROOT / src.lstrip("/")
-        assert asset.is_file(), f"the watermark names {src}, which the portal does not ship"
-        assert asset.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", f"{src} must be the brand kit's PNG"
+        f"the map container carries the lock-up and nothing else: {m.group(1)[:300]!r}")
+    for src in (MARK_LIGHT, *WHITE_FILES):
+        assert src not in m.group(1), f"the map's corner draws the colour lock-up, not {src}"
+    asset = ROOT / LOCKUP_LIGHT.lstrip("/")
+    assert asset.is_file(), f"the watermark names {LOCKUP_LIGHT}, which the portal does not ship"
+    assert asset.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", f"{LOCKUP_LIGHT} must be the brand kit's PNG"
 
 
 def test_the_lockup_is_not_a_link_and_names_both_organisations_in_its_alt_text():
     """FAILS IF the lock-up is wrapped in an anchor. The footers link AuScope, and a link inside the
     map takes a tab stop in the middle of the application's primary surface and can be dragged into a
     navigation by a mis-aimed pan. The alt text is the attribution for a reader who cannot see it, so
-    each variant names both organisations the artwork carries."""
+    it names both organisations the artwork carries."""
     text = _text(INDEX)
     before = text[:text.index(MAP_LOCKUP)]
     open_anchors = before.count("<a ") - before.count("</a>")
     assert open_anchors == 0, (
         f"the watermark must not sit inside an anchor; {open_anchors} anchor(s) are open at it")
-    assert MAP_LOCKUP.count('alt="AuScope and NCRIS"') == 2 and 'alt=""' not in MAP_LOCKUP, (
-        "the lock-up is attribution, so each variant's alt text names both organisations")
+    assert MAP_LOCKUP.count('alt="AuScope and NCRIS"') == 1 and 'alt=""' not in MAP_LOCKUP, (
+        "the lock-up is attribution, so its alt text names both organisations")
 
 
 def test_the_placement_honours_the_style_guide_clear_space_and_intercepts_nothing():
@@ -123,7 +120,7 @@ def test_the_placement_honours_the_style_guide_clear_space_and_intercepts_nothin
 
     FAILS IF the lock-up leaves the bottom-right corner, if its height leaves the specified 44px, if
     the inset drops below one logo height (the guide's clear space), if the width stops following the
-    artwork, if pointer-events:none goes, or if the narrow-width rule that hides both variants below
+    artwork, if pointer-events:none goes, or if the narrow-width rule that hides the lock-up below
     560px goes."""
     text = _text(INDEX)
     assert text.count(RULE) == 1, f"the watermark must carry the shared placement, as {RULE!r}"
@@ -228,7 +225,7 @@ def test_the_watermark_class_is_the_map_pages_alone_and_no_surface_names_the_png
         assert png not in page, f"portal/{name}: no surface names the colour PNG"
     for name in OTHER_PAGES + ("index.html",):
         assert RETIRED_CLASS not in _text(ROOT / name), f"portal/{name}: the .{RETIRED_CLASS} class is retired"
-    assert png not in _text(INDEX), "index.html: the watermark is the lock-up pair, not the colour icon PNG"
+    assert png not in _text(INDEX), "index.html: the watermark is the lock-up, not the colour icon PNG"
     for label, path in (("engine/extract/_pages.py", PAGES_PY), ("portal/src/drawer.js", DRAWER)):
         assert png not in _text(path), f"{label}: no surface names the colour PNG"
         assert RETIRED_CLASS not in _text(path), f"{label}: the .{RETIRED_CLASS} class is retired"
@@ -236,7 +233,7 @@ def test_the_watermark_class_is_the_map_pages_alone_and_no_surface_names_the_png
 
 def test_the_retired_png_stays_committed_byte_for_byte():
     """A trademark asset is a promise about a file, and this one stays committed though the map's
-    corner draws the lock-up pair. FAILS IF it is missing, resized, re-encoded, recoloured or stripped
+    corner draws the lock-up. FAILS IF it is missing, resized, re-encoded, recoloured or stripped
     of its alpha channel."""
     assert PNG_ASSET.is_file(), f"the portal keeps {PNG_SRC} committed"
     data = PNG_ASSET.read_bytes()

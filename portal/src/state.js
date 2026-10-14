@@ -39,8 +39,8 @@ let COORD_POLICY={};
 // state.js.
 let TSACC=null;
 
-// The data-type ramp, the same in both themes so a legend never changes meaning with the theme; it equals
-// the --lpmt/--bbmt/--amt/--gds tokens. See docs: portal internals, state.js.
+// The data-type ramp, a data encoding rather than chrome; it equals the --lpmt/--bbmt/--amt/--gds
+// tokens. See docs: portal internals, state.js.
 const TYPE_COL={LPMT:"#3F88C8",BBMT:"#FFC14F",AMT:"#9FCB5A",GDS:"#CE348A",other:"#999"};
 // The INK a type chip needs: .chip's near-black clears WCAG AA on three of the four, and GDS takes white
 // (4.68:1 against 4.01:1). See docs: portal internals, state.js.

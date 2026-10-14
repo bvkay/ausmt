@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Contribute a survey - AusMT</title>
-<script src="/src/theme.js"></script>
 <link rel="stylesheet" href="vendor/leaflet.css">
 <script src="vendor/leaflet.js"></script>
 <script src="vendor/jszip.min.js"></script>
@@ -43,15 +42,6 @@
     --sans:'Libre Franklin',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
     color-scheme:light;
   }
-  :root[data-theme="dark"]{
-    --bg:#11182D; --surface:#18213D; --surface-2:#1E2B4F; --line:#2B3557;
-    --text:#E8EDF1; --muted:#8FA3B0; --heading:#FFFFFF; --accent:#EF7256; --accent-ink:#16110B;
-    --dot-edge:#11182D;
-    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
-    --map-bg:#0F1626; --map-panel:#18213D; --map-line:#222C4E; --coast-fill:#1D3140; --coast-line:#3A5266;
-    --shadow:none;
-    color-scheme:dark;
-  }
   *{box-sizing:border-box}
   body{font-family:var(--sans);font-size:16px;background:var(--bg);color:var(--text);margin:0;min-height:100vh;display:flex;flex-direction:column}
   /* Uniform chrome: the three-zone header, index.html's geometry. See docs: portal internals,
@@ -75,9 +65,6 @@
   nav a.active{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
-  .theme-dark{display:none}
-  :root[data-theme="dark"] .theme-light{display:none}
-  :root[data-theme="dark"] .theme-dark{display:block}
   @media (max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
   main{max-width:980px;width:min(100%,980px);margin:0 auto;padding:22px 18px 60px;flex:1 0 auto}
   h1{font-size:20px;margin:8px 0 4px;color:var(--heading)}
@@ -224,7 +211,7 @@
   <div class="hzone hleft">
     <!-- The AuScope mark, then AusMT's name set at the AuScope logo's proportions. See docs: portal
          internals, add-survey.html. -->
-    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="36" height="36">
+    <img class="brandmark" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36">
     <a class="wordmark" href="/"><b>Aus</b>MT</a>
   </div>
   <div class="hzone hcenter">
@@ -560,7 +547,7 @@
        portal internals, add-survey.html. -->
   <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">MTCAT JSON ↗</a></div>
   <div class="fzone fcenter">AusMT is enabled by <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">AuScope</a> · Data licences vary by survey</div>
-  <div class="fzone fright"><a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
+  <div class="fzone fright"><a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
 </footer>
 
 <div class="modal" id="modal"><div class="box">

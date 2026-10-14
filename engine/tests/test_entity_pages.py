@@ -1431,7 +1431,7 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
     collection page carries the member-coloured scatter with its legend.
 
     The swatch assertions follow the portal's ramp: BBMT is #FFC14F, the --bbmt token and
-    portal/src/state.js TYPE_COL's value, the same in both appearances. The locator ring is the
+    portal/src/state.js TYPE_COL's value. The locator ring is the
     muted annotation class rather than the accent, because the accent is reserved for links,
     active states and focus; the ring assertion still bites, on the class."""
     surveys = _make_rich_survey(tmp_path)
@@ -1801,9 +1801,8 @@ def test_a_collection_without_prose_renders_exactly_as_before(tmp_path):
 
 
 def test_the_collection_map_carries_the_auscope_mark_in_its_bottom_left_corner():
-    """The mark pair over the collection footprint, asserted on the RENDERED page. The pair is the
-    AuScope mark inked for the light map panel and in white for the dark one, with the theme
-    classes that show the file matching the page; the white file never sits on the light panel.
+    """The mark over the collection footprint, asserted on the RENDERED page: the AuScope mark
+    inked for the light map panel.
 
     The corner is chosen, not arbitrary: this map is a FIXED-EXTENT projection of Australia, so the
     bottom left shows the same open ocean at every rendered width (the nearest coastline in the
@@ -1811,18 +1810,18 @@ def test_the_collection_map_carries_the_auscope_mark_in_its_bottom_left_corner()
     legend is a SIBLING of the figure rather than content inside it, so the mark cannot reach that
     either.
 
-    FAILS IF the mark pair leaves the figure, loses a theme class, if the figure stops being the
+    FAILS IF the mark leaves the figure, if the figure stops being the
     positioning context it is absolutely placed against, or if it is pushed INSIDE the SVG. That last one is the reason for
     the <image> assertion: the footprint's geometry is what the colour ramp, the dot-per-station
     coverage pin and the hub's size budget all measure, and a brand asset inside it would land in
     the middle of all three."""
     pages = _pages_module()
     page = _collection_call(pages)
-    mark = ('<img class="collmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" '
-            'width="42" height="42"><img class="collmark theme-dark" '
-            'src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="42" height="42">')
-    assert page.count(mark) == 1, f"the collection map must carry the mark pair exactly once, got {page.count(mark)}"
-    assert page.count('class="collmark') == 2, "the figure carries the pair and no third mark"
+    mark = ('<img class="collmark" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" '
+            'width="42" height="42">')
+    assert page.count(mark) == 1, f"the collection map must carry the mark exactly once, got {page.count(mark)}"
+    assert page.count('class="collmark') == 1, "the figure carries the mark and no second one"
+    assert "auscope-mark-white.svg" not in page, "the white mark sat on a dark panel only"
     assert "auscope-icon-white.png" not in page, "the raster icon is not the figure's mark"
     figure = page.split('<figure class="collmap">', 1)[1].split("</figure>", 1)[0]
     assert mark in figure, "the mark must sit inside the map's own figure"
@@ -2188,10 +2187,8 @@ def test_the_page_carries_the_dialog_once_and_loads_only_external_scripts():
         ["/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js"], \
         "the composers, the dialog controller and the page driver load at the end of the body, in that order"
     assert re.findall(r'<script src="([^"]+)"></script>', page) == \
-        ["/src/theme.js", "/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js"], \
-        "the page's script list begins with the appearance script, the one script its head carries"
-    assert page.index('<script src="/src/theme.js">') < page.index("</head>"), \
-        "the appearance script runs in the head, before the first paint"
+        ["/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js"], \
+        "the page loads the dialog's three scripts and no other; its head carries none"
     for tag in re.findall(r"<script\b[^>]*>", page):
         assert 'src="' in tag or 'type="application/ld+json"' in tag, \
             f"an inline executable script would need CSP unsafe-inline, which the pages never get: {tag}"
@@ -2199,8 +2196,8 @@ def test_the_page_carries_the_dialog_once_and_loads_only_external_scripts():
     assert "lvlact-fetch" not in page0 and 'id="wgetModal"' not in page0 \
         and "/src/page-fetch.js" not in page0 and "Pointers file" not in page0, \
         "a survey with no routed level carries no card, no dialog and no dialog script"
-    assert re.findall(r'<script src="([^"]+)"></script>', page0) == ["/src/theme.js"], \
-        "a survey with no routed level loads the appearance script alone"
+    assert re.findall(r'<script src="([^"]+)"></script>', page0) == [], \
+        "a survey with no routed level loads no script"
 
 
 def test_the_page_dialog_is_the_spa_s_own_markup():

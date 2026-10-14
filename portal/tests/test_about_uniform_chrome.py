@@ -278,8 +278,8 @@ def test_header_parity_about_matches_index():
         Map, Surveys, Collections, About. "How to use AusMT" is cut from every header (the welcome tour
         and About cover it) and so is "Contribute a survey" (About links it from its own body); a
         header that grows a fifth centre item, or takes either back, fails here.
-      * THE TWO SIDE ZONES: FAILS if either page's identity zone is not the AuScope mark pair, two
-        images and no anchor to AuScope, or if its right zone is not exactly the tagline, or still
+      * THE TWO SIDE ZONES: FAILS if either page's identity zone is not the AuScope mark, one image
+        and no anchor to AuScope, or if its right zone is not exactly the tagline, or still
         carries a counts block or the lock-up.
       * ACTIVE-PAGE HIGHLIGHT NOT REGRESSED: FAILS if adding the ids also made a view button active on
         About (only the current page may be highlighted) or dropped index's active Map button."""
@@ -314,10 +314,10 @@ def test_header_parity_about_matches_index():
 
     for name, items in (("index.html", idx), ("about.html", abt)):
         marks = [a.get("src") for (tag, a, in_nav) in items if tag == "img" and "brandmark" in _classes(a)]
-        assert marks == ["/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg"], (
-            f"{name}: the header opens with the AuScope mark pair; found {marks}")
-        assert len([1 for (tag, a, in_nav) in items if tag == "img"]) == 2, (
-            f"{name}: the mark pair is the header's only image")
+        assert marks == ["/vendor/auscope/auscope-mark.svg"], (
+            f"{name}: the header opens with the AuScope mark; found {marks}")
+        assert len([1 for (tag, a, in_nav) in items if tag == "img"]) == 1, (
+            f"{name}: the mark is the header's only image")
         lockups = [a for (tag, a, in_nav) in items if "orglockup" in _classes(a)
                    or "auscope.org.au" in a.get("href", "")]
         assert not lockups, f"{name}: the lock-up left the header for the footer; found {lockups}"
@@ -435,7 +435,7 @@ def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_i
 # One number is only right in one band. The header WRAPS as the viewport narrows: under 760px the
 # three zones each take a full-width row (the mark and the name, the tab group, the tagline) and the
 # tab group stacks into more rows as the viewport narrows further. It is measured on this document in
-# Chrome at a device scale factor of 1, in both themes, with the 36px AuScope mark and the name in the
+# Chrome at a device scale factor of 1, with the 36px AuScope mark and the name in the
 # identity zone and the one-line tagline in the right zone, by sweeping the viewport one pixel at a
 # time from 320px to 1600px and reading the header's box. Its height runs 216px below 384, 170px to
 # 450, 134px to 760 and 57px above that. At 375px a 74px clearance would leave a heading 142px under
@@ -567,10 +567,9 @@ def test_every_script_a_page_loads_is_shipped_and_every_page_script_is_loaded():
 
     Read over the page scripts at the top of portal/ and the coastline this repository generates
     into vendor/. Third-party libraries under vendor/ are somebody else's file and are held only by
-    the first direction. A root-anchored src (the appearance script every page loads as
-    /src/theme.js, so a document served at any depth finds it) names the same file as its relative
-    spelling. FAILS too if About stops loading the appearance script, or loads config.js, which only
-    the data-reading pages need."""
+    the first direction. A root-anchored src (a script a document served at any depth must find)
+    names the same file as its relative spelling. FAILS too if About loads config.js, which only the
+    data-reading pages need."""
     loaded = {}
     for path in sorted(ROOT.glob("*.html")):
         for src in re.findall(r'<script[^>]*\bsrc="([^"]+)"', path.read_text(encoding="utf-8")):
@@ -589,7 +588,6 @@ def test_every_script_a_page_loads_is_shipped_and_every_page_script_is_loaded():
         "a page script is shipped and loaded by no page, so it reaches no reader and no visitor:\n"
         + "\n".join(dead))
     text = ABOUT.read_text(encoding="utf-8")
-    assert '<script src="/src/theme.js"></script>' in text, "About loads the appearance script"
     assert '<script src="config.js">' not in text, (
         "About reads no data, so it loads no config.js; the pages that do are index.html and releases.html")
 

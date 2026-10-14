@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AusMT: Magnetotelluric Data Discovery &amp; Access</title>
-<script src="/src/theme.js"></script>
 <!-- og:url and og:image must be ABSOLUTE: preview crawlers resolve nothing relative. The card is a
      static 1200x630 PNG in vendor/, regenerated alongside any rebrand. -->
 <meta name="description" content="Discover, explore and access magnetotelluric data from across Australia, with survey and station metadata, provenance and links to available datasets.">
@@ -67,15 +66,6 @@
     --sans:'Libre Franklin',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
     color-scheme:light;
   }
-  :root[data-theme="dark"]{
-    --bg:#11182D; --surface:#18213D; --surface-2:#1E2B4F; --line:#2B3557;
-    --text:#E8EDF1; --muted:#8FA3B0; --heading:#FFFFFF; --accent:#EF7256; --accent-ink:#16110B;
-    --dot-edge:#11182D;
-    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
-    --map-bg:#0F1626; --map-panel:#18213D; --map-line:#222C4E; --coast-fill:#1D3140; --coast-line:#3A5266;
-    --shadow:none;
-    color-scheme:dark;
-  }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{font-family:var(--sans);font-size:16px;background:var(--bg);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
@@ -104,9 +94,6 @@
   nav button.active:hover{border-color:var(--accent)}
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
-  .theme-dark{display:none}
-  :root[data-theme="dark"] .theme-light{display:none}
-  :root[data-theme="dark"] .theme-dark{display:block}
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
   .apilink:hover{color:var(--accent)}
   .counts{font-family:var(--mono);font-size:13px;color:var(--muted)}
@@ -119,7 +106,6 @@
   #map{flex:1;background:var(--map-bg);position:relative}
   #map .leaflet-tile-pane{filter:saturate(.35) brightness(1.04)}
   .maplock{position:absolute;right:44px;bottom:44px;height:44px;width:auto;z-index:500;pointer-events:none;opacity:.8}
-  /* Anchored on the map's id so it outranks the theme switch that shows the dark variant. */
   @media(max-width:900px){#map .maplock{display:none}}
   .mapattrib{position:relative;z-index:900;display:flex;flex-direction:row-reverse;align-items:flex-start;gap:4px}
   .mapattrib-toggle{flex:none;width:20px;height:20px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--text);font-family:var(--sans);font-size:12px;font-style:italic;line-height:1;cursor:pointer}
@@ -204,7 +190,7 @@
   .dhead .sid{font-family:var(--mono);font-weight:800;font-size:22px}
   .dhead .close{margin-left:auto;font-size:16px;padding:4px 10px}
   .dsub{font-size:12.5px;color:var(--muted);margin-top:2px}
-  /* A type chip sits on the data ramp, which is the same in both themes, so its ink is a literal too. */
+  /* A type chip sits on the data ramp, a data encoding rather than chrome, so its ink is a literal too. */
   .chip{display:inline-block;font-size:13px;font-weight:700;padding:2px 9px;border-radius:9px;color:#16110b;vertical-align:2px}
   .qbar{height:5px;border-radius:3px;background:var(--line);margin-top:5px;overflow:hidden}
   .qbar > div{height:5px;border-radius:3px}
@@ -501,10 +487,6 @@
   .introwelcome-actions button{font-size:13.5px;padding:10px 14px;border-radius:6px}
   .introwelcome-dismiss{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer}
   .introwelcome-dismiss input{accent-color:var(--accent)}
-  .introwelcome-appearance{margin:0 0 14px;font-size:12.5px;color:var(--muted)}
-  .introwelcome-appearance legend{margin:0 auto 6px;padding:0;font-weight:600;color:var(--text)}
-  .introwelcome-appearance label{display:inline-flex;align-items:center;gap:5px;margin:0 7px;cursor:pointer}
-  .introwelcome-appearance input{accent-color:var(--accent)}
   .maplegend{position:absolute;left:10px;bottom:10px;z-index:600;background:var(--surface);border:1px solid var(--line);
     border-radius:4px;font-size:12px;color:var(--text);box-shadow:var(--shadow);max-width:210px}
   .maplegend-toggle{display:none;width:100%;background:none;border:0;color:var(--muted);padding:7px 11px;
@@ -587,7 +569,7 @@
   <div class="hzone hleft">
     <!-- The AuScope mark, then AusMT's name set at the AuScope logo's proportions. See docs: portal
          internals, index.html. -->
-    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="36" height="36">
+    <img class="brandmark" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36">
     <h1 class="brandh1"><span class="wordmark"><b>Aus</b>MT</span><span class="visually-hidden">: Magnetotelluric Data Discovery &amp; Access</span></h1>
   </div>
   <div class="hzone hcenter">
@@ -711,7 +693,7 @@
 </aside>
 <div class="resizer" id="resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
 <div class="content" id="content">
-  <div id="map"><img class="maplock theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="maplock theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></div>
+  <div id="map"><img class="maplock" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"></div>
   <div id="surveysview">
     <!-- Discovery controls: search, sort, live count, facet chips, a compact-list toggle and clear-filters,
          all wired in drawer.js where the state lives. See docs: portal internals, index.html. -->
@@ -790,8 +772,6 @@
         <button type="button" class="primary" id="welcomeTour">Take the 2-minute tour (recommended)</button>
         <button type="button" id="welcomeBrowse">Browse immediately</button>
       </div>
-      <!-- Applied and saved the moment it changes, whatever the checkbox below says. -->
-      <fieldset class="introwelcome-appearance"><legend>Appearance</legend><label><input type="radio" name="appearance" value="light"> Light</label><label><input type="radio" name="appearance" value="dark"> Dark</label><label><input type="radio" name="appearance" value="system"> Follow system</label></fieldset>
       <label class="introwelcome-dismiss"><input type="checkbox" id="welcomeDismiss"> Don't show this again</label>
     </div>
   </div>
