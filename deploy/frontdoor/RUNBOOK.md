@@ -134,13 +134,14 @@ generic provider's console, then continue at step 3).
       group to the instance. *Bootstrap access* for the very first login (before Tailscale is up): use
       the Nectar web console (Compute → Instances → Console) to reach the shell, **or** temporarily add
       an SSH rule scoped to your own admin IP and remove it the moment the node has joined the tailnet.
-2N.3  **Floating (public) IP** (Network → Floating IPs): allocate one to the project and associate it
-      with the instance — this is the public IPv4 for the DNS step (step 8). Nectar floating IPs are
-      IPv4 only, so create just an **A** record later (no AAAA).
+2N.3  **Public address:** launch on **Classic Provider**, the only network the project offers; the
+      instance gets a fixed public IPv4 on `qld` for its life, released when it is deleted. That is
+      the address for the DNS step (step 8). It is IPv4 only, so create just an **A** record (no
+      AAAA). The project has no router and no floating IPs (`deploy/nectar/RUNBOOK-NECTAR.md`).
 2N.4  **Allocation:** a Nectar **project-trial** allocation is enough to stand the front door up. The
       front door is **stateless** (no corpus or state lives on it — everything stays on the box), so
       migrating to a full allocation later is simply a runbook re-run on a fresh instance: repeat
-      steps 2–6, re-point the DNS A record (step 8) at the new floating IP, and tear the trial instance
+      steps 2 to 6, re-point the DNS A record (step 8) at the new instance's address, and tear the trial instance
       down (section 10). Nothing is lost in the move.
 
 ---

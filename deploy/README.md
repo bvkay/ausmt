@@ -1333,15 +1333,23 @@ unchanged, in `deploy/frontdoor/RUNBOOK.md` section 10. The runtime pins for bot
 
 ## Nectar serving replica
 
-The public site moves off the home box onto Nectar as two roles (design record
-`maintainer/C48-NectarTopology.md`, procedure `deploy/nectar/RUNBOOK-NECTAR.md`):
+The public site runs on Nectar as two roles (design record `maintainer/C48-NectarTopology.md`, with
+what was executed in its "Executed" section; procedure `deploy/nectar/RUNBOOK-NECTAR.md`):
 
-- **ausmt-serve** has the public address and runs the front door and the portal container on one
-  host, the front door proxying to the reader listener on `127.0.0.1:8445`. It holds the built tree on
-  a volume at `/srv/ausmt` and nothing else: no gateway, no sqlite, no build cache, no git write
-  credential, no curation timer.
+- **ausmt-serve** serves the public names and runs the front door and the portal container on one
+  host, the front door proxying to the reader listener on `127.0.0.1:8445`. It holds the built tree
+  at `/srv/ausmt` and nothing else: no gateway, no sqlite, no build cache, no git write credential, no
+  curation timer. Until the volume amendment is granted the tree is a directory on its root disk
+  bind-mounted there, at one kept build (`AUSMT_PUBLISH_KEEP=1` on the box).
 - **the curation host** (the box today, ausmt-curate once curation is lifted) builds as before and
-  **publishes** each served build to ausmt-serve over the tailnet.
+  **publishes** each served build to ausmt-serve over the tailnet. It serves no visitor.
+
+**Addresses and DNS.** Each Nectar instance has a fixed public address for its life (a Classic
+Provider launch; the project has no router and nothing floats). ausmt-serve is 203.101.226.53, and
+both A records, `ausmt.auscope.org.au` (AuScope's cPanel zone, changed by AuScope's director on
+request) and `ausmt.au` (VentraIP), point at it with a 300-second TTL since the cutover of
+2026-10-14. ausmt-test, the earlier front door at 203.101.226.191, is the rollback (point both
+records back) until it is deleted, which releases its address.
 
 **The publish contract.** `scripts/publish.sh` on the curation host writes `builds/<ts>.sha256`
 beside the build (the sorted `sha256sum` list of every file), rsyncs the build to the replica with a
