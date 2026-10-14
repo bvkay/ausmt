@@ -17,6 +17,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from curves_fixture import write_curves
 
 ROOT = Path(__file__).resolve().parent.parent                 # portal/
 SMOKE = ROOT / "tools" / "smoke.js"
@@ -48,8 +49,9 @@ def test_populated_portal_value_binding(tmp_path):
     (data / "catalogue.json").write_text(json.dumps([cat_row]))
     (data / "sci.json").write_text(json.dumps([sci_row]))
     (data / "tf.json").write_text(json.dumps([tf_row]))
-    (data / "surveys.json").write_text(json.dumps(
-        {"Demo Survey": {"slug": "demo", "org": "X", "country": "Australia", "lic": "CC-BY-4.0"}}))
+    surveys = {"Demo Survey": {"slug": "demo", "org": "X", "country": "Australia", "lic": "CC-BY-4.0"}}
+    write_curves(data, [cat_row], [tf_row], surveys)
+    (data / "surveys.json").write_text(json.dumps(surveys))
     # build.json - a KNOWN, distinctive build_id/generated so the footer's VALUE binding
     # (BUILDID -> buildIdText()) can be asserted against the source, not just "didn't crash".
     (data / "build.json").write_text(json.dumps(

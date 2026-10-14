@@ -43,19 +43,58 @@ async function loadPhase1(){
 // ---- PHASE 2: background hydration -------------------------------------------------------------- The
 // heavy products. See docs: portal internals, data.js.
 function startHydration(){
-  HYDR.tf="pending";HYDR.sci="pending";HYDR.manifest="pending";HYDR.tsaccess="pending";
-  // A tf/sci FAILURE is not absence. See docs: portal internals, data.js.
-  TF_READY=fetchJson("tf.json",FETCH_LOW).then(v=>{TFD=v;HYDR.tf="ready";},()=>{TFD=[];HYDR.tf="failed";});
+  HYDR.sci="pending";HYDR.manifest="pending";HYDR.tsaccess="pending";
+  // A sci FAILURE is not absence. See docs: portal internals, data.js.
   SCI_READY=fetchJson("sci.json",FETCH_LOW).then(v=>{SCI=v;HYDR.sci="ready";},()=>{SCI=[];HYDR.sci="failed";});
-  // manifest.json is OPTIONAL by contract (older data sets / empty builds ship none), so its 404 IS the
-  // honest absence (MANIFEST=null, the exact value every consumer already tolerates), not a failure state.
-  MANIFEST_READY=fetchOptional("manifest.json",null,FETCH_LOW).then(v=>{MANIFEST=v;HYDR.manifest="ready";});
   // ts_access.json is OPTIONAL by contract - the engine writes it only when the register projects at least
   // one open, verified route, so a 404 IS the honest absence and there is no "failed" state to report. See
   // docs: portal internals, data.js.
   TSACC_READY=fetchOptional("ts_access.json",{},FETCH_LOW).then(v=>{TSACC=v||{};HYDR.tsaccess="ready";});
-  return [TF_READY,SCI_READY,MANIFEST_READY,TSACC_READY];
+  return [SCI_READY,TSACC_READY];
 }
+
+// ---- the download manifest, on demand. See docs: portal internals, data.js.
+let _MANIFEST_P=null;
+function loadManifest(){
+  if(_MANIFEST_P)return _MANIFEST_P;
+  if(!hydrating("manifest"))return Promise.resolve();
+  // A 404 is the honest absence (MANIFEST=null), not a failure.
+  _MANIFEST_P=MANIFEST_READY=fetchOptional("manifest.json",null).then(v=>{MANIFEST=v;HYDR.manifest="ready";
+    if(typeof manifestLanded==="function")manifestLanded();});
+  return _MANIFEST_P;}
+
+// ---- the response curves, one survey at a time. See docs: portal internals, data.js.
+let _TF_ALL=null;
+const _CURVES={};
+// A re-read build.json naming a different build from the one this page booted on; absence is no change.
+function buildMoved(v){const was=BUILDID&&BUILDID.build_id,now=v&&v.build_id;
+  return !!(was&&now&&String(now)!==String(was));}
+function announceNewBuild(){
+  if(typeof snack==="function")snack("A newer data build is available",null,{label:"Reload",onClick:()=>location.reload()});}
+// A build that predates the per-survey files names no tf_url anywhere; a failed tf_url never falls back.
+function curvesPredateSplit(){return !Object.values(SMETA||{}).some(m=>m&&m.tf_url);}
+function loadAllCurves(){
+  if(!_TF_ALL)_TF_ALL=fetchJson("tf.json").then(rows=>{
+    if(!Array.isArray(rows)||rows.length!==ST.length)throw new Error("curve rows for the catalogue");
+    return rows;});
+  return _TF_ALL;}
+function loadSurveyCurves(slug){
+  if(_CURVES[slug])return _CURVES[slug];
+  const k="tf:"+slug,sv=SLUG_TO_SURVEY[slug],url=sv&&SMETA[sv]&&SMETA[sv].tf_url;
+  const idx=ST.filter(s=>s.survey===sv).map(s=>s.i);
+  HYDR[k]="pending";
+  const rows=url?fetchJson(url).then(r=>{
+      if(!Array.isArray(r)||r.length!==idx.length)throw new Error("curve rows for "+slug);
+      return r;})
+    :curvesPredateSplit()?loadAllCurves().then(all=>idx.map(i=>all[i]))
+    :Promise.reject(new Error("no curve file for "+slug));
+  // The rows carry no key and are placed by position, so build.json is re-read AFTER they land and a
+  // different build refuses them.
+  _CURVES[slug]=rows.then(r=>fetchOptional("build.json",null).then(v=>{
+    if(buildMoved(v)){announceNewBuild();throw new Error("data build changed");}
+    TFD=TFD||[];idx.forEach((i,n)=>{TFD[i]=r[n];});HYDR[k]="ready";
+  })).catch(()=>{HYDR[k]="failed";});
+  return _CURVES[slug];}
 
 // ---- download manifest resolver: the distribution backbone -----------------------------------
 // manifest.json indexes every downloadable artifact. See docs: portal internals, data.js.

@@ -41,6 +41,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from curves_fixture import datamap_curves
 
 ROOT = Path(__file__).resolve().parent.parent                 # portal/
 SRC = ROOT / "src"
@@ -55,7 +56,7 @@ const fs=require("fs"),vm=require("vm"),path=require("path");
 const SRC=process.argv[2];
 const MODULES=["contract","security","state","data","plots","mapattrib","map","filters","drawer","exports","main","tour"];
 let code=MODULES.map(f=>fs.readFileSync(path.join(SRC,f+".js"),"utf8")).join("\n");
-code+="\nglobalThis.__api={boot,hydrationDone:()=>HYDRATION_DONE,openStation,nST:()=>ST.length};";
+code+="\nglobalThis.__api={boot,hydrationDone:()=>HYDRATION_DONE,curvesDone:()=>Promise.all([...Object.values(_CURVES),MANIFEST_READY]),openStation,selectDrawerTab,nST:()=>ST.length};";
 const stub=()=>new Proxy(function(){},{get:(t,p)=>{if(p==="then")return undefined;if(p===Symbol.iterator)return function*(){};return stub();},apply:()=>stub(),construct:()=>stub()});
 function elStub(){const t={value:"",checked:true,textContent:"",innerHTML:"",scrollTop:0,disabled:false,style:{},dataset:{},children:[],classList:{toggle(){},add(){},remove(){},contains(){return false;}},appendChild(){},addEventListener(){},querySelectorAll(){return[];},querySelector(){return null;},closest(){return null;},setAttribute(){},getAttribute(){return null;},getBoundingClientRect(){return{left:0};},scrollIntoView(){},click(){},onclick:null};return new Proxy(t,{get:(o,p)=>(p in o?o[p]:stub()),set:(o,p,v)=>{o[p]=v;return true;}});}
 const elCache={};function elFor(id){if(!elCache[id])elCache[id]=elStub();return elCache[id];}
@@ -63,9 +64,11 @@ const data=JSON.parse(fs.readFileSync(process.argv[3],"utf8"));
 const ctx={document:{getElementById:id=>elFor(id),createElement:()=>elStub(),addEventListener(){},body:elStub(),querySelector:()=>null,querySelectorAll:sel=>(/typeBoxes/.test(sel)?[{value:"LPMT"},{value:"BBMT"},{value:"AMT"},{value:"GDS"},{value:"other"}]:[])},window:{addEventListener(){},open(){},innerWidth:1200,AUSMT_CONFIG:{short_name:"AusMT"}},location:{hash:"",pathname:"/",search:""},history:{replaceState(){}},navigator:{clipboard:{writeText:()=>Promise.resolve()}},localStorage:{getItem:()=>null,setItem(){},removeItem(){},clear(){}},L:stub(),JSZip:stub(),fetch:url=>Promise.resolve(data[url]?{ok:true,json:()=>Promise.resolve(data[url])}:{ok:false}),URL:{createObjectURL:()=>"x",revokeObjectURL(){}},Blob:function(){},setTimeout:f=>{try{f();}catch(e){}return 0;},clearTimeout(){},console,Math,JSON,Date,Promise,encodeURIComponent,decodeURIComponent,parseInt,parseFloat,isFinite,Set,Array,Object,String,Number};
 ctx.globalThis=ctx;ctx.self=ctx;vm.createContext(ctx);vm.runInContext(code,ctx);
 // Two-phase boot: boot() returns as soon as the FIRST-PAINT products are in (catalogue/surveys + the small
-// optionals); tf.json/sci.json/manifest.json hydrate behind it. This probe renders surfaces that read all
-// three, so it awaits hydrationDone() first; otherwise it would assert against loading states.
-(async()=>{const A=ctx.__api;await A.boot();await A.hydrationDone();if(A.nST()===0){console.error("FIXTURE EMPTY");process.exit(1);}A.openStation(0);console.log("<<<STATION>>>");console.log(elFor("drawer").innerHTML);console.log("<<<END>>>");})().catch(e=>{console.error("PROBE ERROR:",(e&&e.stack)||e);process.exit(1);});
+// optionals); sci.json hydrates behind it, opening a station loads its survey's curves, and the Provenance
+// tab, where the API block lives, loads the manifest.
+// This probe renders surfaces that read all of them, so it awaits each and opens the station again (the stub
+// drawer is never "open", so nothing re-renders it); otherwise it would assert against loading states.
+(async()=>{const A=ctx.__api;await A.boot();await A.hydrationDone();if(A.nST()===0){console.error("FIXTURE EMPTY");process.exit(1);}A.openStation(0);A.selectDrawerTab("provenance");await A.curvesDone();A.openStation(0);console.log("<<<STATION>>>");console.log(elFor("drawer").innerHTML);console.log("<<<END>>>");})().catch(e=>{console.error("PROBE ERROR:",(e&&e.stack)||e);process.exit(1);});
 """
 
 # Station A1 of survey "Vulcan 2022" (slug vulcan-2022): the live corpus shape, including the served
@@ -94,11 +97,13 @@ def _fixture(*, served, access):
     meta = {"slug": "vulcan-2022", "org": "X", "country": "Australia", "lic": "CC-BY-4.0"}
     if access != "open":
         meta["access"] = access
+    cat_rows, tf_rows, surveys = [[_CAT[c] for c in COLS["catalogue"]]], [[_TF[c] for c in COLS["tf"]]], {"Vulcan 2022": meta}
     return {
-        "data/catalogue.json": [[_CAT[c] for c in COLS["catalogue"]]],
+        "data/catalogue.json": cat_rows,
         "data/sci.json": [[_SCI[c] for c in COLS["sci"]]],
-        "data/tf.json": [[_TF[c] for c in COLS["tf"]]],
-        "data/surveys.json": {"Vulcan 2022": meta},
+        "data/tf.json": tf_rows,
+        **datamap_curves(cat_rows, tf_rows, surveys),
+        "data/surveys.json": surveys,
         "data/manifest.json": {"generated_count": 1 if served else 0,
                                "files": [_EDI_ROW] if served else [], "bundles": []},
     }

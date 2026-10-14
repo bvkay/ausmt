@@ -48,6 +48,9 @@ def test_empty_build_generates_valid_json(tmp_path):
     assert {k: manifest[k] for k in ("generated_count", "base_url", "files", "bundles")} == \
         {"generated_count": 0, "base_url": "", "files": [], "bundles": []}
     assert "mth5_version" in manifest and "mt_metadata_version" in manifest
+    # No survey, no per-survey curve file: the directory exists and is empty, the manifest lists none.
+    assert manifest["curves"] == []
+    assert (out / "tf").is_dir() and not any((out / "tf").iterdir())
     # MTCAT 2.0 dropped the document-level library-version keys (manifest/build docs keep theirs)
     # and the empty-collections state: no collections => no key.
     assert "mth5_version" not in mtcat and "mt_metadata_version" not in mtcat

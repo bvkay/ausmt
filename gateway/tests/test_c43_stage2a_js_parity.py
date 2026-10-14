@@ -154,18 +154,21 @@ def test_js_data_urls_absolute(tmp_path):
     driver = (
         "import { readFileSync } from 'fs';\n"
         + _extract_js_function(js, "dataUrl") + "\n"
+        + _extract_js_function(js, "curvesUrl") + "\n"
         + _extract_js_function(js, "stationJsonUrl") + "\n"
         + """
 const out = {
   cat: dataUrl('catalogue.json'),
-  tf: dataUrl('tf.json'),
+  tf: curvesUrl('my survey+2026'),
   station: stationJsonUrl('my survey+2026', 'S01 A#7'),
 };
 process.stdout.write(JSON.stringify(out));
 """)
     got = _run_node(tmp_path, driver, {})
     assert got["cat"] == "/data/catalogue.json", got
-    assert got["tf"] == "/data/tf.json", got
+    # The Stations tab shows one survey, so it reads that survey's curve file, never the corpus tf.json.
+    assert got["tf"] == "/data/tf/my%20survey%2B2026.json", got
+    assert "'tf.json'" not in js, "STATIONS_JS must not fetch the whole-corpus tf.json"
     assert got["station"] == "/data/products/my%20survey%2B2026/S01%20A%237/station.json", got
 
 
@@ -298,9 +301,27 @@ def engine_corpus(tmp_path_factory):
     assert ok, f"real engine preview build failed: {summary_path.read_text(encoding='utf-8')}"
     corpus = {name: json.loads((out / f"{name}.json").read_text(encoding="utf-8"))
               for name in ("catalogue", "sci", "tf")}
+    corpus["curves"] = {slug: json.loads((out / "tf" / f"{slug}.json").read_text(encoding="utf-8"))
+                        for slug in surveys}
     corpus["surveys"] = surveys
     corpus["products"] = out / "products"
     return corpus
+
+
+def curves_by_catalogue_row(out: Path, catalogue):
+    """The tf rows a build serves per survey (tf/<slug>.json, named by surveys.json tf_url), laid out
+    by catalogue index: a survey file's rows are that survey's catalogue rows in order."""
+    smeta = json.loads((out / "surveys.json").read_text(encoding="utf-8"))
+    files = {label: json.loads((out / m["tf_url"]).read_text(encoding="utf-8"))
+             for label, m in smeta.items() if m.get("tf_url")}
+    taken = {label: 0 for label in files}
+    rows = []
+    for r in catalogue:
+        label = r[1]   # catalogue column `survey` (contract/columns.json)
+        rows.append(files[label][taken[label]])
+        taken[label] += 1
+    assert all(taken[label] == len(files[label]) for label in files), "a curve file is longer than its survey"
+    return rows
 
 
 def test_stations_filter_selects_engine_built_rows_by_slug(engine_corpus, tmp_path):
@@ -322,17 +343,19 @@ def test_stations_filter_selects_engine_built_rows_by_slug(engine_corpus, tmp_pa
 const p = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const out = {};
 for (const slug of p.slugs) {
-  out[slug] = surveyRows(p.cat, p.sci, p.tf, slug).map(function (r) {
+  out[slug] = surveyRows(p.cat, p.sci, p.curves[slug], slug).map(function (r) {
     return { id: r.cat[C.id], ausmt_id: r.cat[C.ausmt_id], survey_col: r.cat[C.survey],
-             sc: r.sc !== null, tf: r.tf !== null };
+             sc: r.sc !== null, tf: r.tf, idx: p.cat.indexOf(r.cat) };
   });
+  out[slug + "|short"] = surveyRows(p.cat, p.sci, p.curves[slug].slice(1), slug)
+    .map(function (r) { return r.tf; });
 }
 process.stdout.write(JSON.stringify(out));
 """)
     slugs = sorted(engine_corpus["surveys"])
     got = _run_node(tmp_path, driver, {
         "cat": engine_corpus["catalogue"], "sci": engine_corpus["sci"],
-        "tf": engine_corpus["tf"], "slugs": slugs})
+        "curves": engine_corpus["curves"], "slugs": slugs})
     for slug in slugs:
         label = engine_corpus["surveys"][slug]
         # station dirs only: products/<slug>/ also holds survey-metadata.json (a file)
@@ -345,12 +368,19 @@ process.stdout.write(JSON.stringify(out));
             f"leaks a sibling survey across the au.<slug>. boundary")
         for r in rows:
             assert r["ausmt_id"].startswith(f"au.{slug}."), (slug, r)
-            assert r["sc"] and r["tf"], f"index-aligned sci/tf must join for {r['ausmt_id']}"
+            assert r["sc"] and r["tf"], f"sci and the survey's curve rows must join for {r['ausmt_id']}"
+            # The survey file's rows join by position: each must be the row tf.json holds for the
+            # same catalogue index.
+            assert r["tf"] == engine_corpus["tf"][r["idx"]], (
+                f"{r['ausmt_id']}: the curve row joined from tf/{slug}.json is not tf.json row {r['idx']}")
             # ENGINE TRUTH, pinned where the defect lived: the catalogue survey column carries the
             # display LABEL, never the slug. If the engine ever changes that, this narrates the seam.
             assert r["survey_col"] == label != slug, (
                 f"engine semantics drifted: catalogue survey column is {r['survey_col']!r}, "
                 f"expected the display label {label!r} (never the slug)")
+        assert got[slug + "|short"] and all(t is None for t in got[slug + "|short"]), (
+            f"slug {slug!r}: a curve file whose length disagrees with the survey's rows cannot be "
+            f"aligned and must join nothing")
 
 
 def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):

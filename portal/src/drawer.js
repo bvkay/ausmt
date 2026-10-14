@@ -40,8 +40,7 @@ let _drawerSubject=null;
 // "Automated screening", "AusMT-derived". Plain muted text, no colour semantics.
 function roleChip(l){return `<span class="rolechip">${esc(l)}</span>`;}
 // ---- two-phase boot: the loading surfaces ------------------------------------------------------
-// The drawer is the densest consumer of the PHASE 2 products (tf.json -> the response curves; sci.json -> the
-// processing/screening rows). See docs: portal internals, drawer.js.
+// The drawer is the densest consumer of the late products. See docs: portal internals, drawer.js.
 function hydrBlock(what){return `<div class="hydrating" role="status">Loading ${esc(what)}…</div>`;}
 function hydrFailBlock(what){return `<div class="hydrating hydrfail" role="status">Could not load ${esc(what)}.</div>`;}
 function hydrCell(){return `<span class="hydrating hydr-inline">loading…</span>`;}
@@ -74,6 +73,7 @@ function drawerPanel(id,content,selected){
 let _curDrawerTab="response";
 function selectDrawerTab(name){
   _curDrawerTab=name;
+  if(name==="files"||name==="provenance")loadManifest();
   if(!drawer||!drawer.querySelectorAll)return;
   const tabs=[...drawer.querySelectorAll('[role="tab"]')];
   const panels=[...drawer.querySelectorAll('[role="tabpanel"]')];
@@ -85,7 +85,7 @@ function selectDrawerTab(name){
 // The display gate, factored: the served-EDI descriptor for a station, {sub,st,d}. See docs: portal
 // internals, drawer.js.
 function ediDescriptor(s,m){
-  // Two-phase boot: the manifest is a PHASE 2 product, so before it lands there is no honest answer here:
+  // Two-phase boot: the manifest loads on demand, so before it lands there is no honest answer here:
   // the served-artifact branch and BOTH fallbacks ("EDI (via source archive)" / the embargo wording) are
   // claims about what this deployment serves. See docs: portal internals, drawer.js.
   if(hydrating("manifest"))return {sub:"loading…",st:"unk",d:null};
@@ -99,7 +99,10 @@ function ediDescriptor(s,m){
 // an embargoed/metadata-only station) - otherwise a primary button routed through the same [data-prod]
 // dispatch as the product tiles. See docs: portal internals, drawer.js.
 function headerDownloadBtn(s,m){
-  if(hydrating("manifest"))return `<span class="hydrating hydr-inline" role="status">checking file availability…</span>`;
+  // Before the manifest loads, the access gate alone decides whether there is a download: an open-access
+  // station always has a route, which the click resolves once the manifest is in. See docs: portal
+  // internals, drawer.js.
+  if(hydrating("manifest"))return isOpenAccess(m)?`<button class="primary dl-edi" data-prod="edi-resolve" data-i="${escAttr(s.i)}">Download EDI</button>`:"";
   const e=ediDescriptor(s,m);if(!e.d)return"";
   const attrs=Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" ");
   return `<button class="primary dl-edi" ${attrs}>Download EDI</button>`;}
@@ -370,7 +373,7 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     // Two-phase boot: the hand-off index is a PHASE 2 product, so before it lands the absence of an
     // action row states nothing. Say which wait it is rather than letting silence read as "no file".
     (tsIndexKnown?"":hydrBlock("archive hand-off routes"));
-  // Two-phase boot: all three Level 2 sub-rows resolve against the download manifest (PHASE 2), and each of
+  // Two-phase boot: all three Level 2 sub-rows resolve against the download manifest (loaded on demand), and each of
   // them degrades to a "not currently available" / "via source archive" line, i.e. statements about what
   // the build actually served. See docs: portal internals, drawer.js.
   const level2Body=hydrating("manifest")?hydrBlock("served files"):level2Subs.map(row).join("");
@@ -405,7 +408,7 @@ function fileWrittenByText(fwb){
 // qualifier. It renders inside the station drawer's lineage graph, so every input must be station-scoped.
 // See docs: portal internals, drawer.js.
 function distributedFormatsText(s,m){
-  // Two-phase boot: every input here is a manifest row (PHASE 2). See docs: portal internals, drawer.js.
+  // Two-phase boot: every input here is a manifest row (loaded on demand). See docs: portal internals, drawer.js.
   if(hydrating("manifest"))return "loading…";
   const arts=(typeof artifactsFor==="function"?artifactsFor(s&&s.ausmt_id):[]);
   const out=[];
@@ -679,8 +682,11 @@ function openStation(i,opts){
   // ---- Panel content -------------------------------------------------------------------------------
   // Response (default) - the four plots FIRST, the centerpiece. See docs: portal internals, drawer.js.
   const _rspOpen=isOpenAccess(m);
-  // Two-phase boot: the curves live in tf.json (PHASE 2). See docs: portal internals, drawer.js.
-  const _tfGate=_rspOpen?hydrGate("tf","response functions",true):"";
+  // The curves arrive with the survey's curve file. See docs: portal internals, drawer.js.
+  const _tfKey="tf:"+s.slug;
+  if(_rspOpen&&!rehydrate&&HYDR[_tfKey]!=="ready"&&HYDR[_tfKey]!=="failed")loadSurveyCurves(s.slug).then(()=>{
+    if(_drawerSubject&&_drawerSubject.kind==="station"&&ST[_drawerSubject.i]&&ST[_drawerSubject.i].slug===s.slug)rehydrateOpenDrawer();});
+  const _tfGate=_rspOpen?hydrGate(_tfKey,"response functions",true):"";
   const responseHtml=`<div class="sechead rsphead">Response functions ${roleChip("AusMT-derived")}`+
     (_rspOpen&&!_tfGate&&typeof responseExpandBtn==="function"?responseExpandBtn():"")+`</div>`+
     (_tfGate
@@ -1240,7 +1246,7 @@ function releaseNotesHtml(m){
 // Pre-built per-survey download bundles from the manifest (EDI zip + EMTF-XML zip always when served;
 // survey MTH5 only when the survey_h5_enabled flag produced one). See docs: portal internals, drawer.js.
 function surveyBundleTiles(slug){
-  // Two-phase boot: the bundle rows live in the manifest (PHASE 2). "" (no tiles) reads as "this survey is
+  // Two-phase boot: the bundle rows live in the manifest (on demand). "" (no tiles) reads as "this survey is
   // not served in bundle form", an absence claim made by OMISSION, which is no more honest than making it
   // in words, so pre-hydration the grid shows a loading tile that MANIFEST_READY replaces with the real one.
   if(hydrating("manifest"))return `<div class="prod dis"><span class="pdot" style="background:var(--unk)"></span><div>Survey bundles<small>loading…</small></div></div>`;
@@ -1339,6 +1345,7 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
   const keepScroll=rehydrate?(drawer.scrollTop||0):0;
   const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
   if(!rehydrate)_rememberDrawerOpener();              // Capture the invoking element before the rewrite
+  if(!rehydrate)loadManifest();
   // The survey drawer OWNS its route, as openStation does: opening survey B over
   // survey A must replace #/survey/<A> in the address bar, just as the close path clears it. See docs:
   // portal internals, drawer.js.
@@ -1506,8 +1513,16 @@ function openCollectionPage(cid){
   // repaint setView gives it - otherwise the slot keeps whatever the previous view left there.
   if(typeof updateCounts==="function")updateCounts();
 }
+// The header Download EDI clicked before the manifest loaded: wait for it, then take the route it resolves.
+async function resolveEdi(i){
+  const s=ST[i];if(!s)return;
+  if(hydrating("manifest"))toast("Waiting for the download index…");
+  await loadManifest();
+  const e=ediDescriptor(s,SMETA[s.survey]||{});
+  if(e.d)dispatchProd(e.d);}
 function dispatchProd(d){
-  if(d.prod==="edi")fetchEdi(d.file,d.avail==="1",d.survey);
+  if(d.prod==="edi-resolve")resolveEdi(+d.i);
+  else if(d.prod==="edi")fetchEdi(d.file,d.avail==="1",d.survey);
   else if(d.prod==="fetch"&&d.url){track("DownloadGenerated",{format:(d.name||"").split(".").pop()});downloadUrl(dataUrl(d.url),d.name);}
   else if(d.prod==="open"&&d.url){window.open(d.url,"_blank","noopener,noreferrer");
     // A time-series hand-off carries the archive's filename and size, so it can say what it just

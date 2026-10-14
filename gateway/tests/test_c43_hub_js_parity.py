@@ -524,8 +524,12 @@ def _stations_driver(body: str) -> str:
 
 
 def _load_corpus(warn_report):
-    return {name: json.loads((warn_report["out"] / f"{name}.json").read_text(encoding="utf-8"))
-            for name in ("catalogue", "sci", "tf")}
+    from gateway.tests.test_c43_stage2a_js_parity import curves_by_catalogue_row
+    corpus = {name: json.loads((warn_report["out"] / f"{name}.json").read_text(encoding="utf-8"))
+              for name in ("catalogue", "sci")}
+    # The Stations tab reads each survey's curve file, so the pins drive it with those rows.
+    corpus["tf"] = curves_by_catalogue_row(warn_report["out"], corpus["catalogue"])
+    return corpus
 
 
 def test_convention_sentence_vectors_match_phaseqc_medians(tmp_path):

@@ -532,6 +532,38 @@ def _bundle_row(survey, slug, fmt, served: Path, rel, license_str, n_stations, n
             "custodian": custodian, "n_stations": n_stations}
 
 
+def write_survey_curves(out: Path, labels, tf_rows, surveys_meta) -> list[dict]:
+    """Write data/tf/<slug>.json per survey: that survey's tf.json rows in catalogue order, in the
+    compact form tf.json is written in, so each row is byte-identical to its tf.json row. Returns one
+    manifest `curves` row per file. A survey without a slug, or two surveys sharing one, has no file
+    name that keeps its rows apart, so either fails the build. Any other *.json in tf/ is removed: a
+    file left from an earlier build would serve a survey this catalogue does not hold."""
+    groups: dict[str, list] = {}
+    for label, row in zip(labels, tf_rows):
+        groups.setdefault(label, []).append(row)
+    tdir = out / "tf"
+    tdir.mkdir(parents=True, exist_ok=True)
+    rows_out, owner = [], {}
+    for label, rows in groups.items():
+        slug = (surveys_meta.get(label) or {}).get("slug")
+        if not slug:
+            raise ValueError(f"survey {label!r} has no slug, so its curve file cannot be named")
+        if slug in owner:
+            raise ValueError(f"surveys {owner[slug]!r} and {label!r} share the slug {slug!r}; "
+                             f"one curve file cannot hold both")
+        owner[slug] = label
+        rel = f"tf/{slug}.json"
+        data = _jdump(rows, separators=(",", ":")).encode("utf-8")
+        (out / rel).write_bytes(data)
+        rows_out.append({"survey": label, "slug": slug, "url": rel, "size": len(data),
+                         "sha256": hashlib.sha256(data).hexdigest(), "n_stations": len(rows)})
+    keep = {f"{s}.json" for s in owner}
+    for stale in tdir.glob("*.json"):
+        if stale.name not in keep:
+            stale.unlink()
+    return rows_out
+
+
 def slugify(s: str) -> str:
     return "".join(c if c.isalnum() else "-" for c in s.lower()).strip("-")
 
@@ -6849,8 +6881,15 @@ def _main_build(argv=None):
         (out / "base_ids.json").write_text(
             _jdump(_base_id_map, separators=(",", ":")), encoding="utf-8")
     (out / "tf.json").write_text(_jdump(tf_out, separators=(",", ":")), encoding="utf-8")
+    # The portal fetches a survey's curves when one of its stations opens; tf.json stays until every
+    # consumer reads the per-survey files. surveys.json names each file so the portal resolves it from
+    # a document it already holds at first paint.
+    curve_rows = write_survey_curves(out, [r["survey"] for (_p, r) in all_stations], tf_out, surveys_meta)
+    _curve_url = {c["survey"]: c["url"] for c in curve_rows}
+    surveys_doc = {lbl: ({**m, "tf_url": _curve_url[lbl]} if lbl in _curve_url else m)
+                   for lbl, m in surveys_meta.items()}
     (out / "sci.json").write_text(_jdump(sci_out, separators=(",", ":")), encoding="utf-8")
-    (out / "surveys.json").write_text(_jdump(surveys_meta, separators=(",", ":")), encoding="utf-8")
+    (out / "surveys.json").write_text(_jdump(surveys_doc, separators=(",", ":")), encoding="utf-8")
     # Group surveys into collections ONCE; both collections.json and MTCAT reuse it.
     coll_by_id, _survey_coll = _group_collections(surveys_meta, all_stations)
     for _dup in _near_duplicate_collection_ids(list(coll_by_id)):
@@ -6999,7 +7038,10 @@ def _main_build(argv=None):
                     # None when the library was not importable in the build env — an EDI-only build).
                     "mth5_version": LIB_VERSIONS.get("mth5"),
                     "mt_metadata_version": LIB_VERSIONS.get("mt_metadata"),
-                    "files": manifest["files"], "bundles": manifest["bundles"]}
+                    "files": manifest["files"], "bundles": manifest["bundles"],
+                    # The per-survey curve files, listed for their integrity; they are display
+                    # products rather than downloads, so generated_count does not count them.
+                    "curves": curve_rows}
     (out / "manifest.json").write_text(_jdump(manifest_doc, separators=(",", ":")), encoding="utf-8")
 
     # ---- MTCAT discovery/federation document (portal owns data; shared minimal metadata) ----
@@ -7213,7 +7255,7 @@ def _main_build(argv=None):
 
     if prod:
         (prod / "catalogue.json").write_text(_jdump(compact, separators=(",", ":")), encoding="utf-8")
-        (prod / "surveys.json").write_text(_jdump(surveys_meta, indent=1), encoding="utf-8")
+        (prod / "surveys.json").write_text(_jdump(surveys_doc, indent=1), encoding="utf-8")
         (prod / "mtcat.json").write_text(_jdump(mtcat, indent=1), encoding="utf-8")
         (prod / "manifest.json").write_text(_jdump(manifest_doc, indent=1), encoding="utf-8")
 

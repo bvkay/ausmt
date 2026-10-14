@@ -240,9 +240,13 @@ against `engine/schema/manifest.schema.json` (JSON Schema draft-07, `$id`
 `https://ausmt.org/schema/manifest-1.0.schema.json`) before publishing it. The portal's own download
 resolver reads the same document. Where this page and the schema disagree, the schema is right.
 
-The schema defines four top-level keys: `generated_count` (integer, `len(files) + len(bundles)`, a
+The schema defines five top-level keys: `generated_count` (integer, `len(files) + len(bundles)`, a
 cheap sanity check after parsing), `base_url` (optional string, `""` meaning portal-relative), `files`
-(one row per downloadable file per station) and `bundles` (one row per pre-built per-survey download).
+(one row per downloadable file per station), `bundles` (one row per pre-built per-survey download) and
+`curves`. `curves` is not a download list: it names the portal's own per-survey display files, one per
+catalogued survey with its size and digest so a build can be checked, and it covers embargoed surveys,
+whose files carry the same emptied curves the portal shows. `generated_count` does not count it, and
+the rules below are about `files` and `bundles`.
 The document root is open, and the build adds two keys beside them: `mth5_version` and
 `mt_metadata_version` (each a string, or `null` when the library was not importable in the build
 environment, as in an EDI-only build), the versions of the `mth5` and `mt_metadata` libraries the served

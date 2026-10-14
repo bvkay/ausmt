@@ -361,7 +361,7 @@ bindClick("dlZip",async()=>{trackSelectionZip("edi");
   // the fallback), so packaging before the manifest lands would silently take the fallback route for every
   // station and could write a zip missing files that are in fact served. Await the gate.
   if(hydrating("manifest")){toast("Waiting for the download index…");}
-  await MANIFEST_READY;
+  await loadManifest();
   const z=new JSZip(),f=z.folder("ausmt_edis");
   const chosen=scopeSel(),avail=chosen.filter(s=>s.ediAvail),unavail=chosen.filter(s=>!s.ediAvail);
   let ok=0;const included={};toast("Packaging "+avail.length+" redistributable EDI(s)…",{sticky:true});   // included: survey -> zip subdir
@@ -495,7 +495,7 @@ async function exportSelectionFormat(fmt){
   // Two-phase boot: availability IS the manifest row here, so packaging before the manifest lands would
   // report every station as having no file of this format. Await the gate.
   if(hydrating("manifest")){toast("Waiting for the download index…");}
-  await MANIFEST_READY;
+  await loadManifest();
   const z=new JSZip(),f=z.folder(C.folder);
   const chosen=scopeSel(),have=chosen.filter(s=>selArtifact(s,fmt)),missing=chosen.filter(s=>!selArtifact(s,fmt));
   let ok=0;const included={},failed=[];toast("Packaging "+have.length+" "+C.label+" file(s)…",{sticky:true});

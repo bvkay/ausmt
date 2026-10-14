@@ -66,7 +66,9 @@ and the output is byte-identical to a build from before the flag existed.
    `sitemap.xml`; every sitemap URL is reconciled against a page this build actually wrote, and a
    mismatch fails the build. See [Discoverability](discoverability.md) for the page kinds, the
    structured data each carries, the sitemap's membership rule and the card families.
-8. Verify (`scripts/verify.py`, run separately by the deployment Makefile): schema checks plus the
+8. Verify (`scripts/verify.py`, run separately by the deployment Makefile): schema checks, the
+   curve-file gate (every catalogued survey has its `tf/<slug>.json` with one row per catalogue row,
+   and `manifest.json` `curves[]` matches the bytes; see [Portal data files](data-files.md)), plus the
    cache-independent consistency check of served XML against current survey.yaml, read off the digest
    sidecar.
 

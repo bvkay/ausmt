@@ -1,7 +1,10 @@
 {
+ "schema": "ausmt-station",
+ "version": "0.1",
  "ausmt_id": "au.sweep-survey.EXACTONE",
  "station": "EXACTONE",
  "survey": "Coord Access Sweep Survey",
+ "survey_id": "sweep-survey",
  "country": "Australia",
  "organisation": "AusMT CI",
  "location": {
@@ -18,19 +21,26 @@
   "median_relative_error": 0.019,
   "remote_reference": true,
   "tipper_available": false,
-  "dimensionality": "2-D",
-  "skew_beta_median_deg": 0.7,
   "completeness_smoothness_diagnostic": {
    "value": 5.0,
    "basis": "e",
    "note": "not a quality or geological-value judgement"
-  }
+  },
+  "classification": "2-D",
+  "skew_beta_median_deg": 0.7,
+  "pct_periods_3d": 0,
+  "method": "phase-tensor (Caldwell 2004)",
+  "note": "screening diagnostic, not an interpretation product"
  },
  "processing": {
   "software": "LEMIMT",
   "algorithm": "Robust Remote Reference",
   "remote_reference": true,
   "remote_site": null,
+  "file_written_by": {
+   "name": "Geotools",
+   "version": "4.0.5.12583"
+  },
   "note": "MAXINFO=17\n*\nSITE        : P-A1_RR-RR_S-10Hz_1\nLATITUDE    :   -31.234567\nLONGITUDE   :   135.234567\nELEVATION   :   111.6100\nDECLINATION :     0.0000\n*\nProcessing code: LEMIMT\nAlgorithm      : Robust Remote Reference"
  },
  "distribution": {
@@ -43,9 +53,11 @@
   "pipeline_version": "0.2.1",
   "extractor": "mt_metadata (community canonical)",
   "software": {
-   "python": "3.13.5"
+   "python": "3.12.14",
+   "mt_metadata": "1.0.10",
+   "mth5": "0.6.8"
   },
-  "git_commit": "1012431",
+  "git_commit": "01fbd1d",
   "parameters": {
    "dimensionality": {
     "beta_per_period_deg": 3.0,
@@ -59,9 +71,9 @@
    },
    "diagnostic": "completeness/smoothness (median rel error + coverage + smoothness)"
   },
-  "generated": "2026-07-12T08:31:41.394182+00:00",
+  "generated": "2026-10-14T13:08:55.065849+00:00",
   "input_file": "EXACTONE.edi",
-  "input_sha256": "1bdd596d3db1ddaf1426d9d72bbc78dfc6f1694af041f0d81eb58ec5d0edb91b"
+  "input_sha256": "ee982f5399b722d127a057175aad2b048fd5241cb877b11b6881bfdd595c4077"
  },
  "coordinate_qc": null,
  "canonical_conditioning": [
@@ -70,7 +82,8 @@
   "declination.epoch/model: library defaults (epoch=None, model=IGRF) — an EDI states only the declination value; epoch/model NOT asserted by source",
   "channel orientations: degenerate/defaulted (ex and ey azimuths both 0 deg — parallel dipoles are non-physical); orientations NOT asserted by source EMEAS geometry",
   "citation.authors<-survey_meta:AusMT CI",
-  "citation.title<-survey_meta"
+  "citation.title<-survey_meta",
+  "copyright.release_status=Data Citation Required; conditions_of_use set from licence CC-BY-4.0 (replaced mt_metadata default boilerplate)"
  ],
  "frame": {
   "evidence": {
@@ -99,5 +112,35 @@
    "n_periods_used": 62,
    "detail": null
   }
- }
+ },
+ "resources": [
+  {
+   "id": "edi",
+   "kind": "transfer_function",
+   "format": "edi",
+   "provenance_role": "source",
+   "representation_role": "original",
+   "path": "edi/sweep-survey/EXACTONE.edi"
+  },
+  {
+   "id": "emtfxml",
+   "kind": "transfer_function",
+   "format": "emtfxml",
+   "provenance_role": "derived",
+   "representation_role": "alternate",
+   "path": "xml/sweep-survey/EXACTONE.xml"
+  },
+  {
+   "id": "edi-zip",
+   "kind": "archive",
+   "format": "zip",
+   "path": "bundles/sweep-survey-edi.zip"
+  },
+  {
+   "id": "xml-zip",
+   "kind": "archive",
+   "format": "zip",
+   "path": "bundles/sweep-survey-xml.zip"
+  }
+ ]
 }

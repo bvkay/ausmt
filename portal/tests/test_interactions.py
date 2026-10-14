@@ -20,6 +20,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from curves_fixture import write_curves
 
 ROOT = Path(__file__).resolve().parent.parent                 # portal/
 DRIVER = ROOT / "tools" / "interaction_test.js"
@@ -148,6 +149,7 @@ def test_portal_interactions(tmp_path):
     (data / "catalogue.json").write_text(json.dumps(cat))
     (data / "sci.json").write_text(json.dumps(sci))
     (data / "tf.json").write_text(json.dumps(tf))
+    write_curves(data, cat, tf, surveys)          # tf/<slug>.json per survey, named in surveys.json
     (data / "surveys.json").write_text(json.dumps(surveys))
     (data / "collections.json").write_text(json.dumps(collections))
     # build.json fixes the recently-added window's reference day so the strip is DETERMINISTIC:

@@ -1,7 +1,10 @@
 {
+ "schema": "ausmt-station",
+ "version": "0.1",
  "ausmt_id": "au.sweep-survey.HIDENINE",
  "station": "HIDENINE",
  "survey": "Coord Access Sweep Survey",
+ "survey_id": "sweep-survey",
  "country": "Australia",
  "organisation": "AusMT CI",
  "location": {
@@ -18,19 +21,26 @@
   "median_relative_error": 0.019,
   "remote_reference": true,
   "tipper_available": false,
-  "dimensionality": "2-D",
-  "skew_beta_median_deg": 0.7,
   "completeness_smoothness_diagnostic": {
    "value": 5.0,
    "basis": "e",
    "note": "not a quality or geological-value judgement"
-  }
+  },
+  "classification": "2-D",
+  "skew_beta_median_deg": 0.7,
+  "pct_periods_3d": 0,
+  "method": "phase-tensor (Caldwell 2004)",
+  "note": "screening diagnostic, not an interpretation product"
  },
  "processing": {
   "software": "LEMIMT",
   "algorithm": "Robust Remote Reference",
   "remote_reference": true,
   "remote_site": null,
+  "file_written_by": {
+   "name": "Geotools",
+   "version": "4.0.5.12583"
+  },
   "note": null
  },
  "distribution": {
@@ -43,9 +53,11 @@
   "pipeline_version": "0.2.1",
   "extractor": "mt_metadata (community canonical)",
   "software": {
-   "python": "3.13.5"
+   "python": "3.12.14",
+   "mt_metadata": "1.0.10",
+   "mth5": "0.6.8"
   },
-  "git_commit": "1012431",
+  "git_commit": "01fbd1d",
   "parameters": {
    "dimensionality": {
     "beta_per_period_deg": 3.0,
@@ -59,9 +71,9 @@
    },
    "diagnostic": "completeness/smoothness (median rel error + coverage + smoothness)"
   },
-  "generated": "2026-07-12T08:31:41.394182+00:00",
+  "generated": "2026-10-14T13:08:55.065849+00:00",
   "input_file": "HIDEFILE.edi",
-  "input_sha256": "69fa92d0b93fc47584b9d27a048d56e0e139030c191bf20553ddd33cf2097bb5"
+  "input_sha256": "78954ec16dfa69e0936819514c3cdcc87c9f6d101d64f32ada12a080712c4c01"
  },
  "coordinate_qc": null,
  "canonical_conditioning": null,

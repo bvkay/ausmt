@@ -15,6 +15,7 @@ The committed fixtures are the build's own output, so a reader can verify the ex
   * products/sweep-survey/<ID>/station.json — location {lat,lon} masked; distribution.edi_available
     false for a byte-gated (non-exact) station; coordinate_policy present for the non-exact stations.
   * coord_policy.json — ausmt_id -> policy ('generalised'/'withheld') for the NON-EXACT stations only.
+  * tf/sweep-survey.json - the survey's curve rows, named by its surveys.json tf_url.
 The engine emits an explicit coordinate-policy MARKER on a boot-loaded
 artifact (coord_policy.json) for non-exact stations, so the portal can badge a generalised station's
 position honestly. Exact stations stay unmarked (no marker file for an all-exact corpus).
@@ -78,13 +79,16 @@ def main():
     if r.returncode != 0:
         sys.exit("engine build failed:\n" + r.stderr)
     FIXTURES.mkdir(parents=True, exist_ok=True)
-    for f in ("catalogue.json", "tf.json", "sci.json", "surveys.json", "collections.json",
+    for f in ("catalogue.json", "sci.json", "surveys.json", "collections.json",
               "mtcat.json", "qc_report.json",
               # The coordinate-policy marker boot artifact (ausmt_id -> policy for the non-exact
               # stations). Emitted by the engine because this fixture survey has a generalised + a withheld
               # station; the portal drawer reads it to badge the generalised station.
               "coord_policy.json"):
         shutil.copy(out / f, FIXTURES / f)
+    # The survey's curve file, which the drawer fetches when one of its stations opens.
+    (FIXTURES / "tf").mkdir(exist_ok=True)
+    shutil.copy(out / "tf" / "sweep-survey.json", FIXTURES / "tf" / "sweep-survey.json")
     for sid in (EXACT["id"], GEN["id"], HID["id"]):
         dst = FIXTURES / "products" / "sweep-survey" / sid
         dst.mkdir(parents=True, exist_ok=True)
