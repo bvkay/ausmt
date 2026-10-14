@@ -13,9 +13,10 @@
 Description=AusMT front-door log shipping every hour (+ jitter), ahead of the C45 fold
 
 [Timer]
-# Hourly: the front door rolls its log at 10 MB and keeps a bounded number of rolls, and on busy days
-# a once-a-day pull lost rolls. The aggregator only folds COMPLETE days and is idempotent, so the
-# exact minute is not load-bearing; what matters is that the last pull before 03:35 has run.
+# Hourly: the front door rolls its log at 10 MB and keeps a bounded number of rolls, and a roll the
+# count deletes before a pull never reaches the fold, so pulls must come far more often than a busy
+# day can exhaust the count. The aggregator only folds COMPLETE days and is idempotent, so the exact
+# minute is not load-bearing; what matters is that the last pull before 03:35 has run.
 OnCalendar=hourly
 # A small spread off the top of the hour, kept well under the 35 minutes between the 03:00 pull and
 # the fold.

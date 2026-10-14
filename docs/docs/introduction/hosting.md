@@ -10,7 +10,7 @@ the step-by-step procedure is
 
 Since 14 October 2026 the public site is served from the Nectar Research Cloud. Both public names,
 `ausmt.auscope.org.au` and the redirect name `ausmt.au`, point by DNS at the serving host,
-`ausmt-serve`. The home box no longer serves visitors: it holds the curation role, builds, publishes
+`ausmt-serve`. The home box serves no visitors: it holds the curation role, builds, publishes
 each build to the serving host, answers the Add Survey routes over the tailnet, and collects the
 access log for the usage statistics.
 

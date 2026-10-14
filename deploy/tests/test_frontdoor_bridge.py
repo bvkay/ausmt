@@ -881,10 +881,11 @@ def test_ship_service_documentation_resolves_to_the_runbook():
 
 def test_ship_timer_is_hourly_persistent_and_lands_before_the_fold():
     """The timer fires HOURLY and is Persistent. The front door rolls its log at 10 MB and keeps a
-    bounded number of rolls, and a daily pull let busy days roll files away before the box collected
-    them; an hourly pull leaves only a pull outage as the risk, which roll_keep is sized for. Its jitter
-    stays under 35 minutes so the 03:00 pull lands before the 03:35 fold. FAILS IF the timer goes back
-    to a daily calendar, becomes an interval timer, drops Persistent, or jitters past the fold."""
+    bounded number of rolls, and a roll deleted before a pull never reaches the fold, so pulls must
+    come far more often than a busy day can exhaust the count; hourly leaves only a pull outage as the
+    risk, which roll_keep is sized for. Its jitter stays under 35 minutes so the
+    03:00 pull lands before the 03:35 fold. FAILS IF the timer uses a daily calendar, becomes an
+    interval timer, drops Persistent, or jitters past the fold."""
     assert _lines(_TIMER, "OnCalendar=") == ["hourly"], "the shipper must pull every hour"
     assert _lines(_TIMER, "OnUnitActiveSec=") == [], "a calendar timer, not an interval timer"
     assert _lines(_TIMER, "Persistent=") == ["true"], "the timer must be Persistent"

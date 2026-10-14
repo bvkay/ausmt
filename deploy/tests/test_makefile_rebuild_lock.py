@@ -1,10 +1,11 @@
 """`make rebuild-data` takes the reconcile lock, so a manual rebuild and a timer tick never build at once.
 
 reconcile.sh holds `flock -n` on its lock file (default $AUSMT_DATA_DIR/reconcile.lock) for a whole
-pass, and its pass runs `make rebuild-data`. A rebuild started by hand took no lock, so a tick that
-fired during it saw drift and started a second build into the same site-data. The target now takes
-the same lock without waiting and refuses when it is held; a reconcile pass, which already holds it,
-says so with AUSMT_RECONCILE_LOCK_HELD=1 and the target does not try to take it twice.
+pass, and its pass runs `make rebuild-data`. A rebuild started by hand must take the same lock: a
+tick that fires during an unlocked rebuild sees drift and starts a second build into the same
+site-data. The target takes the lock without waiting and refuses when it is held; a reconcile pass,
+which already holds it, says so with AUSMT_RECONCILE_LOCK_HELD=1 and the target must not take it
+twice, since the pass's own lock would refuse the second open.
 
 Driven through the real make with `flock` and `docker` replaced by recording stubs on PATH, so the
 refusal is exercised on any host with make and sh; one leg holds the real lock where flock(1) exists.
