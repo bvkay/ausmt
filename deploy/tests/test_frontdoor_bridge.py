@@ -879,22 +879,18 @@ def test_ship_service_documentation_resolves_to_the_runbook():
         assert Path(resolved).is_file(), f"Documentation= must resolve to a real runbook; {resolved!r} missing"
 
 
-def test_ship_timer_is_daily_persistent_and_before_the_fold():
-    """The timer fires DAILY, is Persistent, and fires BEFORE the fold (03:35) so each day's public
-    logs are on the box when the aggregator reads them. FAILS IF it uses a sub-daily interval, drops
-    Persistent, or is scheduled at/after 03:35."""
-    cal = _lines(_TIMER, "OnCalendar=")
-    assert cal and any(c.startswith("*-*-*") for c in cal), f"expected a daily OnCalendar: {cal}"
-    assert _lines(_TIMER, "OnUnitActiveSec=") == [], "shipping is daily, not an interval timer"
+def test_ship_timer_is_hourly_persistent_and_lands_before_the_fold():
+    """The timer fires HOURLY and is Persistent. The front door rolls its log at 10 MB and keeps a
+    bounded number of rolls, and a daily pull let busy days roll files away before the box collected
+    them; an hourly pull leaves only a pull outage as the risk, which roll_keep is sized for. Its jitter
+    stays under 35 minutes so the 03:00 pull lands before the 03:35 fold. FAILS IF the timer goes back
+    to a daily calendar, becomes an interval timer, drops Persistent, or jitters past the fold."""
+    assert _lines(_TIMER, "OnCalendar=") == ["hourly"], "the shipper must pull every hour"
+    assert _lines(_TIMER, "OnUnitActiveSec=") == [], "a calendar timer, not an interval timer"
     assert _lines(_TIMER, "Persistent=") == ["true"], "the timer must be Persistent"
-    # Parse HH:MM and assert it is strictly before 03:35 (the ausmt-stats fold time).
-    hhmm = None
-    for c in cal:
-        m = re.search(r"(\d{2}):(\d{2}):\d{2}", c)
-        if m:
-            hhmm = int(m.group(1)) * 60 + int(m.group(2))
-    assert hhmm is not None and hhmm < 3 * 60 + 35, \
-        f"the shipper must fire before the 03:35 analytics fold; got {cal}"
+    delay = _lines(_TIMER, "RandomizedDelaySec=")
+    assert len(delay) == 1 and int(delay[0]) < 35 * 60, (
+        f"the 03:00 pull must land before the 03:35 fold; RandomizedDelaySec={delay}")
 
 
 # ==================================================================================================

@@ -104,8 +104,8 @@ at-edge guarantees:
 
 ## D5. Log shipping (box pulls, never push)
 
-A box-side systemd oneshot+timer (`ausmt-frontdoor-logs.{service,timer}`, fires 03:25 UTC — after the
-backup, before the 03:35 C45 fold) runs `ship-frontdoor-logs.sh`, an rsync-over-ssh **pull** of
+A box-side systemd oneshot+timer (`ausmt-frontdoor-logs.{service,timer}`, fires hourly since
+2026-10-14, the 03:00 run before the 03:35 C45 fold; it fired daily at 03:25 UTC before that) runs `ship-frontdoor-logs.sh`, an rsync-over-ssh **pull** of
 `access-frontdoor*.json` from the VPS into the box log dir. Pull, not push, on purpose: the front-door
 tag is granted **no inbound path to the box** (that is wall 2's whole point); the box initiates the
 copy instead (`ausmt-box → tag:ausmt-frontdoor:22`), a separate ACL grant that never widens the

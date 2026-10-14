@@ -34,8 +34,28 @@ rollback): `maintainer/C47-PublicBridge.md`. Step-by-step owner procedure: **`RU
 | `install-frontdoor.sh` | VPS | Single apply script: render `Caddyfile.rendered` (legacy block in or out on the .env state), validate it against real Caddy, then `compose up -d` (+ in-place reload when already running). |
 | `acl-policy.hujson` | Tailscale admin | The exact ACL stanza to paste: the dedicated `tag:ausmt-frontdoor` and the port-granular fence (reader port only) — wall 2. |
 | `ship-frontdoor-logs.sh` | **box** | Pulls the masked front-door logs off the VPS over the tailnet into the dir the C45 aggregator reads. |
-| `ausmt-frontdoor-logs.{service,timer}` | **box** | systemd oneshot+timer that runs the shipper daily, ahead of the C45 fold. |
+| `ausmt-frontdoor-logs.{service,timer}` | **box** | systemd oneshot+timer that runs the shipper every hour, the 03:00 run ahead of the C45 fold. |
 | `RUNBOOK.md` | owner | The numbered go-live + verification + rollback procedure. |
+
+## Log retention and the pull cadence
+
+The front door rolls its masked access log at 10 MB, keeps at most 49 rolls and none older than 7
+days (`roll_size`, `roll_keep`, `roll_keep_for` in the `Caddyfile`). The box pulls the rolls every
+hour (`ausmt-frontdoor-logs.timer`, `OnCalendar=hourly`). The busiest day counted in the
+post-cutover review of 2026-10-14 rolled the file 7 times (busy days rolled it 5 to 7 times while
+the box pulled once a day), and 7 rolls a day for 7 days is 49, so at that rate a roll is deleted
+for age before it is deleted for count, and a pull outage of up to a week loses nothing.
+`install-frontdoor.sh` renders the roll block unchanged, so every host that runs it, ausmt-serve
+through `deploy/nectar/provision-serve.sh` included, picks up the depth on its next deploy pass.
+
+The hourly timer replaces the interim drop-in that made the daily timer hourly on the box. On a box
+that carries it, install the shipped timer and remove the drop-in:
+```sh
+sudo cp deploy/frontdoor/ausmt-frontdoor-logs.timer /etc/systemd/system/
+sudo rm /etc/systemd/system/ausmt-frontdoor-logs.timer.d/hourly.conf
+sudo systemctl daemon-reload
+systemctl list-timers ausmt-frontdoor-logs.timer --no-pager      # next run within the hour
+```
 
 ## Two independent walls (why the box change exists)
 

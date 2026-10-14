@@ -232,7 +232,8 @@ AUSMT_FRONTDOOR_LOG_REMOTE=caddylog@ausmt-vps:
    The masked `access-frontdoor*.json` files sit at the root of `/var/log/caddy`, which is exactly what
    the `--include='access-frontdoor*.json'` filter in the ship script copies. Verify the pull end-to-end
    on first run (step 9.4) after the front door is serving.
-5.4  Install the box-side shipping timer (fires 03:25 UTC, before the 03:35 C45 fold):
+5.4  Install the box-side shipping timer (fires hourly; the 03:00 run lands before the 03:35 C45
+     fold):
 ```sh
 # edit the __DEPLOY_DIR__/__ENV_FILE__ placeholders + User= in the .service first (see the file header)
 sudo cp deploy/frontdoor/ausmt-frontdoor-logs.{service,timer} /etc/systemd/system/

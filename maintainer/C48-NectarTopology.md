@@ -491,7 +491,9 @@ section 1A of `AusMT_2026/NECTAR-CUTOVER-CHECKLIST-2026-10-13.md`.
   was all PASS at 07:13 UTC, its DNS line included. The box's log pull was repointed at 07:32 UTC.
   Rollback is both A records back to 203.101.226.191 while ausmt-test exists.
 * **Log retention.** On busy days the front door rolled its 10 MB log more often than the box's
-  daily pull could collect, so an hourly pull was installed as a systemd drop-in on the box.
+  daily pull could collect, so an hourly pull was installed as a systemd drop-in on the box. The
+  repository now ships the hourly timer and a roll depth of 49 (`deploy/frontdoor/README.md`, "Log
+  retention and the pull cadence").
 
 ## Provenance
 

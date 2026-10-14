@@ -123,3 +123,79 @@ def test_ship_filter_carries_the_compressed_frontdoor_family(tmp_path):
     assert max(args.index(gz), args.index(plain)) < excl_at, (
         f"rsync filters are first-match-wins: BOTH includes must precede the catch-all exclude; "
         f"argv={argv!r}")
+
+
+# The busiest day the front door has logged rolled its 10 MB file 7 times. roll_keep_for caps a
+# roll's age at 7 days, so a roll_keep of 7 x 7 makes the age cap the binding limit: a pull outage of
+# up to a week loses no roll even at that rate.
+_BUSIEST_ROLLS_PER_DAY = 7
+
+
+def _directive(block: str, name: str) -> str:
+    m = re.search(rf"^\s*{name}\s+(\S+)\s*$", block, re.MULTILINE)
+    assert m, f"the front-door log output block must set {name}; block was:\n{block}"
+    return m.group(1)
+
+
+def test_the_frontdoor_keeps_every_roll_its_age_cap_allows_at_the_busiest_rate():
+    """RETENTION-DEPTH PIN. Rolls the box has not pulled yet are deleted by roll_keep before the age
+    cap when the count runs out first, and those requests never reach the fold. FAILS IF roll_keep
+    holds fewer rolls than the busiest observed day produces over the roll_keep_for window, or if the
+    window or the roll size changes without the depth being recomputed."""
+    block = _log_output_block(_FD_CADDY)
+    assert _directive(block, "roll_size") == "10mb"
+    hours = _directive(block, "roll_keep_for")
+    assert hours.endswith("h"), hours
+    days = int(hours[:-1]) / 24
+    assert int(_directive(block, "roll_keep")) >= _BUSIEST_ROLLS_PER_DAY * days, (
+        f"roll_keep must hold {_BUSIEST_ROLLS_PER_DAY} rolls a day for {days:g} days")
+
+
+def _rendered_log_block(tmp_path: Path, env_lines: list[str]) -> str:
+    """Run the real install-frontdoor.sh over the real Caddyfile with docker and sudo stubbed, and
+    return the log output block of the Caddyfile.rendered it writes."""
+    import os
+    work = tmp_path / "frontdoor"
+    work.mkdir()
+    shutil.copy(_REPO / "deploy" / "frontdoor" / "install-frontdoor.sh", work)
+    shutil.copy(_FD_CADDY, work / "Caddyfile")
+    (work / "compose.yaml").write_text("services: {}\n", encoding="utf-8")
+    (work / ".env").write_text("\n".join(["AUSMT_PUBLIC_NAME=ausmt.auscope.org.au",
+                                          "AUSMT_BOX_READER_UPSTREAM=http://127.0.0.1:8445",
+                                          "AUSMT_ACME_EMAIL=x@y.org", *env_lines]) + "\n",
+                               encoding="utf-8")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    for tool in ("docker", "sudo"):
+        (bindir / tool).write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        (bindir / tool).chmod(0o755)
+    env = dict(os.environ, PATH=f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    r = subprocess.run([_SH, "install-frontdoor.sh"], cwd=str(work), env=env,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return _log_output_block(work / "Caddyfile.rendered")
+
+
+@pytest.mark.skipif(_SH is None, reason="no POSIX sh/bash to run install-frontdoor.sh")
+@pytest.mark.parametrize("env_lines", [
+    [],
+    ["AUSMT_LEGACY_REDIRECT_NAME=ausmt.au"],
+    ["AUSMT_GATEWAY_UPSTREAM=http://ausmt-box:8445"],
+    ["AUSMT_LEGACY_REDIRECT_NAME=ausmt.au", "AUSMT_GATEWAY_UPSTREAM=http://ausmt-box:8445"],
+], ids=["plain", "legacy", "gateway", "both"])
+def test_the_installer_carries_the_roll_block_unchanged(tmp_path, env_lines):
+    """CARRIAGE PIN. ausmt-test runs install-frontdoor.sh by hand and ausmt-serve through
+    provision-serve.sh; both serve the file it renders. FAILS IF any .env shape the two hosts use
+    changes the log output block between the tracked Caddyfile and the rendered one."""
+    assert _rendered_log_block(tmp_path, env_lines) == _log_output_block(_FD_CADDY)
+
+
+def test_provisioning_starts_the_front_door_through_the_installer_and_leaves_the_caddyfile_alone():
+    """FAILS IF provision-serve.sh stops running install-frontdoor.sh from the checkout, or edits the
+    Caddyfile itself, so the serving host could run a roll block other than the tracked one."""
+    src = (_REPO / "deploy" / "nectar" / "provision-serve.sh").read_text(encoding="utf-8")
+    code = [ln for ln in src.splitlines() if not ln.lstrip().startswith("#")]
+    assert any('cd "$DEPLOY/frontdoor" && sh ./install-frontdoor.sh' in ln for ln in code), \
+        "provisioning must start the front door through its installer"
+    assert not any("Caddyfile" in ln for ln in code), \
+        "provisioning must not write the Caddyfile; the installer renders it"

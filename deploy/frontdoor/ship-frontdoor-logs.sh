@@ -1,6 +1,6 @@
 #!/bin/sh
 # AusMT front-door log shipping. Runs ON THE BOX (systemd oneshot, fired by
-# ausmt-frontdoor-logs.timer a few minutes AHEAD of the daily fold). It PULLS the masked
+# ausmt-frontdoor-logs.timer every hour, AHEAD of the daily fold). It PULLS the masked
 # access-frontdoor*.json logs off the VPS over the tailnet into the box's Caddy log dir — the exact
 # directory the aggregator already globs (`access*.json`). Once landed, the daily ausmt-stats fold
 # attributes the public downloads/visits/countries just as it does the box's own log.
