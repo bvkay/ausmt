@@ -40,7 +40,7 @@ declared in the survey package and recorded in provenance.
 |---|---|---|
 | `catalogue.json` | `extract/build_portal.py` (`CATALOGUE_COLUMNS`) | `portal/src/main.js` (builds `ST`), `drawer.js`, `exports.js`, `plots.js`; `engine/scripts/verify.py`; `ausmt-surveys/_validation/contribute.py` |
 | `sci.json` | `extract/_edi_science.py` (`SCI_COLUMNS`), written by `build_portal.py` | `main.js` (`SCI`), `drawer.js`, `exports.js` |
-| `tf.json` | `extract/_edi_tf.py` (`TF_COLUMNS`), written by `build_portal.py` | no runtime reader: the portal and the curator Stations tab read the per-survey files below. Still written and served beside them; it goes in a later change |
+| `tf.json` | `extract/_edi_tf.py` (`TF_COLUMNS`), written by `build_portal.py` | no reader on a current build: the portal and the curator Stations tab read the per-survey files below. The portal falls back to it (`data.js` `loadAllCurves`, once per visit) only on a build that predates them, where no survey names a `tf_url`. Still written and served beside them; it goes in a later change |
 | `tf/<slug>.json` | `build_portal.write_survey_curves`, from the same rows as `tf.json` | `portal/src/data.js` (`loadSurveyCurves`, when a station of the survey opens, into `TFD`), `drawer.js`, `plots.js`; `gateway/curatorpage.py` Stations tab (`curvesUrl`); `engine/scripts/verify.py` |
 | `surveys.json` | `build_portal.survey_meta_from_yaml`; `tf_url` added at emission | `main.js` (`SMETA`), `drawer.js`, `exports.js`, `data.js` (`tf_url`) |
 | `collections.json` | `build_portal.collections_document` | `main.js` (`COLL`) |
@@ -173,7 +173,7 @@ bars and its `q` falls back to the shape basis.
 
 ## `tf/<slug>.json`: one survey's `tf.json` rows
 
-The portal does not load `tf.json`. The build writes one curve file per catalogued survey,
+The portal does not load `tf.json` from a build that writes these files. The build writes one curve file per catalogued survey,
 `tf/<slug>.json`, and the portal fetches it when a station of that survey first opens, so a visit that
 opens no station moves no curves and a visit that opens one moves one survey's.
 
@@ -189,6 +189,8 @@ opens no station moves no curves and a visit that opens one moves one survey's.
 - **Join.** By position only, as `tf[i]` is. The portal places row k at the station index of the
   survey's k-th catalogue row; a file whose length differs from the survey's station count is treated as
   a failed load, never as a partial one, because a short file would put one station's curves on another.
+  A same-length file from another build would pass that check, so once the rows land the portal re-reads
+  `build.json` and refuses them when its `build_id` differs from the one the page booted on.
 - **Integrity.** `manifest.json` lists every file in `curves[]` (`survey`, `slug`, `url`, `size`,
   `sha256`, `n_stations`). `engine/scripts/verify.py` fails a build where a catalogued survey has no file,
   a file's row count differs from the survey's catalogue rows, a row is not 18 columns, or a `curves[]`

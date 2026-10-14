@@ -49,8 +49,8 @@ build.json  tf/<slug>.json
 ```
 
 `tf/<slug>.json` is one file per survey holding that survey's `tf.json` rows in catalogue order; the
-portal fetches it when a station of the survey opens and does not read `tf.json`, which is still
-written until a later change removes it.
+portal fetches it when a station of the survey opens and reads `tf.json` only from a build that
+predates these files. `tf.json` is still written until a later change removes it.
 
 The positional shape of these files is defined in `docs` → `developer/data-files.md`.
 

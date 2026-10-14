@@ -481,10 +481,7 @@ const BUILD_CHECK_MS=5*60*1000;
 let _buildCheckedAt=Date.now(),_BUILD_CHECK=Promise.resolve();
 function checkBuild(){
   _buildCheckedAt=Date.now();
-  _BUILD_CHECK=fetchOptional("build.json",null).then(v=>{
-    const was=BUILDID&&BUILDID.build_id,now=v&&v.build_id;
-    if(was&&now&&String(now)!==String(was)&&typeof snack==="function")
-      snack("A newer data build is available",null,{label:"Reload",onClick:()=>location.reload()});});
+  _BUILD_CHECK=fetchOptional("build.json",null).then(v=>{if(buildMoved(v))announceNewBuild();});
   return _BUILD_CHECK;}
 window.addEventListener("pageshow",e=>{if(e&&e.persisted)checkBuild();});
 document.addEventListener("visibilitychange",()=>{

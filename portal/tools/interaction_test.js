@@ -767,16 +767,23 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // ROUTING claim that needs the manifest to be true, and headerDownloadBtn's d:null makes the sticky header
   // render nothing, which in that function IS the embargo signal. Both are absence claims about a station
   // that may well be downloadable; the manifest just has not arrived.
+  const _mfBefore = fetchOrder.filter(u => /(^|\/)manifest\.json$/.test(u)).length;
   A.openStation(2);
   const _b1 = doc.getElementById("drawer").innerHTML;
+  // The Response tab reads nothing from the download manifest, so opening a station must not pull it.
+  ok(fetchOrder.filter(u => /(^|\/)manifest\.json$/.test(u)).length === _mfBefore,
+    "manifest: opening a station drawer must not request manifest.json, got " + JSON.stringify(fetchOrder));
   ok(_b1.indexOf("EDI (via source archive)") < 0,
     "honesty: the source-archive EDI fallback is a claim about how this deployment serves the file and must not render before the manifest lands");
   ok(_b1.indexOf('class="badges"') < 0,
     "honesty: the format-availability badges must not render before the manifest lands (an 'unk' badge claims a format is not served here)");
   ok(/Loading served files/.test(_b1),
     "honesty: the format-availability block must say it is loading in their place");
-  ok(/checking file availability/.test(_b1),
-    "honesty: the sticky-header download slot must SAY it is checking; rendering nothing there is how this drawer states an embargo");
+  // An open-access station always has a download route (a served file or the legacy edi/ path), so the
+  // header offers Download EDI before the manifest is asked for, and resolves the route on the click.
+  ok(/<button class="primary dl-edi" data-prod="edi-resolve"/.test(_b1),
+    "the sticky header must offer Download EDI for an open-access station before the manifest loads, got " +
+    JSON.stringify((_b1.match(/<div class="dactions">.*?<\/div>/) || [""])[0]));
   // The lineage Method node reads sc[SC.alg]/sc[SC.rr]: ungated it prints "not stated", a claim about what
   // the source EDI carried.
   const _mIdx = _b1.indexOf('<div class="lt">Method</div>');
@@ -913,6 +920,69 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "honesty: a FAILED curve file must be STATED, never rendered as a station that has no response functions");
   ok(!/data-plot=/.test(_failDrawer), "a failed curve file leaves no curves to plot");
   ok(_failDrawer.indexOf("Loading response functions") < 0, "a settled failure must not read as still loading");
+  ok(!failWin.__fetched.some(u => /(^|\/)tf\.json$/.test(u)),
+    "a 404 on a curve file surveys.json names must not fall back to tf.json, got " + JSON.stringify(failWin.__fetched));
+
+  // A curve file whose length disagrees with the survey's catalogue rows cannot be aligned by position, so
+  // it is refused rather than placed one station off.
+  const _alphaRows = DATAMAP["data/tf/alpha.json"];
+  ok(Array.isArray(_alphaRows) && _alphaRows.length === 2, "fixture: Alpha's curve file must hold two rows");
+  for (const [_lbl, _rows] of [["short", _alphaRows.slice(1)], ["long", _alphaRows.concat([_alphaRows[0]])]]) {
+    const _lw = await bootFreshWindow(Object.assign({}, DATAMAP, { "data/tf/alpha.json": _rows }));
+    _lw.__api.openStation(0);
+    await _lw.__api.curvesLoad("alpha");
+    ok(_lw.__api.curvesState("alpha") === "failed",
+      "a " + _lbl + " curve file must settle its gate to 'failed', got " + _lw.__api.curvesState("alpha"));
+    const _ld = _lw.document.getElementById("drawer").innerHTML;
+    ok(/Could not load response functions/.test(_ld) && !/data-plot=/.test(_ld),
+      "a " + _lbl + " curve file must be stated as not loaded and plot nothing");
+  }
+
+  // A curve file fetched after the data build changed under the page. Its rows carry no key, so a
+  // same-length file from another build would put one station's curves on another: build.json is
+  // re-read once the rows land, and a different build_id refuses them and offers the reload.
+  {
+    const _skMap = Object.assign({}, DATAMAP);
+    const _skw = await bootFreshWindow(_skMap);
+    _skMap["data/tf/alpha.json"] = _alphaRows.slice().reverse();
+    _skMap["data/build.json"] = Object.assign({}, DATAMAP["data/build.json"], { build_id: "eng3-src3-2020" });
+    _skw.__api.openStation(0);
+    await _skw.__api.curvesLoad("alpha");
+    ok(_skw.__api.curvesState("alpha") === "failed",
+      "build skew: curves fetched from a newer build than the page booted on must not be placed, got " + _skw.__api.curvesState("alpha"));
+    const _skd = _skw.document.getElementById("drawer").innerHTML;
+    ok(/Could not load response functions/.test(_skd) && !/data-plot=/.test(_skd),
+      "build skew: the drawer must state the curves could not be loaded and plot nothing");
+    const _sks = _skw.document.getElementById("snackbar");
+    ok(!_sks.classList.contains("hidden") && /A newer data build is available/.test(_sks.textContent),
+      "build skew: the refusal must offer the newer build, got " + JSON.stringify(_sks.textContent));
+    ok(_skw.location.href.split("#")[0] === "http://localhost/", "build skew: a newer build must never reload on its own");
+  }
+
+  // A data build that predates the per-survey curve files: no survey names a tf_url and only tf.json
+  // exists. The portal falls back to it once per visit, so a portal image deployed ahead of its data
+  // build still plots.
+  {
+    const _lgMap = {};
+    Object.keys(DATAMAP).forEach(k => { if (!/^data\/tf\//.test(k)) _lgMap[k] = DATAMAP[k]; });
+    const _lgSv = JSON.parse(JSON.stringify(DATAMAP["data/surveys.json"]));
+    Object.values(_lgSv).forEach(m => { delete m.tf_url; });
+    _lgMap["data/surveys.json"] = _lgSv;
+    const _lgw = await bootFreshWindow(_lgMap);
+    const _tfAll = () => _lgw.__fetched.filter(u => /(^|\/)tf\.json$/.test(u)).length;
+    ok(_tfAll() === 0, "older build: boot must not request tf.json");
+    _lgw.__api.openStation(0);
+    await _lgw.__api.curvesLoad("alpha");
+    ok(_lgw.__api.curvesState("alpha") === "ready",
+      "older build: a survey with no tf_url must load its curves from tf.json, got " + _lgw.__api.curvesState("alpha"));
+    ok(/data-plot="rho"/.test(_lgw.document.getElementById("drawer").innerHTML), "older build: the station must plot");
+    const _bSlug = _lgSv["Beta Survey"].slug;
+    _lgw.__api.openStation(_lgw.__api.stIndex("B1"));
+    await _lgw.__api.curvesLoad(_bSlug);
+    ok(_lgw.__api.curvesState(_bSlug) === "ready", "older build: a second survey must settle ready from the same tf.json");
+    ok(_tfAll() === 1, "older build: tf.json must be requested once per visit, got " + _tfAll());
+    ok(!_lgw.__fetched.some(u => /(^|\/)tf\//.test(u)), "older build: no per-survey curve file may be requested");
+  }
   // The strike rose is retired; its control must be GONE, not disabled.
   ok(!failWin.document.getElementById("strike"), "the strike-rose control is retired and must not render");
 
@@ -5838,6 +5908,41 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     const _ediAt = ew.__fetched.findIndex(u => /edi\/alpha\/A1_served\.edi/.test(u));
     ok(_ediAt > _mfAt && _mfAt >= 0,
       "manifest: the export must await the manifest and fetch the station's EDI at its manifest url, got " + JSON.stringify(ew.__fetched));
+
+    // A station drawer does not pull the manifest on open. Its header Download EDI awaits it on the click
+    // and fetches the manifest url; the Files and Provenance tabs load it when selected.
+    const dw = await bootFreshWindow(mfMap);
+    dw.__api.openStation(dw.__api.stIndex("A1"));
+    ok(mfReqs(dw) === 0, "manifest: opening a station drawer must not request manifest.json, got " + JSON.stringify(dw.__fetched));
+    const _hb = dw.document.querySelector("#drawer .dl-edi");
+    ok(_hb && _hb.textContent === "Download EDI", "manifest: the header must offer Download EDI before the manifest loads");
+    _hb.click();
+    ok(mfReqs(dw) === 1, "manifest: the header Download EDI must request manifest.json, got " + mfReqs(dw));
+    await dw.__api.manifestLoad();
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+    const _dmAt = dw.__fetched.findIndex(u => /manifest\.json$/.test(u));
+    const _deAt = dw.__fetched.findIndex(u => /edi\/alpha\/A1_served\.edi/.test(u));
+    ok(_deAt > _dmAt && _dmAt >= 0,
+      "manifest: the header Download EDI must fetch the station's EDI at its manifest url, got " + JSON.stringify(dw.__fetched));
+    const _dl = dw.document.querySelector("#drawer .dl-edi");
+    ok(_dl && _dl.getAttribute("data-prod") === "fetch", "manifest: once loaded the header must carry the served route");
+    for (const tab of ["files", "provenance"]) {
+      const tw = await bootFreshWindow(mfMap);
+      tw.__api.openStation(tw.__api.stIndex("A1"));
+      tw.__api.selectDrawerTab(tab);
+      ok(mfReqs(tw) === 1, "manifest: selecting the " + tab + " tab must request manifest.json, got " + mfReqs(tw));
+    }
+    const cw = await bootFreshWindow(mfMap);
+    cw.__api.openStation(cw.__api.stIndex("A1"));
+    cw.__api.selectDrawerTab("cite");
+    ok(mfReqs(cw) === 0, "manifest: the Cite tab reads nothing from the manifest and must not request it");
+    // An access-gated station offers no download, which the survey metadata decides without the manifest.
+    const _gated = Object.entries(DATAMAP["data/surveys.json"]).find(([, m]) => m.access && m.access !== "open");
+    ok(_gated, "fixture: one survey must be access-gated");
+    const _gi = DATAMAP["data/catalogue.json"].findIndex(r => JSON.stringify(r).indexOf(_gated[0]) >= 0);
+    ok(_gi >= 0, "fixture: the gated survey must have a station");
+    cw.__api.openStation(_gi);
+    ok(!cw.document.querySelector("#drawer .dl-edi"), "manifest: an access-gated station must offer no Download EDI");
   }
 
   // ---- A newer data build is announced, never auto-loaded ----------------------------------------

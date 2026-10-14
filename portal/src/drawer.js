@@ -73,7 +73,7 @@ function drawerPanel(id,content,selected){
 let _curDrawerTab="response";
 function selectDrawerTab(name){
   _curDrawerTab=name;
-  if(name==="files")loadManifest();
+  if(name==="files"||name==="provenance")loadManifest();
   if(!drawer||!drawer.querySelectorAll)return;
   const tabs=[...drawer.querySelectorAll('[role="tab"]')];
   const panels=[...drawer.querySelectorAll('[role="tabpanel"]')];
@@ -99,7 +99,10 @@ function ediDescriptor(s,m){
 // an embargoed/metadata-only station) - otherwise a primary button routed through the same [data-prod]
 // dispatch as the product tiles. See docs: portal internals, drawer.js.
 function headerDownloadBtn(s,m){
-  if(hydrating("manifest"))return `<span class="hydrating hydr-inline" role="status">checking file availability…</span>`;
+  // Before the manifest loads, the access gate alone decides whether there is a download: an open-access
+  // station always has a route, which the click resolves once the manifest is in. See docs: portal
+  // internals, drawer.js.
+  if(hydrating("manifest"))return isOpenAccess(m)?`<button class="primary dl-edi" data-prod="edi-resolve" data-i="${escAttr(s.i)}">Download EDI</button>`:"";
   const e=ediDescriptor(s,m);if(!e.d)return"";
   const attrs=Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" ");
   return `<button class="primary dl-edi" ${attrs}>Download EDI</button>`;}
@@ -627,7 +630,6 @@ function openStation(i,opts){
   const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
   if(!rehydrate)_rememberDrawerOpener();              // Capture the invoking element before the rewrite
   _drawerSubject={kind:"station",i};                  // what rehydrateOpenDrawer re-renders when a gate settles
-  if(!rehydrate)loadManifest();
   const s=ST[i],t=tfRow(i)||[[]],m=SMETA[s.survey]||{},sc=sciRow(i);
   // The sc[SC.dim] (dimensionality) value is not surfaced in the drawer screening grid: it is inferable
   // from the phase tensor + skew, which are shown (strike/|β|/3-D-periods line below), so `dim` is
@@ -1511,8 +1513,16 @@ function openCollectionPage(cid){
   // repaint setView gives it - otherwise the slot keeps whatever the previous view left there.
   if(typeof updateCounts==="function")updateCounts();
 }
+// The header Download EDI clicked before the manifest loaded: wait for it, then take the route it resolves.
+async function resolveEdi(i){
+  const s=ST[i];if(!s)return;
+  if(hydrating("manifest"))toast("Waiting for the download index…");
+  await loadManifest();
+  const e=ediDescriptor(s,SMETA[s.survey]||{});
+  if(e.d)dispatchProd(e.d);}
 function dispatchProd(d){
-  if(d.prod==="edi")fetchEdi(d.file,d.avail==="1",d.survey);
+  if(d.prod==="edi-resolve")resolveEdi(+d.i);
+  else if(d.prod==="edi")fetchEdi(d.file,d.avail==="1",d.survey);
   else if(d.prod==="fetch"&&d.url){track("DownloadGenerated",{format:(d.name||"").split(".").pop()});downloadUrl(dataUrl(d.url),d.name);}
   else if(d.prod==="open"&&d.url){window.open(d.url,"_blank","noopener,noreferrer");
     // A time-series hand-off carries the archive's filename and size, so it can say what it just

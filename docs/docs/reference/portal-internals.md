@@ -2431,8 +2431,25 @@ retrying on every open).
 Each survey has its own gate, HYDR["tf:<slug>"], set to "pending" the moment the load starts, so
 hydrGate renders the same loading and could-not-load blocks it renders for every other late product.
 A file whose length differs from the survey's station count is a failure, never a partial load: there
-is no key on the wire, so a short file would put one station's curves on another. A survey with no
-tf_url fails the same way. The request carries no low-priority hint, because a reader is waiting on it.
+is no key on the wire, so a short file would put one station's curves on another. The request carries
+no low-priority hint, because a reader is waiting on it.
+
+A same-length file from a different build would pass that check and still misplace every row, and a
+page can outlive its build by hours (every product is served no-cache, so a curve file fetched late
+comes from the build that is live then, not the one the catalogue in memory came from). So once the
+rows land, build.json is re-read and compared with the boot's BUILDID (buildMoved). A different
+build_id refuses the rows: the gate settles "failed", the drawer says the curves could not be loaded,
+and the snackbar offers the reload (announceNewBuild, the build check's own message). The re-read
+comes AFTER the rows, not beside them: a build swap is atomic, so a file from the new build always
+means build.json already names the new build, while a parallel read could see the old build.json and
+then the new file. An absent build.json, or a boot that had none, is not a change.
+
+A build that predates the per-survey files names no tf_url on any survey and serves only tf.json; a
+portal image deployed ahead of its data build meets one. Then (curvesPredateSplit) loadAllCurves
+fetches tf.json once per visit, checks it holds one row per station, and every survey's load takes
+its rows from it by catalogue index, under the same build re-read. A survey with no tf_url in a build
+where other surveys have one is a defect, not an older build, and fails like a 404 does; a tf_url that
+fails never falls back to tf.json.
 ```
 
 #### ---- the download manifest, on demand ...
@@ -2443,14 +2460,16 @@ manifest.json was 2,026,061 bytes encoded (14,825,691 decoded) on a first visit 
 site, and only the surfaces that offer files read it. loadManifest() fetches it once per visit, the
 first time one of them is used, and every consumer awaits that one Promise (MANIFEST_READY):
   * switching the sidebar to Select (the Download block's rows and zip sizes);
-  * opening a station drawer (every tab renders at open, and the header Download EDI button, the Files
-    tab and the Provenance format badges and API line all read the manifest) or a survey drawer (its
-    bundle grid), and selecting the Files tab;
+  * selecting a station drawer's Files or Provenance tab (the Files rows, the Provenance format badges,
+    lineage formats and API line read it), and clicking the header Download EDI before it has landed;
+  * opening a survey drawer (its bundle grid);
   * every selection export (the EDI zip and the per-format zips await it before packaging, so no
     station silently takes the legacy fallback path).
-Until it lands the gate reads "pending" and every one of those surfaces shows its loading state;
-because each of them is also what starts the load, a loading state is never shown with nothing in
-flight. When it lands main.js manifestLanded re-renders the open drawer and repaints the Download
+Opening a station drawer does not load it: the Response tab, the one a station opens on, reads
+nothing from it, and the header Download EDI is decided by the survey's access gate alone until it
+lands (headerDownloadBtn, below). Until it lands the gate reads "pending" and every surface that reads
+it shows its loading state; those surfaces sit on the tabs that start the load, so a loading state is
+not shown to a reader with nothing in flight. When it lands main.js manifestLanded re-renders the open drawer and repaints the Download
 block. A 404 is the honest absence (MANIFEST=null, as before), not a failure. A harness that assigns
 MANIFEST directly leaves the gate "ready", and loadManifest then fetches nothing.
 ```
@@ -2707,9 +2726,9 @@ byte), including the "EDI (via source archive)" fallback the pins assert is ABSE
 ```text
 Two-phase boot: the manifest loads on demand, so before it lands there is no honest answer here:
 the served-artifact branch and BOTH fallbacks ("EDI (via source archive)" / the embargo wording) are
-claims about what this deployment serves. Report the pending state with NO download affordance (d:null,
-so headerDownloadBtn renders nothing at all rather than a button that might resolve to the wrong route),
-and let MANIFEST_READY re-render the drawer into the real descriptor.
+claims about what this deployment serves. Report the pending state with NO download affordance (d:null;
+headerDownloadBtn does not call this while the manifest is pending), and let MANIFEST_READY re-render
+the drawer into the real descriptor.
 ```
 
 #### The sticky-header Download EDI action
@@ -2718,11 +2737,16 @@ and let MANIFEST_READY re-render the drawer into the real descriptor.
 The sticky-header Download EDI action. Renders NOTHING where the gate refuses (no download
 affordance for an embargoed/metadata-only station) - otherwise a primary button routed through the
 same [data-prod] dispatch as the product tiles.
-Two-phase boot: rendering NOTHING is precisely this function's embargo signal, so an in-flight manifest
-must not be allowed to borrow it. ediDescriptor returns d:null while the manifest is pending (correctly:
-it cannot yet know the route), which would silently render an OPEN-access station as embargoed for the
-whole flight: absence by omission, the same defect surveyBundleTiles gets a loading tile for. Say what
-is happening instead, and claim nothing either way about availability.
+Two-phase boot: rendering NOTHING is precisely this function's embargo signal, so a manifest that has
+not landed must not be allowed to borrow it. ediDescriptor returns d:null while the manifest is pending
+(correctly: it cannot yet know the route), which would silently render an OPEN-access station as
+embargoed: absence by omission, the same defect surveyBundleTiles gets a loading tile for. The access
+gate alone already answers whether there is a download: an open-access station always has a route (a
+served file, else the legacy edi/ path or its source archive), and an embargoed or metadata-only one
+has none. So before the manifest lands the header renders "Download EDI" for an open-access station
+(data-prod "edi-resolve") and nothing for a gated one. The click (resolveEdi) awaits loadManifest,
+then takes the route ediDescriptor resolves; when the manifest lands manifestLanded re-renders the
+header into the resolved button.
 ```
 
 #### (The Overview "primary download" tile - overviewDownload(), the gated ...
@@ -4871,7 +4895,9 @@ hundred bytes, no-cache) and compares its build_id with the one it booted from (
 differ the snackbar says "A newer data build is available" with a Reload action; an identical id, an
 absent build.json or a boot that had no build id raise nothing. It never reloads by itself: a reader
 may be mid-selection or mid-export, and a reload would throw that state away. The boot itself counts
-as the first check, so a tab hidden and shown again within five minutes costs no request.
+as the first check, so a tab hidden and shown again within five minutes costs no request. The
+comparison (buildMoved) and the snackbar (announceNewBuild) live in data.js, because a survey's curve
+load makes the same check before it places rows.
 ```
 
 #### ts_access.json settles the availability facet: until it lands nothing ...
