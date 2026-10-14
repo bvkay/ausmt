@@ -729,7 +729,7 @@ def test_compose_default_cap_matches_the_engine_default():
     on the box."""
     compose = REPO.parent / "deploy" / "compose.yaml"
     if not compose.is_file():
-        pytest.skip("deploy/ is not shipped in this tree")
+        pytest.skip("engine image build: deploy tree not shipped")
     m = re.search(r"AUSMT_CACHE_MAX_MB:\s*\$\{AUSMT_CACHE_MAX_MB:-(\d+)\}", compose.read_text(encoding="utf-8"))
     assert m, "compose.yaml no longer forwards AUSMT_CACHE_MAX_MB"
     assert int(m.group(1)) == cache_mod.CACHE_MAX_MB_DEFAULT
@@ -753,7 +753,7 @@ def test_every_written_copy_of_the_default_cap_matches_the_engine_default(rel, p
     what the cache may hold on disk."""
     path = REPO.parent / rel
     if not (REPO.parent / "deploy").is_dir():
-        pytest.skip("deploy/ is not shipped in this tree")
+        pytest.skip("engine image build: deploy tree not shipped")
     assert path.is_file(), f"{rel} is gone; update CAP_COPIES"
     found = [int(v) for v in re.findall(pattern, path.read_text(encoding="utf-8"))]
     assert found, f"{rel} no longer states the default cap as /{pattern}/"
