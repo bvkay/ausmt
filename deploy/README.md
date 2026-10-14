@@ -144,6 +144,15 @@ failed build or verify leaves `current` untouched and exits non-zero with the fa
 so a host-side swap gets `Permission denied` (exactly what the first real deploy hit after build +
 verify had already passed).
 
+`rebuild-data` takes the reconcile lock (`flock -n` on `$AUSMT_RECONCILE_LOCK`, default
+`$AUSMT_DATA_DIR/reconcile.lock`, the file `reconcile.sh` locks) for the whole build, so a rebuild run
+by hand and a reconcile tick never build at once. When the lock is held, by a reconcile pass or
+another `rebuild-data`, it refuses at once with `rebuild-data: REFUSED` and the lock's path, and
+starts nothing: wait for the other build to finish (`reconcile-status.json` shows a pass) and run it
+again. A reconcile pass already holds the lock and tells the target so with
+`AUSMT_RECONCILE_LOCK_HELD=1`; never set that in `.env`, or a manual rebuild skips the lock. Without
+`flock(1)` the target builds unlocked with a warning, as `reconcile.sh` does.
+
 `build-runner` runs under a **cgroup memory ceiling** (`mem_limit`, default `8g` of the box's
 15 GB) and a process ceiling (`pids_limit: 512`). The engine fans MTH5 writes out to
 `AUSMT_BUILD_WORKERS` worker processes, so the container's real footprint is roughly the worker
@@ -547,7 +556,8 @@ publish to the serving replica (`publish` = `failed`; see "Nectar serving replic
 > **Note on the lock:** the script serialises overlapping ticks with `flock -n` on
 > `$AUSMT_DATA_DIR/reconcile.lock` (a second concurrent run exits 0 silently). On a host without
 > `flock(1)` it runs the pass without the lock (a stderr WARN) — the 15-min cadence + the atomic swap
-> bound the worst case to a redundant build, never a corrupt one.
+> bound the worst case to a redundant build, never a corrupt one. `make rebuild-data` run by hand
+> takes the same lock and refuses while a pass holds it ("Rebuild the served data" above).
 
 ### Gateway fail-closed behaviour (by design)
 

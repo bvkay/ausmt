@@ -40,7 +40,9 @@
 #
 # LOCK: flock -n on a lock file (default $AUSMT_DATA_DIR/reconcile.lock). If another run holds it,
 # exit 0 SILENTLY without touching the status file (two overlapping ticks must not both build;
-# the second is a no-op, not an error). On a host without flock(1) the script still runs the pass
+# the second is a no-op, not an error). The pass runs the rebuild with AUSMT_RECONCILE_LOCK_HELD=1:
+# `make rebuild-data` takes this same lock when run by hand, and must not take it twice inside a pass.
+# On a host without flock(1) the script still runs the pass
 # WITHOUT the lock (a WARN to stderr) — the timer's 15-min cadence + the atomic rebuild swap bound
 # the worst case to a redundant build, never a corrupt one. NCI note: the timer becomes a
 # cron/PBS job of THIS SAME script — the script itself never assumes systemd.
@@ -94,6 +96,9 @@ STATE_DIR="$AUSMT_DATA_DIR/gateway/state"
 REQUEST_FILE="$STATE_DIR/rebuild.request"
 STATUS_FILE="$STATE_DIR/reconcile-status.json"
 LOCK_FILE="${AUSMT_RECONCILE_LOCK:-$AUSMT_DATA_DIR/reconcile.lock}"
+# 1 once this pass holds the lock. The rebuild reads it as AUSMT_RECONCILE_LOCK_HELD and then does not
+# take the lock itself: a second open of the file would be refused by this pass's own lock.
+LOCK_HELD=0
 MAKE_CMD="${AUSMT_RECONCILE_MAKE:-make -C $AUSMT_CODE_DIR/deploy rebuild-data}"
 JOURNALCTL="${AUSMT_RECONCILE_JOURNALCTL:-journalctl}"
 PUBLISH_TARGET="${AUSMT_PUBLISH_TARGET:-}"
@@ -843,7 +848,7 @@ $_prev_tail"
   # kernel journal about THIS build and not last week's (--since is inclusive to the second).
   build_started=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
   # shellcheck disable=SC2086 -- MAKE_CMD is an intentional word-split command (default or shim).
-  AUSMT_BUILD_CACHE_MODE="$_cache_mode" $MAKE_CMD > "$log_file" 2>&1
+  AUSMT_RECONCILE_LOCK_HELD="$LOCK_HELD" AUSMT_BUILD_CACHE_MODE="$_cache_mode" $MAKE_CMD > "$log_file" 2>&1
   rc=$?
 
   # Prune the log dir to the newest 20 *.build.log (operator forensics; never served — LOG_DIR is a
@@ -927,6 +932,7 @@ if command -v flock >/dev/null 2>&1; then
   if ! flock -n 9; then
     exit 0
   fi
+  LOCK_HELD=1
   run_pass
   exit $?
 else

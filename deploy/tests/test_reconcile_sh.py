@@ -260,6 +260,26 @@ def test_drift_triggers_rebuild(tmp_path):
 
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_the_rebuild_is_told_the_pass_holds_the_lock(tmp_path):
+    """`make rebuild-data` takes the reconcile lock itself unless the caller already holds it, and a
+    second open of the lock file would be refused by the pass's own lock. FAILS IF a pass that took
+    the lock runs the rebuild without AUSMT_RECONCILE_LOCK_HELD=1."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    seen = tmp_path / "held.txt"
+    shim = tmp_path / "make-env.sh"
+    shim.write_text('#!/bin/sh\nprintf "%s" "${AUSMT_RECONCILE_LOCK_HELD:-unset}" > "' +
+                    seen.as_posix() + '"\n', encoding="utf-8")
+    bindir = tmp_path / "flock-bin"
+    bindir.mkdir()
+    (bindir / "flock").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (bindir / "flock").chmod(0o755)
+    env = {"AUSMT_RECONCILE_MAKE": f"sh {shim.as_posix()}",
+           "PATH": f"{bindir}{os.pathsep}{tree['env']['PATH']}"}
+    _run(tree, env_extra=env)
+    assert seen.read_text(encoding="utf-8") == "1", "a locked pass must tell the rebuild it holds the lock"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_log_pruning_keeps_newest_20(tmp_path):
     """After a rebuild the logs/ dir is pruned to the newest 20 *.build.log. FAILS IF: an unbounded
     number of logs accumulates (pre-seed 25, run once => 21 would remain without the prune; the
