@@ -224,7 +224,7 @@ care:
 | Obligation | mandatory: either key satisfies the check, and a package should carry both |
 | Occurrence | 1 each |
 | Type | string |
-| Example | `name: "Vulcan 2022"`, `project_name: "Vulcan Magnetotelluric Survey 2022 (Geological Survey of Queensland)"` |
+| Example | `name: "Survey Name"`, `project_name: "Survey Name (Org)"` |
 | Note | One display title on every reader surface, `name` (Owner decision 2026-10-14), so keep it short: it is what a reader scans in a list. Where `name` is absent the display title falls back to the package folder name, not to `project_name`; where `project_name` is absent the formal title falls back to `name`. `mtcat.json`'s survey `title` is `name`. |
 
 ### 1.4 version
