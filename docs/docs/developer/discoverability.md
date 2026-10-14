@@ -97,11 +97,11 @@ colour values written outside the block.
 | `--part` | the embargo notice's border |
 
 A card is a `--surface` box with a 1px `--line` border, a 4px corner radius and the `--shadow`
-token, a soft shadow. The type stack is
-`--sans`, which names Libre Franklin first; the face is not bundled, so the stack falls through to
-Inter and the system faces, which is intended. The header's wordmark alone leads with Calibre,
-AuScope's typeface, over `--sans`: AuScope's licence covers it on this site, but no page declares an
-`@font-face` and no font file is served yet, so a reader without the face installed sees `--sans`.
+token, a soft shadow. The type stack is `--sans`, which names Libre Franklin first; the face is not
+bundled, so the stack falls through to Inter and the system faces, which is intended. The header's
+wordmark alone leads with Calibre, AuScope's typeface, over `--sans`: AuScope's licence covers it on
+this site, but no page declares an `@font-face` and no font file is served yet, so a reader without
+the face installed sees `--sans`.
 
 ### Header
 
@@ -134,12 +134,11 @@ Three regions, the same on every page apart from the status slot.
   address is not printed (Owner decision 2026-10-13).
 - Right: the page's status, then the AuScope and NCRIS lock-up (Owner decision 2026-10-13). The
   status is what the page can state about itself: the surveys hub states its catalogue counts, and
-  every other page has none, so its right zone is the lock-up alone. The lock-up is the brand
-  kit's own colour PNG, `/vendor/auscope-ncris-colour.png`, declared at its intrinsic 1919 by 325
-  and drawn 30px tall,
-  linking `https://www.auscope.org.au` in a new tab with `rel="noopener noreferrer"`. A negative
-  block margin makes its margin box one footer text line, so it does not make the sticky footer
-  taller. The footer carries no control.
+  every other page has none, so its right zone is the lock-up alone. The lock-up is the brand kit's
+  own colour PNG, `/vendor/auscope-ncris-colour.png`, declared at its intrinsic 1919 by 325 and
+  drawn 30px tall, linking `https://www.auscope.org.au` in a new tab with
+  `rel="noopener noreferrer"`. A negative block margin makes its margin box one footer text line, so
+  it does not make the sticky footer taller. The footer carries no control.
 
 The footer fetches the lock-up and nothing else, and carries two anchors to AuScope, the
 centre's name and the lock-up. Its box, its regions and its narrow-width states are one rule set
@@ -163,9 +162,8 @@ the scale bar are `mm-note` and `mm-label` in `--muted`.
 Station marks keep their literal fills, because the ramp is a data encoding and not chrome: LPMT
 `#3F88C8`, BBMT `#FFC14F`, AMT `#9FCB5A` and GDS `#CE348A` (`_TYPE_COL`, byte for byte the portal's
 `TYPE_COL` and the `--lpmt` to `--gds` tokens), and the collection member palette unchanged. Every
-mark
-sits in a `.mm-dots` group that strokes it in `--dot-edge`, which keeps the lighter hues legible on
-the light panel.
+mark sits in a `.mm-dots` group that strokes it in `--dot-edge`, which keeps the lighter hues
+legible on the light panel.
 
 The collection map's corner mark is the AuScope mark, the file every header opens with, placed and
 sized as before.

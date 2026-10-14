@@ -840,12 +840,11 @@ def _site_footer(status="") -> str:
     lock-up sits at the bottom right of every page in this tier. The status is what the page can
     actually state (the surveys hub's catalogue counts) and is empty elsewhere, because a counter
     that cannot count the page it is on is decoration pretending to be data. The lock-up is the
-    brand kit's colour PNG, linking the same address as the centre's name, so the footer carries
-    two anchors to it. engine/tests/test_index_pages.py holds the footer's src allow-list to that
-    file. Its
-    rules draw it 30px tall, and a negative block margin makes its margin box one footer text line
-    (12.5px at line-height 1.5), so the lock-up never sets a row's height and the sticky footer is
-    as tall as its text makes it. The footer carries no control.
+    brand kit's colour PNG, linking the same address as the centre's name, so the footer carries two
+    anchors to it. engine/tests/test_index_pages.py holds the footer's src allow-list to that file.
+    Its rules draw it 30px tall, and a negative block margin makes its margin box one footer text
+    line (12.5px at line-height 1.5), so the lock-up never sets a row's height and the sticky footer
+    is as tall as its text makes it. The footer carries no control.
 
     Both anchors to the parent organisation open in a new tab and hand the opened page no handle
     on this one: target="_blank" grants window.opener, from which the opened document could

@@ -84,11 +84,12 @@ link-preview cards draw a crop of the white lock-up, pinned against its file.
 
 ## auscope-ncris-colour.png and auscope-ncris-white.png
 
-The AuScope and NCRIS lock-up pair from the AuScope brand kit. The colour file is drawn 30px tall
-at the right of every footer on the pages without the big map and 44px tall in the map page's
-corner; the white file is drawn by no page, and the link-preview cards crop it. Committed VERBATIM from the AuScope brand kit ("2025 AuScope Logos"); they are
-third-party trademark assets, so they are never resized, re-encoded or recoloured here, which is why
-each committed file keeps its full 1919x325 resolution.
+The AuScope and NCRIS lock-up pair from the AuScope brand kit. The colour file is drawn 30px tall at
+the right of every footer on the pages without the big map and 44px tall in the map page's corner;
+the white file is drawn by no page, and the link-preview cards crop it. Committed VERBATIM from the
+AuScope brand kit ("2025 AuScope Logos"); they are third-party trademark assets, so they are never
+resized, re-encoded or recoloured here, which is why each committed file keeps its full 1919x325
+resolution.
 
 | File | Source | Dimensions | SHA-256 | Size |
 |---|---|---|---|---|

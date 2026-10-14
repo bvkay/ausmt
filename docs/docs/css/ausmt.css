@@ -3,7 +3,7 @@
  * Two jobs, in this order:
  *
  *   1. BRAND. The sidebar header carries the AusMT lockup (mark, wordmark, tagline, Documentation)
- *      injected by docs/overrides/main.html, on the portal's dark navy. The theme's own header is a
+ *      injected by docs/overrides/main.html, on navy. The theme's own header is a
  *      centred bold link on #2980b9, so its colour, alignment, image treatment and hover fill are
  *      all replaced here. The navigation below the header follows the same palette, because a navy
  *      header sitting on the theme's warm grey nav reads as two sites.

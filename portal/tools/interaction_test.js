@@ -3712,8 +3712,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "in the taller Select pane and the rail becomes a one-way door. Got: " + JSON.stringify(_segCss));
   const _scaleCss = (html.match(/\.leaflet-control-scale-line\{[^}]*\}/) || [""])[0];
   ok(/text-shadow:\s*none/.test(_scaleCss),
-    "the scale bar must clear Leaflet's WHITE text-shadow: it is meant for a light basemap and reads " +
-    "as a halo around near-white text on the dark legend. Got: " + JSON.stringify(_scaleCss));
+    "the scale bar must clear Leaflet's WHITE text-shadow: it is meant for a light basemap and draws " +
+    "a white halo around the text, and the scale bar keeps no white halo on the light legend. Got: " + JSON.stringify(_scaleCss));
 
   A.setSidebarMode("browse");
   doc.getElementById("selAll").click();
@@ -4900,8 +4900,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   //       the ramp CVD-safe. The old ramp FAILS this (red→amber rises, amber→green falls), so this pin is
   //       red on a revert even if someone re-shades the endpoints;
   //   (c) null stays the separate "not evaluated" grey #5A6E7D — never the ramp's low end;
-  //   (d) the drawer renders the ramp as a .qvdot swatch beside PLAIN text (a dark low end can't be a text
-  //       colour on the dark panel), and no completeness VALUE takes qColor as its text colour any more.
+  //   (d) the drawer renders the ramp as a .qvdot swatch beside PLAIN text (the ramp hexes are marker fills
+  //       on the white surface, not text inks), and no completeness VALUE takes qColor as its text colour any more.
   ok(A.qColor(2) === "#2a3b66", "CVD: qColor(2) (low end) must be the dark slate-blue #2a3b66, got " + A.qColor(2));
   ok(A.qColor(3.5) === "#6e7f46", "CVD: qColor(3.5) (mid) must be the olive #6e7f46, got " + A.qColor(3.5));
   ok(A.qColor(5) === "#f2e27e", "CVD: qColor(5) (high end) must be the pale warm yellow #f2e27e, got " + A.qColor(5));
@@ -4924,7 +4924,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "HIDDEN: the .qvdot completeness swatch must be absent while the completeness row is hidden");
   const _rampTextColours = [...doc.getElementById("drawer").querySelectorAll('[style*="color:#"]')]
     .filter(el => /color:\s*#(2a3b66|6e7f46|f2e27e)/i.test(el.getAttribute("style") || ""));
-  ok(_rampTextColours.length === 0, "CVD: no drawer element may take a ramp hex as its TEXT colour (dark ends are unreadable on the dark panel)");
+  ok(_rampTextColours.length === 0, "CVD: no drawer element may take a ramp hex as its TEXT colour (the ramp hexes are marker fills on the white surface, not text inks)");
   doc.getElementById("drawer").classList.remove("open");
 
   // FINAL em-dash DOM sweep. Render the two rich drawer surfaces (station + survey story) and sweep the
