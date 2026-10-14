@@ -1,5 +1,5 @@
 # AusMT front-door log shipping. A oneshot the ausmt-frontdoor-logs.timer fires
-# once a day, a few minutes AHEAD of the stats fold (ausmt-stats.timer, 03:35 UTC): it runs
+# every hour, the 03:00 run AHEAD of the stats fold (ausmt-stats.timer, 03:35 UTC): it runs
 # deploy/frontdoor/ship-frontdoor-logs.sh, which rsyncs the masked access-frontdoor*.json logs off the
 # VPS over the tailnet into $AUSMT_DATA_DIR/logs/caddy — the exact dir the aggregator globs. Same
 # trust class + install idiom as ausmt-stats.service: NON-root operator uid, .env-driven (no shell
@@ -16,7 +16,7 @@
 # deploy/frontdoor/RUNBOOK.md "Log shipping").
 
 [Unit]
-Description=AusMT front-door log shipping (pull masked access-frontdoor logs over the tailnet, daily)
+Description=AusMT front-door log shipping (pull masked access-frontdoor logs over the tailnet, hourly)
 # The runbook for this unit (resolved by the install sed exactly like ExecStart) — never a literal
 # <operator> path, which would name a path that never exists.
 Documentation=file://__DEPLOY_DIR__/frontdoor/RUNBOOK.md
@@ -38,7 +38,7 @@ WorkingDirectory=__DEPLOY_DIR__
 # the file's exec bit). The script fails LOUD (non-zero) if the remote is unreachable, so a broken
 # tailnet/ssh surfaces in `systemctl status` rather than silently starving the fold.
 ExecStart=/bin/sh __DEPLOY_DIR__/frontdoor/ship-frontdoor-logs.sh
-# The pull is quick (a handful of small JSON files); bound a wedged run well under the daily cadence.
+# The pull is quick (a handful of small JSON files); bound a wedged run well under the hourly cadence.
 TimeoutStartSec=300
 
 [Install]

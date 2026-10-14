@@ -96,9 +96,16 @@
 	# glob folds it without collision. VPS-side retention: rotated + kept 7 days (roll_keep_for 168h),
 	# a short debugging tail; the shipped-and-folded copy on the box is the durable record.
 	#
+	# ROLL DEPTH (roll_keep 49): a roll the box has not pulled is gone once the count runs out. 49 is
+	# 7 rolls a day for the 168h age window, a bound rather than a measured peak: the busiest day's
+	# count is unknown and at least 5 (deploy/frontdoor/README.md, "Log retention and the pull
+	# cadence"). At or below 7 rolls a day the age cap is the binding limit, so a pull outage of up to
+	# a week loses nothing; recount the rate from the roll timestamps in /var/log/caddy on the serving
+	# host and raise the depth if a day exceeds 7. At most 49 x 10 MB = 490 MB of rolls on the host.
+	#
 	# ROLLED FILES STAY PLAIN JSON (roll_uncompressed). Caddy gzips a rolled log by default, and both
 	# the ship filter and the box's fold glob key on the plain `.json` name, so a compressed roll would
-	# never be shipped and never be folded. Every line that rolled before the daily 03:25 pull would be
+	# never be shipped and never be folded. Every line that rolled before the box's next pull would be
 	# deleted by this listener's own 7-day retention having reached the box's aggregate nowhere.
 	#
 	# THE FILE IS CREATED GROUP-READABLE (mode 0640). Caddy creates a log file 0600 by default, and the
@@ -109,7 +116,7 @@
 		output file /var/log/caddy/access-frontdoor.json {
 			mode 0640
 			roll_size 10mb
-			roll_keep 5
+			roll_keep 49
 			roll_keep_for 168h
 			roll_uncompressed
 		}

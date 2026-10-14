@@ -6,7 +6,9 @@ The policy's own `tests` and `sshTests` stanzas are what Tailscale checks on eve
 merged policy, and a save that breaks one is refused. These pins hold that the stanzas exist and
 name the fence: the serving host reaches the curation host's reader port and is refused its SSH and
 its workbench; curators reach the workbench on 443 and never the gateway's debug port 8444; the
-publish and log accounts admit the box's node login without a sign-in check.
+publish and log accounts admit the box's node login without a sign-in check; and the administrators'
+sign-in check names accounts that leave those two out, since a check over them would override that
+accept and fail the save.
 
 Read, never applied: the file is parsed as HuJSON (comments and trailing commas stripped) and the
 stanzas are inspected as data.
@@ -87,3 +89,24 @@ def test_the_box_login_reaches_the_two_service_accounts_unattended():
     assert rows, "an sshTests entry must take the box's node login to tag:ausmt-serve"
     accept = [u for t in rows for u in t.get("accept", [])]
     assert {"publish", "caddylog"} <= set(accept), accept
+
+
+_SERVICE_ACCOUNTS = {"publish", "caddylog"}
+
+
+def test_the_admin_sign_in_check_names_accounts_that_exclude_the_gated_service_accounts():
+    """FAILS IF the administrators' `check` rule names a set of accounts that takes in publish or
+    caddylog: `autogroup:nonroot`, a wildcard, or either account by name. Tailscale applies the
+    stricter of two matching actions, so a check over those accounts overrides the unattended
+    `accept` the publish and the log pull depend on, and the console refuses the save because the
+    publish sshTests entry then fails. The rule must still reach the accounts administrators use."""
+    rules = [r for r in (_policy().get("ssh") or [])
+             if r.get("action") == "check" and "autogroup:admin" in (r.get("src") or [])]
+    assert rules, "an ssh rule must give administrators a sign-in check on the Nectar hosts"
+    for rule in rules:
+        users = rule.get("users") or []
+        assert {"ubuntu", "root"} <= set(users), users
+        for user in users:
+            assert ":" not in user and "*" not in user, (
+                f"{user!r} is a set of accounts and can take in {sorted(_SERVICE_ACCOUNTS)}")
+            assert user not in _SERVICE_ACCOUNTS, user

@@ -134,13 +134,14 @@ generic provider's console, then continue at step 3).
       group to the instance. *Bootstrap access* for the very first login (before Tailscale is up): use
       the Nectar web console (Compute → Instances → Console) to reach the shell, **or** temporarily add
       an SSH rule scoped to your own admin IP and remove it the moment the node has joined the tailnet.
-2N.3  **Floating (public) IP** (Network → Floating IPs): allocate one to the project and associate it
-      with the instance — this is the public IPv4 for the DNS step (step 8). Nectar floating IPs are
-      IPv4 only, so create just an **A** record later (no AAAA).
+2N.3  **Public address:** launch on **Classic Provider**, the only network the project offers; the
+      instance gets a fixed public IPv4 on `qld` for its life, released when it is deleted. That is
+      the address for the DNS step (step 8). It is IPv4 only, so create just an **A** record (no
+      AAAA). The project has no router and no floating IPs (`deploy/nectar/RUNBOOK-NECTAR.md`).
 2N.4  **Allocation:** a Nectar **project-trial** allocation is enough to stand the front door up. The
       front door is **stateless** (no corpus or state lives on it — everything stays on the box), so
       migrating to a full allocation later is simply a runbook re-run on a fresh instance: repeat
-      steps 2–6, re-point the DNS A record (step 8) at the new floating IP, and tear the trial instance
+      steps 2 to 6, re-point the DNS A record (step 8) at the new instance's address, and tear the trial instance
       down (section 10). Nothing is lost in the move.
 
 ---
@@ -232,7 +233,8 @@ AUSMT_FRONTDOOR_LOG_REMOTE=caddylog@ausmt-vps:
    The masked `access-frontdoor*.json` files sit at the root of `/var/log/caddy`, which is exactly what
    the `--include='access-frontdoor*.json'` filter in the ship script copies. Verify the pull end-to-end
    on first run (step 9.4) after the front door is serving.
-5.4  Install the box-side shipping timer (fires 03:25 UTC, before the 03:35 C45 fold):
+5.4  Install the box-side shipping timer (fires hourly; the 03:00 run lands before the 03:35 C45
+     fold):
 ```sh
 # edit the __DEPLOY_DIR__/__ENV_FILE__ placeholders + User= in the .service first (see the file header)
 sudo cp deploy/frontdoor/ausmt-frontdoor-logs.{service,timer} /etc/systemd/system/
@@ -240,6 +242,11 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now ausmt-frontdoor-logs.timer
 ```
 (You can run it once now to test only after the front door is serving — step 9.4.)
+
+The front door keeps 49 rolls (`roll_keep`), 7 rolls a day for the 168-hour age window. That rate is
+a bound, not a measurement: the busiest day's count is unknown and at least 5 (`README.md`, "Log
+retention and the pull cadence"). Recount it from the roll timestamps in `/var/log/caddy` on
+ausmt-serve and raise `roll_keep` if a day exceeds 7.
 
 ---
 
@@ -378,27 +385,31 @@ curl -sS -o /dev/null -w '%{http_code} %{url_effective}\n' -L https://ausmt.au/d
 curl -sSI http://ausmt.au/ | grep -i location               # hop 1: https://ausmt.au/
 ```
 
-9.2c **Path-URL contract legs (tier 1, owner ruling 2026-08-18).** The three published shapes must
-     each answer a permanent 301 into the portal's hash route on the canonical name. These are the
-     PUBLISHED URL contract (`/surveys/<slug>`, `/stations/<ausmt_id>`, `/collections/<id>`), the
-     form that goes into emails, talks, papers and programme pages. `./doctor.sh` runs the survey
-     leg as a gate (pinned on vulcan-2022).
+9.2c **Path-URL contract legs (tier 3; the contract is section 9P).** The three published shapes
+     (`/surveys/<slug>`, `/stations/<ausmt_id>`, `/collections/<id>`) each answer 200 with the
+     prerendered landing page, whose rel=canonical is that exact URL. These are the PUBLISHED URL
+     contract, the form that goes into emails, talks, papers and programme pages. `./doctor.sh` runs
+     the survey leg and both hub pages as a gate (pinned on vulcan-2022).
 ```sh
-curl -sSI https://ausmt.auscope.org.au/surveys/vulcan-2022 | grep -iE '^(HTTP|location)'
-#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/#/survey/vulcan-2022
-curl -sSI https://ausmt.auscope.org.au/stations/au.vulcan-2022.MBV07 | grep -iE '^(HTTP|location)'
-#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/#/station/au.vulcan-2022.MBV07
-curl -sSI https://ausmt.auscope.org.au/collections/auslamp | grep -iE '^(HTTP|location)'
-#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/#/collection/auslamp
-# a query on a path-shaped link is preserved BEFORE the fragment, never eaten:
-curl -sSI 'https://ausmt.auscope.org.au/surveys/vulcan-2022?utm=1' | grep -i location
-#   expect: location: https://ausmt.auscope.org.au/?utm=1#/survey/vulcan-2022
-# a bare prefix (no id) lands on the portal root, not a broken empty-fragment URL:
-curl -sSI https://ausmt.auscope.org.au/surveys/ | grep -i location
-#   expect: location: https://ausmt.auscope.org.au/
-# a LEGACY-name path link takes two hops by design (host 301 with the path preserved, THEN the
-# canonical block's fragment mapping) and ends at the hash route:
+N=https://ausmt.auscope.org.au
+for u in /surveys/vulcan-2022 /stations/au.vulcan-2022.MBV07 /collections/auslamp /surveys /collections; do
+  curl -sS -o /dev/null -w "%{http_code} $u\n" "$N$u"
+done
+#   expect: 200 for each
+curl -sS $N/surveys/vulcan-2022 | grep -o 'rel="canonical" href="[^"]*"'
+#   expect: rel="canonical" href="https://ausmt.auscope.org.au/surveys/vulcan-2022"
+# a query on a path-shaped link passes through to the same page:
+curl -sS -o /dev/null -w '%{http_code}\n' "$N/surveys/vulcan-2022?utm=1"
+#   expect: 200
+# a trailing slash is folded box-side, in one hop, onto the published form:
+curl -sSI $N/surveys/vulcan-2022/ | grep -iE '^(HTTP|location)'
+#   expect: HTTP/2 301  and  location: /surveys/vulcan-2022
+# a bare /stations has no index page and lands on the portal root:
+curl -sSI $N/stations | grep -iE '^(HTTP|location)'
+#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/
+# a LEGACY-name path link takes one host 301 (path preserved), then the canonical name serves the page:
 curl -sS -o /dev/null -w '%{http_code} %{url_effective}\n' -L 'https://ausmt.au/surveys/vulcan-2022'
+#   expect: 200 https://ausmt.auscope.org.au/surveys/vulcan-2022
 ```
 
 9.3  **Wall checks from OUTSIDE (the public wall).** The public subset must be served; every other
@@ -593,9 +604,10 @@ canonical TLS certificate is present with days-to-expiry (WARN inside the renewa
 `AUSMT_LEGACY_REDIRECT_NAME` is set, the LEGACY certificate too (missing = FAIL, the redirect contract
 is down) plus the explicit HTTPS 301 leg (the legacy name must answer `https://.../data/mtcat.schema.json`
 with a 301 to the same path on the canonical name; both legs are skipped cleanly when the var is
-unset); the path-URL contract leg (`https://<canonical>/surveys/vulcan-2022` must 301 to
-`/#/survey/vulcan-2022`; skipped cleanly if the edge gives no response at all, since the container
-check already covers a down edge); the time-series hand-off table (the container-mounted `ts-routes.map`
+unset); the path-URL contract leg (`https://<canonical>/surveys/vulcan-2022` must serve the tier-3
+landing page with its rel=canonical at that URL, and `/surveys` and `/collections` their index pages;
+skipped cleanly if the edge gives no response at all, since the container check already covers a down
+edge); the time-series hand-off table (the container-mounted `ts-routes.map`
 must hash-match the repo copy, an OPEN route must 302 to the exact NCI `Location` the table names, and a
 route the table does NOT name must 404 - set `AUSMT_DOCTOR_TS_WITHHELD_PATH` to a real suppressed
 station's route once the corpus has one); tailscale is up and the box peer is visible; the zombie count is under threshold (section 13);

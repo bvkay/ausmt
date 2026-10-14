@@ -2835,7 +2835,7 @@ dataUrl() (which honours a deployment's data_base_url).
 
 ```text
 The Files tab, structured to the NCI data-level standard as a SINGLE COLUMN of full-width rows
-(Packed raw / Level 0 / Level 1 time series -> Level 2 derived processed data with EDI/EMTF-XML/MTH5
+(Packed raw / Level 0 / Level 1 time series -> Level 2 transfer functions with EDI/EMTF-XML/MTH5
 sub-rows -> Level 3 models, when ever served -> Publication). Each row carries an explicit ORIGIN tag
 ("AusMT-derived" vs "source archive") so there is zero ambiguity about what AusMT computed vs what came
 from the source. The Phase tensor tile is gone (it is a visual product; it lives in the Response tab).

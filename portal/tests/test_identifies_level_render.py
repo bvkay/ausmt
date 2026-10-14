@@ -41,10 +41,11 @@ def test_related_block_labels_by_level_when_identifies_present(tmp_path):
     assert tiles[0].startswith('<div class="prod dl-tile"') and "10.25914/parent" in tiles[0], \
         "slot 1 (Collection) did not take the collection-identified row:\n" + tiles[0]
     assert "Collection<" in tiles[0], "slot 1 is not the Collection slot:\n" + tiles[0]
-    assert "10.25914/raw" in tiles[1] and "Packed Raw Data<" in tiles[1], \
-        "slot 2 (Packed Raw Data) did not take the raw_packed-identified row:\n" + tiles[1]
+    assert "10.25914/raw" in tiles[1] and "Packed raw time series<" in tiles[1], \
+        "slot 2 (Packed raw time series) did not take the raw_packed-identified row:\n" + tiles[1]
     # slots 3-6 (Level 0..Level 3) record nothing here and must still be VISIBLE, muted.
-    for i, name in ((2, "Level 0"), (3, "Level 1"), (4, "Level 2"), (5, "Level 3")):
+    for i, name in ((2, "Level 0 (Edited Time Series)"), (3, "Level 1 (Transformed Time Series)"),
+                    (4, "Level 2 (Transfer Functions)"), (5, "Level 3 (Models)")):
         assert f"{name}<" in tiles[i] and "not yet recorded" in tiles[i] and "dis" in tiles[i], \
             f"slot {i + 1} ({name}) must render muted-but-visible:\n" + tiles[i]
     # the collision-losing `entire` row is the 7th tile, labelled by the level vocabulary, not dropped
@@ -82,7 +83,7 @@ def test_entire_only_survey_fills_the_collection_slot(tmp_path):
         "slot 1 (Collection) did not take the `entire` row:\n" + tiles[0]
     assert "dis" not in tiles[0].split(">")[0], \
         "the Collection slot still renders MUTED despite the `entire` row filling it:\n" + tiles[0]
-    assert "Level 3<" in tiles[5] and "mesac525" in tiles[5], \
+    assert "Level 3 (Models)<" in tiles[5] and "mesac525" in tiles[5], \
         "slot 6 (Level 3) did not take the level3 row:\n" + tiles[5]
     assert "2 of 6 recorded" in story, \
         "the count must read '2 of 6 recorded' once `entire` fills the Collection slot:\n" + story
@@ -202,7 +203,7 @@ def test_files_tab_hostile_url_level_doi_is_never_an_open_action(tmp_path):
     # ... nor as an executable anchor anywhere in the station drawer (the identifiers block also renders here).
     assert 'href="javascript:' not in station, "a hostile identifier became an executable anchor:\n" + station
     # the level row still renders (falls through to the survey/NCI collection PID), not dropped
-    assert "Raw time series" in station
+    assert "Packed raw time series" in station
     # and the related-identifiers block collapses the URL-typed hostile value to an inert href '#'
     assert 'href="javascript:' not in story, "a hostile identifier became an executable anchor:\n" + story
     assert 'href="#"' in story, "the URL-typed hostile value did not collapse to href '#':\n" + story

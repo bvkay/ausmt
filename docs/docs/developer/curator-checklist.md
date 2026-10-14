@@ -14,7 +14,8 @@ the human review a curator does before a survey is published. The rationale is i
 **Identity and metadata**
 
 - [ ] `slug` equals the folder name and is stable and unique.
-- [ ] `project_name`/`name`, `organisation`, `country`, `license`, `access` are real (no `TBD`/`TODO`).
+- [ ] `name` (the display title, mandatory), `organisation`, `country`, `license`, `access` are real
+      (no `TBD`/`TODO`); `project_name` (the formal title) is set, or falls back to `name`.
 - [ ] `version` is semantic (`1.0.0`).
 - [ ] `collection.id` (if any) is a confirmed, correctly spelled id; see
       [Collection IDs](collection-ids.md).

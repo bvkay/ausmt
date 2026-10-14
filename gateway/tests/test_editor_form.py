@@ -1452,3 +1452,14 @@ def test_care_blank_leaves_unchanged_and_bad_json_refuses():
     assert errors == [] and "care" not in patch
     patch, errors = ef.build_section_patch({"j_care": "{not json", **_snap("care", {"x": 1})})
     assert any(e.section == "care" for e in errors) and "care" not in patch
+
+
+def test_the_edit_form_labels_name_as_the_required_display_title():
+    """FAILS IF the curator edit form labels `name` as an alias of project_name, or stops saying
+    which title is required and which is the formal one. The survey-package validator requires
+    name (the display title on every reader surface); project_name is the formal title the
+    citation carries."""
+    from gateway.curatorpage import _EDIT_SCALARS
+    labels = dict(_EDIT_SCALARS)
+    assert labels["name"] == "Name (display title, required)"
+    assert labels["project_name"] == "Project name (formal title, citation)"

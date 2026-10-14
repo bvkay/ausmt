@@ -6,21 +6,35 @@ design and its arithmetic are recorded in
 the step-by-step procedure is
 [`deploy/nectar/RUNBOOK-NECTAR.md`](https://github.com/bvkay/ausmt/blob/main/deploy/nectar/RUNBOOK-NECTAR.md).
 
+## Where it stands
+
+Since 14 October 2026 the public site is served from the Nectar Research Cloud. Both public names,
+`ausmt.auscope.org.au` and the redirect name `ausmt.au`, point by DNS at the serving host,
+`ausmt-serve`. The home box serves no visitors: it holds the curation role, builds, publishes
+each build to the serving host, answers the Add Survey routes over the tailnet, and collects the
+access log for the usage statistics.
+
+Nectar gives each instance a fixed public address for its life; nothing is moved between instances.
+So the move to the serving host was a DNS change: both names' A records went from the earlier
+front-door instance's address (203.101.226.191) to the serving host's (203.101.226.53), with a
+five-minute TTL, after the serving host had been checked by name against its own address. Until the
+earlier instance is deleted, pointing the records back is the rollback; deleting it releases its
+address.
+
 ## Two roles
 
-AusMT is moving onto the Nectar Research Cloud as two instances with separate jobs. The serving host
-comes first; until the curation host exists, the home box holds the curation role, and until the
-serving host takes the public address, a small front-door instance passes public traffic through to
-the home box. What follows describes the two roles as they stand once the move is made.
+AusMT runs on Nectar as two roles. The serving host is live; the home box holds the curation role
+until a Nectar curation host (`ausmt-curate`) takes it over.
 
-**The serving host** (`ausmt-serve`) is the only machine with a public address, and it opens only
+**The serving host** (`ausmt-serve`) is the only machine the internet can reach, and it opens only
 the web ports. It runs the public front door (TLS, the masked access log, the allowlist of public
-routes) and the portal's static server, and it holds the built portal tree on a storage volume. It
+routes) and the portal's static server, and it holds the built portal tree, for now on its own disk
+at one kept build, later on a storage volume. It
 holds nothing that is not already public: no survey repository credential, no submission gateway, no
 curation database and no build cache. It never builds; it receives builds.
 
-**The curation host** has no public address and is reached only over the tailnet (a private overlay
-network). It runs everything that curates and builds: the submission gateway and its antivirus
+**The curation host** admits no traffic from the internet and is reached only over the tailnet (a
+private overlay network). It runs everything that curates and builds: the submission gateway and its antivirus
 scanner, the survey repository checkout and its publish credential, the curation database, and the
 reconcile agent that rebuilds the corpus when the survey repository moves. Curators reach its
 workbench over the tailnet and nowhere else.

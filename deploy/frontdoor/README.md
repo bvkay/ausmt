@@ -34,8 +34,37 @@ rollback): `maintainer/C47-PublicBridge.md`. Step-by-step owner procedure: **`RU
 | `install-frontdoor.sh` | VPS | Single apply script: render `Caddyfile.rendered` (legacy block in or out on the .env state), validate it against real Caddy, then `compose up -d` (+ in-place reload when already running). |
 | `acl-policy.hujson` | Tailscale admin | The exact ACL stanza to paste: the dedicated `tag:ausmt-frontdoor` and the port-granular fence (reader port only) — wall 2. |
 | `ship-frontdoor-logs.sh` | **box** | Pulls the masked front-door logs off the VPS over the tailnet into the dir the C45 aggregator reads. |
-| `ausmt-frontdoor-logs.{service,timer}` | **box** | systemd oneshot+timer that runs the shipper daily, ahead of the C45 fold. |
+| `ausmt-frontdoor-logs.{service,timer}` | **box** | systemd oneshot+timer that runs the shipper every hour, the 03:00 run ahead of the C45 fold. |
 | `RUNBOOK.md` | owner | The numbered go-live + verification + rollback procedure. |
+
+## Log retention and the pull cadence
+
+The front door rolls its masked access log at 10 MB, keeps at most 49 rolls and none older than 7
+days (`roll_size`, `roll_keep`, `roll_keep_for` in the `Caddyfile`). The box pulls the rolls every
+hour (`ausmt-frontdoor-logs.timer`, `OnCalendar=hourly`).
+
+The busiest day's roll count is not known. With `roll_keep 5` and a once-a-day pull, exactly five
+rolls reached the box in 7 of the 24 daily windows from 20 September to 13 October 2026, and five
+is the most a window could deliver, so on those days the file rolled at least 5 times and any
+further rolls were deleted unseen (`AusMT_2026/HANDOVER-2026-10-14-NECTAR-CUTOVER-AND-HOUSE-STYLE.md`,
+"Analytics"). The depth of 49 is 7 rolls a day for the 168-hour age window: a bound, not a measured
+peak. At or below 7 rolls a day a roll is deleted for age before it is deleted for count, and a
+pull outage of up to a week loses nothing; above it, an outage of a week loses the oldest rolls.
+The owner should recount the daily rate from the roll timestamps in `/var/log/caddy` on
+ausmt-serve (each rolled file's name carries the time it rolled) and raise `roll_keep` if any day
+exceeds 7.
+`install-frontdoor.sh` renders the roll block unchanged, so every host that runs it, ausmt-serve
+through `deploy/nectar/provision-serve.sh` included, picks up the depth on its next deploy pass.
+
+The shipped timer is hourly. The cutover handover of 2026-10-14 offered an hourly drop-in for the
+box's daily timer (`ausmt-frontdoor-logs.timer.d/hourly.conf`); whether it was applied is not
+confirmed. Install the shipped timer, and remove the drop-in if the box carries one:
+```sh
+sudo cp deploy/frontdoor/ausmt-frontdoor-logs.timer /etc/systemd/system/
+sudo rm -f /etc/systemd/system/ausmt-frontdoor-logs.timer.d/hourly.conf
+sudo systemctl daemon-reload
+systemctl list-timers ausmt-frontdoor-logs.timer --no-pager      # next run within the hour
+```
 
 ## Two independent walls (why the box change exists)
 

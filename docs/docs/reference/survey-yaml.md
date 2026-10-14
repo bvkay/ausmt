@@ -39,7 +39,8 @@ absence is silent.
 |---|---|---|---|
 | `schema_version` | recommended | string | [1 Identity](#1-identity) |
 | `slug` | mandatory | string | [1 Identity](#1-identity) |
-| `project_name` and `name` | mandatory (either one; carry both) | string | [1 Identity](#1-identity) |
+| `name` | mandatory (the display title) | string | [1 Identity](#1-identity) |
+| `project_name` | recommended (the formal title; falls back to `name`) | string | [1 Identity](#1-identity) |
 | `version` | recommended | string | [1 Identity](#1-identity) |
 | `country` | mandatory | string | [1 Identity](#1-identity) |
 | `region` | optional | string | [1 Identity](#1-identity) |
@@ -82,8 +83,8 @@ round-trip verbatim, so hand-edited YAML is never silently dropped.
 schema_version: "0.2"                 # "0.2" or "0.3" (0.3 adds the attribution block)
 
 slug: my-survey-2026                  # REQUIRED, must equal the folder name
-project_name: "Survey Name (Org)"     # REQUIRED (this or name): the formal title
-name: "Survey Name"                   # the display title every reader surface prints
+project_name: "Survey Name (Org)"     # the formal title (citation); falls back to name
+name: "Survey Name"                   # REQUIRED: the display title every reader surface prints
 version: "1.0.0"                      # survey-package semver, not the schema version
 country: Australia                    # REQUIRED
 region: "South Australia"             # optional, a finer geographic facet than country
@@ -221,7 +222,7 @@ care:
 | | |
 |---|---|
 | Definition | The survey's two titles. `name` is the display title: the key `surveys.json` and the catalogue are indexed by, and the string every reader surface prints (the portal's survey tree, survey cards and recently-added strip, the survey page's heading, crumb and link-preview card, the `/surveys` hub card and a collection's member list). `project_name` is the formal title, carried by the survey-metadata document's `title` and by the citation. |
-| Obligation | mandatory: either key satisfies the check, and a package should carry both |
+| Obligation | `name` mandatory: the validator fails a package without it, and `project_name` does not stand in for it. `project_name` recommended: absent, the formal title falls back to `name`. Carry both. |
 | Occurrence | 1 each |
 | Type | string |
 | Example | `name: "Survey Name"`, `project_name: "Survey Name (Org)"` |

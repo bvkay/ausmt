@@ -105,9 +105,28 @@ down:
 # producer enabled in the YAML alone is a no-op here, which has bitten twice, so
 # deploy/tests/test_makefile_build_flags.py pins every producer flag against this line in both
 # directions (present here, and a real option of the engine CLI).
+# THE RECONCILE LOCK. The recipe holds `flock -n` on reconcile.sh's lock file
+# ($AUSMT_RECONCILE_LOCK, default $AUSMT_DATA_DIR/reconcile.lock) for the whole build, so a rebuild
+# run by hand and a reconcile tick never build at once; when the lock is held it refuses rather than
+# waits. A reconcile pass already holds that lock and passes AUSMT_RECONCILE_LOCK_HELD=1, because a
+# second open of the file would be refused by the pass's own lock; never set it in .env. Without
+# flock(1) the recipe builds unlocked with a warning, as reconcile.sh does.
 rebuild-data:
 	@set -e; \
 	DATA_DIR=$${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR (see .env)}/site-data; \
+	LOCK=$${AUSMT_RECONCILE_LOCK:-$$AUSMT_DATA_DIR/reconcile.lock}; \
+	if [ "$${AUSMT_RECONCILE_LOCK_HELD:-}" = 1 ]; then \
+	  :; \
+	elif command -v flock >/dev/null 2>&1; then \
+	  ( : >>"$$LOCK" ) 2>/dev/null || { echo "rebuild-data: cannot open the reconcile lock $$LOCK" >&2; exit 1; }; \
+	  exec 9>>"$$LOCK"; \
+	  if ! flock -n 9; then \
+	    echo "rebuild-data: REFUSED -- the reconcile lock $$LOCK is held by a reconcile pass or another rebuild-data; wait for it to finish (reconcile-status.json names the pass)" >&2; \
+	    exit 1; \
+	  fi; \
+	else \
+	  echo "rebuild-data: flock(1) not found -- building WITHOUT the reconcile lock" >&2; \
+	fi; \
 	TS=$$(date -u +%Y%m%dT%H%M%SZ); \
 	BUILD_REL="builds/$$TS"; \
 	CACHE_MODE=$${AUSMT_BUILD_CACHE_MODE:-rw}; \

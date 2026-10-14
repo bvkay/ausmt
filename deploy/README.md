@@ -144,6 +144,15 @@ failed build or verify leaves `current` untouched and exits non-zero with the fa
 so a host-side swap gets `Permission denied` (exactly what the first real deploy hit after build +
 verify had already passed).
 
+`rebuild-data` takes the reconcile lock (`flock -n` on `$AUSMT_RECONCILE_LOCK`, default
+`$AUSMT_DATA_DIR/reconcile.lock`, the file `reconcile.sh` locks) for the whole build, so a rebuild run
+by hand and a reconcile tick never build at once. When the lock is held, by a reconcile pass or
+another `rebuild-data`, it refuses at once with `rebuild-data: REFUSED` and the lock's path, and
+starts nothing: wait for the other build to finish (`reconcile-status.json` shows a pass) and run it
+again. A reconcile pass already holds the lock and tells the target so with
+`AUSMT_RECONCILE_LOCK_HELD=1`; never set that in `.env`, or a manual rebuild skips the lock. Without
+`flock(1)` the target builds unlocked with a warning, as `reconcile.sh` does.
+
 `build-runner` runs under a **cgroup memory ceiling** (`mem_limit`, default `8g` of the box's
 15 GB) and a process ceiling (`pids_limit: 512`). The engine fans MTH5 writes out to
 `AUSMT_BUILD_WORKERS` worker processes, so the container's real footprint is roughly the worker
@@ -547,7 +556,8 @@ publish to the serving replica (`publish` = `failed`; see "Nectar serving replic
 > **Note on the lock:** the script serialises overlapping ticks with `flock -n` on
 > `$AUSMT_DATA_DIR/reconcile.lock` (a second concurrent run exits 0 silently). On a host without
 > `flock(1)` it runs the pass without the lock (a stderr WARN) — the 15-min cadence + the atomic swap
-> bound the worst case to a redundant build, never a corrupt one.
+> bound the worst case to a redundant build, never a corrupt one. `make rebuild-data` run by hand
+> takes the same lock and refuses while a pass holds it ("Rebuild the served data" above).
 
 ### Gateway fail-closed behaviour (by design)
 
@@ -1323,15 +1333,23 @@ unchanged, in `deploy/frontdoor/RUNBOOK.md` section 10. The runtime pins for bot
 
 ## Nectar serving replica
 
-The public site moves off the home box onto Nectar as two roles (design record
-`maintainer/C48-NectarTopology.md`, procedure `deploy/nectar/RUNBOOK-NECTAR.md`):
+The public site runs on Nectar as two roles (design record `maintainer/C48-NectarTopology.md`, with
+what was executed in its "Executed" section; procedure `deploy/nectar/RUNBOOK-NECTAR.md`):
 
-- **ausmt-serve** has the public address and runs the front door and the portal container on one
-  host, the front door proxying to the reader listener on `127.0.0.1:8445`. It holds the built tree on
-  a volume at `/srv/ausmt` and nothing else: no gateway, no sqlite, no build cache, no git write
-  credential, no curation timer.
+- **ausmt-serve** serves the public names and runs the front door and the portal container on one
+  host, the front door proxying to the reader listener on `127.0.0.1:8445`. It holds the built tree
+  at `/srv/ausmt` and nothing else: no gateway, no sqlite, no build cache, no git write credential, no
+  curation timer. Until the volume amendment is granted the tree is a directory on its root disk
+  bind-mounted there, at one kept build (`AUSMT_PUBLISH_KEEP=1` on the box).
 - **the curation host** (the box today, ausmt-curate once curation is lifted) builds as before and
-  **publishes** each served build to ausmt-serve over the tailnet.
+  **publishes** each served build to ausmt-serve over the tailnet. It serves no visitor.
+
+**Addresses and DNS.** Each Nectar instance has a fixed public address for its life (a Classic
+Provider launch; the project has no router and nothing floats). ausmt-serve is 203.101.226.53, and
+both A records, `ausmt.auscope.org.au` (AuScope's cPanel zone, changed by AuScope's director on
+request) and `ausmt.au` (VentraIP), point at it with a 300-second TTL since the cutover of
+2026-10-14. ausmt-test, the earlier front door at 203.101.226.191, is the rollback (point both
+records back) until it is deleted, which releases its address.
 
 **The publish contract.** `scripts/publish.sh` on the curation host writes `builds/<ts>.sha256`
 beside the build (the sorted `sha256sum` list of every file), rsyncs the build to the replica with a

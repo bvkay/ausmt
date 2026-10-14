@@ -95,5 +95,5 @@ def test_the_access_log_is_created_group_readable_so_the_log_account_acl_holds()
     assert m, "the front door's access log output block must exist"
     block = [ln.strip() for ln in m.group(1).splitlines() if ln.strip()]
     assert "mode 0640" in block, block
-    for directive in ("roll_size 10mb", "roll_keep 5", "roll_keep_for 168h", "roll_uncompressed"):
+    for directive in ("roll_size 10mb", "roll_keep 49", "roll_keep_for 168h", "roll_uncompressed"):
         assert directive in block, (directive, block)

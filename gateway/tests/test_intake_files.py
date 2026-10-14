@@ -34,6 +34,7 @@ _SURVEY_YAML = """\
 schema_version: "0.2"
 slug: intake-survey-2026
 project_name: Intake Test Survey
+name: Intake Test Survey
 version: 1.0.0
 country: Australia
 organisation:

@@ -1988,7 +1988,8 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
 
     # --- metadata ---
     # Tolerant of both the Prototype-20 structured schema (project_name; organisation as a map with
-    # name/ror; data_types list) and the older flat schema (name; organisation string; data_type).
+    # name/ror; data_types list) and the older flat schema (organisation string; data_type). `name`
+    # is required in both: it is the display title, and project_name does not stand in for it.
     try:
         meta = _load_yaml(sy) or {}
     except Exception as e:  # malformed YAML -> a clear FAIL at the contributor gate, not a raw traceback
@@ -2018,6 +2019,15 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
         present = val not in (None, "", "TBD", "TODO")
         r.add("PASS" if present else "FAIL", "metadata",
               f"required field '{label}' {'set' if present else 'missing/placeholder'}")
+    # `name` is the display title on every reader surface. The engine falls back to the folder name,
+    # never to project_name, when it is absent, so project_name cannot satisfy this check.
+    if meta.get("name") not in (None, "", "TBD", "TODO"):
+        r.add("PASS", "metadata", "required field 'name' set")
+    else:
+        r.add("FAIL", "metadata",
+              "required field 'name' missing/placeholder - name is the survey's display title on every "
+              "reader surface (page heading, cards, tree, collection lists); project_name is the formal "
+              "title and does not stand in for it. Add a short name, e.g. name: \"Survey Name\"")
     # C1 access gate — enum + embargo date. Only run once access is present (the required-field loop above
     # already FAILs a missing access). access.level must be one of the enum (FAIL — required field, no legacy
     # excuse); embargo_until must be ISO YYYY-MM-DD when present (FAIL if malformed). A non-open level is a

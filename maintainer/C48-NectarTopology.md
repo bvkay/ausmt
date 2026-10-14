@@ -12,9 +12,11 @@ and masked edge log carry over unchanged.
 
 * **The Nectar project** (custom bundle, from the owner's dashboard): 8 vCPU, 16 GB RAM, 3 instances,
   1 router, 2 floating IPs, 5 security groups, 200 GB object store, 2,000 SU budget. **There is no
-  volume storage line in the allocation.**
+  volume storage line in the allocation.** The router and floating-IP lines are quota, not things
+  that exist: on 2026-10-13 the dashboard showed no router and no private network, and the public
+  address below is a fixed one ("Executed").
 * **The one instance**, `ausmt-test`: t3.xsmall (1 vCPU, 1 GB, 10 GB disk), availability zone
-  QRIScloud, floating IP 203.101.226.191 on network `qld` (private 10.255.131.44 on `qld-data`),
+  QRIScloud, fixed public address 203.101.226.191 on network `qld` (10.255.131.44 on `qld-data`),
   created 21 Jul 2026, image NeCTAR Ubuntu 24.04 LTS (Noble) amd64 v29, security groups `default`,
   `icmp`, `http` (80/tcp and 443/tcp from 0.0.0.0/0), no SSH rule. **It is the production front door
   today**: it runs `deploy/frontdoor` (Caddy, host network) and proxies over the tailnet to the home
@@ -46,15 +48,15 @@ and masked edge log carry over unchanged.
 
 | | **ausmt-serve** | **ausmt-curate** |
 |---|---|---|
-| Public address | floating IP (the one ausmt-test holds today) | none |
-| Security group | 80/tcp and 443/tcp from anywhere, nothing else | nothing inbound from the internet |
+| Public address | its own fixed address on `qld`; both public names point at it by DNS (D6) | its own fixed address, outbound only |
+| Security group | 80/tcp and 443/tcp from anywhere, nothing else | no ingress rule: nothing inbound from the internet |
 | Runs | the front-door Caddy (`deploy/frontdoor`) and the portal container, on one host, reader upstream `http://127.0.0.1:8445`, gateway upstream the curation host's reader listener (D12) | gateway, clamd, gw-runner, surveys-live, git-creds, the sqlite, reconcile and the build |
 | Holds | the built tree on a Cinder volume at `/srv/ausmt` | everything the build and the curator workbench need, on its own Cinder volume at `/srv/ausmt` |
 | Never holds | a git write credential, the gateway, the sqlite, the build cache | a public listener |
 | Flavour | m3.small first, m3.medium if serving needs it | m3.medium with the build capped at 4g (D3), or larger after a RAM amendment |
 | Gets data by | publish from the curation host (D4) | curator publishes to surveys-live |
 
-The serving host is the only machine on the internet and it holds nothing that is not already public
+The serving host is the only machine the internet can reach and it holds nothing that is not already public
 (the served tree) plus the TLS key. A compromise of it yields the public tree and the certificate; it
 cannot push to the survey repository or read a submission, and over the tailnet it reaches only the
 curation host's reader listener on port 8445, whose wall 2 admits the same public subset the internet
@@ -65,8 +67,9 @@ The instances also share the project's private network, `qld-data`, which the ta
 not govern; that path is closed by the security groups. An OpenStack `default` group normally admits
 all ingress from its own members, so neither host carries
 `default` or any group with a same-group ingress rule (runbook 3.1). The rules of the project's
-`default` group are not in the D1 facts and are to be read in the dashboard. The curation host has no
-public address and is reached only over the tailnet.
+`default` group are not in the D1 facts and are to be read in the dashboard. The curation host's
+fixed address carries its outbound traffic only; no security group on it admits inbound traffic, so
+it is reached only over the tailnet.
 
 Serve holds no curation duty, so its first-boot and provisioning files install no curation timer and
 never start the gateway profile (`deploy/tests/test_cloud_init_serve.py` pins both).
@@ -90,8 +93,8 @@ Readings:
 
 * **The volume is the first blocker, for both hosts.** The allocation has no volume storage, and the
   m3 root disk is 30 GB. Neither host's data fits it at five kept builds, so the amendment (D9) asks
-  for volume storage in QRIScloud, the availability zone ausmt-test and its floating IP live in: one
-  100 GB volume per host.
+  for volume storage in QRIScloud, the availability zone ausmt-test lives in: one 100 GB volume per
+  host. By owner ruling the serving host cut over on its root disk at one kept build ("Executed").
 * **Sizing the serving volume.** One build is 7.5 GB (D1). Five kept builds take between 21.9 GB
   (7.5 + 4 × 3.6, when each later build links its h5 files to the one before and stores its 3.6 GB of
   non-MTH5 afresh) and 37.5 GB (5 × 7.5, when nothing links), plus the 2.4 GB basemap: at most
@@ -242,10 +245,11 @@ deploy pass re-runs provisioning on the serving host before the box's pass (`dep
 Provisioning also carries `AUSMT_GATEWAY_UPSTREAM` from `deploy/.env` into the front door's `.env`
 (D12). The GHCR images are public (an anonymous token got
 HTTP 200 on the `ghcr.io/bvkay/ausmt-portal` tags list, checked 2026-09-30), so the serving host holds
-no registry credential. Until its tailnet join the serving host is reached at the project's second
-floating IP (D1 gives a quota of 2), associated at launch and released once the join is proved; from
-then until the cutover it has no internet address and reaches the internet through the project
-router's SNAT, checked before launch (runbook 3.0). The front-door doctor skips its two
+no registry credential. The serving host has its own fixed public address from first boot (a
+Classic Provider launch; the project has no router and no private network), which is its route to
+the internet. Until its tailnet join it is reached there over SSH, through a temporary security
+group admitting 22/tcp from the operator's address only, removed once the join is proved; from then
+the internet reaches 80 and 443 only. The front-door doctor skips its two
 tailnet-peer legs on a loopback upstream; `deploy/nectar/doctor-serve.sh` reports the whole serve
 role in the doctor-box shape. Provisioning installs that doctor at `/usr/local/bin/ausmt-doctor-serve`,
 outside the data volume, and refreshes it on every run; operators run `sudo ausmt-doctor-serve`
@@ -267,7 +271,8 @@ checks ausmt-test's log the same way before the cutover (12.1), since it uses th
 
 ## D6. Cutover and rollback
 
-The public name already resolves to 203.101.226.191, so the cutover moves the address, not DNS:
+Nectar addresses are fixed per instance (D1), so the cutover is a DNS change: both public names' A
+records, TTL 300 seconds, move from ausmt-test's address to the serving host's.
 
 1. Copy the `caddy_data` volume from ausmt-test to ausmt-serve BEFORE the serving front door first
    starts, so the certificate travels, and do it while the certificate has more than 30 days left, so
@@ -281,21 +286,27 @@ The public name already resolves to 203.101.226.191, so the cutover moves the ad
 3. Check the serving host end to end on itself with `curl --resolve <name>:443:127.0.0.1`: the
    certificate, the reader, `/data`, the wall refusals, and `GET /gateway/healthz` (a probe that
    submits nothing) answering through to the box.
-4. Move the floating IP from ausmt-test to ausmt-serve in the dashboard (disassociate, associate).
+4. Verify the serving host by name from off the tailnet without touching DNS
+   (`curl --resolve <name>:443:<its address>`), then change both A records to its address. Proof of
+   arrival is a request carrying a unique marker, found in the serving host's access log; a
+   `build.json` check cannot tell the hosts apart, since both serve the same build.
 5. Repoint the box's log pull at the serving host, after a last pull from ausmt-test whose live file
    is set aside under a name the stats fold still reads (both front doors write the same file name).
    A pull from ausmt-test just before the move, while its tailnet path is certain, leaves that last
    pull only the minutes around the move to collect.
 
-The four public gateway routes stay live through the move: before it ausmt-test sends them to the
-box's reader listener, and after it ausmt-serve sends them to the same listener (D12).
+The change has no gap. Until resolvers pick it up, for up to the TTL, visitors reach either host;
+both serve the box's current build under the same certificate, and both send the four public gateway
+routes to the box's reader listener (D12).
 
-**Rollback is moving the floating IP back.** ausmt-test is left running and untouched through a quiet
-period, still proxying to the box's reader listener, which keeps serving the box's own current. It
-cannot renew while the address is away (the challenge reaches the serving host), so its certificate
+**Rollback is pointing the A records back at ausmt-test's address.** ausmt-test is left running and
+untouched through a quiet period, still proxying to the box's reader listener, which keeps serving the
+box's own current. It cannot renew while the names point away (the challenge reaches the serving
+host), so its certificate
 is good only until its own expiry, 2026-11-15 for the current one: the quiet period ends before that
 date, and a rollback restarts ausmt-test's front door so that it renews at once. **ausmt-test is
-deleted only after the quiet period**, and the rollback ends with it: the serving host's `caddy_data`
+deleted only after the quiet period**, and the rollback ends with it: deletion releases its fixed
+address to the cloud, so both names must point at the serving host first, and the serving host's `caddy_data`
 is in Docker's volume on its root disk, so a lost serving host after that means a new instance and a
 fresh certificate. ausmt-test's tailnet tag and ACL entries go when it does. Procedure:
 `deploy/nectar/RUNBOOK-NECTAR.md`.
@@ -357,11 +368,10 @@ workbench over the tailnet, and ausmt-test's upstream through the quiet period).
 **The lift, in order** (commands in runbook 16). Two rules govern it: one sender at every moment,
 and no submission accepted on a host whose state is about to be copied.
 
-1. **Create ausmt-curate** (m3.medium, D3; no floating IP once joined, no security group that admits
-   inbound traffic, `default` included; `tag:ausmt-curate`), bootstrapped like the serving host on the
-   second floating IP (D5). It has no public address, so its outbound traffic (GitHub, GHCR, ClamAV
-   updates, Tailscale) leaves through the project router, whose external gateway, SNAT and `qld-data`
-   interface are checked before the serving host's launch (runbook 3.0).
+1. **Create ausmt-curate** (m3.medium, D3; Classic Provider, so it has a fixed address that carries
+   its outbound traffic: GitHub, GHCR, ClamAV updates, Tailscale; no security group that admits
+   inbound traffic once joined, `default` and `http` included; `tag:ausmt-curate`), bootstrapped like
+   the serving host through a temporary 22/tcp group from the operator's address (D5).
 2. **Its volume**: 100 GB (D9), labelled and mounted at `/srv/ausmt`, holding the whole tree, so that
    `site-data/builds` and `site-data/cache` share one filesystem (D1, D3).
 3. **Provision** with the full `deploy/README.md` checklist (gateway profile and the 10002 tree
@@ -443,17 +453,56 @@ before; only the destination of the four routes changes.
   `deploy/tests/test_frontdoor_bridge.py` drives the split against a real Caddy.
 * **Reach.** The tailnet policy grants `tag:ausmt-serve` the curation host's port 8445 and no other
   port (`deploy/nectar/acl-policy.hujson`).
-* **Cutover.** The routes stay live through the floating-IP move (D6).
+* **Cutover.** The routes stay live through the DNS change (D6).
 * **Failure.** With the curation host unreachable the four routes answer an error at the public name
   and readers are unaffected. `doctor-serve.sh` probes `GET /gateway/healthz` through the front door
   and reports WARN, never FAIL, when it does not answer 200.
 * **The lift** moves the variable to ausmt-curate's reader listener (D10).
 
+## Executed
+
+The serving replica went live on 2026-10-13 and 2026-10-14; the record of the session is
+`AusMT_2026/HANDOVER-2026-10-14-NECTAR-CUTOVER-AND-HOUSE-STYLE.md` and the networking as found is
+section 1A of `AusMT_2026/NECTAR-CUTOVER-CHECKLIST-2026-10-13.md`.
+
+* **Networking as found (2026-10-13).** The project has no router and no private network. The launch
+  wizard offers only Classic Provider, which gives an instance a fixed public address on `qld` and an
+  interface on `qld-data`, QRIScloud's storage network. Nothing floats, so the designed address move
+  was not available; the owner ruled the cutover a DNS change.
+* **Addresses.** ausmt-serve: 203.101.226.53 (`qld-data` 10.255.137.28). ausmt-test: 203.101.226.191,
+  released when the instance is deleted, which is due before 2026-11-15, its certificate's expiry.
+* **Root disk (owner ruling 2026-10-13).** Phase one serves from ausmt-serve's 30 GB m3.small root
+  disk at one kept build: the tree is the directory `/var/lib/ausmt-proof`, bind-mounted at
+  `/srv/ausmt` (runbook 4A), with `AUSMT_PUBLISH_KEEP=1` in the box's `deploy/.env`. This overrides
+  the runbook's earlier "never on the root disk"; the volume waits on the amendment (D9) and is
+  needed before the curate lift. The root disk stood at 52 percent with one build on 2026-10-14.
+* **Launch and seed (2026-10-13).** Security groups `http` and a temporary `ssh` group narrowed to
+  the owner's address; tailnet policy merged and the fence proven (runbook 5.5); certificate volume
+  copied, so the front door placed no ACME order; seed publish of 7.3 GiB in 87,637 files over a
+  direct tailnet path, about an hour.
+* **Tailnet policy, as merged.** The administrators' `check` SSH rule names the users `ubuntu` and
+  `root`. The committed rule named `autogroup:nonroot`, which includes the gated `publish` and
+  `caddylog` accounts; Tailscale applies the stricter action, so the policy's own `sshTests` refused
+  the save. `deploy/nectar/acl-policy.hujson` now carries the merged form.
+* **DNS change (2026-10-14, about 07:00 UTC).** Verified beforehand with `curl --resolve` against
+  203.101.226.53. `ausmt.auscope.org.au` (AuScope's cPanel zone) was changed by AuScope's director on
+  request and `ausmt.au` (VentraIP) by the owner, both to 203.101.226.53 at TTL 300. The marker
+  request `cutover-1791961947` answered 200 and reached ausmt-serve's log; `sudo ausmt-doctor-serve`
+  was all PASS at 07:13 UTC, its DNS line included. The box's log pull was repointed at 07:32 UTC.
+  Rollback is both A records back to 203.101.226.191 while ausmt-test exists.
+* **Log retention.** At `roll_keep 5` with a daily pull, exactly five rolls reached the box in 7 of
+  the 24 daily windows from 20 September to 13 October, five being the cap, so rolls on those days
+  were deleted before the pull. On 2026-10-14 the handover offered the owner an hourly systemd
+  drop-in for the box's daily timer; it is not confirmed applied. The repository now ships the
+  hourly timer and a roll depth of 49 (`deploy/frontdoor/README.md`, "Log retention and the pull
+  cadence").
+
 ## Provenance
 
 Owner rulings 2026-09-30 (two roles and their contents, flavours, sequence, tailnet as identity layer,
-curator layering, floating-IP cutover and rollback, the amendment, the continuity items). Owner ruling
-2026-10-02 (the service accounts' SFTP path over Tailscale SSH accepted for phase one, D4 and D11).
+curator layering, floating-IP cutover and rollback, the amendment, the continuity items). Owner rulings
+2026-10-13 (the DNS cutover in place of the floating-IP move, and the root-disk serve; "Executed").
+Owner ruling 2026-10-02 (the service accounts' SFTP path over Tailscale SSH accepted for phase one, D4 and D11).
 Measured 2026-10-02: the size of one build, the MTH5 cache generation, the box's Linux build memory
 and the live certificate dates (D1). Architect
 rulings 2026-09-30 (the public gateway routes' upstream, curator access on 443, GHCR visibility, the

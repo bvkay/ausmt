@@ -446,6 +446,7 @@ _REAL_PACKAGE_YAML = """\
 schema_version: "0.2"
 slug: intg-survey-2026
 project_name: Integration Survey
+name: Integration Survey
 version: 1.0.0
 country: Australia
 organisation:

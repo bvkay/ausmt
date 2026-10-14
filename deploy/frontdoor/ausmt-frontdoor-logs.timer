@@ -1,8 +1,8 @@
-# AusMT front-door log-shipping timer. Fires ausmt-frontdoor-logs.service once a
-# day at 03:25 UTC - AFTER the nightly backup (03:20) and BEFORE the fold (ausmt-stats, 03:35), so
-# each day's public logs are on the box before the aggregator reads them. Install:
+# AusMT front-door log-shipping timer. Fires ausmt-frontdoor-logs.service every hour, so a roll the
+# front door makes reaches the box long before roll_keep can delete it, and the 03:00 pull lands before
+# the 03:35 fold (ausmt-stats). Install:
 #   sudo cp deploy/frontdoor/ausmt-frontdoor-logs.{service,timer} /etc/systemd/system/
-#   # (edit the __PLACEHOLDER__ paths + User= in the .service first — see that file)
+#   # (edit the __PLACEHOLDER__ paths + User= in the .service first; see that file)
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now ausmt-frontdoor-logs.timer
 #   systemctl list-timers ausmt-frontdoor-logs.timer         # confirm the next run
@@ -10,14 +10,16 @@
 # See deploy/frontdoor/RUNBOOK.md "Log shipping".
 
 [Unit]
-Description=AusMT front-door log shipping once a day at 03:25 UTC (+ jitter), ahead of the C45 fold
+Description=AusMT front-door log shipping every hour (+ jitter), ahead of the C45 fold
 
 [Timer]
-# 03:25 UTC: after the backup (03:20), before the stats fold (03:35). The aggregator only folds
-# COMPLETE days and is idempotent, so the exact minute is not load-bearing — the ordering (before the
-# fold) is what matters, and even a missed ship only defers a day's public counts to the next fold.
-OnCalendar=*-*-* 03:25:00
-# Small spread so this does not fire on the exact same second as the co-scheduled backup/stats timers.
+# Hourly: the front door rolls its log at 10 MB and keeps a bounded number of rolls, and a roll the
+# count deletes before a pull never reaches the fold, so pulls must come far more often than a busy
+# day can exhaust the count. The aggregator only folds COMPLETE days and is idempotent, so the exact
+# minute is not load-bearing; what matters is that the last pull before 03:35 has run.
+OnCalendar=hourly
+# A small spread off the top of the hour, kept well under the 35 minutes between the 03:00 pull and
+# the fold.
 RandomizedDelaySec=300
 # Catch up one missed run after downtime (a box off overnight still ships on the next boot). Re-copies
 # are no-ops (rsync -a) and the fold is idempotent, so a catch-up run cannot double-count.

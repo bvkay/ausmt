@@ -3479,8 +3479,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const filesHtmlV = filesPanel.innerHTML;
   ok(filesPanel.querySelector(".filelist") != null && filesPanel.querySelector(".prodgrid") == null,
     "the Files tab must be a single-column .filelist, not the 2-col .prodgrid");
-  ["Raw time series", "Level 0 edited time series", "Level 1 transformed time series",
-   "Level 2 derived processed data", "EDI", "EMTF XML", "MTH5", "Publication (interpretation)"].forEach(lbl =>
+  ["Packed raw time series", "Level 0 (Edited Time Series)", "Level 1 (Transformed Time Series)",
+   "Level 2 (Transfer Functions)", "EDI", "EMTF XML", "MTH5", "Publication (interpretation)"].forEach(lbl =>
     ok(filesHtmlV.indexOf(lbl) >= 0, "the Files tab is missing the '" + lbl + "' row"));
   ok(filesHtmlV.indexOf("Phase tensor") < 0, "the Phase tensor tile must be removed from the Files tab");
   ok(filesHtmlV.indexOf("source archive") >= 0 && filesHtmlV.indexOf("AusMT-derived") >= 0,
@@ -4170,7 +4170,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(idTiles.length === 6, "Alpha must render exactly the SIX fixed slots (no extras), got: " + idTiles.length);
   // The six slot names, in the canonical Table-1 order. Order is part of the rule: the chain reads
   // `collection -> raw -> L0 -> L1 -> L2 -> L3` the same way on every survey.
-  const SLOTS = ["Collection", "Packed Raw Data", "Level 0", "Level 1", "Level 2", "Level 3"];
+  const SLOTS = ["Collection", "Packed raw time series", "Level 0 (Edited Time Series)",
+    "Level 1 (Transformed Time Series)", "Level 2 (Transfer Functions)", "Level 3 (Models)"];
   SLOTS.forEach((nm, i) => ok(idTiles[i].textContent.indexOf(nm) === 0,
     "slot " + (i + 1) + " must be '" + nm + "', got: " + JSON.stringify(idTiles[i].textContent.slice(0, 40))));
   // An unrecorded level is MUTED BUT VISIBLE (never dropped) - .prod.dis + a hollow dot +
