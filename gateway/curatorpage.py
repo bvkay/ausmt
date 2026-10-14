@@ -1271,11 +1271,12 @@ SURVEY_HUB_JS = r"""
 
 
 # The Stage-2a Stations tab browser-side script. ALL data is fetched SAME-ORIGIN from the served
-# /data corpus (catalogue.json / sci.json / tf.json / surveys.json + build.json) — the serve-panel
-# pattern, ZERO new gateway privileges (the gateway has no site-data mount). The catalogue/sci/tf
-# arrays are INDEX-ALIGNED (station i is catalogue[i]/sci[i]/tf[i] — the engine appends them in one
+# /data corpus (catalogue.json / sci.json / tf/<slug>.json / build.json), the serve-panel
+# pattern, ZERO new gateway privileges (the gateway has no site-data mount). The catalogue/sci
+# arrays are INDEX-ALIGNED (station i is catalogue[i]/sci[i]; the engine appends them in one
 # pass); we filter to this survey's rows by ausmt_id prefix ('au.<slug>.', surveyRows below) — the
-# catalogue `survey` column carries the display LABEL, never the slug.
+# catalogue `survey` column carries the display LABEL, never the slug. The survey's curve file
+# tf/<slug>.json holds its tf rows in catalogue order, so the k-th filtered row takes its k-th row.
 #
 # CSP + XSS discipline (the same rules SURVEY_HUB_JS follows, extended to SVG): served external under
 # script-src 'self'; EVERY value goes in via textContent or a DOM property, NEVER innerHTML with data;
@@ -1387,6 +1388,8 @@ STATIONS_JS = r"""
   // and 404s, killing the whole tab. Matches the Overview/context-bar JS. Single-sourced here so the
   // executable URL parity pin can drive these exact functions.
   function dataUrl(name) { return '/data/' + name; }
+  // One survey's curve file: its tf rows in catalogue order (the engine's tf/<slug>.json).
+  function curvesUrl(slug2) { return dataUrl('tf/' + encodeURIComponent(slug2) + '.json'); }
   function stationJsonUrl(slug2, id) {
     return '/data/products/' + encodeURIComponent(slug2) + '/' + encodeURIComponent(id) + '/station.json';
   }
@@ -1412,8 +1415,13 @@ STATIONS_JS = r"""
       rows.push({
         cat: cat[i],
         sc: (Array.isArray(sci) && sci[i]) ? sci[i] : null,
-        tf: (Array.isArray(tf) && tf[i]) ? tf[i] : null
+        tf: null
       });
+    }
+    // tf is this survey's curve file, whose rows are its catalogue rows in order, so they join by
+    // position; a file whose length disagrees cannot be aligned and joins nothing.
+    if (Array.isArray(tf) && tf.length === rows.length) {
+      rows.forEach(function (r, k) { r.tf = tf[k] || null; });
     }
     return rows;
   }
@@ -2234,7 +2242,7 @@ STATIONS_JS = r"""
   Promise.all([
     fetchJson(dataUrl('catalogue.json')).catch(function () { return { __err: true }; }),
     fetchJson(dataUrl('sci.json')).catch(function () { return { __err: true }; }),
-    fetchJson(dataUrl('tf.json')).catch(function () { return { __err: true }; }),
+    fetchJson(curvesUrl(slug)).catch(function () { return { __err: true }; }),
     fetchJson(dataUrl('build.json')).catch(function () { return { __err: true }; }),
     // coord_policy.json is OPTIONAL (absent for an all-exact corpus) — tolerate absence, same
     // graceful-degrade posture as the portal (empty => every station reads 'exact').
@@ -2264,8 +2272,9 @@ STATIONS_JS = r"""
     if (publishedHead && served) {
       lagPending = !(publishedHead.indexOf(served) === 0 || served.indexOf(publishedHead) === 0);
     }
-    // Join catalogue/sci/tf BY INDEX, filtered to this survey's rows by ausmt_id prefix (H1 —
-    // the survey column is the display label, never the slug; see surveyRows).
+    // Join catalogue/sci BY INDEX, filtered to this survey's rows by ausmt_id prefix (the survey
+    // column is the display label, never the slug; see surveyRows), and the survey's
+    // curve rows by position within it.
     render(surveyRows(cat, sci, tf, slug), buildId, lagPending);
   }).catch(function (e) {
     host.textContent = '';

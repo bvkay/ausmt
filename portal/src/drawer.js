@@ -40,8 +40,8 @@ let _drawerSubject=null;
 // "Automated screening", "AusMT-derived". Plain muted text, no colour semantics.
 function roleChip(l){return `<span class="rolechip">${esc(l)}</span>`;}
 // ---- two-phase boot: the loading surfaces ------------------------------------------------------
-// The drawer is the densest consumer of the PHASE 2 products (tf.json -> the response curves; sci.json -> the
-// processing/screening rows). See docs: portal internals, drawer.js.
+// The drawer is the densest consumer of the late products (a survey's curve file -> the response curves;
+// sci.json -> the processing/screening rows). See docs: portal internals, drawer.js.
 function hydrBlock(what){return `<div class="hydrating" role="status">Loading ${esc(what)}…</div>`;}
 function hydrFailBlock(what){return `<div class="hydrating hydrfail" role="status">Could not load ${esc(what)}.</div>`;}
 function hydrCell(){return `<span class="hydrating hydr-inline">loading…</span>`;}
@@ -679,8 +679,12 @@ function openStation(i,opts){
   // ---- Panel content -------------------------------------------------------------------------------
   // Response (default) - the four plots FIRST, the centerpiece. See docs: portal internals, drawer.js.
   const _rspOpen=isOpenAccess(m);
-  // Two-phase boot: the curves live in tf.json (PHASE 2). See docs: portal internals, drawer.js.
-  const _tfGate=_rspOpen?hydrGate("tf","response functions",true):"";
+  // The curves arrive with the survey's curve file; the open drawer re-renders once it settles. See docs:
+  // portal internals, drawer.js.
+  const _tfKey="tf:"+s.slug;
+  if(_rspOpen&&!rehydrate&&HYDR[_tfKey]!=="ready"&&HYDR[_tfKey]!=="failed")loadSurveyCurves(s.slug).then(()=>{
+    if(_drawerSubject&&_drawerSubject.kind==="station"&&ST[_drawerSubject.i]&&ST[_drawerSubject.i].slug===s.slug)rehydrateOpenDrawer();});
+  const _tfGate=_rspOpen?hydrGate(_tfKey,"response functions",true):"";
   const responseHtml=`<div class="sechead rsphead">Response functions ${roleChip("AusMT-derived")}`+
     (_rspOpen&&!_tfGate&&typeof responseExpandBtn==="function"?responseExpandBtn():"")+`</div>`+
     (_tfGate

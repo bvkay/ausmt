@@ -1,6 +1,6 @@
 # Portal data files (the producer and consumer contract)
 
-Not a public surface. The files on this page (`catalogue.json`, `sci.json`, `tf.json`, `surveys.json`,
+Not a public surface. The files on this page (`catalogue.json`, `sci.json`, `tf.json`, `tf/<slug>.json`, `surveys.json`,
 `collections.json`, `build_provenance.json`, `coord_policy.json`, `base_ids.json`, `ts_access.json`, the portal-side use of
 `manifest.json`, and the operator-only `build_report.json` and `qc_report.json`) are portal-internal or
 operator-only: they carry no public contract and no stability promise, and any build may change or drop
@@ -24,7 +24,9 @@ reorder.
 ## Row alignment, metadata and observations
 
 `catalogue[i]`, `tf[i]` and `sci[i]` describe the same station; alignment is by array index only, with
-no key on the wire, and preserving it is the central data-integrity invariant of the product set.
+no key on the wire, and preserving it is the central data-integrity invariant of the product set. A
+survey's curve file `tf/<slug>.json` is aligned the same way within the survey: its k-th row belongs to
+the survey's k-th catalogue row, counting in catalogue order.
 
 Observations are measured physics: the impedance tensor and tipper per period with their errors, which
 become `tf.json` and the phase-tensor fields of `sci.json`. Metadata is asserted and human-curated:
@@ -38,8 +40,9 @@ declared in the survey package and recorded in provenance.
 |---|---|---|
 | `catalogue.json` | `extract/build_portal.py` (`CATALOGUE_COLUMNS`) | `portal/src/main.js` (builds `ST`), `drawer.js`, `exports.js`, `plots.js`; `engine/scripts/verify.py`; `ausmt-surveys/_validation/contribute.py` |
 | `sci.json` | `extract/_edi_science.py` (`SCI_COLUMNS`), written by `build_portal.py` | `main.js` (`SCI`), `drawer.js`, `exports.js` |
-| `tf.json` | `extract/_edi_tf.py` (`TF_COLUMNS`), written by `build_portal.py` | `main.js` (`TFD`), `drawer.js`, `plots.js`, `exports.js` |
-| `surveys.json` | `build_portal.survey_meta_from_yaml` | `main.js` (`SMETA`), `drawer.js`, `exports.js` |
+| `tf.json` | `extract/_edi_tf.py` (`TF_COLUMNS`), written by `build_portal.py` | no runtime reader: the portal and the curator Stations tab read the per-survey files below. Still written and served beside them; it goes in a later change |
+| `tf/<slug>.json` | `build_portal.write_survey_curves`, from the same rows as `tf.json` | `portal/src/data.js` (`loadSurveyCurves`, when a station of the survey opens, into `TFD`), `drawer.js`, `plots.js`; `gateway/curatorpage.py` Stations tab (`curvesUrl`); `engine/scripts/verify.py` |
+| `surveys.json` | `build_portal.survey_meta_from_yaml`; `tf_url` added at emission | `main.js` (`SMETA`), `drawer.js`, `exports.js`, `data.js` (`tf_url`) |
 | `collections.json` | `build_portal.collections_document` | `main.js` (`COLL`) |
 | `build_provenance.json` | `build_portal.py` (`PROV`) | `data.js` (`PROV`), `drawer.js` provenance panel |
 | `build_report.json` | `build_portal.py` (per-survey report accumulator) | the curator serve-state view; validated against `schema/build_report.schema.json`; re-checked by `engine/scripts/verify.py` |
@@ -47,7 +50,7 @@ declared in the survey package and recorded in provenance.
 | `products/<slug>/survey-metadata.json` | `build_portal.survey_metadata_document` | a public contract, not read by the portal; validated against `schema/ausmt-survey-metadata.schema.json`, see [Survey metadata](../reference/survey-metadata.md) |
 | `products/<slug>/<station>/station.json` | `build_portal.station_document` | a public contract; `portal/src/drawer.js` reads two members of it (`frame`, `processing.file_written_by`); validated against `schema/ausmt-station.schema.json` and against the semantic layer in `extract/_stationcheck.py`, see [Per-station products](../reference/station-products.md) |
 | `qc_report.json` | `build_portal.qc_pass` | curator-facing; not read by the portal runtime |
-| `manifest.json` | `extract/build_portal.py` (download manifest) | `portal/src/data.js` (download resolver); validated against `schema/manifest.schema.json` |
+| `manifest.json` | `extract/build_portal.py` (download manifest, plus `curves[]` for the per-survey curve files) | `portal/src/data.js` (download resolver); validated against `schema/manifest.schema.json`; `engine/scripts/verify.py` recomputes every `curves[]` digest |
 | `coord_policy.json` | `extract/build_portal.py` (the coordinate mask seam) | `portal/src/drawer.js`, to badge a generalised or withheld position |
 | `base_ids.json` | `extract/build_portal.py` (`_coordaccess.base_station_id`) | the curator workbench, so a per-station coordinate override is keyed by the base station id |
 | `ts_access.json` | `extract/build_portal.py` (`_tsproject.route_rows`, from the `--ts-index` register) | `portal/src/data.js`, for the Download block's time-series rows, the Data available filter and the hand-off pointer files |
@@ -167,6 +170,31 @@ scale with a `|T| = 0.5` corner reference; no panel for an absent or masked tipp
 gain error bars from `t[10]…t[13]` (ρ in the log domain clipped at a small positive floor; φ in
 degrees), drawn only where the error is present; a station whose EDI carries no error blocks shows no
 bars and its `q` falls back to the shape basis.
+
+## `tf/<slug>.json`: one survey's `tf.json` rows
+
+The portal does not load `tf.json`. The build writes one curve file per catalogued survey,
+`tf/<slug>.json`, and the portal fetches it when a station of that survey first opens, so a visit that
+opens no station moves no curves and a visit that opens one moves one survey's.
+
+- **Rows.** A JSON array of that survey's `tf.json` rows, in catalogue order: the k-th row is the curve
+  entry of the survey's k-th row in `catalogue.json`. Each row has the 18 columns of the `tf.json` table
+  above, and is byte-identical to the row `tf.json` holds for the same station; the file is written in
+  the same compact form. An embargoed or metadata-only survey's file carries the same emptied rows
+  `tf.json` carries.
+- **Naming.** The survey's `surveys.json` entry names the file in `tf_url` (always `tf/<slug>.json`,
+  relative to the data directory). The portal reads `tf_url` from the `surveys.json` it already holds at
+  first paint; the curator Stations tab, which shows one survey and does not load `surveys.json`, builds
+  the same path from the slug.
+- **Join.** By position only, as `tf[i]` is. The portal places row k at the station index of the
+  survey's k-th catalogue row; a file whose length differs from the survey's station count is treated as
+  a failed load, never as a partial one, because a short file would put one station's curves on another.
+- **Integrity.** `manifest.json` lists every file in `curves[]` (`survey`, `slug`, `url`, `size`,
+  `sha256`, `n_stations`). `engine/scripts/verify.py` fails a build where a catalogued survey has no file,
+  a file's row count differs from the survey's catalogue rows, a row is not 18 columns, or a `curves[]`
+  size or digest disagrees with the bytes.
+
+`tf.json` is still written and served, with identical rows, until a later change removes it.
 
 ## The key-based documents
 

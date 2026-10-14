@@ -5,12 +5,13 @@ let CAT,TFD,SCI,SMETA,PROV,COLL,MANIFEST,BUILDID; /*__DATA_BINDING__*/
 // ---- two-phase boot: background hydration gates ------------------------------------------------
 // The boot paints from the SMALL products (catalogue + surveys, plus the four small optionals). See
 // docs: portal internals, state.js.
-let TF_READY=Promise.resolve(),SCI_READY=Promise.resolve(),MANIFEST_READY=Promise.resolve();
+let SCI_READY=Promise.resolve(),MANIFEST_READY=Promise.resolve();
 // ts_access.json rides phase 2 as well. The chooser it feeds is a facet most visitors
 // never open, so a phase-1 fetch would add a blocking boot request for it; the Availability controls
 // are disabled and aria-busy across the window instead, exactly as the colour modes are.
 let TSACC_READY=Promise.resolve();
-const HYDR={tf:"ready",sci:"ready",manifest:"ready",tsaccess:"ready"};
+// A survey's curve file has its own gate, "tf:<slug>", set when loadSurveyCurves first asks for it.
+const HYDR={sci:"ready",manifest:"ready",tsaccess:"ready"};
 function hydrating(k){return HYDR[k]==="pending";}
 function hydrFailed(k){return HYDR[k]==="failed";}
 // A product is USABLE only when it is loaded. "pending" and "failed" are two different REASONS for one

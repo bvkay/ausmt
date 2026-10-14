@@ -453,7 +453,6 @@ function renderBuildId(){
 let HYDRATION_DONE=Promise.resolve();
 // Late hydration must never leave a stale render standing. See docs: portal internals, main.js.
 function wireHydration(){
-  const tf=TF_READY.then(()=>{rehydrateOpenDrawer();});
   const sci=SCI_READY.then(()=>{
     applySciToStations();
     // SCI_READY settles on FAILURE too (phase 2 records the failure rather than rejecting), so
@@ -476,7 +475,7 @@ function wireHydration(){
     if(typeof paintAvailSelect==="function")paintAvailSelect();
     if(ST.length&&typeof refresh==="function")refresh();
     rehydrateOpenDrawer();});
-  HYDRATION_DONE=Promise.all([tf,sci,man,tsa]);
+  HYDRATION_DONE=Promise.all([sci,man,tsa]);
 }
 async function boot(){
   if(typeof CAT==="undefined"||CAT===null){
@@ -486,9 +485,8 @@ async function boot(){
     // Phase 1 is the only fatal set: no catalogue or no surveys means there is nothing honest to draw.
     // A phase-2 failure is reported by the consumers that read it, not by blanking the whole portal.
     try{[CAT,SMETA,PROV,COLL,BUILDID,COORD_POLICY]=await p1;}catch(e){showLoadError();return;}
-    // Hydration starts only AFTER phase 1 has its bytes: the phase-2 products are large (tf.json alone is
-    // most of the page weight) and share one connection with the catalogue the dots need. See docs: portal
-    // internals, main.js.
+    // Hydration starts only AFTER phase 1 has its bytes: the phase-2 products share one connection with the
+    // catalogue the dots need. See docs: portal internals, main.js.
     startHydration();
   }
   // The ts_access-driven surfaces are inert and disabled until the index is known: the Download

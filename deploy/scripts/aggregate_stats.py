@@ -175,9 +175,10 @@ _LICENCE_SIDECAR_SUFFIX = ".LICENSE.txt"
 # The API-CONSUMER path class: the documented machine-readable entry points that the portal's OWN
 # JavaScript never fetches, so a hit is a third party reading the corpus programmatically rather than a
 # browser booting the SPA. Verified against the shipped portal tree, and the exclusions are the point:
-#   * /data/catalogue.json, /data/surveys.json, /data/tf.json, /data/sci.json, /data/manifest.json,
+#   * /data/catalogue.json, /data/surveys.json, /data/sci.json, /data/manifest.json,
 #     /data/build.json, /data/collections.json, /data/coord_policy.json, /data/build_provenance.json
-#     are all fetched by portal/src/data.js on every SPA boot -- they measure browsers, not consumers;
+#     are all fetched by portal/src/data.js on every SPA boot, and /data/tf/<slug>.json when a station
+#     drawer opens -- they measure browsers, not consumers;
 #   * /data/products/<slug>/<station>/station.json is fetched by portal/src/drawer.js when a station
 #     drawer opens -- also a browser.
 # What is left is the documents About points a programmatic reader at. mtcat.schema.json is the `$id`

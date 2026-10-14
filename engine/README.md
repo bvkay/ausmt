@@ -45,8 +45,12 @@ Generated outputs (consumed directly by the AusMT Portal):
 ```text
 catalogue.json  tf.json  sci.json  surveys.json  collections.json  mtcat.json  manifest.json
 build_provenance.json  build_report.json  qc_report.json  base_ids.json  coord_policy.json
-build.json
+build.json  tf/<slug>.json
 ```
+
+`tf/<slug>.json` is one file per survey holding that survey's `tf.json` rows in catalogue order; the
+portal fetches it when a station of the survey opens and does not read `tf.json`, which is still
+written until a later change removes it.
 
 The positional shape of these files is defined in `docs` → `developer/data-files.md`.
 

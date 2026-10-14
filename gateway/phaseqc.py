@@ -8,7 +8,8 @@ against this module over a boundary-heavy vector sweep, so the mirror cannot dri
 source-string pin lets a truncated-versus-floored modulo divergence ship).
 
 THE ONE LOAD-BEARING FACT (verified against engine/extract/_edi_tf.py:143):
-  tf.json t[4] = phs_yx_adj is stored with a +180 PRESENTATION SHIFT — `norm_phase(pyx, add=180.0)`.
+  a tf row's t[4] = phs_yx_adj (tf.json and each survey's tf/<slug>.json carry the same rows) is
+  stored with a +180 PRESENTATION SHIFT: `norm_phase(pyx, add=180.0)`.
   So the TRUE φyx = stored − 180, re-wrapped. A station whose TRUE φyx is in Q3 (−180…−90 - the
   physically expected quadrant for yx) therefore has a STORED t[4] near 0…90. Reading the stored value
   AS the true phase would mis-classify a healthy Q3 station - the trap the φyx-unwrap pin guards.

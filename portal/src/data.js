@@ -43,9 +43,8 @@ async function loadPhase1(){
 // ---- PHASE 2: background hydration -------------------------------------------------------------- The
 // heavy products. See docs: portal internals, data.js.
 function startHydration(){
-  HYDR.tf="pending";HYDR.sci="pending";HYDR.manifest="pending";HYDR.tsaccess="pending";
-  // A tf/sci FAILURE is not absence. See docs: portal internals, data.js.
-  TF_READY=fetchJson("tf.json",FETCH_LOW).then(v=>{TFD=v;HYDR.tf="ready";},()=>{TFD=[];HYDR.tf="failed";});
+  HYDR.sci="pending";HYDR.manifest="pending";HYDR.tsaccess="pending";
+  // A sci FAILURE is not absence. See docs: portal internals, data.js.
   SCI_READY=fetchJson("sci.json",FETCH_LOW).then(v=>{SCI=v;HYDR.sci="ready";},()=>{SCI=[];HYDR.sci="failed";});
   // manifest.json is OPTIONAL by contract (older data sets / empty builds ship none), so its 404 IS the
   // honest absence (MANIFEST=null, the exact value every consumer already tolerates), not a failure state.
@@ -54,8 +53,24 @@ function startHydration(){
   // one open, verified route, so a 404 IS the honest absence and there is no "failed" state to report. See
   // docs: portal internals, data.js.
   TSACC_READY=fetchOptional("ts_access.json",{},FETCH_LOW).then(v=>{TSACC=v||{};HYDR.tsaccess="ready";});
-  return [TF_READY,SCI_READY,MANIFEST_READY,TSACC_READY];
+  return [SCI_READY,MANIFEST_READY,TSACC_READY];
 }
+
+// ---- the response curves, one survey at a time ------------------------------------------------
+// A survey's curve file (surveys.json tf_url) holds its tf rows in catalogue order, fetched once when a
+// station of it first opens. See docs: portal internals, data.js.
+const _CURVES={};
+function loadSurveyCurves(slug){
+  if(_CURVES[slug])return _CURVES[slug];
+  const k="tf:"+slug,sv=SLUG_TO_SURVEY[slug],url=sv&&SMETA[sv]&&SMETA[sv].tf_url;
+  const idx=ST.filter(s=>s.survey===sv).map(s=>s.i);
+  HYDR[k]="pending";
+  // A file whose row count disagrees with the survey's stations cannot be aligned, so it is a failure.
+  _CURVES[slug]=(url?fetchJson(url):Promise.reject(new Error("no curve file for "+slug))).then(rows=>{
+    if(!Array.isArray(rows)||rows.length!==idx.length)throw new Error("curve rows for "+slug);
+    TFD=TFD||[];idx.forEach((i,n)=>{TFD[i]=rows[n];});HYDR[k]="ready";
+  }).catch(()=>{HYDR[k]="failed";});
+  return _CURVES[slug];}
 
 // ---- download manifest resolver: the distribution backbone -----------------------------------
 // manifest.json indexes every downloadable artifact. See docs: portal internals, data.js.

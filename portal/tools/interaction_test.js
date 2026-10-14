@@ -26,6 +26,8 @@ const DATA = path.resolve(process.argv[2] || path.join(PORTAL, "data"));
 const FILES = ["catalogue", "tf", "sci", "surveys", "build_provenance", "collections", "build"];
 const DATAMAP = {};
 FILES.forEach(k => { try { DATAMAP["data/" + k + ".json"] = JSON.parse(fs.readFileSync(path.join(DATA, k + ".json"))); } catch (e) {} });
+// The per-survey curve files, served at the tf/<slug>.json path each surveys.json entry names.
+try { fs.readdirSync(path.join(DATA, "tf")).forEach(f => { DATAMAP["data/tf/" + f] = JSON.parse(fs.readFileSync(path.join(DATA, "tf", f))); }); } catch (e) {}
 
 // This test is FIXTURE-driven: it asserts against a known 4-station fixture that the pytest wrapper
 // (tests/test_interactions.py) builds and passes as argv[2]. The shipped portal/data is empty BY DESIGN
@@ -283,15 +285,15 @@ win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", sch
 
 // ---- two-phase boot instrumentation --------------------------------------------------------------
 // The portal boots in TWO phases: phase 1 fetches only what the first paint needs (catalogue + surveys and
-// the four small optionals, all in parallel) and renders; phase 2 (tf.json ~3.2MB, sci.json, manifest.json)
-// hydrates behind it. To drive that split this fetch (a) LOGS every url in request order, so the driver can
-// prove the six phase-1 products and the three heavy ones all went out together rather than one behind
-// another, and (b) HOLDS the three heavy responses until releaseHeavy(), so the driver can inspect the app
-// in exactly the window the split creates. Every other url resolves immediately, as before.
+// the four small optionals, all in parallel) and renders; phase 2 (sci.json, manifest.json, ts_access.json)
+// hydrates behind it, and a survey's curve file (tf/<slug>.json) is fetched only when one of its stations
+// opens. To drive that split this fetch (a) LOGS every url in request order, so the driver can prove what
+// went out and when, and (b) HOLDS the phase-2 responses and every curve file until releaseHeavy(), so the
+// driver can inspect the app in exactly the window the split creates. Every other url resolves immediately.
 // ts_access.json joins the held set although it is small: what it gates is a two-phase HONESTY rule
 // (nothing may claim a station has no archive route while the index is still in flight), and that
 // window is only drivable if the response can be held open here.
-const HEAVY = /(^|\/)(tf|sci|manifest|ts_access)\.json$/;
+const HEAVY = /(^|\/)(tf|sci|manifest|ts_access)\.json$|(^|\/)tf\/[^/]+\.json$/;
 // The served ARTIFACT families (the per-station files the selection exports package). The data dir holds
 // only JSON products, so without this every artifact fetch came back !ok and every export packaged
 // nothing: a pin could then only observe which URLs were requested, never what the archive ended up
@@ -502,6 +504,8 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // now the only way to set it, and the two-phase honesty legs below are what it exists for - and
   // markerCount/station/closeDrawer are plain observables for the first-paint assertions.
   "hydrationDone:()=>HYDRATION_DONE,hydrState:(k)=>HYDR[k]," +
+  // A survey's curve-file gate and its memoised load, read without starting one.
+  "curvesState:(slug)=>HYDR[\"tf:\"+slug],curvesLoad:(slug)=>_CURVES[slug]," +
   "markerCount:()=>ST.filter(s=>s.marker).length,station:(id)=>ST.find(x=>x.id===id)," +
   "qMin:()=>qMin,setQMin:(v)=>{qMin=v;},closeDrawer," +
   // Availability-chooser hooks. tsLevels/setTsLevels read and drive the chosen level set without
@@ -601,14 +605,18 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // resolved, so with tf held four of these urls would be missing from the log entirely.
   // ts_access.json rides PHASE 2: the Availability facet it feeds is one most visitors never open,
   // so it must never be one of the requests first paint waits on.
+  // The curves are not on this list: a survey's curve file is fetched when one of its stations opens.
   const _bootUrls = ["catalogue.json", "surveys.json", "build_provenance.json", "collections.json",
-    "build.json", "coord_policy.json", "tf.json", "sci.json", "manifest.json", "ts_access.json"];
+    "build.json", "coord_policy.json", "sci.json", "manifest.json", "ts_access.json"];
   _bootUrls.forEach(n => ok(fetchOrder.some(u => u.endsWith("/" + n)),
     "phase1/2: " + n + " must be requested during boot (the optionals must not queue behind each other); issued: " + JSON.stringify(fetchOrder)));
   ok(fetchOrder.length === _bootUrls.length,
-    "boot must issue exactly the ten data fetches, got " + JSON.stringify(fetchOrder));
-  ok(heavyHeld() === 4, "phase2: tf/sci/manifest/ts_access must all be in flight CONCURRENTLY, held " + heavyHeld());
-  ["tf", "sci", "manifest", "tsaccess"].forEach(k => ok(A.hydrState(k) === "pending",
+    "boot must issue exactly the nine data fetches, got " + JSON.stringify(fetchOrder));
+  ok(!fetchOrder.some(u => /(^|\/)tf(\.json$|\/)/.test(u)),
+    "boot must request no transfer-function curves (neither tf.json nor a survey's tf/<slug>.json), got " + JSON.stringify(fetchOrder));
+  ok(A.curvesState("alpha") === undefined, "no survey's curve gate may exist before a station of it opens");
+  ok(heavyHeld() === 3, "phase2: sci/manifest/ts_access must all be in flight CONCURRENTLY, held " + heavyHeld());
+  ["sci", "manifest", "tsaccess"].forEach(k => ok(A.hydrState(k) === "pending",
     "phase2: the " + k + " gate must read 'pending' while its fetch is held, got " + A.hydrState(k)));
   ok(A.tsRoutes("au.alpha.A1") === null,
     "phase2: with ts_access.json in flight the hand-off index must read as UNKNOWN, never as an empty answer");
@@ -695,8 +703,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // the split: the dots, the counts, the tree and the whole surveys view are already rendered off phase-1
   // data alone (pre-change none of this existed until every product had landed). Second the HONESTY RULE:
   // in that window no surface may render an ABSENCE claim for a product that is merely still in flight.
-  ok(A.hydrState("tf") === "pending" && A.hydrState("sci") === "pending" && A.hydrState("manifest") === "pending",
-    "phase2 window: the three gates must still read pending here");
+  ok(A.hydrState("sci") === "pending" && A.hydrState("manifest") === "pending",
+    "phase2 window: the two gates must still read pending here");
   ok(A.nVisCount() === 5, "phase1: all five stations must be filtered and visible before hydration, got " + A.nVisCount());
   ok(A.markerCount() === 5, "phase1: a map marker must exist per positioned station before hydration, got " + A.markerCount());
   ok(doc.getElementById("nTot").textContent === "5", "phase1: the total-station count must be painted before hydration, got " + doc.getElementById("nTot").textContent);
@@ -787,12 +795,16 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   // A station drawer opened DURING hydration: loading states, and NOT ONE of the honest-absence lines that
   // belong to a product this build genuinely does not serve.
+  const _alphaReqs = () => fetchOrder.filter(u => /(^|\/)tf\/alpha\.json$/.test(u)).length;
+  ok(_alphaReqs() === 0, "Alpha's curve file must not be requested before one of its stations opens");
   A.openStation(0);                                  // station A1 (Alpha Survey, open access, real curves in the fixture)
+  ok(_alphaReqs() === 1, "opening a station must request its survey's curve file exactly once, got " + _alphaReqs());
+  ok(A.curvesState("alpha") === "pending", "the Alpha curve gate must read pending while its file is held, got " + A.curvesState("alpha"));
   const _preDrawer = doc.getElementById("drawer").innerHTML;
   ok(/Loading response functions/.test(_preDrawer),
-    "honesty: the response panel must show a loading state while tf.json is in flight");
+    "honesty: the response panel must show a loading state while the survey's curve file is in flight");
   ok(!/data-plot=/.test(_preDrawer),
-    "honesty: no response plot may render before tf.json lands (an empty curve set renders as NO plot, i.e. as 'this station has no response functions')");
+    "honesty: no response plot may render before the curve file lands (an empty curve set renders as NO plot, i.e. as 'this station has no response functions')");
   ok(!/class="plotexp/.test(_preDrawer),
     "honesty: the expand control must be withheld while there are no curves to expand");
   ok(!/class="matdim /.test(_preDrawer),
@@ -817,8 +829,10 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // ---- TWO-PHASE BOOT, part 3: late hydration must refresh what it made stale ----------------------
   releaseHeavy();
   await A.hydrationDone();
-  ["tf", "sci", "manifest", "tsaccess"].forEach(k => ok(A.hydrState(k) === "ready",
+  await A.curvesLoad("alpha");
+  ["sci", "manifest", "tsaccess"].forEach(k => ok(A.hydrState(k) === "ready",
     "hydration: the " + k + " gate must settle to 'ready', got " + A.hydrState(k)));
+  ok(A.curvesState("alpha") === "ready", "the Alpha curve gate must settle to 'ready', got " + A.curvesState("alpha"));
   // The fixture data dir ships NO ts_access.json, which is the deployment case the engine produces
   // for a corpus with no verified routes. That 404 is an ANSWER, not a failure: the gate settles
   // ready on an empty index, and nothing anywhere may report it as a load error.
@@ -838,7 +852,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the group's own note must state the same thing in words, got " + JSON.stringify(doc.getElementById("tsSegNote").textContent));
   const _postDrawer = doc.getElementById("drawer").innerHTML;
   ok(!/Loading response functions/.test(_postDrawer),
-    "hydration: a stale loading state may not stand once tf.json has landed; the OPEN drawer must re-render");
+    "hydration: a stale loading state may not stand once the curve file has landed; the OPEN drawer must re-render");
   ok(/data-plot="rho"/.test(_postDrawer) && /data-plot="pt"/.test(_postDrawer),
     "hydration: the OPEN drawer must re-render with its response curves");
   ok(/>A1</.test(_postDrawer), "hydration: the re-render must keep the SAME station open");
@@ -864,25 +878,32 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.nVisCount() === 0,
     "hydration: the completeness filter must be LIVE after sci.json lands (q=4.0 < 4.5 for every fixture station), got " + A.nVisCount());
   A.setQMin(0); A.refresh();
+  // A second station of a survey whose curves are loaded requests nothing and plots at once.
+  A.openStation(1);                                  // station A2, Alpha Survey
+  ok(_alphaReqs() === 1, "a second station in a loaded survey must request nothing, Alpha's file was requested " + _alphaReqs() + " times");
+  ok(/data-plot="rho"/.test(doc.getElementById("drawer").innerHTML) && !/Loading response functions/.test(doc.getElementById("drawer").innerHTML),
+    "a station of a loaded survey must plot on open, with no loading state");
   A.closeDrawer();
   win.location.hash = "";
 
   // ---- TWO-PHASE BOOT, part 4: a FAILED heavy product is not an absence either ---------------------
-  // A fresh window whose tf.json 404s (a broken or partial build). Before the split that was FATAL: tf.json
+  // A fresh window whose Alpha curve file 404s (a broken or partial build); tf.json is still there and must
+  // not be fallen back to. Before the split a missing tf.json was FATAL: tf.json
   // rode in the required Promise.all, so the whole portal fell back to the load-error page. Now first paint
   // survives it, which makes it critical that the response panel SAYS the curves could not be loaded instead
   // of rendering exactly the nothing a station with no curves renders.
-  const _noTf = Object.assign({}, DATAMAP); delete _noTf["data/tf.json"];
+  const _noTf = Object.assign({}, DATAMAP); delete _noTf["data/tf/alpha.json"];
   const failWin = await bootFreshWindow(_noTf);
-  ok(failWin.__api.nST() === 5, "a missing tf.json must no longer blank the portal; the stations must still paint");
-  ok(failWin.__api.hydrState("tf") === "failed",
-    "a 404 on tf.json must settle its gate to 'failed', got " + failWin.__api.hydrState("tf"));
-  ok(failWin.__api.hydrState("sci") === "ready", "the other gates must be unaffected by the tf failure");
+  ok(failWin.__api.nST() === 5, "a missing curve file must not blank the portal; the stations must still paint");
   failWin.__api.openStation(0);
+  await failWin.__api.curvesLoad("alpha");
+  ok(failWin.__api.curvesState("alpha") === "failed",
+    "a 404 on a survey's curve file must settle its gate to 'failed', got " + failWin.__api.curvesState("alpha"));
+  ok(failWin.__api.hydrState("sci") === "ready", "the other gates must be unaffected by the curve failure");
   const _failDrawer = failWin.document.getElementById("drawer").innerHTML;
   ok(/Could not load response functions/.test(_failDrawer),
-    "honesty: a FAILED tf.json must be STATED, never rendered as a station that has no response functions");
-  ok(!/data-plot=/.test(_failDrawer), "a failed tf.json leaves no curves to plot");
+    "honesty: a FAILED curve file must be STATED, never rendered as a station that has no response functions");
+  ok(!/data-plot=/.test(_failDrawer), "a failed curve file leaves no curves to plot");
   ok(_failDrawer.indexOf("Loading response functions") < 0, "a settled failure must not read as still loading");
   // The strike rose is retired; its control must be GONE, not disabled.
   ok(!failWin.document.getElementById("strike"), "the strike-rose control is retired and must not render");
@@ -4084,7 +4105,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // With five fixture stations "5" formats identically either way, so BOTH forms were invisible to the
   // suite and the map's could widen without anything noticing. A fresh window carrying 1,200 stations is
   // the smallest thing that can see the difference. Rows are cloned POSITIONALLY (contract/columns.json:
-  // id, survey, lat, lon, ..., ausmt_id at 12); tf.json and sci.json are dropped rather than left at
+  // id, survey, lat, lon, ..., ausmt_id at 12); the curves and sci.json are dropped rather than left at
   // five rows, so the synthetic corpus is a clean phase-1-only boot like the two failure windows above.
   const _bigCat = _cat.slice();
   for (let i = _cat.length; i < 1200; i++) {
@@ -4094,6 +4115,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   }
   const _bigMap = Object.assign({}, DATAMAP, { "data/catalogue.json": _bigCat });
   delete _bigMap["data/tf.json"]; delete _bigMap["data/sci.json"];
+  Object.keys(_bigMap).filter(k => /^data\/tf\//.test(k)).forEach(k => delete _bigMap[k]);
   const bigWin = await bootFreshWindow(_bigMap);
   const bigA = bigWin.__api, bigSlot = bigWin.document.getElementById("countSlot");
   ok(bigA.nST() === 1200, "the 1,200-station window did not build; got " + bigA.nST() + " stations");
@@ -5733,7 +5755,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "CLEANUP-WAVE recently-added-single-strip+30day-build-window (rail #recentSide deleted, leak fixed) + facet-swap(Open-licence+data-type chips, DOI/tipper gone)+survey-search(name/org/region/blurb) + rail-hidden-on-surveys/collections/detail + drawer-scrim(non-map click-close) + collections-redesign(one-rich-card+full-abstract+two-column-hero, intro/collnote deleted), " +
     "CARD-POLISH one-attribution-box(single .attn, names ORCID/ROR-linked in place, text == attributionText) + contributors-above-Downloads + lineage software(station-level-wins/survey-fallback/no-invented-version, node == prov row) + AusMT-Provenance-title + formats(served-only, no ticks/(pipeline), embargoed claims nothing) + publication-node-from-pubs(short cite + N-more, no fabricated et al., none-recorded when empty), " +
     "DRAWER-POLISH slot-alias(`entire` fills Collection: 2-of-6 + six tiles + no orphan) + collision-rule(exact `collection` wins the slot, alias survives as an extra, count tallies the slot) + 'Data at every level' head + LINKCSS accent rule SELECTS all three grid link sites incl. :visited, muted state text excluded, " +
-    "THREDDS ts_access.json phase-2(ten-fetch boot + held-with-the-heavies + unknown-vs-empty + absence-is-not-failure) + " +
+    "THREDDS ts_access.json phase-2(nine-fetch boot + held-with-the-heavies + unknown-vs-empty + absence-is-not-failure) + " +
     "ONE Availability group(#dlOnly/#qSeg gone, tfAvail keeps the s.ediAvail predicate, four routable level buttons and no level2, " +
     "in-flight disabled+aria-busy+inert-filter, settled-empty says 'publishes no download index' and never 'could not be loaded', " +
     "per-level count+size+gloss summed from ts_access and NOT from the download manifest, multi-select union filter, embargoed station unreachable by any level) + " +
@@ -5761,7 +5783,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     w2.AUSMT_CONFIG = { short_name: "AusMT" };
     const order2 = [];
     let releaseCat = null;
-    const HEAVY2 = /tf\.json|sci\.json|manifest\.json|ts_access\.json/;
+    const HEAVY2 = /tf\.json|tf\/|sci\.json|manifest\.json|ts_access\.json/;
     w2.fetch = url => {
       order2.push(String(url));
       const body = DATAMAP[url] ? { ok: true, json: () => Promise.resolve(DATAMAP[url]) } : { ok: false };
@@ -5778,7 +5800,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     releaseCat();
     await bootP;
     await w2.__api.hydrationDone();
-    ok(order2.some(u => /tf\.json/.test(u)) && order2.some(u => /ts_access\.json/.test(u)),
+    ok(order2.some(u => /sci\.json/.test(u)) && order2.some(u => /ts_access\.json/.test(u)),
       "hydration-order: hydration must still run to completion once phase 1 settles, got " + order2.join(","));
   }
 

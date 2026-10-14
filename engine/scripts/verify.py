@@ -3,7 +3,8 @@
 
   1. the test suite (pytest)
   2. a full build with mt_metadata (the sole extractor since the regex retirement)
-  3. mtcat.json schema validation for the build, the manifest and build_report checks, the
+  3. mtcat.json schema validation for the build, the manifest, curve-file and build_report checks
+     (every catalogue survey has its tf/<slug>.json with one row per catalogue row), the
      survey-metadata gate (every products/<slug>/survey-metadata.json validates with format checking,
      the slug set equals mtcat's surveys[], and the build skipped no survey) and the station gate
      (every products/<slug>/<station>/station.json validates, holds the semantic layer beyond JSON
@@ -243,6 +244,59 @@ def _check_mtcat_and_manifest(cat, mtc, man, base_dir: Path, jsonschema, schema,
             man_ok = "integrity-OK (schema unchecked)"
     lines.append(f"   manifest: {len(man.get('files', []))} files + {len(man.get('bundles', []))} bundles "
                  f"-> {man_ok}")
+    return ok, lines
+
+
+def _check_curves(base_dir: Path, cat, man):
+    """The per-survey curve-file gate. Every survey the catalogue holds has the file its surveys.json
+    entry names (tf_url, always tf/<slug>.json), the file holds exactly as many rows as the survey has
+    catalogue rows, each row is TF-contract wide, and manifest.json's curves[] lists exactly these files
+    with sizes and sha256 recomputed from the bytes. The portal maps a file's rows onto the survey's
+    catalogue rows by position, so a short or long file would plot one station's curves on another.
+    Returns (ok, lines)."""
+    from _contract import CATALOGUE_COLUMNS, TF_COLUMNS  # noqa: PLC0415
+    p = base_dir / "surveys.json"
+    smeta = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    col = CATALOGUE_COLUMNS.index("survey")
+    counts: dict = {}
+    for row in cat:
+        counts[row[col]] = counts.get(row[col], 0) + 1
+    problems, files = [], set()
+    for label, n in counts.items():
+        m = smeta.get(label) or {}
+        want = f"tf/{m.get('slug')}.json"
+        if m.get("tf_url") != want:
+            problems.append(f"{label!r} names {m.get('tf_url')!r}, not {want!r}")
+            continue
+        files.add(want)
+        f = base_dir / want
+        if not f.is_file():
+            problems.append(f"{want} missing")
+            continue
+        try:
+            rows = json.loads(f.read_text(encoding="utf-8"))
+        except ValueError:
+            problems.append(f"{want} is not JSON")
+            continue
+        if not isinstance(rows, list) or len(rows) != n:
+            problems.append(f"{want} holds {len(rows) if isinstance(rows, list) else 'no'} rows for "
+                            f"{n} catalogue rows")
+        elif any(len(r) != len(TF_COLUMNS) for r in rows):
+            problems.append(f"{want} has a row that is not {len(TF_COLUMNS)} columns wide")
+    listed = {r.get("url"): r for r in man.get("curves", [])}
+    if set(listed) != files:
+        problems.append(f"manifest curves[] lists {sorted(set(listed) - files)[:3]} extra and "
+                        f"{sorted(files - set(listed))[:3]} missing")
+    for url in sorted(files & set(listed)):
+        f = base_dir / url
+        if f.is_file():
+            data = f.read_bytes()
+            if (listed[url].get("size") != len(data)
+                    or listed[url].get("sha256") != hashlib.sha256(data).hexdigest()):
+                problems.append(f"{url} does not match its manifest size/sha256")
+    ok = not problems
+    lines = [f"   curves: {len(files)} survey file(s) for {len(counts)} catalogue survey(s) -> "
+             + ("PASS" if ok else f"FAIL ({'; '.join(problems[:3])})")]
     return ok, lines
 
 
@@ -617,6 +671,10 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None,
                                           station_label="stations")
     for ln in lines:
         print(ln)
+    cv_ok, cv_lines = _check_curves(data_dir, cat, man)
+    for ln in cv_lines:
+        print(ln)
+    ok &= cv_ok
     rep_ok, rep_lines = _check_build_report(rep, man, jsonschema, rep_schema)
     for ln in rep_lines:
         print(ln)
@@ -732,6 +790,10 @@ def main(argv=None):
     ok &= check_ok and rc == 0
     for ln in lines:
         print(ln)
+    cv_ok, cv_lines = _check_curves(out, cat, man)
+    for ln in cv_lines:
+        print(ln)
+    ok &= cv_ok
     rep_ok, rep_lines = _check_build_report(rep, man, jsonschema, rep_schema)
     for ln in rep_lines:
         print(ln)

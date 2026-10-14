@@ -2331,7 +2331,8 @@ columns.json regenerates the indices and no consumer can silently lag. Legend (i
   CAT[i]  r[]  = [0 id,1 survey,2 lat,3 lon,4 pmin,5 pmax,6 nper,7 comps,8 type,9 region,
                   10 file,11 coord_flag,12 ausmt_id,13 edi_available,14 sha256,15 site_name]
   SCI[i]  sc[] = [0 q,1 qb,2 rr,3 sw,4 alg,5 dim,6 p3d,7 gd,8 ellip,9 skew,10 mre,11 decades]
-  TFD[i]  t[]  = [0 periods,1 rho_xy,2 rho_yx,3 phs_xy,4 phs_yx_adj,5 tip_mag,6 pt_min,7 pt_max,
+  TFD[i]  t[]  = (filled one survey at a time by loadSurveyCurves, below)
+                 [0 periods,1 rho_xy,2 rho_yx,3 phs_xy,4 phs_yx_adj,5 tip_mag,6 pt_min,7 pt_max,
                   8 pt_az,9 pt_beta,10 rho_xy_err,11 rho_yx_err,12 phs_xy_err,13 phs_yx_err,
                   14 tzx_re,15 tzx_im,16 tzy_re,17 tzy_im]   (18 columns; tip_mag kept for compat).
 To change a column: edit contract/columns.json, run `python contract/generate.py`, then data-files.md. APPEND, never reorder.
@@ -2356,10 +2357,11 @@ supporting browsers throw on an unknown one.
 Everything the map dots, the filter rail and the survey/collection views need, and nothing else:
 catalogue.json (~320KB, REQUIRED: it IS the dots) + surveys.json (REQUIRED: the per-survey metadata
 every card and drawer header reads) + the four SMALL optionals. All SIX are issued together.
-The split is what keeps first paint off the big product: tf.json is 3.2MB raw / ~1MB gzipped, ~3.1s on
-a live load, so awaiting it in the same Promise.all would hold the dots behind it, and issuing the five
-optionals sequentially would stack five round trips on top of that wait. The dots must not wait on the
-transfer functions, and the optionals must not wait on each other.
+The transfer-function curves are in neither phase: each survey's curve file is fetched when a station
+of that survey first opens (loadSurveyCurves, below). The whole-corpus tf.json was 16,405,514 bytes
+encoded (47,442,001 decoded) on a first visit measured on the live site, and the dots must not wait on
+curves no reader has asked for. Issuing the optionals sequentially would stack round trips on the
+first paint, so the optionals must not wait on each other either.
 ```
 
 #### build.json (build_id/engine_commit/source_commit/generated), optional ...
@@ -2383,20 +2385,21 @@ case) => {} => no badges. Same tolerant-of-absence pattern as collections/build 
 
 ```text
 ---- PHASE 2: background hydration --------------------------------------------------------------
-The heavy products, issued AFTER phase 1 settles (they would otherwise contend with the catalogue
-for the same connection) and awaited by NOBODY on the first-paint path.
-Each assigns its global and settles its own gate, so a consumer waits only for the product it actually
-reads (a station drawer's plots need tf; the Files tab needs the manifest; neither needs the other).
-Returns the four gates so a caller (and the headless drivers) can observe hydration.
+The products every view may read, issued AFTER phase 1 settles (they would otherwise contend with the
+catalogue for the same connection) and awaited by NOBODY on the first-paint path: sci.json, the
+manifest and ts_access.json. Each assigns its global and settles its own gate, so a consumer waits only
+for the product it actually reads (the Files tab needs the manifest; the processing rows need sci).
+Returns the three gates so a caller (and the headless drivers) can observe hydration. The curves are
+not here: they are per survey and on demand.
 ```
 
-#### A tf/sci FAILURE is not absence
+#### A sci FAILURE is not absence
 
 ```text
-A tf/sci FAILURE is not absence. First paint must not depend on them, so a failure is recorded
-as "failed" and the products fall back to EMPTY arrays; the empty array keeps every positional deref
+A sci FAILURE is not absence. First paint must not depend on it, so a failure is recorded
+as "failed" and the product falls back to an EMPTY array; the empty array keeps every positional deref
 safe, and hydrFailed() is what the consumers render, so a broken build is never mistaken for a station
-that genuinely has no curves.
+that genuinely has no processing record. A survey's curve file follows the same rule under its own gate.
 ```
 
 #### ts_access.json is OPTIONAL by contract - the engine writes it only when ...
@@ -2407,6 +2410,25 @@ register projects at least one open, verified route, so a 404 IS the honest abse
 is no "failed" state to report. The fallback is {} rather than null so every consumer reads one
 shape, and the difference the Availability controls render is TSACC===null (still in flight)
 against an empty object (this deployment publishes no download index).
+```
+
+#### ---- the response curves, one survey at a time ...
+
+```text
+---- the response curves, one survey at a time -------------------------------------------------
+A survey's curve file (its surveys.json entry names it in tf_url, always tf/<slug>.json) holds that
+survey's tf rows in catalogue order: row k belongs to the survey's k-th station in catalogue order. The
+station drawer asks for it (loadSurveyCurves(slug)) the first time a station of that survey opens, and
+places row k at that station's index in TFD, so tfRow(i) reads exactly as it did when TFD was the whole
+tf.json. One request per survey per visit: the Promise is memoised per slug, a second station of the
+same survey resolves from TFD at once, and a failed load stays failed (the drawer says so rather than
+retrying on every open).
+
+Each survey has its own gate, HYDR["tf:<slug>"], set to "pending" the moment the load starts, so
+hydrGate renders the same loading and could-not-load blocks it renders for every other late product.
+A file whose length differs from the survey's station count is a failure, never a partial load: there
+is no key on the wire, so a short file would put one station's curves on another. A survey with no
+tf_url fails the same way. The request carries no low-priority hint, because a reader is waiting on it.
 ```
 
 #### ---- download manifest resolver: the distribution backbone ...
@@ -2615,8 +2637,9 @@ markup (the strike rose) owns it.
 
 ```text
 ---- two-phase boot: the loading surfaces ------------------------------------------------------
-The drawer is the densest consumer of the PHASE 2 products (tf.json -> the response curves; sci.json ->
-the processing/screening rows; manifest.json -> every served-artifact row, badge and download tile), and
+The drawer is the densest consumer of the late products (a survey's curve file -> the response curves;
+sci.json -> the processing/screening rows; manifest.json -> every served-artifact row, badge and
+download tile), and
 almost every one of those surfaces has an HONEST-ABSENCE rendering: "not currently available", "not
 recorded", "not stated in EDI", "none currently served", "not evaluated". Each of those is a CLAIM about
 the corpus. None of them may be shown for a product that is merely still in flight, so every such site
@@ -3112,14 +3135,19 @@ only for an open-access station: without curves openStationModal has no panels t
 nothing, so a control there would be a dead affordance over the access panel.
 ```
 
-#### Two-phase boot: the curves live in tf.json (PHASE 2)
+#### The curves arrive with the survey's curve file; the open drawer ...
 
 ```text
-Two-phase boot: the curves live in tf.json (PHASE 2). An empty TF row renders NO plot at all (plotBlock
-guards on an empty series), so painting the plots pre-hydration would show an open-access station as
-having no response functions, the loudest absence claim in the drawer. While tf is in flight the panel
-carries a loading state instead, and the expand control is withheld with it (openStationModal would find
-no panels and open an empty overlay). TF_READY re-renders this section with the curves in place.
+The curves arrive with the survey's curve file; the open drawer re-renders once it settles. Opening an
+open-access station starts loadSurveyCurves for its survey unless that survey's gate has already
+settled. An empty TF row renders NO plot at all (plotBlock guards on an empty series), so painting the
+plots before the file lands would show an open-access station as having no response functions, the
+loudest absence claim in the drawer. While the file is in flight the panel carries a loading state
+instead, and the expand control is withheld with it (openStationModal would find no panels and open an
+empty overlay). When the load settles the drawer re-renders in place, but only if the station it is
+still showing belongs to that survey; a re-render (opts.rehydrate) never starts a load, so a failed
+file cannot loop. A station of a survey that is not open access fetches nothing: its panel is the
+access panel, and the engine empties those curves anyway.
 ```
 
 #### NO SCREENING SURFACE RENDERS in the drawer: the automated indicators ...
@@ -4245,7 +4273,7 @@ product, and it returns before the index is consulted.
 Level 2 (Transfer Functions): a station whose transfer function AusMT serves, read from the
 catalogue. The station has periods (catalogue n_periods above zero), and its survey's access level
 is open (drawer.js isOpenAccess over surveys.json), which is the build's own display gate: for an
-embargoed or metadata-only survey the engine empties the station's tf.json curves and withholds its
+embargoed or metadata-only survey the engine empties the station's curves and withholds its
 derived products, so the transfer function is not served even though the station stays in the
 catalogue. This is deliberately NOT the "Downloadable here" chip (s.ediAvail): an open survey under
 a non-redistributable licence still has its transfer functions plotted and screened here, it just
@@ -4807,9 +4835,9 @@ the honest answer - so there is no failure branch to mirror sci's.
 #### Hydration starts only AFTER phase 1 has its bytes: the phase-2 products ...
 
 ```text
-Hydration starts only AFTER phase 1 has its bytes: the phase-2 products are large (tf.json
-alone is most of the page weight) and share one connection with the catalogue the dots need,
-so issuing them earlier delays the exact first paint the two-phase split exists to protect.
+Hydration starts only AFTER phase 1 has its bytes: the phase-2 products share one connection
+with the catalogue the dots need, so issuing them earlier delays the exact first paint the
+two-phase split exists to protect.
 Nothing on the first-paint path awaits these gates, and no consumer can read them before
 runInit attaches the UI below, so the later start is invisible everywhere but the network.
 ```
@@ -5321,7 +5349,7 @@ tests/surveys_hub.test.js drives the driver in jsdom against a fixture that mirr
 
 ```text
 Pure SVG transfer-function plotters (no data/DOM dependency): ρ, φ, phase tensor, induction arrows.
-Each plotter takes a TF entry `t` (one per station, from tf.json). Columns are POSITIONAL - see
+Each plotter takes a TF entry `t` (one per station, from its survey's curve file). Columns are POSITIONAL - see
 the legend in data.js / docs developer/data-files.md (TF_COLUMNS):
   t[T.periods] periods · t[T.rho_xy] ρ_xy · t[T.rho_yx] ρ_yx · t[T.phs_xy] φ_xy · t[T.phs_yx_adj] φ_yx(+180°) · t[T.tip_mag] |T| ·
   t[T.pt_min] pt_min · t[T.pt_max] pt_max · t[T.pt_az] pt_az · t[T.pt_beta] pt_β ·
@@ -5459,19 +5487,22 @@ arrive here raw (a related identifier of type URL), so this branch is an allowli
 
 ```text
 ---- two-phase boot: background hydration gates ------------------------------------------------
-The boot paints from the SMALL products (catalogue + surveys, plus the four small optionals). The heavy
-ones (tf.json ~3.2MB raw, sci.json and the download manifest) stream in AFTERWARDS, so between first
-paint and their arrival TFD/SCI/MANIFEST are simply NOT LOADED YET. That is a THIRD state, distinct both
+The boot paints from the SMALL products (catalogue + surveys, plus the four small optionals). The
+rest (sci.json, the download manifest, and each survey's curve file when a station of it opens) arrive
+AFTERWARDS, so between first paint and their arrival SCI/MANIFEST and a survey's rows of TFD are
+simply NOT LOADED YET. That is a THIRD state, distinct both
 from "loaded and empty" and from "this deployment does not serve it", and the honesty rule of this
 codebase forbids collapsing it into either: no consumer may render "not recorded" / "not currently
 available" / "not evaluated" / "none currently served" for a product that is merely still in flight.
   HYDR[k] === "ready" -> assigned; render exactly as before
   HYDR[k] === "pending" -> in flight; render an unobtrusive LOADING state, NEVER absence
   HYDR[k] === "failed" -> the fetch resolved not-ok / unparseable; say THAT, never dress it as absence
-TF_READY / SCI_READY / MANIFEST_READY are the awaitable gates for consumers that cannot degrade (the
-exports read TFD/SCI; the bulk EDI zip reads the manifest). The defaults are the SETTLED values so every
-harness that assigns TFD/SCI/MANIFEST directly (the coord-access and bundle-tile drivers do) behaves
-byte-for-byte as it did before phasing: only a boot that actually starts phase 2 flips them to pending.
+SCI_READY / MANIFEST_READY are the awaitable gates for consumers that cannot degrade (the exports read
+SCI; the bulk EDI zip reads the manifest), and loadSurveyCurves(slug) returns the one for a survey's
+curves. A survey's curve gate is HYDR["tf:<slug>"], absent until a station of the survey opens. The
+defaults are the SETTLED values so every harness that assigns SCI/MANIFEST directly (the coord-access
+and bundle-tile drivers do) behaves as it did before phasing: only a boot that actually starts phase 2
+flips them to pending.
 ```
 
 #### A product is USABLE only when it is loaded
@@ -5483,7 +5514,7 @@ line or a could-not-load line) distinguishes them; a surface that cannot (a filt
 fill, a property written into an exported file) must gate on THIS, because a failed sci.json leaves s.q
 undefined for every station exactly as a pending one does. Gating those on hydrating() alone would resume
 claiming "fails the threshold" / "not evaluated" / "remote_ref: false" the instant the fetch errored,
-which is the same dishonesty one state later. Phase 2 made a tf/sci failure survivable (before the split
+which is the same dishonesty one state later. Phase 2 made a sci failure survivable (before the split
 it was fatal and the portal blanked), so this state is reachable and has to be answered here.
 ```
 
