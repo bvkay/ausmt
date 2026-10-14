@@ -125,10 +125,11 @@ def test_ship_filter_carries_the_compressed_frontdoor_family(tmp_path):
         f"argv={argv!r}")
 
 
-# The busiest day the front door has logged rolled its 10 MB file 7 times. roll_keep_for caps a
-# roll's age at 7 days, so a roll_keep of 7 x 7 makes the age cap the binding limit: a pull outage of
-# up to a week loses no roll even at that rate.
-_BUSIEST_ROLLS_PER_DAY = 7
+# The daily roll rate roll_keep is sized for: a bound, not a measured peak, since the busiest day's
+# count is unknown and at least 5 (deploy/frontdoor/README.md, "Log retention and the pull cadence").
+# roll_keep_for caps a roll's age at 7 days, so a roll_keep of 7 x 7 makes the age cap the binding
+# limit at or below this rate: a pull outage of up to a week loses no roll.
+_BOUND_ROLLS_PER_DAY = 7
 
 
 def _directive(block: str, name: str) -> str:
@@ -137,18 +138,18 @@ def _directive(block: str, name: str) -> str:
     return m.group(1)
 
 
-def test_the_frontdoor_keeps_every_roll_its_age_cap_allows_at_the_busiest_rate():
+def test_the_frontdoor_keeps_every_roll_its_age_cap_allows_at_the_bounding_rate():
     """RETENTION-DEPTH PIN. Rolls the box has not pulled yet are deleted by roll_keep before the age
     cap when the count runs out first, and those requests never reach the fold. FAILS IF roll_keep
-    holds fewer rolls than the busiest observed day produces over the roll_keep_for window, or if the
+    holds fewer rolls than the bounding daily rate produces over the roll_keep_for window, or if the
     window or the roll size changes without the depth being recomputed."""
     block = _log_output_block(_FD_CADDY)
     assert _directive(block, "roll_size") == "10mb"
     hours = _directive(block, "roll_keep_for")
     assert hours.endswith("h"), hours
     days = int(hours[:-1]) / 24
-    assert int(_directive(block, "roll_keep")) >= _BUSIEST_ROLLS_PER_DAY * days, (
-        f"roll_keep must hold {_BUSIEST_ROLLS_PER_DAY} rolls a day for {days:g} days")
+    assert int(_directive(block, "roll_keep")) >= _BOUND_ROLLS_PER_DAY * days, (
+        f"roll_keep must hold {_BOUND_ROLLS_PER_DAY} rolls a day for {days:g} days")
 
 
 def _rendered_log_block(tmp_path: Path, env_lines: list[str]) -> str:

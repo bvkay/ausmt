@@ -96,8 +96,14 @@ at-edge guarantees:
   **no `trusted_proxies`**: `client_ip` is the genuine remote peer, which `ip_mask` truncates (/24,
   /48) at write time. A client-sent `X-Forwarded-For` (or `X-Real-IP`/`Forwarded`) is **deleted** so a
   caller cannot smuggle a full address into the log; `Cookie`/`Authorization`/`Set-Cookie`/`Referer`
-  are deleted as before. A full IP never touches disk. VPS-side retention: rotated, 7 days
-  (`roll_keep_for 168h`) — a short debugging tail.
+  are deleted as before. A full IP never touches disk. VPS-side retention: rotated at 10 MB and kept 7
+  days (`roll_keep_for 168h`) as a short debugging tail, at most 49 rolls (`roll_keep 49`). 49 is 7
+  rolls a day for the 168-hour window, a bound and not a measured peak. The handover of 2026-10-14
+  (`AusMT_2026/HANDOVER-2026-10-14-NECTAR-CUTOVER-AND-HOUSE-STYLE.md`, "Analytics") records that at
+  `roll_keep 5` with a daily pull, exactly five rolls reached the box in 7 of the 24 daily windows
+  from 20 September to 13 October, five being the cap, so the busiest day's count is unknown and at
+  least 5. The owner should recount the daily rate from the roll timestamps in `/var/log/caddy` on
+  ausmt-serve and raise the depth if a day exceeds 7.
 * The front-door log is written to a **distinct** filename (`access-frontdoor.json`) and **shipped over
   the tailnet to the box** (D5) into `$AUSMT_DATA_DIR/logs/caddy`, where the C45 aggregator's
   `access*.json` glob folds it beside the box's own log — no aggregator change, no new metric.

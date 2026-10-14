@@ -41,10 +41,18 @@ rollback): `maintainer/C47-PublicBridge.md`. Step-by-step owner procedure: **`RU
 
 The front door rolls its masked access log at 10 MB, keeps at most 49 rolls and none older than 7
 days (`roll_size`, `roll_keep`, `roll_keep_for` in the `Caddyfile`). The box pulls the rolls every
-hour (`ausmt-frontdoor-logs.timer`, `OnCalendar=hourly`). The busiest day counted in the
-post-cutover review of 2026-10-14 rolled the file 7 times (busy days rolled it 5 to 7 times while
-the box pulled once a day), and 7 rolls a day for 7 days is 49, so at that rate a roll is deleted
-for age before it is deleted for count, and a pull outage of up to a week loses nothing.
+hour (`ausmt-frontdoor-logs.timer`, `OnCalendar=hourly`).
+
+The busiest day's roll count is not known. With `roll_keep 5` and a once-a-day pull, exactly five
+rolls reached the box in 7 of the 24 daily windows from 20 September to 13 October 2026, and five
+is the most a window could deliver, so on those days the file rolled at least 5 times and any
+further rolls were deleted unseen (`AusMT_2026/HANDOVER-2026-10-14-NECTAR-CUTOVER-AND-HOUSE-STYLE.md`,
+"Analytics"). The depth of 49 is 7 rolls a day for the 168-hour age window: a bound, not a measured
+peak. At or below 7 rolls a day a roll is deleted for age before it is deleted for count, and a
+pull outage of up to a week loses nothing; above it, an outage of a week loses the oldest rolls.
+The owner should recount the daily rate from the roll timestamps in `/var/log/caddy` on
+ausmt-serve (each rolled file's name carries the time it rolled) and raise `roll_keep` if any day
+exceeds 7.
 `install-frontdoor.sh` renders the roll block unchanged, so every host that runs it, ausmt-serve
 through `deploy/nectar/provision-serve.sh` included, picks up the depth on its next deploy pass.
 

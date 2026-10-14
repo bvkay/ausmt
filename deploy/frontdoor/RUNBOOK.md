@@ -243,6 +243,11 @@ sudo systemctl enable --now ausmt-frontdoor-logs.timer
 ```
 (You can run it once now to test only after the front door is serving — step 9.4.)
 
+The front door keeps 49 rolls (`roll_keep`), 7 rolls a day for the 168-hour age window. That rate is
+a bound, not a measurement: the busiest day's count is unknown and at least 5 (`README.md`, "Log
+retention and the pull cadence"). Recount it from the roll timestamps in `/var/log/caddy` on
+ausmt-serve and raise `roll_keep` if a day exceeds 7.
+
 ---
 
 ## 6. Deploy the front-door stack on the VPS
