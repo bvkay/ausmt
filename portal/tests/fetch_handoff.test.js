@@ -70,6 +70,24 @@ ok(JSON.stringify(built.doc) === JSON.stringify(FIX.document),
    (JSON.stringify(built.doc) === JSON.stringify(FIX.document) ? "" : "\n      got: " + JSON.stringify(built.doc)));
 ok(built.files === FIX.files && built.bytes === FIX.bytes,
    "the SPA's file count and byte total equal the fixture's, got " + built.files + " / " + built.bytes);
+// The route vocabulary outlives the offer. No control offers level1_netcdf, but a register row at that
+// level still routes, so the every-level document must carry it, after level1_mth5, exactly as the
+// engine's emitter (which iterates its own level table) writes it for the same register; a list
+// narrowed to that level still finds it.
+const NC_AID = FIX.survey.ausmt_ids[2];
+vm.runInContext("TSACC[" + JSON.stringify(NC_AID) + "].level1_netcdf={bytes:5000,url_path:'my80/x/EXAMPLE03.nc'};", ctx);
+const withNc = S.tsHandoffDocument(ST, null);
+const ncRow = withNc.doc.stations.find(r => r.ausmt_id === NC_AID);
+ok(ncRow && JSON.stringify(ncRow.levels.map(l => l.level)) === JSON.stringify(["level1_mth5", "level1_netcdf"]),
+   "a level1_netcdf route reaches the every-level document after level1_mth5, got " +
+   JSON.stringify(ncRow && ncRow.levels.map(l => l.level)));
+ok(withNc.files === FIX.files + 1 && withNc.bytes === FIX.bytes + 5000,
+   "the NetCDF row counts in the document's own totals, got " + withNc.files + " / " + withNc.bytes);
+ok(ncRow && ncRow.levels[1].url === FIX.base + "/go/ts/" + FIX.survey.slug + "/EXAMPLE03/level1_netcdf",
+   "the NetCDF row's url is its /go/ts route");
+ok(S.tsHandoffDocument(ST, ["level1_netcdf"]).files === 1,
+   "a list narrowed to level1_netcdf finds the one routed file");
+vm.runInContext("delete TSACC[" + JSON.stringify(NC_AID) + "].level1_netcdf;", ctx);
 ok(S.TS_HANDOFF_NOTE === FIX.document.note, "exports.js TS_HANDOFF_NOTE is the fixture note");
 ok(S.TS_COLLECTION.doi === FIX.document.time_series_collection.doi &&
    S.TS_COLLECTION.name === FIX.document.time_series_collection.name,

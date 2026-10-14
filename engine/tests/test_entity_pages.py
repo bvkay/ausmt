@@ -804,8 +804,11 @@ def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide()
     "L0 3.2 GB &#183; L0 41 KB" with nothing to tell the reader which was which. level1_netcdf, which
     ts_access.json emits and the SPA's own TS_LEVELS names, had no panel at all.
 
-    FAILS IF a level loses its portal name, if two levels share a badge, or if level1_netcdf goes
-    back to rendering nothing for a register that carries it."""
+    FAILS IF a level loses its portal name, if a name leaves the data-level bracket scheme the
+    portal's chooser and Download rows print, if two levels share a badge, or if level1_netcdf goes
+    back to rendering nothing for a register that carries it. The portal offers no NetCDF control,
+    but the route vocabulary still admits the level, so a page whose register carries it still
+    names it, in the same scheme."""
     pages = _pages_module()
     docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey_id": "s",
              "location": {"lat": -30.0, "lon": 137.0},
@@ -818,8 +821,18 @@ def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide()
                              smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
                              station_docs=docs, bundle_rows=[], ts_access=ts,
                              base="https://x.example")
-    for name in ("Packed raw", "Level 0", "Level 1 MTH5", "Level 1 NetCDF"):
+    for name in ("Packed raw time series", "Level 0 (Edited Time Series)",
+                 "Level 1 MTH5 (Transformed Time Series)", "Level 1 NetCDF (Transformed Time Series)"):
         assert f'<span class="lvlname">{name}</span>' in page, f"{name} must render its own panel"
+    assert re.findall(r'<span class="lvlname">([^<]+)</span>', page) == [
+        "Packed raw time series", "Level 0 (Edited Time Series)",
+        "Level 1 MTH5 (Transformed Time Series)", "Level 1 NetCDF (Transformed Time Series)"], \
+        "the panels follow the register's level order, one per level"
+    doc = pages.fetch_handoff_document(slug="s", label="S", smeta={}, station_docs=docs,
+                                       ts_access=ts, base="https://x.example")
+    assert [lvl["level"] for lvl in doc["stations"][0]["levels"]] == [
+        "raw_packed", "level0", "level1_mth5", "level1_netcdf"], \
+        "the pointers document carries every routed level, the one no portal control offers included"
     badges = re.findall(r'<span class="lvlbadge">([^<]+)</span>', page)
     assert len(badges) == 4, badges
     assert len(set(badges)) == len(badges), f"two levels share a badge: {badges}"
@@ -1217,9 +1230,8 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
     """No placeholder panels: a survey with raw archives gets the packed-raw card and
     per-station sizes; levels the register does not carry render nothing at all.
 
-    Level names and badges follow portal/src/state.js TS_LEVELS as of the download-cards commit
-    (LANE-CONTRACT-PAGE-HIERARCHY.md), so "Raw time series" is now "Packed raw", "MTH5 time
-    series" is "Level 1 MTH5", and the L0 badge is not shared by two levels."""
+    Level names and badges follow portal/src/state.js TS_LEVELS ("Packed raw time series",
+    "Level 1 MTH5 (Transformed Time Series)"), and the L0 badge is not shared by two levels."""
     pages = _pages_module()
     docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey_id": "s",
              "location": {"lat": -30.0, "lon": 137.0},
@@ -1230,7 +1242,7 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
                              smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
                              station_docs=docs, bundle_rows=[], ts_access=ts,
                              base="https://x.example")
-    assert "Packed raw" in page and "1 of 1 stations" in page
+    assert '<span class="lvlname">Packed raw time series</span>' in page and "1 of 1 stations" in page
     assert "Raw 3.2 GB" in page, "the table cell states the level and the real size"
     # The download panel once sent a reader standing on THIS survey's page to the bare map with
     # nothing selected (34 occurrences across 17 pages). It keeps the survey they were reading.
@@ -1244,7 +1256,8 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
                               station_docs=docs, bundle_rows=[],
                               ts_access={"au.s.A1": {"level1_mth5": {"bytes": 5e8, "url_path": "y"}}},
                               base="https://x.example")
-    assert "Level 1 MTH5" in page2 and '<span class="lvlbadge">L1 MTH5</span>' in page2
+    assert '<span class="lvlname">Level 1 MTH5 (Transformed Time Series)</span>' in page2 \
+        and '<span class="lvlbadge">L1 MTH5</span>' in page2
 
 
 def test_collection_jsonld_rolls_up_member_licence_creators_and_years():

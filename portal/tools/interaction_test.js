@@ -710,19 +710,29 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // level filter would hide every station over them. (Colour-by is retired; the Data
   // available dropdown and the Download block's time-series rows are the gated surfaces.)
   const _tsBtns = () => [...doc.getElementById("tsSeg").querySelectorAll("button")];
-  ok(_tsBtns().length === 4,
-    "one Download row per ROUTABLE level token (level2 opens nothing), got " + _tsBtns().length);
+  ok(_tsBtns().length === 3,
+    "one Download row per OFFERED level token (level2 opens nothing; level1_netcdf routes but no control offers it), got " + _tsBtns().length);
   ok(_tsBtns().every(b => b.disabled),
     "honesty: the time-series Download rows must be disabled while ts_access.json is in flight");
   ok(_tsBtns()[0].getAttribute("aria-busy") === "true",
     "honesty: an in-flight hand-off index makes the rows aria-busy, not merely inert");
-  const _availLevelOpts = () => [...doc.getElementById("availSel").querySelectorAll("option")].filter(o => o.value && o.value !== "tf");
-  ok(_availLevelOpts().length === 4 && _availLevelOpts().every(o => o.disabled),
-    "honesty: the Data available level options must be disabled while ts_access.json is in flight");
+  const _availOpt = v => doc.getElementById("availSel").querySelector('option[value="' + v + '"]');
+  const _availTsOpts = () => ["raw_packed", "level0", "level1_mth5"].map(_availOpt);
+  ok(_availTsOpts().every(o => o && o.disabled),
+    "honesty: the Data available time-series options must be disabled while ts_access.json is in flight");
   A.setAvail("raw_packed");
   A.refresh();
   ok(A.nVisCount() === 5,
     "honesty: the level filter must be INERT while ts_access.json is in flight; emptying the map would read as 'no station publishes this level', got " + A.nVisCount());
+  // Level 2 reads the CATALOGUE (catalogue.json + surveys.json, both phase 1), so it is live while the
+  // index is still in flight: it keeps the stations whose transfer functions AusMT serves, which drops
+  // only the embargoed Delta station D1, whose curves the engine withholds.
+  ok(_availOpt("level2") && !_availOpt("level2").disabled,
+    "Level 2 rides the catalogue and must be live from first paint, never disabled on the hand-off index");
+  A.setAvail("level2");
+  A.refresh();
+  ok(A.visIds().sort().join() === "A1,A2,B1,G1",
+    "Level 2 must keep exactly the stations with a served transfer function before the index lands, got " + JSON.stringify(A.visIds()));
   A.setAvail("");
   A.refresh();
   A.setQMin(4.5);                                    // stricter than every fixture station's q (4.0)
@@ -2514,6 +2524,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the time-series level filter is a VIEWING control and lives in Browse, beside data type");
   ok([...availSel.options].every(o => o.value !== "tf"),
     "the rail copy of the downloadable-only filter must be removed from #availSel");
+  ok([...availSel.options].every(o => o.value !== "level1_netcdf" && !/NetCDF/.test(o.textContent)),
+    "#availSel offers no NetCDF level: the route table may carry it, the chooser does not");
   const dlChip = () => doc.getElementById("facetChips").querySelector('[data-facet="dl"]');
   A.setView("surveys");
   ok(dlChip(), "a 'Downloadable here' chip must render in the discovery bar");
@@ -2544,12 +2556,17 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.paintDownloadRows(); A.refresh();
   const tsBtn = tok => doc.getElementById("tsSeg").querySelector('button[data-ts="' + tok + '"]');
   const tsMeta = tok => tsBtn(tok).querySelector(".dlmeta").textContent;
-  ok(["raw_packed", "level0", "level1_mth5", "level1_netcdf"].every(t => tsBtn(t)),
-    "D8: the Download block must carry a row for each routable level token");
+  ok(["raw_packed", "level0", "level1_mth5"].every(t => tsBtn(t)),
+    "D8: the Download block must carry a row for each offered level token");
   ok(!tsBtn("level2"), "level_2 holds transfer functions, not time series, and takes no row");
+  ok(!tsBtn("level1_netcdf"), "level1_netcdf still routes, but no control offers it, so it takes no row");
+  ok(JSON.stringify([...doc.getElementById("tsSeg").querySelectorAll("button .pname")].map(n => n.textContent)) ===
+     JSON.stringify(["Packed raw time series", "Level 0 (Edited Time Series)", "Level 1 MTH5 (Transformed Time Series)"]),
+    "the Download rows carry the bracket labels, in render order, got " +
+    JSON.stringify([...doc.getElementById("tsSeg").querySelectorAll("button .pname")].map(n => n.textContent)));
   ok(!tsBtn("raw_packed").disabled && !tsBtn("level1_mth5").disabled,
     "a level the scope can fetch must offer its list once the index has landed");
-  ok(tsBtn("level0").disabled && tsBtn("level1_netcdf").disabled,
+  ok(tsBtn("level0").disabled,
     "a level with nothing in scope must stay inert rather than offering an empty list");
   ok(/2 stations/.test(tsMeta("raw_packed")),
     "each row states its scope station count, got " + JSON.stringify(tsMeta("raw_packed")));
@@ -2579,6 +2596,18 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "a single-select change must REPLACE the level filter, got " + JSON.stringify(A.visIds()));
   ok(!A.visIds().includes("D1"),
     "an embargoed station is absent from the index, so no level can bring it back");
+  // Level 2 is the CATALOGUE answer, not the index's: once the index has landed it still keeps every
+  // station with a served transfer function, routed or not (station G1 publishes no route), and still
+  // drops the embargoed station D1. It is not the Downloadable here chip either: the licence of
+  // station B1 withholds its EDI, but its transfer function is served, so it stays.
+  A.setAvail("level2"); A.refresh();
+  ok(A.visIds().sort().join() === "A1,A2,B1,G1",
+    "Level 2 must keep exactly the stations whose transfer functions AusMT serves, got " + JSON.stringify(A.visIds()));
+  A.setSMETA("Gamma Survey", { access: "metadata_only" }); A.refresh();
+  ok(A.visIds().sort().join() === "A1,A2,B1",
+    "a metadata-only survey's transfer functions are not served, so Level 2 drops its stations, got " + JSON.stringify(A.visIds()));
+  A.setSMETA("Gamma Survey", { access: undefined }); A.refresh();
+  ok(A.visIds().length === 4, "reopening the survey restores its station under Level 2, got " + JSON.stringify(A.visIds()));
   A.setAvail(""); A.refresh();
   ok(A.availValue() === "" && A.visIds().length === 5,
     "clearing Data available must restore the unfiltered map, got " + JSON.stringify(A.visIds()));
@@ -2840,8 +2869,19 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const _hand = [..._files.querySelectorAll('.prod[data-prod="open"][data-tsname]')];
   ok(_hand.length === 1,
     "the JOIN RULE: a verified level must offer its action even where the survey declares no levels, got " + _hand.length);
-  ok(/Level 1 MTH5/.test(_hand[0].textContent) && /488 KB/.test(_hand[0].textContent),
-    "the action row states the level and the archive's size, got " + JSON.stringify(_hand[0].textContent));
+  ok(/Level 1 MTH5 \(Transformed Time Series\)/.test(_hand[0].textContent) && /488 KB/.test(_hand[0].textContent),
+    "the action row states the level by its bracket label and the archive's size, got " + JSON.stringify(_hand[0].textContent));
+  // No NetCDF action: an index entry at level1_netcdf still routes (it reaches the Pointers document),
+  // but no control offers that level, so the Files tab keeps its one Level 1 action.
+  const _ixKeep = A.tsAccess();
+  A.setTsAccess(Object.assign({}, _ixKeep, {"au.beta.B1": Object.assign({}, _ixKeep["au.beta.B1"],
+    { level1_netcdf: { bytes: 300000, url_path: "my80/x/B1.nc" } })}));
+  A.openStationById("au.beta.B1");
+  const _handNc = [..._files.querySelectorAll('.prod[data-prod="open"][data-tsname]')];
+  ok(_handNc.length === 1 && !/NetCDF/.test(_files.querySelector(".filelist").textContent),
+    "a level1_netcdf route must add no action row and no NetCDF label to the Files tab, got " + _handNc.length);
+  A.setTsAccess(_ixKeep);
+  A.openStationById("au.beta.B1");
   ok(/not available/.test(_files.querySelector(".filelist").textContent),
     "sensitivity: the survey-scope 'not available' sub-text is UNCHANGED by the action row; the two " +
     "statements answer different questions and this one is still the curator's");

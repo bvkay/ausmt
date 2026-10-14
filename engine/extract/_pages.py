@@ -64,11 +64,13 @@ _BUNDLE_LABELS = {
 
 # The register's level keys, in the order the portal renders them, with the badge and the name the
 # portal uses (portal/src/state.js TS_LEVELS): one vocabulary across the SPA, the survey page and
-# the station page. Every badge is distinct, so a station cell listing two levels can be read.
-_TS_LEVELS = (("raw_packed", "Raw", "Packed raw"),
-              ("level0", "L0", "Level 0"),
-              ("level1_mth5", "L1 MTH5", "Level 1 MTH5"),
-              ("level1_netcdf", "L1 NetCDF", "Level 1 NetCDF"))
+# the station page. The portal offers no NetCDF control, but a register row at level1_netcdf still
+# routes, so its name follows the same bracket scheme here. Every badge is distinct, so a station
+# cell listing two levels can be read.
+_TS_LEVELS = (("raw_packed", "Raw", "Packed raw time series"),
+              ("level0", "L0", "Level 0 (Edited Time Series)"),
+              ("level1_mth5", "L1 MTH5", "Level 1 MTH5 (Transformed Time Series)"),
+              ("level1_netcdf", "L1 NetCDF", "Level 1 NetCDF (Transformed Time Series)"))
 
 # The time-series collection every hand-off document names, and the note it opens with: the SPA's
 # own values (portal/src/state.js TS_COLLECTION, portal/src/exports.js TS_HANDOFF_NOTE), held equal

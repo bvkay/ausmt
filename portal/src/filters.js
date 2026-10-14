@@ -31,13 +31,17 @@ function passesCore(s){
   // read for their not-included honesty. Its CONTROL is the discovery-bar facet (drawer.js), so the
   // map filters on it wherever a reader sets it. See docs: portal internals, filters.js.
   if(typeof surveyFacetOn==="function"&&surveyFacetOn("dl")&&!s.ediAvail)return false;
-  // Data available: the single-select TIME-SERIES level chooser in Browse. See docs: portal internals,
-  // filters.js.
+  // Data available: the single-select level chooser in Browse. Level 2 reads the catalogue; a time-series
+  // level reads ts_access.json. See docs: portal internals, filters.js.
   const av=document.getElementById("availSel");
+  if(av&&av.value==="level2")return servesTransferFunction(s);
   if(av&&av.value&&typeof tsAccessKnown==="function"&&tsAccessKnown()){
     const lv=tsRoutesFor(s.ausmt_id);
     if(!lv||!lv[av.value])return false;}
   return true;}
+// Level 2 (Transfer Functions): a station whose transfer function AusMT serves, read from the catalogue: it
+// has periods, and its survey's access level is open. See docs: portal internals, filters.js.
+function servesTransferFunction(s){return s.nper>0&&isOpenAccess(SMETA[s.survey]);}
 function passes(s){if(!passesCore(s))return false;
   const q=document.getElementById("find").value.trim().toLowerCase();
   // match station id/file OR survey name, so typing a survey/collection name (which Find invites) keeps that
@@ -252,9 +256,9 @@ document.getElementById("find").addEventListener("keydown",e=>{
 (function(){const find=document.getElementById("find");if(!find)return;
   find.setAttribute("role","combobox");find.setAttribute("aria-autocomplete","list");
   find.setAttribute("aria-controls","findResults");find.setAttribute("aria-expanded","false");})();
-// Data available (Browse): a change re-filters; paintAvailSelect owns the level options' two-phase
-// state (disabled + a reason while ts_access.json is in flight or absent; Any/TF ride the catalogue
-// and are live from first paint).
+// Data available (Browse): a change re-filters; paintAvailSelect owns the time-series options' two-phase
+// state (disabled + a reason while ts_access.json is in flight or absent; Any and Level 2 ride the
+// catalogue and are live from first paint).
 const _availSel=document.getElementById("availSel");
 if(_availSel&&_availSel.addEventListener)_availSel.addEventListener("change",refresh);
 function paintAvailSelect(){
@@ -263,10 +267,9 @@ function paintAvailSelect(){
   const ix=(typeof TSACC!=="undefined"&&TSACC)||{};
   const empty=known&&!Object.keys(ix).length;
   [...av.querySelectorAll("option")].forEach(o=>{
-    // "" is the Any option, which rides the catalogue and is live from first paint. There is no "tf"
-    // option in #availSel (the capability is a discovery chip), so no option reaches that branch; the
-    // harness pin asserts #availSel carries no "tf" value.
-    if(o.value==="")return;
+    // Any ("") and Level 2 read the catalogue, so neither waits on the index. There is no "tf" option
+    // (the capability is a discovery chip); the harness pin asserts #availSel carries no "tf" value.
+    if(o.value===""||o.value==="level2")return;
     o.disabled=!known||empty;
     o.title=known?(empty?"Availability by level: "+TS_NONE_HINT:""):TS_PENDING_HINT;});
 }

@@ -44,16 +44,28 @@ Recording a pointer says the data exists somewhere. It does not say whether a gi
 be fetched today. The portal answers that in two places, because the two halves of the answer are
 different questions:
 
-* **The Data available filter** (Browse pane) decides what the map shows. Its options are the licence
-  question (*Transfer functions downloadable here*: whether AusMT is allowed to serve that station's
-  processed files itself) and the route question per time-series level (whether the archive holds a
-  verified file for that station at that level and serves it openly). Selecting a level keeps the
-  stations whose files are ready to fetch.
+* **The Data available filter** (Browse pane, under Advanced search) decides what the map shows. Its
+  time-series options, *Packed raw time series*, *Level 0 (Edited Time Series)* and *Level 1 MTH5
+  (Transformed Time Series)*, ask the route question per level (whether the archive holds a verified
+  file for that station at that level and serves it openly), and selecting one keeps the stations
+  whose files are ready to fetch. *Level 2 (Transfer Functions)* keeps the stations whose transfer
+  functions AusMT itself serves: a station with periods in a survey whose access level is open. It
+  is read from the catalogue, so it never waits on the hand-off index, and on a corpus with no
+  embargoed or metadata-only survey it keeps every station. It is offered for completeness beside
+  the time-series levels (Owner decision 2026-10-14), and it is where a *Level 3 (Model Inputs and
+  Outputs)* option, linking model DOIs, will follow. The licence question (whether AusMT may serve a station's files itself)
+  is the *Downloadable here* chip in the discovery bar, not an option here.
 * **The Download block** (Select & download pane) prices what the current scope can take. Every row
   reflects the selection when one exists, else the filtered corpus, and the scope line above the rows
   says which. Level 2 rows (EDI, EMTF XML, MTH5 zips) are served by AusMT; the time-series rows
-  (packed raw, Level 0, Level 1 MTH5, Level 1 NetCDF) are hand-offs, each stating how many stations in
-  scope it covers and what they total.
+  (Packed raw time series, Level 0 (Edited Time Series), Level 1 MTH5 (Transformed Time Series)) are
+  hand-offs, each stating how many stations in scope it covers and what they total.
+
+The portal offers no NetCDF level (Owner decision 2026-10-14: no one uses it and no new survey will
+publish it). The route vocabulary still carries `level1_netcdf`, so a survey package whose register
+records one stays valid: that file still routes, still appears in the **Pointers (JSON)** export,
+and is still named on the station and survey pages as *Level 1 NetCDF (Transformed Time Series)*.
+No control in the portal offers it.
 
 The list behind the time-series rows is built from the survey packages' verified-resource registers,
 so a station whose access is embargoed, whose position is withheld, or whose match is still awaiting
