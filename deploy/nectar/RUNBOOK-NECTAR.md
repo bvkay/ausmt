@@ -1,7 +1,7 @@
 # Runbook: the Nectar serving replica (ausmt-serve)
 
-The numbered procedure to stand up **ausmt-serve**, feed it from the box by publish, move the public
-address onto it, roll back if needed, and retire **ausmt-test**. Design and rationale:
+The numbered procedure to stand up **ausmt-serve**, feed it from the box by publish, point the public
+names at it by a DNS change, roll back if needed, and retire **ausmt-test**. Design and rationale:
 `maintainer/C48-NectarTopology.md`. The front door itself is the C47 stack; its own runbook is
 `deploy/frontdoor/RUNBOOK.md`.
 
@@ -11,7 +11,7 @@ the box or the tailnet on its own, and no file here holds a secret. Where a step
 dashboard at that step.
 
 ```
-internet ──▶ 203.101.226.191 ──▶ ausmt-serve: front door (Caddy, TLS, masked log) ──▶ portal :8445 (loopback)
+internet ──▶ DNS A record ──▶ ausmt-serve: front door (Caddy, TLS, masked log) ──▶ portal :8445 (loopback)
                                         ▲        │
                                         │        └─ 4 public /gateway routes ──▶ box reader :8445 (tailnet) ──▶ gateway
              box (curates, builds) ─────┘ publish over the tailnet: rsync + receive-build.sh
@@ -33,8 +33,16 @@ internet ──▶ 203.101.226.191 ──▶ ausmt-serve: front door (Caddy, TLS
   the cutover.
 - **The amendment is filed in step 1 and its volume must be approved before step 4.** Steps 1 to 3 run
   while it is pending. If it is still pending at step 4, take the proof serve on the root disk (4A)
-  instead, and move to the volume when it is granted; the address never moves onto the root disk.
-- **The public submission routes stay live through the address move** (C48 D12). The serving host
+  instead, and move to the volume when it is granted. The root disk can carry the cutover at one kept
+  build (C48, "Executed").
+- **Nectar gives each instance a fixed public address, and nothing floats.** The project has no
+  router and no private network of its own; an instance launched on Classic Provider gets a fixed
+  address on the `qld` network, kept for the instance's life and released when it is deleted. The
+  cutover is therefore a DNS change: both public names' A records move from ausmt-test's address
+  (203.101.226.191) to ausmt-serve's. `ausmt.auscope.org.au` is in AuScope's cPanel zone and is
+  changed by AuScope's director on request; `ausmt.au` is at VentraIP and changed by the owner. Book
+  the request for step 12 before you start.
+- **The public submission routes stay live through the DNS change** (C48 D12). The serving host
   runs no gateway, so its front door sends `POST /gateway/submit`, `POST /gateway/request-key`,
   `GET /gateway/healthz` and `GET /gateway/status/*` to the box's reader listener over the tailnet
   (`AUSMT_GATEWAY_UPSTREAM`, step 8), exactly where ausmt-test sends them today.
@@ -103,19 +111,19 @@ Steps 1 to 3 run while it is pending. Step 4 needs the volume, or the proof serv
 
 ## 3. Launch ausmt-serve
 
-3.0  Network → Routers → the project's router: an **External Network** set with **SNAT** enabled, and
-     an interface on `qld-data`. ausmt-serve has no internet address of its own except the bootstrap
-     one (3.2 to 5.4) and the public one (from step 12), so apt, GitHub, GHCR and Tailscale traffic
-     leaves through this router's SNAT; so does ausmt-test's tailnet traffic once step 12 takes its
-     address. If any of the three is missing, fix it in the dashboard before launching.
+3.0  Nothing to configure for the network. Network → Routers is empty and there is no private
+     network: the instance reaches apt, GitHub, GHCR and the tailnet through its own fixed public
+     address, which it holds from first boot. That is why both security groups of 3.1 go on before
+     launch.
 3.1  Compute → Instances → Launch Instance:
-     - **Details:** name `ausmt-serve`, availability zone **QRIScloud** (where ausmt-test and its
-       floating IP live).
+     - **Details:** name `ausmt-serve`, availability zone **QRIScloud** (where ausmt-test lives).
      - **Source:** image NeCTAR Ubuntu 24.04 LTS (Noble) amd64 (the current version).
      - **Flavour:** `m3.small` (C48 D2; m3.medium only if serving needs it).
-     - **Networks:** `qld-data`, the network ausmt-test's private address is on, so the floating IP on
-       `qld` can be associated with it.
-     - **Security groups:** `http` only (80/tcp and 443/tcp inbound). Not `default`: an OpenStack
+     - **Networks:** **Classic Provider**, the only network the wizard offers. The instance shows its
+       fixed public address under `qld`; an interface on `qld-data`, QRIScloud's storage network,
+       arrives by itself.
+     - **Security groups:** `http` (80/tcp and 443/tcp inbound) and a TEMPORARY group allowing 22/tcp
+       from **your own address only** (call it `ssh`), removed in 5.4. Not `default`: an OpenStack
        `default` group normally admits all ingress from its own members, which would open every port
        of ausmt-serve to ausmt-test (and later ausmt-curate) over `qld-data`, outside the tailnet
        policy. Before launching, open Network → Security Groups → `http` → Manage Rules and confirm it
@@ -126,13 +134,10 @@ Steps 1 to 3 run while it is pending. Step 4 needs the volume, or the proof serv
      - **Configuration → Customisation script:** paste `deploy/nectar/cloud-init-serve.yaml`. Its one
        placeholder takes the PUBLIC key of an OpenSSH publish key on the box; Tailscale SSH does not use
        it, so leave the placeholder as it is unless you publish over plain OpenSSH.
-3.2  Bootstrap access. The public floating IP stays on ausmt-test until step 12, so ausmt-serve has
-     only its private `qld-data` address. Give it the project's SECOND floating IP (the quota is 2,
-     C48 D1) for the bootstrap: Network → Floating IPs → **Allocate IP to Project** (pool `qld`), then
-     that row's Actions → **Associate** → the `ausmt-serve` port. Add a TEMPORARY rule to a new
-     security group allowing 22/tcp from **your own address only**, attach it, and log in as `ubuntu`
-     at the bootstrap address. You release both in step 5.4; the bootstrap address is never the
-     public name's.
+3.2  Bootstrap access. Note the fixed public address the instance shows under `qld`: it is the
+     address step 8 gives the doctor and the address both public names point at from step 12. Log in
+     as `ubuntu` at that address with your key pair, from the address the `ssh` group admits. Until
+     step 12 no public name points at it.
 3.3  Check first boot finished: `cloud-init status --wait` then `tailscale version`, `docker compose
      version`. Near the end of `/var/log/cloud-init-output.log`, just before cloud-init's own
      finished line, a line says the volume is not mounted yet; that is expected.
@@ -168,16 +173,19 @@ sudo mkdir -p /srv/ausmt && sudo systemctl daemon-reload && sudo mount /srv/ausm
      refuses a data root that is not a mount point, so the tree lives in a directory on the root disk,
      bind-mounted at `/srv/ausmt` in place of the volume line cloud-init wrote. cloud-init separates
      that line's fields with tabs and the fallback of 4.2 with spaces, so the patterns match either
-     (`[[:space:]]`); `deploy/tests/test_runbook_nectar_fstab.py` runs this step's two `sed` commands on both:
+     (`[[:space:]]`); `deploy/tests/test_runbook_nectar_fstab.py` runs this step's two `sed`
+     commands on both:
 ```sh
 sudo mkdir -p /var/lib/ausmt-proof /srv/ausmt
 sudo sed -i 's|^LABEL=ausmt-data[[:space:]]|#&|' /etc/fstab         # park the volume line
 echo '/var/lib/ausmt-proof /srv/ausmt none bind 0 0' | sudo tee -a /etc/fstab
 sudo systemctl daemon-reload && sudo mount /srv/ausmt && mountpoint /srv/ausmt
 ```
-     Run steps 5 to 11 on it. Move it to the volume before step 12, once the volume is granted: create
-     and label the volume as in 4.1 and 4.2 (stop before its `mount`), then, with Docker stopped so
-     neither stack writes during the copy:
+     Run steps 5 to 11 on it, and step 12 too if the volume is still pending (C48, "Executed"). Move
+     it to the volume once the volume is granted, before step 12 if you can: after step 12 the move
+     stops the public site for the length of the copy, so pick a quiet hour. Create and label the
+     volume as in 4.1 and 4.2 (stop before its `mount`), then, with Docker stopped so neither stack
+     writes during the copy:
 ```sh
 sudo systemctl stop docker.socket docker.service          # both stacks down
 sudo mkdir -p /mnt/ausmt-new && sudo mount LABEL=ausmt-data /mnt/ausmt-new
@@ -209,11 +217,10 @@ sudo shred -u /root/ts-authkey
      the key under Settings → Keys.
 5.2  `tailscale status` shows the node with `tag:ausmt-serve`.
 5.3  From your own tailnet device: `ssh ubuntu@ausmt-serve` (Tailscale SSH, with its sign-in check).
-5.4  From the tailnet session of 5.3, remove the temporary SSH security group from the instance, then
-     Network → Floating IPs → the bootstrap address → Actions → **Disassociate**, and **Release
-     Floating IP** on the same row. From here until step 12 the host has no internet address: you reach
-     it over the tailnet, and it reaches the internet through the router's SNAT (3.0). From step 12 it
-     has 80 and 443 open to the internet and nothing else.
+5.4  From the tailnet session of 5.3, remove the temporary `ssh` security group from the instance
+     (Compute → Instances → `ausmt-serve` → Actions → Edit Security Groups). The public address stays:
+     it is the host's own, and its only route to the internet. From here the internet reaches 80 and
+     443 and nothing else, and you reach the host over the tailnet (Tailscale SSH).
 5.5  Prove the tailnet fence from the serving host's side. The policy is merged into a live policy
      this repository cannot see, so these are the evidence that nothing broader admits the serving
      host. On ausmt-serve:
@@ -310,7 +317,8 @@ is in it with `sudo docker compose -f /srv/ausmt/code/deploy/frontdoor/compose.y
   tailscale-serve reader port). Provisioning copies it into `deploy/frontdoor/.env`.
 - `/srv/ausmt/code/deploy/frontdoor/.env`: `AUSMT_PUBLIC_NAME=ausmt.auscope.org.au`,
   `AUSMT_LEGACY_REDIRECT_NAME` exactly as ausmt-test has it, `AUSMT_ACME_EMAIL`, and
-  `AUSMT_DOCTOR_EXPECT_IP=203.101.226.191` (listed in `deploy/frontdoor/.env.example`). Leave
+  `AUSMT_DOCTOR_EXPECT_IP` set to ausmt-serve's own fixed address from 3.2, never ausmt-test's
+  (listed in `deploy/frontdoor/.env.example`). Leave
   `AUSMT_BOX_READER_UPSTREAM` as provisioning set it (`http://127.0.0.1:8445`).
 
 ```sh
@@ -387,19 +395,21 @@ AUSMT_PUBLISH_TARGET=publish@ausmt-serve make publish
      sent again. If a newer box build has become current meanwhile, the re-run sends that one instead,
      and the interrupted directory, which has no sidecar, is left for you to delete (step 15,
      Retention).
-9.4  On ausmt-serve: `sudo ausmt-doctor-serve`. Expect PASS everywhere, the `gateway` line included:
+9.4  On ausmt-serve: `sudo ausmt-doctor-serve`. Expect PASS everywhere but the DNS line, the
+     `gateway` line included:
      it asks this host's front door for `/gateway/healthz`, which the box answers. A `gateway` WARN
      means this host cannot reach the box's reader port: check the `tag:ausmt-serve` rule of step 2.1
-     and `AUSMT_GATEWAY_UPSTREAM`. The `sender` INFO line names the box's tailnet address (step 15). The DNS and TLS lines pass already: the public name resolves to the address
-     step 8 set as expected, and it still reaches ausmt-test, which presents the same certificate.
-     Neither line tells the two hosts apart.
+     and `AUSMT_GATEWAY_UPSTREAM`. The `sender` INFO line names the box's tailnet address (step 15).
+     The DNS line FAILs until step 12, because the public name still resolves to ausmt-test, not to
+     the address step 8 set; it is the line that turns green when the names move. The TLS line
+     passes already: the public name reaches ausmt-test, which presents the same certificate.
 
 ---
 
-## 10. Verify on ausmt-serve before the address moves
+## 10. Verify ausmt-serve before the DNS change
 
-Everything below runs ON ausmt-serve against its own front door, with the public name resolved to
-loopback, so the certificate, both walls and the served tree are checked before any visitor sees them.
+10.1 On ausmt-serve, against its own front door with the public name resolved to loopback, so the
+     certificate, both walls and the served tree are checked before any visitor sees them:
 
 ```sh
 N=ausmt.auscope.org.au
@@ -415,6 +425,18 @@ echo | openssl s_client -connect 127.0.0.1:443 -servername $N 2>/dev/null | open
 ```
 The `build.json` must name the same `build_id` and `source_commit` as the box's
 `site-data/current/build.json`. None of these probes POSTs, so none submits or requests a key.
+
+10.2 From your own machine off the tailnet, by name against ausmt-serve's public address, without
+     touching DNS. This proves the internet path, the `http` group and the copied certificate as a
+     visitor will meet them after step 12:
+```sh
+A=<ausmt-serve's fixed public address, from 3.2>
+curl -sSI --resolve ausmt.auscope.org.au:443:$A https://ausmt.auscope.org.au/ | head -1            # HTTP/2 200
+curl -sS --resolve ausmt.auscope.org.au:443:$A https://ausmt.auscope.org.au/data/build.json        # the box's current build
+curl -sSI --resolve ausmt.au:443:$A https://ausmt.au/ | grep -iE '^(HTTP|location)'                 # 301 to the main name
+```
+     The last line applies only when `AUSMT_LEGACY_REDIRECT_NAME` is set. A certificate error here
+     means step 7's copy did not land; a timeout means the `http` group is missing from the instance.
 
 ---
 
@@ -433,14 +455,20 @@ timer fail-pings on it.
 
 ---
 
-## 12. Move the floating IP
+## 12. Change DNS
 
-Only after steps 9 to 11 are green. The four public gateway routes stay live through the move: both
-front doors send them to the box's reader listener. **The move has a gap:** between 12.2 and 12.3 the
-public name answers nothing, for about a minute, and an Add Survey upload in flight is cut. Pick a
-quiet hour.
+Only after steps 9 to 11 are green. The cutover points both public names' A records at ausmt-serve's
+fixed address. It has no gap: until resolvers pick up the change, for up to the record's TTL of
+300 seconds, some visitors still reach ausmt-test and the rest ausmt-serve, and both front doors serve
+the box's current build under the same certificate and send the four public gateway routes to the
+box's reader listener. ausmt-test stays running and untouched; it is the rollback (step 13).
 
-12.1  Before the move, the log account. The box's pull reads ausmt-test's log as `caddylog`, and
+Book the change in advance: `ausmt.auscope.org.au` is in AuScope's cPanel zone for auscope.org.au
+(nameservers ns1 and ns2.server-cpanel.com) and AuScope's director changes it on request. Send the
+request with ausmt-serve's address, the time window and the rollback (the old address,
+203.101.226.191) once steps 9 to 11 are green, and run 12.1 shortly before the window.
+
+12.1  Before the change, the log account. The box's pull reads ausmt-test's log as `caddylog`, and
       Caddy creates its log files mode 0600 unless told otherwise, which masks a `caddylog` ACL out.
       On ausmt-test (`ssh ubuntu@ausmt-vps`):
 ```sh
@@ -456,15 +484,22 @@ sudo setfacl -m u:caddylog:r /var/log/caddy/access-frontdoor*.json
 ```
       ausmt-serve's front door writes its log files mode 0640, so the default ACL provisioning sets
       is effective there, and its doctor checks that `caddylog` can read the live log. Then, on the
-      box, pull from ausmt-test now, while its tailnet path is certain:
+      box, pull from ausmt-test now:
 ```sh
 sudo systemctl start ausmt-frontdoor-logs.service
 ```
-12.2  Network → Floating IPs → the row for **203.101.226.191** (mapped to ausmt-test) → Actions →
-      **Disassociate** → confirm.
-12.3  Same row → Actions → **Associate** → Port to be associated: the `ausmt-serve` port
-      (10.255.x.x on qld-data) → **Associate**.
-12.4  From any machine off the tailnet, send a request only this check makes:
+12.2  The main name. In AuScope's cPanel DNS zone, the A record `ausmt` changes from 203.101.226.191
+      to ausmt-serve's address, TTL left at 300. The director makes the change; confirm the time it
+      was saved.
+12.3  The legacy name, only when `AUSMT_LEGACY_REDIRECT_NAME` is set. `ausmt.au` is an A record at
+      VentraIP (nameservers ns1 to ns3.nameserver.net.au); change it to ausmt-serve's address in the
+      same window, TTL 300. The front door answers the redirect name on its own certificate, which
+      travelled in step 7, so the two names move together.
+12.4  From any machine off the tailnet, wait until both names resolve to the new address:
+```sh
+dig +short ausmt.auscope.org.au ; dig +short ausmt.au      # ausmt-serve's address, twice
+```
+      then send a request only this check makes:
 ```sh
 M=cutover-$(date +%s); echo $M
 curl -sSI "https://ausmt.auscope.org.au/?check=$M" | head -1        # HTTP/2 200
@@ -473,43 +508,48 @@ curl -sSI "https://ausmt.auscope.org.au/?check=$M" | head -1        # HTTP/2 200
 ```sh
 sudo grep -c "check=<the M printed above>" /var/log/caddy/access-frontdoor.json   # 1 or more
 ```
-      The DNS and `build.json` checks pass before and after the move alike (both hosts serve the box's
-      current build under the same certificate), so only this log line proves the address moved. Then
+      The `build.json` check passes on either host (both serve the box's current build under the same
+      certificate), and a resolver you asked is not the one every visitor uses, so only this log line
+      proves that traffic arrives at ausmt-serve. Then
       run the public checks of `deploy/frontdoor/RUNBOOK.md` step 9, and `sudo ausmt-doctor-serve` on
       ausmt-serve.
-12.5  Repoint the masked-log pull on the box. Both front doors write `access-frontdoor.json`, and the
-      box keeps one copy of each name, so the first pull from ausmt-serve would overwrite what
-      ausmt-test logged since the last pull, before the daily stats fold has read it. On the box:
+12.5  Repoint the masked-log pull on the box, once at least 300 seconds (the TTL) have passed since
+      12.2 and 12.3, so stragglers have stopped reaching ausmt-test. Both front doors write
+      `access-frontdoor.json`, and the box keeps one copy of each name, so the first pull from
+      ausmt-serve would overwrite what ausmt-test logged since the last pull, before the daily stats
+      fold has read it. On the box:
 ```sh
 sudo systemctl start ausmt-frontdoor-logs.service      # a last pull from ausmt-test, which now gets no traffic
 cd "$AUSMT_DATA_DIR/logs/caddy"
 mv access-frontdoor.json access-frontdoor-ausmt-test.json   # still read by the fold, never overwritten
 ```
-      That last pull collects what ausmt-test logged between 12.1 and the move. ausmt-test now reaches
-      the tailnet through the router's SNAT (3.0); if the pull fails, only those minutes are missing,
-      because 12.1 already pulled the rest.
+      That last pull collects what ausmt-test logged between 12.1 and the change. ausmt-test keeps its
+      own address and its tailnet path; if the pull fails, only those minutes are missing, because 12.1
+      already pulled the rest.
       Then set `AUSMT_FRONTDOOR_LOG_REMOTE=caddylog@ausmt-serve:` in `deploy/.env`, pull once, and
       check that `access-frontdoor.json` is back (it can only have come from ausmt-serve):
 ```sh
 sudo systemctl start ausmt-frontdoor-logs.service && ls -l access-frontdoor.json
 ```
-      Delete `access-frontdoor-ausmt-test.json` once the fold has passed the day of the move.
+      Delete `access-frontdoor-ausmt-test.json` once the fold has passed the day of the change.
 
 ---
 
 ## 13. Rollback
 
-Move the address back; nothing else is needed while ausmt-test is left running.
+Point the names back; nothing else is needed while ausmt-test is left running.
 
-13.1  Network → Floating IPs → 203.101.226.191 → Disassociate, then Associate with the `ausmt-test`
-      port. ausmt-test's front door still proxies to the box's reader listener, which still serves the
-      box's own current. Then, on ausmt-test (`ssh ubuntu@ausmt-vps`, by the rule of step 2.3):
+13.1  Ask for the A record `ausmt` in AuScope's cPanel zone to go back to 203.101.226.191, and put
+      `ausmt.au` at VentraIP back to the same address. With the TTL at 300 seconds, visitors move back
+      within about five minutes, and both hosts answer meanwhile. ausmt-test's front door still proxies
+      to the box's reader listener, which still serves the box's own current. Then, on ausmt-test
+      (`ssh ubuntu@ausmt-vps`, by the rule of step 2.3):
 ```sh
 sudo docker compose -f ~/ausmt/deploy/frontdoor/compose.yaml restart frontdoor   # ~/ausmt is the front-door checkout there
 ```
-      While the address was away ausmt-test could not renew (the challenge reached ausmt-serve), and
-      Caddy backs off between failed attempts; the restart makes it renew at once, now that the
-      challenge reaches it, if its certificate is inside the window.
+      While the names pointed at ausmt-serve, ausmt-test could not renew (the challenge reached
+      ausmt-serve), and Caddy backs off between failed attempts; the restart makes it renew at once,
+      now that the challenge reaches it, if its certificate is inside the window.
 13.2  Keep what ausmt-serve logged, as in 12.5 the other way round: pull once more, move
       `access-frontdoor.json` aside as `access-frontdoor-ausmt-serve.json`, then put the box's
       `AUSMT_FRONTDOOR_LOG_REMOTE` back to its ausmt-test value.
@@ -524,20 +564,25 @@ box → reconcile → publish → ausmt-serve with `publish` = `ok`, and `sudo a
 apart from the known WARNs. ausmt-test costs 125 SU a year until it is deleted, shut down or not.
 
 **End the quiet period before ausmt-test's certificate expires**, 2026-11-15 for the certificate it
-holds today. ausmt-test cannot renew while the address is on ausmt-serve, so a rollback after that
+holds today. ausmt-test cannot renew while the names point at ausmt-serve, so a rollback after that
 date serves an expired certificate until 13.1's renewal succeeds. From about 2026-10-16 its Caddy
 tries to renew and fails, and those failures count against the shared ACME account; serving is
 unaffected, and deleting ausmt-test ends them.
 
-**Rollback ends at 14.2.** Once ausmt-test is deleted there is no host to move the address back to.
-The front door's `caddy_data` lives in Docker's volume on ausmt-serve's root disk, not on the data
+**Rollback ends at 14.2.** Deleting ausmt-test releases its fixed address, 203.101.226.191, back to
+the cloud, where another project can be given it. So both names must already point at ausmt-serve,
+and once ausmt-test is gone there is no host to point them back to. The front door's `caddy_data` lives in Docker's volume on ausmt-serve's root disk, not on the data
 volume, so a lost ausmt-serve after that point means a new instance by this runbook from step 3 and
 a fresh certificate.
 
+14.0  From a machine off the tailnet: `dig +short ausmt.auscope.org.au` and `dig +short ausmt.au`
+      both print ausmt-serve's address, never 203.101.226.191. A name still pointing at the old
+      address would follow it to whoever is given it next.
 14.1  On ausmt-test (`ssh ubuntu@ausmt-vps`, by the rule of step 2.3):
       `cd ~/ausmt && sudo docker compose -f deploy/frontdoor/compose.yaml down` (`~/ausmt` is the
       front-door checkout on ausmt-test).
-14.2  Compute → Instances → ausmt-test → Actions → **Delete Instance** → confirm.
+14.2  Compute → Instances → ausmt-test → Actions → **Delete Instance** → confirm. Its address goes
+      with it.
 14.3  Tailscale admin: remove the ausmt-test node, the `tag:ausmt-frontdoor` tag, its two ACL rules
       (`deploy/frontdoor/RUNBOOK.md` 10.3) and the temporary admin rule of step 2.3.
 
@@ -628,12 +673,13 @@ govern the order: there is one sender at every moment, and no submission is acce
 state is about to be copied.
 
 16.1  **Launch** ausmt-curate as in step 3: m3.medium (it holds the build, C48 D3), availability zone
-      QRIScloud, network `qld-data`, no security group that admits inbound traffic (`default`
-      included), and no floating IP once it has joined. Bootstrap it as ausmt-serve was (3.2 to 5.4:
-      the second floating IP and a temporary 22/tcp rule from your own address, both released after
-      the join), joining with an auth key tagged `tag:ausmt-curate` (as in 2.2) and
-      `--advertise-tags=tag:ausmt-curate --hostname ausmt-curate`. Its
-      outbound traffic (GitHub, GHCR, ClamAV updates, Tailscale) leaves through the router's SNAT (3.0).
+      QRIScloud, network Classic Provider, so it too has a fixed public address, which carries its
+      outbound traffic (GitHub, GHCR, ClamAV updates, Tailscale). Security groups: a new group with no
+      ingress rule (a new group carries only the two egress rules; call it `egress`) and the temporary
+      `ssh` group of 3.1; never `http` or `default`. Bootstrap it as ausmt-serve was (3.2 to 5.4: the
+      temporary group removed after the join), joining with an auth key tagged `tag:ausmt-curate`
+      (as in 2.2) and `--advertise-tags=tag:ausmt-curate --hostname ausmt-curate`. From then nothing
+      on the internet reaches it.
 16.2  **The volume.** Volumes → Create Volume: `ausmt-curate-data`, 100 GB (the curation half of the
       grant), QRIScloud, attached to ausmt-curate. Label it and mount it at `/srv/ausmt` as in 4.2,
       with the same fstab line. Everything under `/srv/ausmt` lives on it, `site-data/builds` and
