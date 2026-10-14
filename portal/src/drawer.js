@@ -288,7 +288,7 @@ function tsUrlFor(m){return "https://doi.org/"+tsPidRaw(m);}
 function apiArtifactPath(u){const v=String(u==null?"":u);
   return /^[a-z][a-z0-9+.\-]*:\/\//i.test(v)?v:"/data/"+v.replace(/^\/+/,"");}
 // The Files tab, structured to the NCI data-level standard as a SINGLE COLUMN of full-width rows (Packed
-// raw / Level 0 / Level 1 time series -> Level 2 derived processed data with EDI/EMTF-XML/MTH5 sub-rows ->
+// raw / Level 0 / Level 1 time series -> Level 2 transfer functions with EDI/EMTF-XML/MTH5 sub-rows ->
 // Level 3 models, when ever served -> Publication). See docs: portal internals, drawer.js.
 function relatedProducts(s){const m=SMETA[s.survey]||{};
   const tsDoi=tsUrlFor(m);
@@ -362,9 +362,9 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   const dot=st=>`<span class="pdot" style="background:var(--${st==="ok"?"ok":st==="part"?"part":st==="no"?"no":"unk"})"></span>`;
   const row=it=>`<div class="prod ${it.d?"":"dis"}" ${attrs(it.d)}>${dot(it.st)}<div>${esc(it.n)} ${it.origin?roleChip(it.origin):""}<small>${esc(it.sub)}</small></div></div>`;
   const tsRows=[
-    [tsLevelRow("Raw time series","packed raw time series","raw_packed"),tsActionRows(["raw_packed"])],
-    [tsLevelRow("Level 0 edited time series","instrument-recorded, full resolution","level0"),tsActionRows(["level0"])],
-    [tsLevelRow("Level 1 transformed time series","calibrated, resampled, filtered","level1"),
+    [tsLevelRow("Packed raw time series","telemetry data streamed from site loggers","raw_packed"),tsActionRows(["raw_packed"])],
+    [tsLevelRow("Level 0 (Edited Time Series)","instrument-recorded, full resolution","level0"),tsActionRows(["level0"])],
+    [tsLevelRow("Level 1 (Transformed Time Series)","calibrated, resampled, filtered","level1"),
      tsActionRows(["level1_mth5"])],
   ].map(([lvl,acts])=>row(lvl)+acts.map(row).join("")).join("")+
     // Two-phase boot: the hand-off index is a PHASE 2 product, so before it lands the absence of an
@@ -374,7 +374,7 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   // them degrades to a "not currently available" / "via source archive" line, i.e. statements about what
   // the build actually served. See docs: portal internals, drawer.js.
   const level2Body=hydrating("manifest")?hydrBlock("served files"):level2Subs.map(row).join("");
-  const level2=`<div class="fl-group"><div class="fl-ghead">Level 2 derived processed data <small>transfer functions</small></div>`+
+  const level2=`<div class="fl-group"><div class="fl-ghead">Level 2 (Transfer Functions) <small>derived frequency-domain processed data</small></div>`+
     `<div class="fl-sub">${level2Body}</div></div>`;
   // Level 3 models render ONLY when a model DOI is served in the survey metadata. No such field exists,
   // so the slot renders nothing: a survey record carrying m.model_doi is what would fill it, as a row
@@ -1261,11 +1261,11 @@ const REES_LEVELS_DOI="https://doi.org/10.1080/22020586.2019.12073015";
 // [identifies key, tile name, one-line description]. See docs: portal internals, drawer.js.
 const DATA_LEVEL_SLOTS=[
   ["collection","Collection","the umbrella record for everything this survey deposited"],
-  ["raw_packed","Packed Raw Data","raw time series: telemetry data streamed from site loggers"],
-  ["level0","Level 0","edited time series: instrument-recorded, full resolution"],
-  ["level1","Level 1","transformed time series (MTH5): calibrated, resampled, filtered"],
-  ["level2","Level 2","derived frequency-domain processed data: transfer functions"],
-  ["level3","Level 3","derived modelling inputs and outputs"],
+  ["raw_packed","Packed raw time series","telemetry data streamed from site loggers"],
+  ["level0","Level 0 (Edited Time Series)","instrument-recorded, full resolution"],
+  ["level1","Level 1 (Transformed Time Series)","MTH5: calibrated, resampled, filtered"],
+  ["level2","Level 2 (Transfer Functions)","derived frequency-domain processed data"],
+  ["level3","Level 3 (Models)","derived modelling inputs and outputs"],
 ];
 // SLOT ALIASES. `entire` - ONE record covering all levels, the shape the survey template gives a
 // state-survey landing page - IS the umbrella record the Collection slot names, so it FILLS that slot

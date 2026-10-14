@@ -17,6 +17,7 @@ change to either side fires it; the engine workflow cannot see a state.js or ind
 Skips the state.js half if Node is unavailable (CI installs Node; see .github/workflows/portal-ci.yml).
 """
 import json
+import re
 import shutil
 import subprocess
 from html.parser import HTMLParser
@@ -105,3 +106,50 @@ def test_the_engine_pages_name_every_level_in_the_same_scheme():
     portal, or names a routed NetCDF file outside the scheme the other levels use."""
     table = namespace()["_TS_LEVELS"]
     assert [(tok, name) for tok, _badge, name in table] == TS_LABELS + [NETCDF]
+
+
+DRAWER_JS = PORTAL / "src" / "drawer.js"
+# Level 1 as a whole (the Files tab heading and the survey slot cover every Level 1 format) and
+# Level 3, which no chooser offers, in the same bracket scheme.
+LEVEL1 = "Level 1 (Transformed Time Series)"
+LEVEL3 = "Level 3 (Models)"
+
+
+def _drawer_files_headings():
+    """The Files tab's level headings: each time-series level row's label, then the Level 2 group."""
+    src = DRAWER_JS.read_text(encoding="utf-8")
+    rows = re.findall(r'tsLevelRow\("([^"]+)","[^"]*","(\w+)"\)', src)
+    group = re.search(r'<div class="fl-ghead">([^<]+?)\s*<small>', src)
+    assert rows and group, "drawer.js must keep its Files tab level rows and its Level 2 group heading"
+    return [(vocab, label) for label, vocab in rows] + [("level2", group.group(1))]
+
+
+def _drawer_level_slots():
+    """drawer.js DATA_LEVEL_SLOTS as (identifies key, tile name), read from its array literal."""
+    src = DRAWER_JS.read_text(encoding="utf-8")
+    m = re.search(r"const DATA_LEVEL_SLOTS=(\[.*?\]);", src, re.S)
+    assert m, "drawer.js must keep DATA_LEVEL_SLOTS"
+    return [(key, name) for key, name, _desc in json.loads(re.sub(r",\s*\]$", "]", m.group(1)))]
+
+
+def test_the_files_tab_headings_use_the_level_vocabulary():
+    """FAILS IF a station's Files tab heads a level in words other than the chooser's: the packed raw
+    and Level 0 labels as the chooser prints them, Level 1 in the same bracket scheme, Level 2 as
+    the chooser's Level 2."""
+    labels = dict(TS_LABELS)
+    assert _drawer_files_headings() == [("raw_packed", labels["raw_packed"]),
+                                        ("level0", labels["level0"]),
+                                        ("level1", LEVEL1),
+                                        LEVEL2]
+
+
+def test_the_survey_level_table_uses_the_level_vocabulary():
+    """FAILS IF the survey drawer's data-at-every-level table names a level in words other than the
+    chooser's, or loses the bracket scheme for Level 1 and Level 3."""
+    labels = dict(TS_LABELS)
+    assert _drawer_level_slots() == [("collection", "Collection"),
+                                     ("raw_packed", labels["raw_packed"]),
+                                     ("level0", labels["level0"]),
+                                     ("level1", LEVEL1),
+                                     LEVEL2,
+                                     ("level3", LEVEL3)]
