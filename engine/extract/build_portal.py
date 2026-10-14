@@ -2415,7 +2415,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
     _survey_frame_note = conv.classify_survey_frame(_angles)   # The survey-note string, or None
     for p in sorted(edi_paths):
         _ck = cache.key(edi_sha=sha256(p), survey_digest=survey_digest, kind="parse") if _use_cache else None
-        parsed = cache.get_json(_ck) if _ck else None
+        parsed = cache.get_json(_ck, kind="parse") if _ck else None
         if parsed is None:
             try:
                 parsed = _parse_one_edi(p)
@@ -2441,7 +2441,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                          "error": f"{type(e).__name__}: {e}"})
                 continue
             if _ck:
-                cache.put_json(_ck, parsed)   # populate for the next warm build
+                cache.put_json(_ck, parsed, kind="parse")   # populate for the next warm build
         # Convention-gate FAIL (fresh or cache-replayed): the station is skipped LOUDLY - stderr names the
         # gate, the angles and the fix; the structured drop rides into build_report.json via
         # `report` so the skip is machine-visible, never a silent absence.
@@ -4190,16 +4190,16 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
         _ck = cache.key(edi_sha=sha256(p), survey_digest=survey_digest,
                         kind=f"xml:{r['id']}") if (_use_cache and not _keep_derived) else None
         if _ck:
-            _cached_xml = cache.get_bytes(_ck, "xml")
+            _cached_xml = cache.get_bytes(_ck, "xml", kind="xml")
             if _cached_xml is not None:
-                _cached_meta = cache.get_json(_ck, "meta")
+                _cached_meta = cache.get_json(_ck, "meta", kind="xml")
                 if _cached_meta is None:
                     # TORN pair: the xml blob hit its checksum but the meta sibling is
                     # absent/corrupt, so the pair produced NOTHING usable — revoke the phantom xml
                     # hit (get_json already tallied its own miss/corrupt) and fall through to a
                     # fresh normalize, which re-puts BOTH blobs. Without the revoke, a torn pair
                     # over-counted hits (the review's phantom-hit finding).
-                    cache.revoke_hit()
+                    cache.revoke_hit(kind="xml")
                 else:
                     xml_target.parent.mkdir(parents=True, exist_ok=True)
                     xml_target.write_bytes(_cached_xml)
@@ -4257,9 +4257,9 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
                 # The meta blob carries survey_digest (the digest this entry was keyed under)
                 # so a future cache HIT can propagate it to the sidecar — surfacing a stale entry's
                 # digest to the verify.py consistency gate. The v3 tag bump keys this new-shape meta.
-                cache.put_bytes(_ck, "xml", Path(res.canonical_xml).read_bytes())
+                cache.put_bytes(_ck, "xml", Path(res.canonical_xml).read_bytes(), kind="xml")
                 cache.put_json(_ck, {"conditioned": res.conditioned, "survey_digest": survey_digest},
-                               ext="meta")
+                               ext="meta", kind="xml")
         except Exception as ex:  # noqa: BLE001
             # Record the failure (station id + exception class) so the caller can COUNT it into
             # build_report.json; a per-station XML gap must never again be invisible in a green build,
@@ -4404,6 +4404,34 @@ def _mth5_project_lead(smeta: dict):
     return None
 
 
+def _mth5_survey_fields(smeta):
+    """The part of SMETA the MTH5 survey_metadata mapping reads, in SMETA's own shape, or None when
+    there is no SMETA. _apply_mth5_survey_metadata reads its fields from THIS projection and from
+    nothing else, and the MTH5 cache keys digest it, so a field outside it (the --pid-status
+    resolution facets, which come from a file outside the survey package, or anything a later
+    SMETA mapper adds) cannot reach an MTH5 byte without first entering the projection and so the
+    key. Idempotent: projecting a projection returns it unchanged
+    (tests/test_build_cache_mth5.py pins that and the write equivalence)."""
+    if not smeta:
+        return None
+    _cite = smeta.get("cite") or {}
+    out = {"cite": {"ti": _cite.get("ti")}, "blurb": smeta.get("blurb"), "doi": smeta.get("doi"),
+           "org": smeta.get("org"), "lic": smeta.get("lic")}
+    _pubs = smeta.get("pubs") or []
+    if _pubs:
+        _p0 = _pubs[0] or {}
+        out["pubs"] = [{k: _p0.get(k) for k in ("doi", "t", "j", "y")}]
+    _lead = _mth5_project_lead(smeta)
+    if _lead:
+        out["creators"] = [{"name": _lead.get("name"), "orcid": _lead.get("orcid")}]
+    _fund = smeta.get("funders") or []
+    if _fund:
+        _f0 = _fund[0] or {}
+        out["funders"] = [{"name": _f0.get("name"), "grant_id": _f0.get("grant_id") or _f0.get("id")}
+                          if isinstance(_f0, dict) else _f0]
+    return out
+
+
 def _apply_mth5_survey_metadata(sm, smeta, slug, label):
     """Map survey.yaml/SMETA scholarly + identifier fields onto an mth5 TF's survey_metadata at write
     time. The grouping key id=slug ALWAYS overrides the raw EDI '0' so stations do not collapse into
@@ -4413,7 +4441,8 @@ def _apply_mth5_survey_metadata(sm, smeta, slug, label):
     the enriched-EDI round-trip). Every set is best-effort: mt_metadata 1.0.9 rejects some hand-authored
     values (unit strings, unknown attributes - caveat 7), so a field that will not coerce is skipped
     with NO effect on the TF payload (round-trip stays lossless). smeta None => only the slug is
-    seeded (raw/CSV-only surveys build metadata-thin but valid, caveat 2)."""
+    seeded (raw/CSV-only surveys build metadata-thin but valid, caveat 2). Every SMETA read goes
+    through _mth5_survey_fields: the MTH5 cache key is complete only while that holds."""
     def _set(path, value):
         if value in (None, "", []):
             return
@@ -4427,25 +4456,23 @@ def _apply_mth5_survey_metadata(sm, smeta, slug, label):
             print(f"  [h5] note {slug} survey_metadata.{path}: {type(ex).__name__}: {str(ex)[:80]}",
                   file=sys.stderr)
     sm.id = slug   # the grouping key — always seeded, even without SMETA
+    smeta = _mth5_survey_fields(smeta)
     if not smeta:
         return
-    _cite = smeta.get("cite") or {}
-    _name = _cite.get("ti") or label
+    _name = smeta["cite"]["ti"] or label
     _set("name", _name)
     _set("project", _name)
-    _set("summary", smeta.get("blurb"))
+    _set("summary", smeta["blurb"])
     # The one genuinely-absent scholarly field. Inject the dataset DOI from SMETA (survey.yaml).
-    _set("citation_dataset.doi", _mth5_doi_url(smeta.get("doi")))
+    _set("citation_dataset.doi", _mth5_doi_url(smeta["doi"]))
     # Journal citation: single-source from the first publication (SMETA), best-effort.
-    _pubs = smeta.get("pubs") or []
-    if _pubs:
-        _p0 = _pubs[0] or {}
+    for _p0 in smeta.get("pubs", [])[:1]:
         _set("citation_journal.doi", _mth5_doi_url(_p0.get("doi")))
         _set("citation_journal.title", _p0.get("t"))
         _set("citation_journal.journal", _p0.get("j"))
         _set("citation_journal.year", str(_p0.get("y")) if _p0.get("y") not in (None, "") else None)
-    _set("acquired_by.organization", smeta.get("org"))
-    _set("release_license", smeta.get("lic"))
+    _set("acquired_by.organization", smeta["org"])
+    _set("release_license", smeta["lic"])
     # The contributor-credit model: project_lead is the lead-most credited party (a ProjectLeader contributor,
     # else the lead creator, else the legacy investigator). Its ORCID goes into project_lead.url as a full
     # https://orcid.org/<id> URL - the AuthorPerson model has no serialised `id` field, so the URL is the
@@ -4454,12 +4481,10 @@ def _apply_mth5_survey_metadata(sm, smeta, slug, label):
     if _lead:
         _set("project_lead.author", _lead.get("name"))
         _set("project_lead.url", _orcid_url(_lead.get("orcid")))
-    _fund = smeta.get("funders") or []
-    if _fund:
-        _f0 = _fund[0] or {}
+    for _f0 in smeta.get("funders", [])[:1]:
         _set("funding_source.organization", _f0.get("name") if isinstance(_f0, dict) else _f0)
         if isinstance(_f0, dict):
-            _set("funding_source.grant_id", _f0.get("grant_id") or _f0.get("id"))
+            _set("funding_source.grant_id", _f0.get("grant_id"))
 
 
 def _tensor_max_abs_diff(a, b):
@@ -4638,13 +4663,18 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None, failure_rows=None,
     WARN prints, the posture a direct caller wants. The file-level lines (open failure, close failure,
     the WITHHOLD verdict) are one per FILE, not per station, and always print.
 
-    NOTE: HDF5 embeds creation timestamps/uuids, so these files are NOT byte-reproducible across builds;
-    a manifest sha256 over one is a download-integrity hash for THIS build's bytes, not a cross-build
-    invariant."""
+    NOTE: two writes of the same inputs differ in the root `file.access.time` attribute and in the
+    address bytes of HDF5 object references, so these files are NOT byte-reproducible across
+    writes; a manifest sha256 over one is a download-integrity hash for the bytes served, not a
+    cross-build invariant. A build-cache hit serves the bytes of the write that populated the
+    entry, so the sha256 holds across warm builds and moves whenever the file is written again."""
     from mt_metadata.transfer_functions.core import TF  # noqa: PLC0415
     from mth5.mth5 import MTH5  # noqa: PLC0415
     hpath = Path(hpath)
     hpath.parent.mkdir(parents=True, exist_ok=True)
+    # The unlink is load-bearing: a file already at hpath may be a hardlink to a build-cache
+    # payload, and mode "w" truncates in place, which would write through into the cache and every
+    # tree that links the same inode. Unlinking first makes the write a new inode.
     if hpath.exists():
         hpath.unlink()
     # Opening the h5 can itself fail (file lock, HDF5 driver). Keep it best-effort like the per-station
@@ -4704,11 +4734,12 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None, failure_rows=None,
 
 
 # ---- The MTH5 worker pool (the build-parallelism seam) -------------------------------------------
-# A build profile attributed ~68% of a cold build and ~99% of a warm rebuild to _write_tf_mth5,
-# which is self-contained by construction: it re-reads its source EDIs from disk, carries its own
+# _write_tf_mth5 is the dominant cost of a cold build (~68% in the build profile) and is
+# self-contained by construction: it re-reads its source EDIs from disk, carries its own
 # gate, owns a unique output path per call and returns 0 instead of raising. The pool parallelises
 # exactly that unit and NOTHING else:
-# parse, XML, the cache and all manifest bookkeeping stay in the main process, and every
+# parse, XML, every cache read and write (MTH5 hits are placed before a task is submitted, misses
+# stored after it returns) and all manifest bookkeeping stay in the main process, and every
 # station id is final (_disambiguate has run) before the first task is submitted, so worker
 # scheduling can never reach an identity or ordering decision. Workers are spawned, not forked
 # (h5py and forked HDF5 state do not mix, and spawn behaves identically on the Linux box and a
@@ -4831,7 +4862,142 @@ def _mth5_pool_stop():
         _MTH5_POOL = None
 
 
-def emit_survey_mth5(stations, slug, label, out, smeta=None, failure_rows=None):
+# ---- The MTH5 build-cache seam ---------------------------------------------------------------------
+# Both tiers are cache FILE entries. The file is a pure function of its inputs apart from the root
+# `file.access.time` attribute and the address bytes of HDF5 object references, so a cached file
+# is SEMANTICALLY equal to a fresh write, not byte-equal to one; the round-trip gate the miss build
+# ran over it is what makes it trustworthy. What reaches the bytes, and so the key: the source
+# file (its bytes, and its name, which selects the reader), the survey.yaml digest, the slug and
+# label, the FINAL station id (sanitised inside the writer), the record's declared
+# source_provenance (stamped into station comments), the SMETA projection the survey_metadata
+# mapping reads, the installed mt_metadata/mth5 stack with its VCS commits (in the salt) and
+# h5py/HDF5 (below). Nothing else of the record is read by _write_tf_mth5 but the gate's `_survey`
+# tag, which only the collection tier sets; the coordinate policy, the withhold predicate and the
+# channel masks decide MEMBERSHIP (which stations reach a writer), and the survey key binds
+# membership through its member keys. tests/test_build_cache_mth5.py pins every component.
+_MTH5_ENTRY_TAG = "mth5-entry-v1"
+
+
+def _mth5_lib_fingerprint() -> str:
+    """h5py and the HDF5 C library it links: both shape the file, and the HDF5 build is not a
+    distribution version the salt's installed-stack identity can see, so the MTH5 keys carry
+    them."""
+    try:
+        import h5py  # noqa: PLC0415
+        return f"h5py={h5py.__version__};hdf5={h5py.version.hdf5_version}"
+    except Exception:  # noqa: BLE001  (no h5py: no MTH5 either, the key just stays stable)
+        return "h5py=absent"
+
+
+def _station_h5_key(cache, p, r, slug, label, smeta, survey_digest) -> str:
+    """The station-tier MTH5 cache key (see the seam note above for the component list)."""
+    p = Path(p)
+    return cache.key_parts("station_h5", [
+        _MTH5_ENTRY_TAG, _mth5_lib_fingerprint(), sha256(p), p.name, survey_digest or "",
+        slug, label, r["id"],
+        json.dumps(r.get("source_provenance") or None, sort_keys=True, default=str),
+        json.dumps(_mth5_survey_fields(smeta), sort_keys=True, default=str)])
+
+
+def _survey_h5_key(cache, stations, slug, label, smeta, survey_digest) -> str:
+    """The survey-tier key: the SORTED member station keys (each binding its own inputs), so a
+    change to any member, or a member added or dropped, moves the bundle, and member order does
+    not (mth5 addresses stations by name). Survey-level material rides beside them."""
+    members = sorted(_station_h5_key(cache, p, r, slug, label, smeta, survey_digest)
+                     for (p, r) in stations)
+    return cache.key_parts("survey_h5", [
+        _MTH5_ENTRY_TAG, _mth5_lib_fingerprint(), survey_digest or "", slug, label,
+        json.dumps(_mth5_survey_fields(smeta), sort_keys=True, default=str), *members])
+
+
+def _mth5_cache_on(cache) -> bool:
+    return cache is not None and getattr(cache, "enabled", False)
+
+
+def _mth5_cache_fetch(cache, key, kind, hpath):
+    """Place a cached MTH5 at hpath. Returns (n_written, captured_stderr, failure_rows) on a hit,
+    None on a miss. A stored meta that cannot describe a written file is rejected (corrupt +
+    miss) and the placed file removed, so the caller writes it fresh."""
+    meta = cache.link_file(key, kind, hpath)
+    if meta is None:
+        return None
+    try:
+        n = int(meta["n"])
+        err, rows = str(meta.get("err") or ""), list(meta.get("rows") or [])
+        if n < 1:
+            raise ValueError(n)
+    except (KeyError, TypeError, ValueError):
+        Path(hpath).unlink(missing_ok=True)
+        cache.reject_file(key, kind)
+        return None
+    return n, err, rows
+
+
+def _sources_unmoved(sources) -> bool:
+    """True when every source file still hashes to the digest its key was derived from. The writer
+    re-reads each source after the key is derived, so a source edited in between (a surveys
+    checkout moved mid-build) was written and gated as bytes the key does not name."""
+    for p in sources:
+        used = _SHA_CACHE.get(str(p))
+        try:
+            now = hashlib.sha256(Path(p).read_bytes()).hexdigest()
+        except OSError:
+            return False
+        if used is None or now != used:
+            return False
+    return True
+
+
+def _mth5_cache_store(cache, key, kind, hpath, n, err, rows, sources) -> None:
+    """Put a gate-passed MTH5 into the cache with what a hit must replay: its station count, its
+    captured stderr and its per-station failure rows. Not stored when a source moved after the key
+    was derived: the file is still served by this build, but its bytes are not the key's."""
+    if key and n and _sources_unmoved(sources):
+        cache.put_file(key, kind, Path(hpath), {"n": n, "err": err, "rows": rows})
+
+
+def _replay_mth5_result(err, rows, failure_rows) -> None:
+    """Emit one write's (or one hit's) diagnostics in the direct writer's form: the captured
+    file-level lines, then the per-station rows into the caller's ledger, or as the writer's own
+    WARN lines when the caller keeps no ledger."""
+    if err:
+        sys.stderr.write(err)
+    if failure_rows is not None:
+        failure_rows.extend(rows)
+    else:
+        for _row in rows:
+            print(f"  [h5] WARN {_row['file']}: {_row['error']}: {_row['message']}", file=sys.stderr)
+
+
+def _write_tf_mth5_cached(stations, slug, label, hpath, smeta, failure_rows, context, cache, key,
+                          kind):
+    """One MTH5 file through the cache: a hit places the stored file and replays its diagnostics
+    (no write, no gate); a miss writes and gates exactly as _write_tf_mth5 does, then stores the
+    file only if the gate passed. Without a key this IS the direct write."""
+    if not key:
+        return _write_tf_mth5(stations, slug, label, hpath, smeta=smeta, failure_rows=failure_rows,
+                              context=context)
+    hit = _mth5_cache_fetch(cache, key, kind, hpath)
+    n, err, rows = hit if hit is not None else _mth5_write_task(stations, slug, label, hpath, smeta,
+                                                                  context)
+    _replay_mth5_result(err, rows, failure_rows)
+    if hit is None:
+        _mth5_cache_store(cache, key, kind, hpath, n, err, rows, [p for (p, _r) in stations])
+    return n
+
+
+class _DoneFuture:
+    """A completed stand-in for a pool future, so a cache hit rides the deferred-bundle drain."""
+
+    def __init__(self, result):
+        self._result = result
+
+    def result(self):
+        return self._result
+
+
+def emit_survey_mth5(stations, slug, label, out, smeta=None, failure_rows=None, *, cache=None,
+                     survey_digest=""):
     """Tier 2: write ONE survey-aggregated MTH5 (out/bundles/<slug>-tf.h5) holding every
     served station's TRANSFER FUNCTION via mth5.add_transfer_function, the idiomatic MTCollection
     working unit for mtpy-v2/ModEM. It contains transfer functions ONLY (never time series); the -tf
@@ -4840,11 +5006,14 @@ def emit_survey_mth5(stations, slug, label, out, smeta=None, failure_rows=None):
     manifest row's n_stations reflects reality. A survey that fails the gate is withheld,
     not the corpus. `failure_rows` is passed straight to the writer, tagged with the survey-bundle
     context: this tier re-reads the SAME source files the tier-1 station products read, so a fault
-    both hit must fold to one ledger row and one line.
+    both hit must fold to one ledger row and one line. With an enabled `cache` the bundle is a
+    survey_h5 cache entry keyed by _survey_h5_key.
     Returns (rel_url, h5_path, n_written) or (None, None, 0)."""
     hpath = out / "bundles" / f"{slug}-tf.h5"
-    n = _write_tf_mth5(stations, slug, label, hpath, smeta=smeta, failure_rows=failure_rows,
-                       context="survey bundle")
+    key = _survey_h5_key(cache, stations, slug, label, smeta, survey_digest) \
+        if (_mth5_cache_on(cache) and stations) else None
+    n = _write_tf_mth5_cached(stations, slug, label, hpath, smeta, failure_rows, "survey bundle",
+                              cache, key, "survey_h5")
     if not n:
         return None, None, 0
     return f"bundles/{slug}-tf.h5", hpath, n
@@ -4878,7 +5047,8 @@ def _stamp_mth5_source_provenance(station_metadata, record) -> None:
               f"{type(ex).__name__}: {str(ex)[:80]}", file=sys.stderr)
 
 
-def emit_station_mth5(stations, slug, label, h5dir, smeta=None, failure_rows=None):
+def emit_station_mth5(stations, slug, label, h5dir, smeta=None, failure_rows=None, *, cache=None,
+                      survey_digest=""):
     """Tier 1: one
     <station>.h5 per served station, written into h5dir = out/h5/<slug>/ so the per-station MTH5 sits
     beside the edi/ and xml/ families the manifest already keys. deploy/docker/caddy/Caddyfile has
@@ -4909,26 +5079,34 @@ def emit_station_mth5(stations, slug, label, h5dir, smeta=None, failure_rows=Non
     drained IN INPUT ORDER, each task's captured stderr replayed before the next, so the log and
     the returned map are indistinguishable from the serial loop's. The map is consumed by keyed
     lookup, but input order is still the contract: it is what makes the two paths comparable
-    line-for-line."""
+    line-for-line.
+
+    With an enabled `cache` each file is a station_h5 cache entry keyed by _station_h5_key. Hits
+    are placed in the main process before any task is submitted, and only misses reach the pool;
+    the drain still runs in input order, a hit replaying its stored diagnostics in its own slot."""
     written = {}
+    _keyed = _mth5_cache_on(cache)
     if _MTH5_POOL is not None and len(stations) > 1:
-        futs = []
+        plan = []
         for (p, r) in stations:
             hpath = Path(h5dir) / f"{r['id']}.h5"
-            futs.append((r["id"], hpath, _MTH5_POOL.submit(
-                _mth5_write_task, [(str(p), r)], slug, label, str(hpath), smeta)))
-        for sid, hpath, fut in futs:
+            key = _station_h5_key(cache, p, r, slug, label, smeta, survey_digest) if _keyed else None
+            hit = _mth5_cache_fetch(cache, key, "station_h5", hpath) if key else None
+            fut = _DoneFuture(hit) if hit is not None else _MTH5_POOL.submit(
+                _mth5_write_task, [(str(p), r)], slug, label, str(hpath), smeta)
+            plan.append((p, r["id"], hpath, key if hit is None else None, fut))
+        for p, sid, hpath, key, fut in plan:
             n, err, rows = fut.result()
-            if err:
-                sys.stderr.write(err)
-            if failure_rows is not None:
-                failure_rows.extend(rows)
+            _replay_mth5_result(err, rows, failure_rows)
+            _mth5_cache_store(cache, key, "station_h5", hpath, n, err, rows, [p])
             if n:
                 written[sid] = hpath
         return written
     for (p, r) in stations:
         hpath = Path(h5dir) / f"{r['id']}.h5"
-        if _write_tf_mth5([(p, r)], slug, label, hpath, smeta=smeta, failure_rows=failure_rows):
+        key = _station_h5_key(cache, p, r, slug, label, smeta, survey_digest) if _keyed else None
+        if _write_tf_mth5_cached([(p, r)], slug, label, hpath, smeta, failure_rows, "station product",
+                                 cache, key, "station_h5"):
             written[r["id"]] = hpath
     return written
 
@@ -5458,7 +5636,8 @@ def _main_build(argv=None):
                          "ORs with portal.config flags.station_h5_enabled. Wired into deploy/Makefile's "
                          "rebuild-data, which is the ONLY enable that reaches a production build.")
     ap.add_argument("--workers", default=None, metavar="N|auto", type=_workers_arg,
-                    help="MTH5 writer processes (the ~68%%-cold / ~99%%-warm seam of a build). "
+                    help="MTH5 writer processes (~68%% of a cold build; a warm build places "
+                         "cached MTH5 files and writes none). "
                          "Default 1: byte-for-byte identical to a serial build. "
                          "'auto' (or 0) = min(6, cpus). Overrides the AUSMT_BUILD_WORKERS env var; "
                          "only the MTH5 writes parallelise (parse, XML, cache and manifest stay in "
@@ -5947,8 +6126,8 @@ def _main_build(argv=None):
             # EDI copy loop and the tier-2 bundle apply (an MTH5 rebuilt from the RAW source
             # carries the true lat/lon/elev in its own metadata, which is exactly how the survey
             # bundle leaked one before it was gated), so a generalised or withheld station gets no
-            # file, no manifest row and no bytes. NOT cached: the cache stores the pre-mask parse
-            # and the served XML only, and an HDF5 file is not byte-reproducible anyway.
+            # file, no manifest row and no bytes. Each file is a station_h5 cache entry; the gates
+            # above decide membership BEFORE any key is derived, so a withheld station has no entry.
             if flags["station_h5_enabled"]:
                 h5_written = emit_station_mth5(
                     [(_p, _r) for (_p, _r) in stations
@@ -5956,7 +6135,8 @@ def _main_build(argv=None):
                          _coord_default, _coord_overrides, _r.get("id"), _r.get("variant")))
                      and not derived_rendition_withheld(_r)],
                     slug, label, out / "h5" / slug, smeta=meta,
-                    failure_rows=_product_failure_rows)
+                    failure_rows=_product_failure_rows,
+                    cache=build_cache, survey_digest=_survey_digest)
         # One per-survey instrumentation line (the delta of this survey's cache activity vs
         # the snapshot at the top of the iteration). digest=<first12> ties the log to the sidecar so an
         # operator reading the build log sees, per survey, which digest keyed it and how it hit/missed.
@@ -6217,20 +6397,29 @@ def _main_build(argv=None):
                     # survey's station fan-out. An EMPTY row is reserved here so the manifest keeps
                     # the serial build's exact row order; the resolver after the loop fills it (or
                     # leaves it empty for the withheld filter) and writes the LICENSE sidecar then.
+                    # A survey_h5 cache hit is placed here and rides the same drain as a completed
+                    # future; a miss is stored by the drain once its write has passed the gate.
                     _hpath = out / "bundles" / f"{slug}-tf.h5"
                     _row: dict = {}
                     manifest["bundles"].append(_row)
+                    _hkey = _survey_h5_key(build_cache, _h5_stations, slug, label, meta, _survey_digest) \
+                        if (_mth5_cache_on(build_cache) and _h5_stations) else None
+                    _hhit = _mth5_cache_fetch(build_cache, _hkey, "survey_h5", _hpath) if _hkey else None
                     _deferred_bundles.append({
-                        "fut": _MTH5_POOL.submit(
+                        "fut": _DoneFuture(_hhit) if _hhit is not None else _MTH5_POOL.submit(
                             _mth5_write_task, [(str(p), r) for (p, r) in _h5_stations],
                             slug, label, str(_hpath), meta, "survey bundle"),
+                        "cache_key": _hkey if _hhit is None else None,
+                        "sources": [p for (p, _r) in _h5_stations],
                         "rows": _product_failure_rows,
                         "row": _row, "slug": slug, "label": label, "lic": lic,
                         "lic_txt": _lic_txt, "hpath": _hpath, "custodian": _custodian,
                         "nci_base": nci_base})
                 else:
                     _hrel, _hpath, _hn = emit_survey_mth5(_h5_stations, slug, label, out, smeta=meta,
-                                                          failure_rows=_product_failure_rows)
+                                                          failure_rows=_product_failure_rows,
+                                                          cache=build_cache,
+                                                          survey_digest=_survey_digest)
                     if _hpath:
                         manifest["bundles"].append(_bundle_row(label, slug, "mth5", _hpath, _hrel,
                                                                lic, _hn, nci_base=nci_base, base_url=base_url,
@@ -6469,6 +6658,8 @@ def _main_build(argv=None):
     # Ordered strictly BEFORE the QC/mask seam and every manifest/_bundle_formats consumer.
     for _d in _deferred_bundles:
         _n, _err, _rows = _d["fut"].result()
+        _mth5_cache_store(build_cache, _d["cache_key"], "survey_h5", _d["hpath"], _n, _err, _rows,
+                          _d["sources"])
         if _err:
             sys.stderr.write(_err)
         # Fold the bundle's per-station failures into THIS survey's ledger and print only what the
@@ -7094,21 +7285,25 @@ def _main_build(argv=None):
         if a.allow_empty:
             print("note: 0 stations — wrote valid EMPTY default product files (--allow-empty). "
                   "The portal will show its empty state until surveys are added.")
-            _prune_cache(build_cache)
+            _prune_cache(build_cache, out)
             return 0
         attempted = len(work)
         print(f"ERROR: pipeline produced 0 stations from {attempted} survey(s) attempted — "
               f"failing the build (empty products are not a success). Use --allow-empty for an "
               f"intentional fresh-start build.", file=sys.stderr)
         return 2   # a FAILED build does not prune (prune at the end of a SUCCESSFUL build)
-    _prune_cache(build_cache)
+    _prune_cache(build_cache, out)
     return 0
 
 
-def _prune_cache(build_cache):
+def _prune_cache(build_cache, out=None):
     """Run the cache prune at the end of a SUCCESSFUL build (drop entries untouched
-    for the age window, then enforce the AUSMT_CACHE_MAX_MB size cap oldest-first). A prune failure
-    must never fail the build; a disabled/absent cache is a no-op."""
+    for the age window, then enforce the AUSMT_CACHE_MAX_MB size cap oldest-first), then report.
+    The per-kind counters are only final after the prune (evictions), so build_provenance.json's
+    `cache` block is rewritten here and the per-kind summary printed. A size-cap eviction WARNs:
+    evicting what this build used makes the next build miss it, and a cap too small for the corpus
+    would otherwise turn every build cold without a word. A prune or report failure must never
+    fail the build; a disabled/absent cache is a no-op."""
     if build_cache is None or not build_cache.enabled:
         return
     try:
@@ -7116,8 +7311,25 @@ def _prune_cache(build_cache):
         if summary.get("pruned_age") or summary.get("pruned_size"):
             print(f"C18 cache prune: dropped {summary['pruned_age']} aged + {summary['pruned_size']} "
                   f"over-cap entries; kept {summary['kept']} ({summary['bytes'] // 1024} KiB).")
+        if summary.get("pruned_size"):
+            print(f"C18 cache WARN: the size cap (AUSMT_CACHE_MAX_MB={build_cache.max_mb}) evicted "
+                  f"{summary['pruned_size']} entries, {summary['evicted_live']} of them used by this "
+                  f"build (the next build misses those); {summary['bytes'] // (1024 * 1024)} MiB kept. "
+                  f"Raise AUSMT_CACHE_MAX_MB if this repeats.", file=sys.stderr)
     except Exception as e:  # noqa: BLE001
         print(f"  [cache] WARN prune failed (non-fatal): {type(e).__name__}: {e}", file=sys.stderr)
+    stats = build_cache.counters()
+    for _k, _c in stats["kinds"].items():
+        print(f"C18 cache kind {_k}: " + " ".join(f"{f}={_c[f]}" for f in _c), file=sys.stderr)
+    prov = Path(out) / "build_provenance.json" if out is not None else None
+    if prov is not None and prov.is_file():
+        try:
+            doc = json.loads(prov.read_text(encoding="utf-8"))
+            doc["cache"] = stats
+            prov.write_text(_jdump(doc, indent=1), encoding="utf-8")
+        except (OSError, ValueError) as e:
+            print(f"  [cache] WARN build_provenance cache block not updated: {type(e).__name__}: {e}",
+                  file=sys.stderr)
 
 
 if __name__ == "__main__":

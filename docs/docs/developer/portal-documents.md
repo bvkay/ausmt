@@ -209,7 +209,7 @@ exactly what produced the numbers it used.
 | `nci_tier_artifacts` | mandatory | integer | manifest rows served from the NCI tier |
 | `distribution_flags` | mandatory | object | the bundle feature flags in force |
 | `base_url` | mandatory | string | the manifest `base_url` this build wrote |
-| `cache` | mandatory | object | the incremental cache counters, or `{"enabled": false}` |
+| `cache` | mandatory | object | the incremental cache counters, or `{"enabled": false}`; see the notes |
 | `mt_metadata_version` | recommended | string or null | mirrors `build.json` |
 | `mth5_version` | recommended | string or null | mirrors `build.json` |
 | `source_commit` | recommended | string or null | mirrors `build.json` |
@@ -219,6 +219,16 @@ exactly what produced the numbers it used.
 `parameters.dimensionality` records the thresholds the screening ran with. They are read from the named
 constants in the science module rather than retyped, so the recorded parameters cannot drift from the
 code that ran. Provenance describes what actually executed.
+
+`cache`, when the incremental cache ran, carries `enabled`, `mode`, `degenerate`, `reason`,
+`salt_fp`, `max_mb`, the parse-and-XML totals `hits`, `misses`, `writes` and `corrupt`, the I/O
+counters `read_errors` and `write_errors`, a `kinds` object and a `prune` object. `kinds` has one
+member per cache entry kind (`parse`, `xml`, `station_h5`, `survey_h5`), each with the integer
+counters `hits`, `misses`, `writes`, `corrupt`, `link_fallbacks` (an MTH5 file copied because the
+filesystem refused a hardlink) and `evicted` (entries the size cap removed). `prune` is the
+end-of-build prune summary (`pruned_age`, `pruned_size`, `evicted_live`, `kept`, `bytes`), or null
+when the build did not reach it. The counters are deterministic for a given cache state; they are
+never timings.
 
 The document is optional to a consumer: the portal loads without it.
 

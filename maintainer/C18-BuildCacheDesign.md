@@ -359,3 +359,323 @@ Consequences for this contract:
   matching sensitivity leg (a changed impedance value must move the digest). The `<CreateTime>`
   normalisations in `test_build_cache.py` and `test_build_parallel.py` are removed, so the served XML
   and the xml-zip are byte-compared like everything else and a regression fails loudly.
+
+## Amendment A6 (2026-09-30): both MTH5 tiers are cache entries, reused by hardlink
+
+The build profile (`AusMT_2026/BUILD-PERF-PROFILE-2026-08-27.md`) measured a warm rebuild at 73.9
+min, 99.1% of it `_write_tf_mth5`, and a cold build at ~68% `_write_tf_mth5` with the round-trip
+gate `mth5_survey_roundtrip_ok` inside that share. The cache covered none of it: §2's cached value
+was the parse rows and the served XML. This amendment admits the two MTH5 tiers.
+
+### What is admitted
+
+Two new entry kinds, both written by `_write_tf_mth5`:
+
+* `station_h5`: the tier-1 station file `h5/<slug>/<station>.h5` (`emit_station_mth5`);
+* `survey_h5`: the tier-2 survey bundle `bundles/<slug>-tf.h5` (`emit_survey_mth5`, and the
+  pool build's deferred-bundle path in `_main_build`).
+
+HIT: the stored file is placed in the build tree by hardlink, and neither the MTH5 write nor its
+round-trip gate runs. MISS: the file is written and gated exactly as without a cache, and stored
+only if the gate passed (a withheld write, `n == 0`, stores nothing and is written again next
+build). Every cache read and write stays in the main process; the pool only ever sees misses. The
+tier-3 collection file is not admitted (it is disabled by construction and not on the production
+invocation).
+
+### Equality: semantic, not byte
+
+Two writes of the same inputs are not byte-identical. They differ in the root `file.access.time`
+attribute and in the address bytes of HDF5 object references (the profile's "multi-TF bundle size
+wiggle", adjudicated there to internal reference addresses with every value column identical). So
+the claim for a cached MTH5 is:
+
+* **claimed:** a cached file is SEMANTICALLY equal to a fresh write of the same inputs: every
+  attribute and dataset equal, object references compared by the name they resolve to, the one
+  write-clock attribute excluded. `test_semantic_comparator_sees_value_changes_but_not_the_write_clock`
+  pins that the comparator is not blind in either direction.
+* **claimed:** a warm build serves the bytes of the write that populated the entry, so an MTH5
+  manifest SHA-256 holds across warm builds and moves whenever the file is written again
+  (`test_warm_build_hardlinks_both_tiers_and_skips_write_and_gate` compares the warm and populating
+  `manifest.json` byte for byte).
+* **not claimed:** byte identity with an independent full build. A5's baseline ("three independent
+  full builds produce byte-identical served artifacts") already excludes the MTH5, the one served
+  artifact that carries a build clock; this amendment does not change that exclusion and the
+  cache does not widen it. A5's cache invariant becomes, for these two kinds: the cache may only
+  change build speed and which of several semantically equal writes is served.
+
+Why a hit is trustworthy without re-running the gate: the stored file is the very file the miss
+build gated against its own source EDIs, and the key binds every input that reaches it (below),
+so a hit's inputs are the gated write's inputs. `test_warm_h5_files_pass_the_roundtrip_gate_against_this_builds_stations`
+runs the gate over every warm file of two surveys against the warm build's own served EDIs.
+
+### File-payload entry format
+
+A file entry is two files under the key's shard, `<root>/<k[:2]>/`:
+
+* `<k>.<kind>`: the RAW payload, so it can be hardlinked;
+* `<k>.<kind>.ref`: a sidecar in the existing self-verifying format (`<sha256-hex>\n<payload>`)
+  whose payload is JSON `{"sha256", "size", "meta"}`; `meta` is `{"n", "err", "rows"}`, the
+  station count, the captured file-level stderr and the per-station failure rows the populating
+  write produced, which a hit replays so the build log and the `build_report.json` ledger are the
+  same on a hit as on the miss (`test_a_hit_replays_the_populating_writes_diagnostics`).
+
+Write (`put_file`): link (copy on refusal) the gated file to a temporary name in the shard, hash
+that inode, rename it over `<k>.<kind>`, and only then write the sidecar, so no sidecar ever names
+a payload that is not in place. Read (`link_file`): verify the sidecar's own checksum and JSON,
+link the payload to a temporary name BESIDE the destination, re-hash THAT inode against the
+sidecar, and only then rename it into place: what was hashed is what is served. A malformed
+sidecar, a missing payload or a digest mismatch deletes both files and counts `corrupt` and a
+miss, and the seam recomputes (`test_corrupt_payload_is_deleted_counted_and_recomputed`,
+`test_corrupt_sidecar_is_deleted_counted_and_recomputed`). A stored meta the seam cannot use is
+rejected the same way (`reject_file`,
+`test_a_verified_entry_whose_meta_is_unusable_is_rejected_and_rewritten`). The cache stays a passive store: `key_parts` binds the
+fixed salt and the kind, and the seam owns which parts it passes.
+
+### Key components
+
+Every input that reaches the writer, per tier, and where each is bound. Common to both tiers:
+the fixed salt (`ausmt-c47-cache-v7`, the engine source digest, `lib_versions` = mt_metadata and
+mth5, the installed library identity, the contract digest), then `"parts"` and the kind, so no kind
+shares a key with another. The installed library identity (`cache.installed_lib_identity`) is every
+installed distribution in the requirement closure of mt_metadata and mth5 as `name==version`, with
+`@<commit>` for one installed from a VCS URL: the forks are pinned to git commits whose
+`__version__` does not move (mt_metadata 1.0.10, mth5 0.6.8 at the time of writing), so the
+version alone would let a new pin reuse entries the old pin wrote. It is in the fixed salt, so the
+parse and XML entries move with it too
+(`test_keys_move_with_the_installed_library_commit_and_dependency_versions`).
+
+**Station tier** (`_station_h5_key`), in order:
+
+1. `mth5-entry-v1`, the entry-format tag;
+2. the h5py and HDF5 versions (`_mth5_lib_fingerprint`): both shape the file, and the HDF5 C
+   library build is not a distribution version the installed identity can see
+   (`test_station_key_moves_with_the_hdf5_stack`);
+3. sha256 of the source file bytes, and its file NAME (the extension selects the reader);
+4. the survey.yaml digest (the same single-read digest §2 item 5 and A4 use);
+5. slug and label;
+6. the FINAL station id, after `_disambiguate`; the sanitisation `_sanitise_station_id` applies
+   inside the writer is a pure function of that id and of engine code, which the salt binds;
+7. the record's `source_provenance`, which `_stamp_mth5_source_provenance` writes into the station
+   comments;
+8. the SMETA projection `_mth5_survey_fields`: the fields the survey_metadata mapping reads
+   (title, blurb, DOI, organisation, licence, first publication, project lead, first funder).
+   `_apply_mth5_survey_metadata` reads SMETA only through that projection, so a field outside it
+   cannot reach an MTH5 byte without first entering the projection and so the key.
+
+`test_station_key_moves_with_every_component` moves each one in turn.
+
+**Survey tier** (`_survey_h5_key`): the tag, the h5py/HDF5 versions, the survey.yaml digest, slug,
+label, the SMETA projection, then the SORTED member station keys. Each member key binds that
+member's inputs, so an edit to any member, or a member added or dropped, moves the bundle, and
+member order does not (mth5 addresses stations by name)
+(`test_survey_key_is_the_sorted_member_keys_plus_digest_and_salt`,
+`test_one_byte_edi_edit_moves_its_station_and_survey_files_only`).
+
+**Inputs that are deliberately not key parts, and why:**
+
+* *Coordinate access generalisation, the `channels_recorded` impedance mask
+  (`derived_rendition_withheld`), the per-station `station_channels` masks.* They decide
+  MEMBERSHIP, before any key is derived: a withheld or generalised station reaches no writer and
+  gets no entry, and the survey key binds membership through its member keys. The writer re-reads
+  the source file, never the masked record; `test_record_fields_outside_the_key_cannot_reach_the_h5`
+  writes a record carrying nulled coordinates, masks, run facts and other fields and gets a
+  semantically equal file and an equal key. All three declarations live in survey.yaml, so the
+  survey digest moves every key of that survey when one changes in any case. (The tipper mask is
+  not a withhold and a masked tipper is republished in both MTH5 tiers; that is the recorded
+  policy gap in `derived_rendition_withheld`, not a cache matter: the cache serves exactly what a
+  fresh write would.)
+* *Run facts* (`run-metadata.csv`, the >INFO dialect facts in the parse row). `_write_tf_mth5`
+  reads the record in three places only: `r["id"]`, `source_provenance`, and the round-trip
+  gate's `_survey` lookup tag, which only the collection tier sets and which that tier's
+  `(None, id)` fallback makes irrelevant for the two cached tiers. Run facts reach station.json,
+  not the MTH5 (same test, whose record also carries a `_survey` tag).
+* *The --pid-status resolution facets.* The one file outside the survey package that feeds SMETA
+  (`/out/cache/pid_status.json` on the box) adds `doi_resolution` and related facets. They are not
+  in the projection, and `test_pid_status_and_unread_smeta_fields_cannot_reach_the_h5` writes the
+  full resolved SMETA and its projection and gets semantically equal files and equal keys. The DOI
+  VALUE itself is in the projection, so an injected or changed DOI moves the key.
+* *--seed-meta.* Only a `--raw` build reads it, and A1a keeps `--raw` builds out of the cache
+  entirely; `test_raw_seed_meta_build_never_caches_an_mth5` pins that for the MTH5 kinds with both
+  h5 flags on.
+* *failure_rows.* An OUTPUT of the writer, never an input: it is stored in the entry's meta and
+  replayed on a hit.
+* *The source file's directory.* It never reaches the file
+  (`test_source_directory_is_not_a_key_part_because_it_never_reaches_the_h5`).
+* *The pin and lock files* (`engine/requirements*.txt`, `engine/environments/`). Not key parts:
+  what they pin reaches the key through the installed identity above, which reads the
+  distributions the build actually imports rather than the files that were meant to install them.
+  A library outside the mt_metadata/mth5 requirement closure is not keyed; a change there that
+  should re-derive the corpus is a `--cache-mode refresh` build.
+
+### Hardlink discipline and prune
+
+The cache payload, the file in the build that populated it, and the file in every warm build since
+are ONE inode. That is safe only because nothing ever writes into an existing MTH5 inode:
+
+* a build writes a new file: `_write_tf_mth5` unlinks any file at its path BEFORE `open_mth5(mode="w")`,
+  because mode "w" truncates in place and would write through into the cache and every tree that
+  links the inode. That unlink is load-bearing and commented as such;
+  `test_rewriting_a_served_tree_never_writes_through_to_the_cache` rebuilds, without a cache, into a
+  tree whose files are cache links and asserts every payload keeps its bytes (removing the unlink
+  turns it red: "a write into a served tree changed a cache payload");
+* the cache stores or replaces an entry by renaming a new file over the old name, and places a hit
+  by renaming a verified link into place; neither ever opens an existing payload for writing. A
+  hit placed at a dest that already links the same payload (a second build into the same `--out`)
+  is a rename between two names of one inode, which succeeds and moves nothing, so the temporary
+  name is unlinked after every rename
+  (`test_relinking_a_dest_that_already_is_the_payload_leaves_no_temporary`);
+* served trees are never mutated in place; the box prunes old builds with `rm -rf`, which unlinks
+  names; a release (`cut_release._copy_tree`) is a `shutil.copy2` byte copy, a new inode that shares
+  nothing with the cache.
+
+So unlinking a cache entry (prune, eviction, corrupt drop, refresh replacement) never changes a
+served tree: the tree keeps its name on the same inode and the bytes it verified with
+(`test_evicting_every_entry_leaves_the_served_tree_intact` evicts every entry under a zero cap and
+reruns `verify.py` on the warm tree). The corollary: bit rot in a shared inode is rot in every tree
+that links it, which is why every read re-hashes before placing, and why `verify.py` stays the full,
+cache-blind, byte-re-hashing gate §0 made it.
+
+A filesystem that refuses a hardlink (cross-device EXDEV, no link support, a link-count limit) gets
+a byte copy, counted in `link_fallbacks`; a copy is a new inode, so the discipline above holds
+trivially (`test_failed_hardlink_falls_back_to_a_counted_copy`). On the box `/out/cache` and
+`/out/builds` are siblings on one volume, so links are expected to succeed there.
+
+The prune now works on ENTRIES, not files: an entry is every file of one key inside its
+two-character shard, aged and evicted together, so a payload and its sidecar live and die as one,
+and anything else in the cache root (the Makefile keeps `pid_status.json` there) is never counted,
+aged or evicted (`test_file_entry_roundtrip_and_prune_keeps_foreign_files`). A hit touches the
+sidecar only: the payload's mtime is also the served file's mtime and must not move with cache
+bookkeeping; an entry's age is the newest mtime of its files. A put killed between its link and
+its rename strands `.<key>.<kind>.<pid>.<ns>.tmp` in the shard, which for an MTH5 kind is a whole
+file; it is not an entry, so the prune removes such a temporary once it is older than
+`TMP_GRACE_SECONDS` (one day), which no live put reaches
+(`test_prune_removes_stale_put_temporaries_and_nothing_else`).
+
+A miss is stored only if every source file still hashes to the digest its key was derived from.
+The key hashes each EDI when the build first reads it, and the writer reads it again later, often
+in a worker; an EDI edited in between (a surveys checkout moved during `rebuild-data`) is written
+and gated as bytes the key does not name. Such a file is served by the
+build that wrote it and not stored, so a later build over the original bytes cannot hit it
+(`test_a_source_edited_after_its_key_was_derived_is_not_stored`). The check costs one hash per
+source of a miss; a hit reads no source.
+
+### The cap, sized from measured sizes
+
+§3's default of 2048 MB is superseded: `CACHE_MAX_MB_DEFAULT = 16384`, and `deploy/compose.yaml`
+forwards the same default (`test_compose_default_cap_matches_the_engine_default` pins them equal;
+`test_every_written_copy_of_the_default_cap_matches_the_engine_default` pins the env template, the
+operator pages and this section). The prune reads the cap as `max_mb * 1024 * 1024` bytes, so 16384
+is 17,179,869,184 B.
+
+Every figure below is from the live-corpus acceptance run: one cold build then one warm build of
+engine commit `b362918` (the build_id recorded in the run's build.json; after the branch was rebased onto main the same patch is `6aedf7d`) over 15,265 stations in 161 surveys (`n_stations`, `n_surveys` in
+`sm/.corpus-live-out/builds/{cold,warm}/build_provenance.json`), mt_metadata 1.0.10 and mth5 0.6.8
+(the same files' `software` block), h5py 3.16.0 and HDF5 2.0.0 (`h5py.__version__` and
+`h5py.version.hdf5_version` in `ausmt-lock`), four workers, both MTH5 flags on
+(`logs/run_build.sh`). Paths are relative to `sm/.corpus-live-out/`.
+
+* **One key generation is 5,480,914,613 B (5,227 MiB).** The cold build's `cache.prune` block
+  records `bytes: 5480914613`, `kept: 41741`, `pruned_age: 0`, `pruned_size: 0`, so the cache after
+  that build is exactly one generation; the warm build's block records the same bytes and entries.
+  Summing `stat -f %z` over every file under `cache/` gives the same 5,480,914,613 B.
+* **By kind** (`find cache -type f -name '*.<ext>' -print0 | xargs -0 stat -f %z`, summed):
+  station MTH5 13,267 payloads, 2,889,318,340 B; survey MTH5 147 payloads, 985,145,227 B; XML 13,049
+  `.xml` payloads, 1,469,314,736 B, plus 13,049 `.meta` files, 11,363,184 B; parse 15,278 `.json`
+  entries, 122,986,259 B; file-entry sidecars 13,414 `.ref` files, 2,786,867 B. The entry counts
+  agree with the cold build's `kinds` writes (`parse` 15,278, `xml` 26,098 as two files per key,
+  `station_h5` 13,267, `survey_h5` 147).
+* **On disk:** `du -sh cache` prints `5.3G`; `find cache | wc -l` prints `68461`, which is the
+  68,204 files (`find cache -type f | wc -l`) plus the 256 shard directories and the root.
+* **The served MTH5 tiers of the cold build:** `du -sh builds/cold/h5` prints `2.7G`,
+  `find builds/cold/h5 | wc -l` prints `13424` (13,267 files, 2,889,318,340 B, and 157
+  directories); `du -sh builds/cold/bundles` prints `1.4G`, `find builds/cold/bundles | wc -l` prints
+  `604` (603 files: the 147 `-tf.h5` survey MTH5 at 985,145,227 B, plus 309 `.zip` and 147 `.txt`
+  EDI bundle files at 507,101,106 B, which the cache does not hold).
+* **The fixture** (the two sample stations, one cold build into an empty cache, re-run on this
+  stack): parse 10,615 B for 2 entries, XML 121,069 B for 2 (plus 839 B of meta each), station
+  MTH5 208,487 B each, the 2-station survey MTH5 276,327 B, sidecars 190 B each.
+
+The cap holds 17,179,869,184 / 5,480,914,613 = 3.13 generations: three whole generations at
+today's corpus. At 359,051 B per station (5,480,914,613 B over 15,265 stations, assuming a
+generation grows linearly with station count), one generation exceeds the cap at about 47,850
+stations, 3.13 times today's corpus; a 25,000-station corpus would make a generation of 8.36 GiB
+and the cap would hold 1.9 of them. The previous default of 8192 held 1.57 generations and a
+single generation would have exceeded it at about 23,920 stations.
+
+What the cap does at each stage. Below the growth point a new generation (an engine-source or
+library change re-keys everything) is written beside the old ones; once the retained generations
+together pass the cap (the fourth, at today's size), the prune evicts oldest-first, which is the old
+generations, and the build prints the WARN below with `M = 0`. Past the growth point one generation
+no longer fits: every build's prune evicts entries that build used, the next build misses them, and
+the WARN fires on every build with `M > 0`. That is the signal to raise the cap, or the corpus
+turns cold build after build. Old generations also age out after 90 days untouched.
+
+The cap counts the cache's own file sizes, so a payload hardlinked into retained builds is counted
+in full although the disk holds it once: the cap bounds what the cache would cost if every build
+sharing it were pruned. Disk use of the whole data volume goes DOWN with this amendment: the box
+retains 5 builds (`deploy/Makefile`, `ls -1t | tail -n +6`), each of which held its own copy of the
+MTH5 tiers, 2,889,318,340 B of station MTH5 and 985,145,227 B of survey MTH5 at today's corpus
+(3.61 GiB); warm builds now share one inode per file with the cache (after the acceptance run all
+13,267 station MTH5 in `builds/cold/h5` and all 147 survey MTH5 in `builds/cold/bundles` carry link
+count 3, `stat -f %l`: the cache payload, the cold tree and the warm tree).
+
+When the size cap does evict, the build says so: `C18 cache WARN: the size cap
+(AUSMT_CACHE_MAX_MB=...) evicted N entries, M of them used by this build`. `M` counts evicted
+entries whose mtime is at or after the build's start, which the next build misses; a repeating
+warning with `M > 0` means the cap is too small for the corpus
+(`test_size_cap_eviction_warns_and_is_counted`).
+
+An entry's age for the 90-day rule is the newest mtime of its files, so a file entry hit by a build
+keeps its place through the sidecar that hit touched, however old its payload
+(`test_a_hit_keeps_a_file_entry_whose_payload_is_older_than_the_age_window`).
+
+### Negative outcomes are recomputed
+
+The cache stores only a file it verified, so a station or survey for which no entry is ever stored
+is recomputed on every build by design: a withheld rendition, an `n == 0` write, or a writer or
+round-trip failure. The warm build's `kinds` block (`builds/warm/build_provenance.json`, and the
+`C18 cache kind` lines of `logs/warm.log`) counts them: `xml` 26,098 hits and 1,779 misses,
+`station_h5` 13,267 hits and 1,561 misses, `survey_h5` 147 hits and 9 misses, every kind with
+`writes=0`, so every miss was an outcome that stores nothing. The cold build's misses (`xml` and
+`station_h5` 14,828 each, `survey_h5` 156) less its stored entries (13,049, 13,267, 147) give the
+same 1,779, 1,561 and 9. Two surveys account for a share of them in `logs/warm.log`:
+`seahorse-2022-23` logs `[h5] WARN ... MTH5Error:  does not exist, check station_list for existing
+names - 167 file(s)` and 111 derived EDI round-trip failures, and serves 278 station MTH5 and 334
+XML for 445 EDIs; `black-hill-2005-06` logs 180 round-trip failures (177 derived EDI, 3 canonical
+EMTF-XML), every one on lines 11, 12, 16, 25 and 26, which its `survey.yaml` declares the 180
+figure-recovered files, and serves 229 XML for 409 EDIs. The whole warm build, these
+recomputations included, took 525 s (`logs/warm.log`: `BUILD_RC=0 wall_s=525`) against 4,037 s cold
+(`logs/cold.log`: `BUILD_RC=0 wall_s=4037`). Caching a negative outcome would need a sentinel entry
+that a hit replays as "nothing to serve", with its own key and verification rules; that is out of
+scope for this amendment.
+
+### Counters
+
+`build_provenance.json`'s `cache` block keeps the corpus totals `hits`, `misses`, `writes`,
+`corrupt` as the parse + XML tally, so their meaning under the per-survey lines and the deploy
+alerting does not move, and adds `max_mb`, `prune` (`pruned_age`, `pruned_size`, `evicted_live`,
+`kept`, `bytes`) and `kinds`: for each of `parse`, `xml`, `station_h5`, `survey_h5` the integer
+counters `hits`, `misses`, `writes`, `corrupt`, `link_fallbacks`, `evicted`. The block is rewritten
+after the end-of-build prune, because evictions are only final then, and the build prints one
+`C18 cache kind <kind>: ...` line per kind to stderr
+(`test_build_provenance_carries_per_kind_counters_and_the_log_prints_them`). Counters stay
+deterministic; none is a timing.
+
+### Modes and the degenerate salt
+
+* `rw`: read, place hits, write misses, prune at the end of a successful build.
+* `ro`: reads and places hits exactly as `rw`; never stores an entry, and does not prune. As for
+  the parse and XML entries, a hit still refreshes the entry's mtime and a read that fails its
+  checksum still deletes the bad entry (`test_refresh_rewrites_and_ro_never_writes`: ro against an
+  empty cache leaves it empty; ro against a populated one hits everything and leaves the listing of
+  names and inodes unchanged).
+* `refresh`: every MTH5 read is a miss, every file is written and gated, and every entry is
+  replaced by a new inode; builds that linked the old inode keep it.
+* degenerate salt, or the `--raw` policy exclusion: the cache is inert, no MTH5 key is even
+  derived, every file is written and gated fresh, and every per-kind counter is zero
+  (`test_degenerate_salt_writes_fresh_and_never_touches_the_cache`).
+
+The parallel build (`--workers`) keys, links and populates exactly as the serial one
+(`test_parallel_build_hits_the_same_entries`). All of the above is in
+`engine/tests/test_build_cache_mth5.py`; `docs/docs/developer/build-lifecycle.md` and
+`portal-documents.md` carry the operator- and consumer-facing parts.

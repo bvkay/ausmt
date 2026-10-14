@@ -15,9 +15,9 @@ included; `--survey-h5` enables the per-survey MTH5 bundles and `--station-h5` t
 files. The engine image ships without the portal config, so these flags, not `portal.config.yaml`, are
 the production enables.
 
-`--workers N|auto` parallelises the MTH5 writes (the dominant build cost: ~68% of a cold build,
-~99% of a warm rebuild) across worker processes; `auto` means `min(6, cpus)`. Only the MTH5 writes
-fan out. Parsing, EMTF XML, the build cache and all manifest bookkeeping stay in the main process,
+`--workers N|auto` parallelises the MTH5 writes (the dominant build cost: ~68% of a cold build)
+across worker processes; `auto` means `min(6, cpus)`. Only the MTH5 writes fan out. Parsing, EMTF
+XML, every build-cache read and write and all manifest bookkeeping stay in the main process,
 and the engine's `test_build_parallel` pins a parallel build's products as indistinguishable from a
 serial build's. The default without the flag is 1, the serial build; `deploy/Makefile`'s
 `rebuild-data` passes `auto` (override with `AUSMT_BUILD_WORKERS` in the deploy `.env`).
@@ -32,7 +32,14 @@ publish a download route under an identifier nothing assigned. Without the flag 
 and the output is byte-identical to a build from before the flag existed.
 
 1. Parse arguments; create the output directories; resolve the survey validator (`AUSMT_VALIDATOR_PATH`
-   or the documented search path). An unresolvable validator aborts the build.
+   or the documented search path). An unresolvable validator aborts the build. The validator is
+   `AUSMT_VALIDATOR_PATH` when set (a directory holding `validate_survey.py`, or the file itself;
+   unresolvable is a hard error, never a fall-through), else the first
+   `ausmt-surveys/_validation/validate_survey.py` under `engine/extract/` or one of its five nearest
+   parent directories, and the log line `survey validator: ...` names the one chosen; the container
+   pins `/srv/surveys/_validation`, and a host build must pin the variable to the validator of the
+   surveys checkout it builds, because the walk adopts whatever `ausmt-surveys` clone sits above the
+   engine and a stale one skips packages the current validator accepts.
 2. Discover survey packages: one folder per survey containing `survey.yaml` and
    `transfer_functions/edi|emtfxml|mth5/`. Folders prefixed `_` are skipped; a package that fails
    validation is skipped and reported.
@@ -65,11 +72,48 @@ and the output is byte-identical to a build from before the flag existed.
 
 With `--incremental --cache-dir`, unchanged stations are served from the build cache, keyed on the EDI
 bytes, a content digest of the engine's product-producing code (`engine/extract`, `engine/ausmt_science`,
-`engine/schema` and the column contract), library versions and the `survey.yaml` digest, so it can only
-affect build speed, never output bytes. The engine git commit is not part of the key: an engine image
+`engine/schema` and the column contract), the installed library stack (every distribution in the
+requirement closure of mt_metadata and mth5, by version and, for the git-pinned forks, by commit) and
+the `survey.yaml` digest. For the parse and XML products it can only affect build speed, never output
+bytes; for the MTH5 files it can also change which of several equal-content writes is served (see
+below). The engine git commit is not part of the key: an engine image
 whose product code is unchanged keeps the cache warm. A degenerate salt (an unknown engine commit, a
 dirty checkout, or no digestable engine tree) disables it. Raw/bulk mode (`--raw` with `--collections` and `--seed-meta`, for regenerating a seed from
 loose EDI folders) is excluded from caching; see [How to extend](extending.md#bulk-and-seed-mode).
+
+The cache holds four kinds of entry: the parse rows (`parse`), the served EMTF XML (`xml`), the
+per-station MTH5 `h5/<slug>/<station>.h5` (`station_h5`) and the survey MTH5
+`bundles/<slug>-tf.h5` (`survey_h5`). An MTH5 hit is placed in the build tree by hardlink to the
+cached file (a byte copy where the filesystem refuses a link, counted as a `link_fallback`), and
+neither the MTH5 write nor its round-trip gate runs for it; a miss writes and gates exactly as
+without a cache and stores the file only if the gate passed. The station key binds the source
+file's bytes and name, the final station id, its declared source provenance, the slug, label and
+`survey.yaml` digest, the survey metadata fields the MTH5 carries, and the h5py and HDF5 versions
+on top of the installed library stack every key carries; the survey key is the sorted set of its
+member station keys with the survey digest, so any member edit moves the bundle too. Two MTH5
+writes of the same inputs are not byte-identical (HDF5 records a write clock and internal
+addresses), so a cached MTH5 is equal to a fresh write in content, not in bytes, and a warm build serves the bytes of the build that populated
+the entry: its manifest SHA-256 holds across warm builds and moves when the file is written again.
+
+Nothing ever writes into an existing MTH5 file: a build writes a new file, and the cache stores or
+replaces an entry by renaming a new file into place. That is why one inode can safely be shared by
+the cache and every retained build, and why a pruned entry never changes a served tree. Every cache
+read re-hashes the file against the entry's checksum before it is placed; a mismatch deletes the
+entry, counts it as `corrupt` and rebuilds the file.
+
+`build_provenance.json`'s `cache` block carries the corpus totals (`hits`, `misses`, `writes`,
+`corrupt`: the parse and XML entries, as the `C18 cache [...]` line prints them) and a `kinds`
+block with `hits`, `misses`, `writes`, `corrupt`, `link_fallbacks` and `evicted` for each of the
+four kinds, final after the end-of-build prune, which the build also prints to stderr as one
+`C18 cache kind <kind>: ...` line per kind. The size cap is `AUSMT_CACHE_MAX_MB` (default 16384).
+When the prune evicts entries to meet it the build prints `C18 cache WARN: the size cap ...
+evicted N entries, M of them used by this build`; entries this build used are misses for the next
+one, so a repeating warning with M above zero means the cap is too small for the corpus. The prune
+only touches cache entries (files named by their key inside the two-character shard directories),
+so a file kept beside them in the cache root, such as `pid_status.json`, is never aged or evicted;
+it also removes a temporary a killed build left in a shard once that temporary is a day old. An
+MTH5 miss is stored only if its source EDIs still hash to what the key was derived from, so an
+EDI edited while the build ran is served by that build but never cached under its old bytes.
 
 ## Exit codes
 
@@ -204,8 +248,8 @@ one emitter that still prints one line per failing file, because a collection sp
 no per-survey report entry to fold into; that tier is capped at a few hundred stations by
 `collection_h5_allowed`, so its line count is bounded by construction.
 
-The count lines (`C18 survey ...`, `C18 cache [...]`, `built N stations`, the `QC:` summary) are
-unchanged, and so is every gate that stops or withholds: a `WITHHOLD`, a `GATE FAIL`, a `SKIP` and a
+The count lines (`C18 survey ...`, `C18 cache [...]`, `C18 cache kind ...`, `built N stations`, the
+`QC:` summary) are unchanged, and so is every gate that stops or withholds: a `WITHHOLD`, a `GATE FAIL`, a `SKIP` and a
 duplicate-id `ERROR` still name their own file or station.
 
 Two export shapes look like frame mixing and are not drops. A rotation block that reads 0 only at periods whose transfer function is the EMPTY sentinel is one frame: exporters write 0 where they have no estimate, so the gate reads rotation angles only at periods that carry data (the Delamerian shape, 8 or 41 degrees on every estimate). A spectra ROTSPEC exactly a half-turn from the coil azimuths (ROTSPEC=180 with HX written 360, the Bollards Lagoon shape) leaves the impedance unchanged, so the station serves in the azimuth frame with the tipper sign ambiguity noted.

@@ -152,6 +152,12 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # Same designed-topology class as the portal/docs entries above; INERT on every checkout workflow,
     # where the workflow is always present and both pins assert.
     "engine image build: workflow tree not shipped",
+    # test_build_cache_mth5.py, the same designed-topology class, for the deploy tree: the cache cap
+    # has written copies in deploy/compose.yaml and deploy/.env.example that must equal the engine
+    # default, and engine.Dockerfile does not COPY deploy/, so in the image workflow those two pins
+    # skip with the exact reason below. INERT on checkout workflows, where deploy/ is present and
+    # both pins assert.
+    "engine image build: deploy tree not shipped",
 ]
 
 # `pytest -rs` prints one line per DISTINCT (location, reason): "SKIPPED [N] path:line: <reason>",

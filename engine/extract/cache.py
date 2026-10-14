@@ -33,14 +33,24 @@ Design: maintainer/C18-BuildCacheDesign.md. The invariants this module upholds:
     computed FROM the served bytes) cannot see a poisoned value that flowed through the build; it
     guards post-build tampering of the served tree only.
 
+  * FILE entries (the two MTH5 tiers) keep the payload RAW so it can be hardlinked into the build
+    tree, beside a self-verifying JSON sidecar `<key>.<kind>.ref` that carries the payload's sha256
+    and the seam's meta. A read links the payload to a temporary name in the build tree, re-hashes
+    THAT inode against the sidecar and only then renames it into place, so what was hashed is what
+    is served. Neither the cache nor a build ever writes into an existing inode (every write is a
+    new file renamed over the old name), so a payload shared by a cache entry and any number of
+    served trees cannot change under either of them; unlinking one name never touches the others.
+
 The cache is a passive store: it makes no policy decisions about WHAT is cacheable, only about
 whether a given key is present and readable. The build seams decide what to compute-and-put.
 """
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -50,10 +60,28 @@ from pathlib import Path
 # Prune policy defaults - operator-tunable, single-sourced here. Adjudicated v1 policy:
 # an mtime-age window + a size cap, oldest-first. The design's "20 builds" window is
 # NOT implemented (the cache keeps no per-build ledger); age is the operator-meaningful bound.
-CACHE_MAX_MB_DEFAULT = 2048          # AUSMT_CACHE_MAX_MB overrides (size cap, oldest-first eviction)
+CACHE_MAX_MB_DEFAULT = 16384         # AUSMT_CACHE_MAX_MB overrides (size cap, oldest-first eviction)
 PRUNE_MAX_AGE_DAYS = 90              # drop entries untouched for this many days
 
 CACHE_MODES = ("rw", "ro", "refresh")
+
+# The per-kind counter buckets. parse and xml are the JSON/bytes entries; the MTH5 tiers are FILE
+# entries (raw payload + sidecar). The corpus-total hits/misses/writes/corrupt stay the parse+xml
+# tally, so their meaning does not move under the per-survey lines and the deploy alerting.
+KINDS = ("parse", "xml", "station_h5", "survey_h5")
+FILE_KINDS = ("station_h5", "survey_h5")
+_KIND_FIELDS = ("hits", "misses", "writes", "corrupt", "link_fallbacks", "evicted")
+_REF = "ref"   # sidecar suffix of a file entry: <key>.<kind>.ref
+
+# Which bucket an entry file belongs to, by its name after the key. The prune reads this to count
+# evictions per kind; a name the table does not know is still an entry and still counts to the cap.
+_KIND_OF_EXT = {"json": "parse", "xml": "xml", "meta": "xml",
+                **{k: k for k in FILE_KINDS}, **{f"{k}.{_REF}": k for k in FILE_KINDS}}
+_ENTRY_NAME = re.compile(r"^([0-9a-f]{64})\.(.+)$")
+# The temporary a put writes beside its entry before the rename. One older than the grace period
+# belongs to a put that was killed between the two steps; a younger one may be a put in flight.
+_TMP_NAME = re.compile(r"^\.[0-9a-f]{64}\..*\.tmp$")
+TMP_GRACE_SECONDS = 86400
 
 
 def _dirty_checkout(cwd: Path) -> bool | None:
@@ -168,6 +196,49 @@ def engine_source_digest(engine_root) -> str:
     return h.hexdigest()
 
 
+# The libraries whose installed identity keys every entry: the product writers, and through their
+# declared requirements the stack beneath them. A fork pinned to a git commit keeps its release
+# __version__, so the version alone cannot tell two installs apart.
+LIB_IDENTITY_ROOTS = ("mt_metadata", "mth5")
+
+
+def _dist_key(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def installed_lib_identity(roots=LIB_IDENTITY_ROOTS) -> str:
+    """Every installed distribution in the requirement closure of `roots`, as sorted
+    `name==version` lines, each suffixed `@<commit>` when the distribution was installed from a
+    VCS URL. Requirements behind an extra are not followed; one not installed is left out. Any
+    change to the installed stack moves the string, which over-invalidates at worst."""
+    seen: dict = {}
+    stack = list(roots)
+    while stack:
+        name = stack.pop()
+        key = _dist_key(name)
+        if key in seen:
+            continue
+        seen[key] = None
+        try:
+            dist = importlib.metadata.distribution(name)
+            ident = f"{key}=={dist.version}"
+            try:
+                commit = json.loads(dist.read_text("direct_url.json") or "{}") \
+                    .get("vcs_info", {}).get("commit_id")
+            except (ValueError, AttributeError):
+                commit = None
+            seen[key] = f"{ident}@{commit}" if commit else ident
+            for req in dist.requires or []:
+                if "extra" in req.partition(";")[2]:
+                    continue
+                m = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", req)
+                if m:
+                    stack.append(m.group(1))
+        except Exception:  # noqa: BLE001  (absent or unreadable metadata: that library is omitted)
+            continue
+    return "\n".join(sorted(v for v in seen.values() if v))
+
+
 # NOTE: the per-survey yaml digest is not derived here. It is
 # computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from,
 # one read feeds both, so a mid-build survey.yaml edit can never key products under a digest their
@@ -189,7 +260,7 @@ class BuildCache:
     def __init__(self, root: Path, *, engine_commit, lib_versions: dict,
                  contract_digest: str, mode: str = "rw", checkout_dir: Path | None = None,
                  max_mb: int | None = None, disabled_reason: str = "",
-                 source_digest: str | None = None):
+                 source_digest: str | None = None, lib_identity: str | None = None):
         self.root = Path(root)
         self.mode = mode if mode in CACHE_MODES else "rw"
         self.engine_commit = engine_commit
@@ -199,6 +270,8 @@ class BuildCache:
             source_digest = engine_source_digest(Path(__file__).resolve().parent.parent)
         self.source_digest = str(source_digest)
         self.lib_versions = dict(lib_versions or {})
+        # None derives the identity of the library stack installed in this interpreter.
+        self.lib_identity = installed_lib_identity() if lib_identity is None else str(lib_identity)
         self.contract_digest = contract_digest or ""
         self.max_mb = int(max_mb) if max_mb is not None else _env_max_mb()
         # Counters: deterministic build-report evidence, NOT wall-clock timing.
@@ -212,6 +285,11 @@ class BuildCache:
         # but attributable — a lock-induced spurious miss is not a cold miss).
         self.write_errors = 0
         self.read_errors = 0
+        self.kinds = {k: dict.fromkeys(_KIND_FIELDS, 0) for k in KINDS}
+        # Entries touched or written at or after this instant were used by THIS build; an eviction
+        # of one of them means the next build misses it (the cap is too small for the corpus).
+        self.started = time.time()
+        self.last_prune: dict | None = None
         # `disabled_reason` is a POLICY exclusion (e.g. --raw builds, whose seed-meta
         # citations feed served XML but are not a key component) — behaviourally identical to a
         # degenerate salt: the cache is inert, no reads, no writes.
@@ -254,12 +332,14 @@ class BuildCache:
             "ausmt-c47-cache-v7",
             self.source_digest,                                      # coarse engine-source salt
             json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions
+            self.lib_identity,                                       # installed stack, VCS commits
             self.contract_digest,                                    # columns + schema digest
         ])
         # Forensics: a short fingerprint of the FULL fixed salt (version tag + engine source digest +
-        # lib versions + contract digest). Two builds that should key identically expose identical
-        # fingerprints; a mid-process salt flip (the flake class: moving HEAD, transient
-        # rev-parse failure, contract-file read failure) is attributable from the build report alone.
+        # lib versions + installed stack + contract digest). Two builds that should key identically
+        # expose identical fingerprints; a mid-process salt flip (the flake class: moving HEAD,
+        # transient rev-parse failure, contract-file read failure) is attributable from the build
+        # report alone.
         self.salt_fp = hashlib.sha256(self._fixed_salt.encode("utf-8")).hexdigest()[:12]
         if self.enabled:
             self.root.mkdir(parents=True, exist_ok=True)
@@ -278,50 +358,72 @@ class BuildCache:
         material = "\x00".join([self._fixed_salt, str(edi_sha), str(survey_digest or ""), str(kind)])
         return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
+    def key_parts(self, kind: str, parts) -> str:
+        """The key of an entry whose material the SEAM enumerates: the fixed salt, the kind, then
+        every part in the given order. The seam owns completeness (which inputs reach the product);
+        this only guarantees that the salt is always bound and that two kinds never share a key."""
+        material = "\x00".join([self._fixed_salt, "parts", str(kind), *(str(x) for x in parts)])
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
     def _path(self, key: str, ext: str) -> Path:
         return self.root / key[:2] / f"{key}.{ext}"
 
-    def get_bytes(self, key: str, ext: str) -> bytes | None:
-        """Read a cached blob's PAYLOAD, or None on miss / disabled / refresh-mode / integrity
-        failure. Increments hits on a verified read, misses otherwise. `refresh` mode forces a miss
-        (ignore hits and rewrite): the forced-full-rebuild escape hatch that still repopulates.
+    def _tally(self, kind, field: str, n: int = 1) -> None:
+        if kind in self.kinds:
+            self.kinds[kind][field] += n
 
-        Integrity: the entry is `<sha256-hex>\\n<payload>`; the payload is RE-HASHED on every
-        read. A malformed entry or a digest mismatch (bit rot, tampering) is deleted, counted in
-        `corrupt`, tallied as a MISS, and None returned so the caller recomputes — fail-safe."""
-        if not self.enabled or self.mode == "refresh":
-            self.misses += 1
-            return None
-        p = self._path(key, ext)
+    def _read_entry(self, p: Path):
+        """(status, payload) for one self-verifying entry file: "ok", "absent" (a cold miss),
+        "unreadable" (present but not readable, counted in read_errors) or "corrupt" (malformed or
+        digest mismatch, already deleted). Touches no hit/miss counter: the callers tally."""
         try:
             raw = p.read_bytes()
         except FileNotFoundError:
-            self.misses += 1
-            return None
+            return "absent", None
         except OSError:
-            # A PRESENT-but-unreadable entry (Windows AV/indexer lock, permissions) is not a
-            # normal cold miss. Still tallied as a miss (the arithmetic and the recompute path
-            # are unchanged) but counted in read_errors so a lock-induced spurious miss is
-            # attributable from the build report instead of masquerading as content drift.
             self.read_errors += 1
-            self.misses += 1
-            return None
+            return "unreadable", None
         head, sep, payload = raw.partition(b"\n")
         if not sep or head != hashlib.sha256(payload).hexdigest().encode("ascii"):
-            self.corrupt += 1
+            _safe_unlink(p)
+            return "corrupt", None
+        return "ok", payload
+
+    def get_bytes(self, key: str, ext: str, kind: str | None = None) -> bytes | None:
+        """Read a cached blob's PAYLOAD, or None on miss / disabled / refresh-mode / integrity
+        failure. Increments hits on a verified read, misses otherwise. `refresh` mode forces a miss
+        (ignore hits and rewrite): the forced-full-rebuild escape hatch that still repopulates.
+        `kind` names the per-kind bucket the read is tallied in as well as the corpus totals.
+
+        Integrity: the entry is `<sha256-hex>\\n<payload>`; the payload is RE-HASHED on every
+        read. A malformed entry or a digest mismatch (bit rot, tampering) is deleted, counted in
+        `corrupt`, tallied as a MISS, and None returned so the caller recomputes: fail-safe.
+        A PRESENT-but-unreadable entry (Windows AV/indexer lock, permissions) is tallied as a miss
+        too, but counted in read_errors so a lock-induced spurious miss is attributable from the
+        build report instead of masquerading as content drift."""
+        if not self.enabled or self.mode == "refresh":
             self.misses += 1
-            _safe_unlink(p)      # drop the bad entry; the caller's recompute re-puts a good one
+            self._tally(kind, "misses")
+            return None
+        status, payload = self._read_entry(self._path(key, ext))
+        if status != "ok":
+            if status == "corrupt":
+                self.corrupt += 1
+                self._tally(kind, "corrupt")
+            self.misses += 1
+            self._tally(kind, "misses")
             return None
         self.hits += 1
+        self._tally(kind, "hits")
         self._touch(key, ext)   # mark recently-used for the age prune policy
         return payload
 
-    def get_json(self, key: str, ext: str = "json"):
+    def get_json(self, key: str, ext: str = "json", kind: str | None = None):
         """Read a cached JSON blob (the parse-rows / xml-meta product), or None on miss. Shares the
         get_bytes counter + integrity semantics. A checksum-VALID payload that fails to decode is a
         put-side defect (put_json always writes valid JSON), handled with the same fail-safe
         discipline: revoke the counted hit, count corrupt + miss, drop the entry, recompute."""
-        raw = self.get_bytes(key, ext)
+        raw = self.get_bytes(key, ext, kind)
         if raw is None:
             return None
         try:
@@ -330,57 +432,189 @@ class BuildCache:
             self.hits -= 1
             self.misses += 1
             self.corrupt += 1
+            self._tally(kind, "hits", -1)
+            self._tally(kind, "misses")
+            self._tally(kind, "corrupt")
             _safe_unlink(self._path(key, ext))
             return None
 
-    def revoke_hit(self) -> None:
+    def revoke_hit(self, kind: str | None = None) -> None:
         """Correct the tally when a PAIRED read turns out unusable after this cache already counted
         a hit - the torn-pair case at the served-XML seam: the xml blob hit but its meta sibling
         missed, so the pair produced nothing and the station recomputes. The sibling's own get
         already tallied its miss; this only revokes the phantom hit (mirrors
         get_json's internal corrupt-payload discipline)."""
         self.hits -= 1
+        self._tally(kind, "hits", -1)
 
-    def put_bytes(self, key: str, ext: str, data: bytes) -> None:
-        """Write a blob to the cache as a SELF-VERIFYING entry (`<sha256-hex-of-payload>\\n<payload>`),
-        temp-then-atomic-rename. No-op when disabled or in read-only (`ro`) mode.
-        os.replace is atomic within a filesystem on both POSIX and Windows, so a concurrent or
-        interrupted build never observes a half-written entry."""
-        if not self.enabled or self.mode == "ro":
-            return
-        p = self._path(key, ext)
+    def _replace_into(self, tmp: Path, p: Path) -> bool:
+        """os.replace with retries: on Windows an AV/on-access scanner briefly holding the fresh
+        tmp (or the destination) raises a transient PermissionError, and a silently dropped entry
+        is a spurious miss on the next build. Three attempts with a short backoff clear a scanner
+        hold; a still-failing write counts in write_errors and never breaks the build."""
+        last_err = None
+        for attempt in range(3):
+            try:
+                os.replace(tmp, p)          # atomic rename (POSIX + Windows)
+                return True
+            except OSError as e:
+                last_err = e
+                if attempt < 2:
+                    time.sleep(0.05 * (attempt + 1))
+        self.write_errors += 1
+        print(f"  [cache] WARN could not write {p.name}: {type(last_err).__name__}: {last_err}",
+              file=sys.stderr)
+        _safe_unlink(tmp)
+        return False
+
+    def _write_entry(self, p: Path, data: bytes) -> bool:
+        """Write one self-verifying entry file (`<sha256-hex-of-payload>\\n<payload>`),
+        temp-then-atomic-rename. os.replace is atomic within a filesystem on both POSIX and
+        Windows, so a concurrent or interrupted build never observes a half-written entry."""
         tmp = None   # assigned inside the try: a mkdir failure must not leave the cleanup referencing it
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
-            tmp = p.parent / f".{key}.{ext}.{os.getpid()}.{time.time_ns()}.tmp"
+            tmp = p.parent / f".{p.name}.{os.getpid()}.{time.time_ns()}.tmp"
             tmp.write_bytes(hashlib.sha256(data).hexdigest().encode("ascii") + b"\n" + data)
-            # Retry the rename - on Windows an AV/on-access scanner briefly holding the fresh tmp
-            # (or the destination) raises a transient PermissionError, and a silently dropped entry
-            # is a spurious miss on the next build (one flake candidate). Three attempts with a
-            # short backoff clears a scanner hold; a still-failing write counts in write_errors.
-            last_err = None
-            for attempt in range(3):
-                try:
-                    os.replace(tmp, p)          # atomic rename (POSIX + Windows)
-                    self.writes += 1
-                    return
-                except OSError as e:
-                    last_err = e
-                    if attempt < 2:
-                        time.sleep(0.05 * (attempt + 1))
-            raise last_err
         except OSError as e:  # noqa: BLE001  (a cache write must never break the build)
             self.write_errors += 1
             print(f"  [cache] WARN could not write {p.name}: {type(e).__name__}: {e}", file=sys.stderr)
-            try:
-                if tmp is not None:
-                    tmp.unlink(missing_ok=True)
-            except OSError:
-                pass
+            if tmp is not None:
+                _safe_unlink(tmp)
+            return False
+        return self._replace_into(tmp, p)
 
-    def put_json(self, key: str, obj, ext: str = "json") -> None:
+    def put_bytes(self, key: str, ext: str, data: bytes, kind: str | None = None) -> None:
+        """Write a blob to the cache as a SELF-VERIFYING entry. No-op when disabled or in
+        read-only (`ro`) mode."""
+        if not self.enabled or self.mode == "ro":
+            return
+        if self._write_entry(self._path(key, ext), data):
+            self.writes += 1
+            self._tally(kind, "writes")
+
+    def put_json(self, key: str, obj, ext: str = "json", kind: str | None = None) -> None:
         """Write a JSON-serializable object as a cache blob (the parse-rows product)."""
-        self.put_bytes(key, ext, json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        self.put_bytes(key, ext, json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+                       kind)
+
+    # ---- file entries: a raw payload that can be hardlinked, plus its self-verifying sidecar -----
+
+    def _link_or_copy(self, src: Path, dst: Path, kind: str) -> None:
+        """Place `src`'s inode at `dst` by hardlink; a filesystem that refuses (cross-device EXDEV,
+        no hardlink support, a link-count limit) gets a byte copy instead, counted in
+        link_fallbacks. A missing `src` raises FileNotFoundError to the caller."""
+        try:
+            os.link(src, dst)
+        except FileNotFoundError:
+            raise
+        except OSError:
+            shutil.copyfile(src, dst)
+            self._tally(kind, "link_fallbacks")
+
+    def link_file(self, key: str, kind: str, dest: Path):
+        """Place a file entry's payload at `dest` and return the meta its seam stored, or None on a
+        miss. The payload is linked to a temporary name beside `dest` and THAT inode is re-hashed
+        against the sidecar before it is renamed into place: what was verified is what is served.
+        A malformed sidecar, a sidecar whose payload is gone, or a digest mismatch deletes the
+        whole entry, counts corrupt and misses, exactly like a corrupt JSON entry. Tallies only
+        the per-kind bucket; `refresh` mode and an inert cache always miss."""
+        if not self.enabled or self.mode == "refresh":
+            self._tally(kind, "misses")
+            return None
+        payload, ref = self._path(key, kind), self._path(key, f"{kind}.{_REF}")
+        status, raw = self._read_entry(ref)
+        side = None
+        if status == "ok":
+            try:
+                side = json.loads(raw.decode("utf-8"))
+                if not (isinstance(side, dict) and isinstance(side.get("sha256"), str)):
+                    side = None
+            except (ValueError, UnicodeDecodeError):
+                side = None
+            if side is None:
+                status = "corrupt"
+        if status != "ok":
+            if status == "corrupt":
+                self._drop_file_entry(key, kind)
+            self._tally(kind, "misses")
+            return None
+        dest = Path(dest)
+        tmp = dest.parent / f".{dest.name}.{os.getpid()}.{time.time_ns()}.tmp"
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            self._link_or_copy(payload, tmp, kind)
+        except FileNotFoundError:
+            self._drop_file_entry(key, kind)
+            self._tally(kind, "misses")
+            return None
+        except OSError:
+            self.read_errors += 1
+            _safe_unlink(tmp)
+            self._tally(kind, "misses")
+            return None
+        if _file_sha256(tmp) != side["sha256"]:
+            _safe_unlink(tmp)
+            self._drop_file_entry(key, kind)
+            self._tally(kind, "misses")
+            return None
+        try:
+            os.replace(tmp, dest)
+        except OSError:
+            self.read_errors += 1
+            _safe_unlink(tmp)
+            self._tally(kind, "misses")
+            return None
+        # A rename between two names of one inode (dest already links this payload) succeeds and
+        # leaves both names; after a real rename tmp is gone and this is a no-op.
+        _safe_unlink(tmp)
+        self._tally(kind, "hits")
+        # Only the sidecar is touched: the payload inode is also a served file, whose mtime is the
+        # instant it was written and must not move with cache bookkeeping.
+        self._touch(key, f"{kind}.{_REF}")
+        return side.get("meta")
+
+    def _drop_file_entry(self, key: str, kind: str) -> None:
+        self._tally(kind, "corrupt")
+        _safe_unlink(self._path(key, kind))
+        _safe_unlink(self._path(key, f"{kind}.{_REF}"))
+
+    def reject_file(self, key: str, kind: str) -> None:
+        """Revoke a link_file hit whose meta the seam cannot use: the entry is dropped and the read
+        re-tallied as corrupt + miss, so the seam recomputes. The seam unlinks what it placed."""
+        self._tally(kind, "hits", -1)
+        self._tally(kind, "misses")
+        self._drop_file_entry(key, kind)
+
+    def put_file(self, key: str, kind: str, src: Path, meta=None) -> None:
+        """Store the file at `src` as a file entry. The payload is linked (copy on refusal) to a
+        temporary name, hashed there, renamed into place, and only THEN is the sidecar written, so
+        a reader never finds a sidecar naming a payload that is not yet in place. A concurrent
+        writer of the same key can interleave the two renames; the reader then sees a digest
+        mismatch, drops the entry and recomputes, never serving an unverified file. No-op when
+        disabled or in `ro` mode."""
+        if not self.enabled or self.mode == "ro":
+            return
+        payload = self._path(key, kind)
+        tmp = payload.parent / f".{payload.name}.{os.getpid()}.{time.time_ns()}.tmp"
+        try:
+            payload.parent.mkdir(parents=True, exist_ok=True)
+            self._link_or_copy(Path(src), tmp, kind)
+            digest, size = _file_sha256(tmp), tmp.stat().st_size
+        except OSError as e:  # noqa: BLE001  (a cache write must never break the build)
+            self.write_errors += 1
+            print(f"  [cache] WARN could not write {payload.name}: {type(e).__name__}: {e}",
+                  file=sys.stderr)
+            _safe_unlink(tmp)
+            return
+        if not self._replace_into(tmp, payload):
+            return
+        side = json.dumps({"sha256": digest, "size": size, "meta": meta},
+                          sort_keys=True, separators=(",", ":")).encode("utf-8")
+        if self._write_entry(self._path(key, f"{kind}.{_REF}"), side):
+            self._tally(kind, "writes")
+        else:
+            _safe_unlink(payload)
 
     def _touch(self, key: str, ext: str) -> None:
         """Bump the entry's mtime so the age/build prune keeps recently-USED entries, not just
@@ -392,56 +626,116 @@ class BuildCache:
 
     def counters(self) -> dict:
         """The deterministic hit/miss/write/corrupt tally for the build log + report.
-        salt_fp fingerprints the fixed salt so cross-build key-space drift is observable."""
+        hits/misses/writes/corrupt are the parse+xml totals; `kinds` breaks every kind out,
+        the MTH5 file entries included. salt_fp fingerprints the fixed salt so cross-build
+        key-space drift is observable. `prune` is the end-of-build prune summary, or None before
+        it has run."""
         return {"enabled": self.enabled, "mode": self.mode, "hits": self.hits,
                 "misses": self.misses, "writes": self.writes, "corrupt": self.corrupt,
                 "write_errors": self.write_errors, "read_errors": self.read_errors,
                 "degenerate": self.degenerate, "reason": self.degenerate_reason,
-                "salt_fp": self.salt_fp}
+                "salt_fp": self.salt_fp, "max_mb": self.max_mb,
+                "kinds": {k: dict(v) for k, v in self.kinds.items()},
+                "prune": self.last_prune}
 
     # ---- lifecycle: prune at the end of a successful build ---------------------------------------
+
+    def _entries(self) -> dict:
+        """{key: [mtime, size, [paths], kind]} over the cache's own entries: files named
+        `<64-hex key>.<ext>` inside a `<key[:2]>` shard directory. Anything else under the root
+        (temporary files, a file an operator keeps beside the shards) is not an entry and is never
+        counted, aged or evicted. An entry is every file of one key, so a file entry's payload and
+        sidecar live and die together."""
+        groups: dict = {}
+        if not self.root.is_dir():
+            return groups
+        for shard in self.root.iterdir():
+            if not shard.is_dir() or len(shard.name) != 2:
+                continue
+            for p in shard.iterdir():
+                m = _ENTRY_NAME.match(p.name)
+                if not m or not m.group(1).startswith(shard.name) or not p.is_file():
+                    continue
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue
+                g = groups.setdefault(m.group(1), [0.0, 0, [], None])
+                g[0] = max(g[0], st.st_mtime)
+                g[1] += st.st_size
+                g[2].append(p)
+                g[3] = g[3] or _KIND_OF_EXT.get(m.group(2))
+        return groups
+
+    def _drop_stale_temporaries(self) -> None:
+        """Remove put temporaries (`.<key>.<ext>.<pid>.<ns>.tmp` in a shard) older than
+        TMP_GRACE_SECONDS. They are not entries, so neither the age rule nor the cap sees them."""
+        stale = time.time() - TMP_GRACE_SECONDS
+        for shard in self.root.iterdir():
+            if not shard.is_dir() or len(shard.name) != 2:
+                continue
+            for p in shard.iterdir():
+                if not _TMP_NAME.match(p.name):
+                    continue
+                try:
+                    if p.is_file() and p.stat().st_mtime < stale:
+                        _safe_unlink(p)
+                except OSError:
+                    pass
 
     def prune(self) -> dict:
         """Drop entries untouched for PRUNE_MAX_AGE_DAYS, then enforce the size cap oldest-first.
         Runs at the end of a successful build. A prune failure must never fail the build; returns a
         small summary. Adjudicated v1 policy: mtime-age + size cap ONLY - the
         design's original "20 builds" window is not implemented (the cache keeps no per-build
-        ledger); age is the operator-meaningful bound, the size cap the hard ceiling."""
+        ledger); age is the operator-meaningful bound, the size cap the hard ceiling.
+
+        The size is the sum of entry file sizes. A payload hardlinked into retained builds is
+        counted in full although the disk holds it once, so the cap bounds what the cache could
+        cost if every build that shares it were pruned. Evictions are tallied per kind;
+        `evicted_live` counts the evicted entries this build used, which the next build misses."""
+        empty = {"pruned_age": 0, "pruned_size": 0, "evicted_live": 0, "kept": 0, "bytes": 0}
         if not self.enabled or self.mode == "ro" or not self.root.exists():
-            return {"pruned_age": 0, "pruned_size": 0, "kept": 0, "bytes": 0}
+            return empty
+        self._drop_stale_temporaries()
         now = time.time()
         max_age = PRUNE_MAX_AGE_DAYS * 86400
-        entries = []  # (mtime, size, path)
-        for p in self.root.rglob("*"):
-            if not p.is_file() or p.name.endswith(".tmp"):
-                continue
-            try:
-                st = p.stat()
-            except OSError:
-                continue
-            entries.append([st.st_mtime, st.st_size, p])
         pruned_age = 0
         kept = []
-        for e in entries:
-            if now - e[0] > max_age:
-                if _safe_unlink(e[2]):
-                    pruned_age += 1
+        for key, (mtime, size, paths, kind) in self._entries().items():
+            if now - mtime > max_age:
+                for p in paths:
+                    _safe_unlink(p)
+                pruned_age += 1
             else:
-                kept.append(e)
-        # Size cap, oldest-first (smallest mtime evicted first).
+                kept.append((mtime, size, paths, kind))
         cap = self.max_mb * 1024 * 1024
         total = sum(e[1] for e in kept)
-        pruned_size = 0
+        pruned_size = evicted_live = 0
         if total > cap:
-            for e in sorted(kept, key=lambda x: x[0]):
+            for mtime, size, paths, kind in sorted(kept, key=lambda x: x[0]):
                 if total <= cap:
                     break
-                if _safe_unlink(e[2]):
-                    total -= e[1]
-                    pruned_size += 1
+                for p in paths:
+                    _safe_unlink(p)
+                total -= size
+                pruned_size += 1
+                self._tally(kind, "evicted")
+                if mtime >= self.started:
+                    evicted_live += 1
         _prune_empty_dirs(self.root)
-        return {"pruned_age": pruned_age, "pruned_size": pruned_size,
-                "kept": len(kept) - pruned_size, "bytes": total}
+        self.last_prune = {"pruned_age": pruned_age, "pruned_size": pruned_size,
+                           "evicted_live": evicted_live, "kept": len(kept) - pruned_size,
+                           "bytes": total}
+        return dict(self.last_prune)
+
+
+def _file_sha256(p: Path) -> str:
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
 
 
 def _env_max_mb() -> int:
