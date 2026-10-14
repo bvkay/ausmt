@@ -192,7 +192,7 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
       tree.appendChild(orow);
       Object.keys(hier[country][org]).sort().forEach(sv=>{
         const l=document.createElement("label");l.className="survey";
-        l.innerHTML=`<input type="checkbox" value="${escAttr(sv)}" data-country="${escAttr(country)}" data-org="${escAttr(okey)}" checked>${esc(sv.replace(/^AusLAMP /,""))}<span class="n">${hier[country][org][sv]|0}</span>`;
+        l.innerHTML=`<input type="checkbox" value="${escAttr(sv)}" data-country="${escAttr(country)}" data-org="${escAttr(okey)}" checked>${esc(sv)}<span class="n">${hier[country][org][sv]|0}</span>`;
         tree.appendChild(l);});});});
   // Country checkbox toggles all its orgs + surveys; org checkbox toggles its surveys. The PARENT
   // checkboxes have NO `value` attribute (surveys do), so identify them with hasAttribute("value") - NOT

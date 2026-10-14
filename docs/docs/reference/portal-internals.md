@@ -4175,6 +4175,11 @@ can disagree eventually do.
 Shared station filter (drives both Map and Surveys) + the hierarchy tree. buildTree() is
 data-dependent and called by main after ST is built. recolor lives in map.js and is
 referenced only inside event handlers (runtime), never at load time.
+
+A survey row in the tree prints the survey's label, which is its survey.yaml `name`, whole and
+unedited: the display title every surface shows (tree, catalogue cards, recently-added strip,
+survey and hub pages, link-preview cards), so a prefix such as "AusLAMP " is part of it and is
+never stripped here. A shorter row is the curator's call, made in `name`.
 ```
 
 #### up here so renderFind() (which resets it) is never in its temporal dead ...

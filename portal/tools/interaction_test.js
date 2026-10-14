@@ -448,6 +448,12 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // attribution/sources render paths that the base fixture doesn't carry.
   "screeningIndicators,maturityModel,licBadgeState,licIsOpen,attributionText," +
   "setSMETA:(sv,patch)=>{SMETA[sv]=Object.assign(SMETA[sv]||{},patch);}," +
+  // treeRowsAs relabels one survey's stations, rebuilds the tree, reads every survey row's printed
+  // label, then puts the label back and rebuilds again, so the run continues on the fixture's own tree.
+  "treeRowsAs:(from,to)=>{const moved=ST.filter(s=>s.survey===from);moved.forEach(s=>{s.survey=to;});" +
+  "tree.innerHTML=\"\";buildTree();const rows=[...tree.querySelectorAll(\"label.survey\")].map(l=>({value:l.querySelector(\"input\").value," +
+  "text:[...l.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join(\"\")}));" +
+  "moved.forEach(s=>{s.survey=from;});tree.innerHTML=\"\";buildTree();refresh();return rows;}," +
   // Card polish hooks. processingSoftwareText/pubShortCite are the PURE lineage derivations (the
   // most-specific software string, and a publication reduced to a short cite without fabricating an
   // "et al."); setManifest swaps the download manifest so the distributed-formats node can be driven
@@ -987,6 +993,18 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(_tMemb.indexOf("Q ") < 0 && _tMemb.indexOf("4.2") < 0, "the TF diagnostic (Q) must be gone from the hover tooltip, got: " + JSON.stringify(_tMemb));
   ok(_tMemb.indexOf("AusLAMP") < 0 && _tMemb.indexOf("LPMT") < 0, "the type/AusLAMP label must be gone from the hover tooltip, got: " + JSON.stringify(_tMemb));
   A.buildAuslampSet();   // restore the boot-built set for the rest of the run
+
+  // TREE LABELS. A survey row prints the survey's label whole: the label is survey.yaml `name`, the one
+  // display title, and a programme prefix is part of it. Relabelling station G1's survey "AusLAMP
+  // Gamma Survey" must put exactly that text on its row, and every row's text must be its own value.
+  const _treeRows = A.treeRowsAs("Gamma Survey", "AusLAMP Gamma Survey");
+  const _gRow = _treeRows.find(r => r.value === "AusLAMP Gamma Survey");
+  ok(_gRow && _gRow.text === "AusLAMP Gamma Survey",
+    "the tree must print the full survey name, prefix included, got " + JSON.stringify(_gRow));
+  ok(_treeRows.length === 4 && _treeRows.every(r => r.text === r.value),
+    "every survey row prints its own label, unedited, got " + JSON.stringify(_treeRows));
+  ok(A.visIds().length === 5 && [...doc.querySelectorAll("#tree input[value]")].some(b => b.value === "Gamma Survey"),
+    "restoring the label must rebuild the fixture's own tree with every station visible");
 
   // A. buildTree made REAL checkboxes (the smoke stub never did): 2 countries, 4 orgs, 4 surveys.
   // (The fixture adds Delta Survey / OrgW / station D1 - an embargoed survey, still fully discoverable.)
