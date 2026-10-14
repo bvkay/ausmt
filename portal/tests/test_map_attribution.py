@@ -175,14 +175,10 @@ def test_the_spa_map_mounts_the_collapsed_control_and_credits_the_layer_it_draws
     attributions = re.findall(r"attribution:\s*([A-Za-z_0-9]+|\"[^\"]*\")", src)
     assert len(attributions) >= 2, (
         f"both basemap branches state a credit of their own, found {attributions}")
-    # The pmtiles pair is built in one function, mounted at start and remounted on a theme change, so
-    # the credit is stated where the layers are built rather than in the branch that calls it.
-    mount = re.search(r"function mountBasemap\(flavor\)\{(.*?)\n\}", src, re.S)
-    assert mount, "the pmtiles pair is built by mountBasemap(flavor)"
-    assert mount.group(1).count("attribution:_PM_CREDIT") == 2 and _PMTILES_CREDIT in src, (
-        "both pmtiles layers credit OpenStreetMap and Protomaps, the same string, so Leaflet prints it once")
     pmtiles = src.split("if(_bmCfg.provider===")[1].split("}else{")[0]
-    assert "mountBasemap(" in pmtiles, "the pmtiles branch mounts the pair through mountBasemap"
+    assert pmtiles.count("protomapsL.leafletLayer(") == 2, "the pmtiles branch builds the pair"
+    assert pmtiles.count("attribution:_PM_CREDIT") == 2 and _PMTILES_CREDIT in src, (
+        "both pmtiles layers credit OpenStreetMap and Protomaps, the same string, so Leaflet prints it once")
     carto = src.split("}else{")[1].split("\n}", 1)[0]
     assert "attribution:" in carto, (
         "the CARTO fallback states its OWN credit; it is the branch a footer line naming Protomaps "

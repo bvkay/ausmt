@@ -7,10 +7,9 @@ NCRIS lock-up after it, so the lock-up sits at the bottom right of every such pa
 is its live station counts and its right zone holds nothing else, because its map's corner carries
 the lock-up; a generated page's right zone is its contextual status markup, then the lock-up; the
 other five static pages have no status, so theirs is the lock-up alone. On those six surfaces the
-footer fetches the lock-up pair and nothing else and carries two anchors to AuScope, the centre's
-name and the lock-up; the SPA's fetches nothing and carries one. The copyright clause left the
-acknowledgement. The footer holds no control: the appearance choice lives in the map's welcome
-dialog and in About's Appearance section.
+footer fetches the lock-up and nothing else and carries two anchors to AuScope, the centre's name
+and the lock-up; the SPA's fetches nothing and carries one. The copyright clause left the
+acknowledgement. The footer holds no control.
 
 WHY THE ENGINE HALF LIVES HERE rather than in engine/tests: portal-ci runs on portal/** AND on
 engine/extract/_pages.py, so an edit to either surface fires this module, where the engine workflow
@@ -50,7 +49,8 @@ Each assertion states its failure criterion:
   * ONE FOOTER RULE SET, ON ALL SEVEN SURFACES - FAILS if any surface's footer rule set drifts from
     portal/index.html's by a character, or reaches for a literal colour instead of a token.
   * THE RETIRED CONTENT STAYS RETIRED - FAILS if Releases, About this build, the disclosure popover,
-    the copyright clause, the retired footer logo or the appearance control comes back to any footer.
+    the copyright clause, the retired footer logo or the retired appearance control comes back to
+    any footer.
   * THE EXTERNAL ANCHORS OPEN IN A NEW TAB - FAILS if an AuScope anchor on any surface loses
     target="_blank" or rel="noopener noreferrer", if a surface carries more or fewer of them than
     its contents call for, or if an in-site footer link takes a target.
@@ -73,8 +73,8 @@ from pathlib import Path
 
 import pytest
 
-from chrome_contract import (FOOTER_CENTRE, FOOTER_CENTRE_MARKUP, FOOTER_LINE, LOCKUP, LOCKUP_DARK,
-                             LOCKUP_FOOTERS, LOCKUP_HEIGHT, LOCKUP_LIGHT, LOCKUP_RULES, entities, flat)
+from chrome_contract import (FOOTER_CENTRE, FOOTER_CENTRE_MARKUP, FOOTER_LINE, LOCKUP, LOCKUP_FOOTERS,
+                             LOCKUP_HEIGHT, LOCKUP_LIGHT, LOCKUP_RULES, entities, flat)
 from engine_chrome import function_source, site_footer
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
@@ -121,8 +121,9 @@ INDEX_STATUS = ('<div class="counts" id="footerCounts"><span id="countSlot" titl
 # right zone, before the lock-up.
 ENGINE_STATUS = '<span class="counts">probe status</span>'
 
-# The white lock-up, the footer's theme-dark variant, committed as its rights holder published it;
-# portal/vendor/README.md records the same facts.
+# The white lock-up, committed as its rights holder published it because the raster cards draw a crop
+# of it (engine/tests/test_og_cards.py); portal/vendor/README.md records the same facts. No footer
+# names it: it was drawn only on a dark ground.
 LOGO_SRC = "/vendor/auscope-ncris-white.png"
 LOGO_SHA256 = "595a564ece1151d94347331c1521381df987da437aa3080cff47a5280cf818f6"
 LOGO_BYTES = 35628
@@ -394,11 +395,10 @@ def test_the_surfaces_agree_on_where_the_footer_points():
         f"the engine footer's MTCAT link must target {MTCAT}")
 
 
-def test_the_white_lockup_png_stays_committed_unaltered_and_only_the_lockup_footers_name_it():
-    """The white PNG lock-up is the footer's theme-dark variant and is committed as its rights holder
-    published it. FAILS if the file is missing or its bytes change (a resize, a re-encode, a
-    recolour, a metadata strip), if a lock-up footer names it other than once, or if the SPA's
-    footer names it at all."""
+def test_the_white_lockup_png_stays_committed_unaltered_and_no_footer_names_it():
+    """The white PNG lock-up is committed as its rights holder published it. FAILS if the file is
+    missing or its bytes change (a resize, a re-encode, a recolour, a metadata strip), or if any
+    footer names it."""
     path = ROOT / LOGO_SRC.lstrip("/")
     assert path.is_file(), f"{LOGO_SRC} stays committed"
     raw = path.read_bytes()
@@ -411,21 +411,17 @@ def test_the_white_lockup_png_stays_committed_unaltered_and_only_the_lockup_foot
         f"{LOGO_SRC}: expected {LOGO_PIXELS[0]}x{LOGO_PIXELS[1]}, found {width}x{height}")
     assert raw[24] == 8 and raw[25] == 6, (
         f"{LOGO_SRC}: expected 8-bit RGBA (colour type 6), found bit depth {raw[24]} type {raw[25]}")
-    assert LOGO_SRC == LOCKUP_DARK, "the white lock-up is the contract's theme-dark variant"
     name = LOGO_SRC.rsplit("/", 1)[-1]
     for where in SURFACES:
-        want = 1 if where in LOCKUP_FOOTERS else 0
-        assert _foot(where).count(name) == want, (
-            f"{where}: the footer names the white lock-up {name} {want} time(s), "
-            f"found {_foot(where).count(name)}")
+        assert name not in _foot(where), f"{where}: the footer names the white lock-up {name}"
 
 
 def _no_external_fetch(where, footer_html, sheet):
     """THE ONE EXTERNAL TARGET, second half. A footer may NAVIGATE to the allow-listed AuScope
-    address; what it FETCHES is the lock-up pair, same-origin and root-absolute, on the surfaces that
+    address; what it FETCHES is the lock-up, same-origin and root-absolute, on the surfaces that
     draw it, and nothing else on any surface: no other image, no stylesheet, no script, no url() in
     the rules that style it."""
-    want = [LOCKUP_LIGHT, LOCKUP_DARK] if where in LOCKUP_FOOTERS else []
+    want = [LOCKUP_LIGHT] if where in LOCKUP_FOOTERS else []
     srcs = re.findall(r"""\bsrc\s*=\s*["']?([^"'\s>]+)""", footer_html)
     assert srcs == want, f"{where}: the footer fetches {want} and nothing else, found {srcs}"
     assert footer_html.count("src=") == len(want), f"{where}: every src in the footer is counted"
@@ -437,7 +433,7 @@ def _no_external_fetch(where, footer_html, sheet):
 
 
 @pytest.mark.parametrize("where", SURFACES)
-def test_no_footer_fetches_anything_but_the_lockup_pair(where):
+def test_no_footer_fetches_anything_but_the_lockup(where):
     """THE ONE EXTERNAL TARGET, held on every surface. See _no_external_fetch."""
     sheet = "".join(f"{sel}{{{body}}}" for sel, body in _SET_RE.findall(_outside_queries(_text(where))))
     _no_external_fetch(where, _foot(where), sheet)
@@ -456,8 +452,7 @@ def test_the_retired_content_has_left_every_footer(where):
         assert cls not in _text(where), f"{where}: the {cls} markup and its CSS are retired"
 
 
-# What makes an element a control, by tag and by attribute. A footer carries text and links only:
-# the appearance choice lives in the map's welcome dialog and in About's Appearance section.
+# What makes an element a control, by tag and by attribute. A footer carries text and links only.
 _CONTROL_TAGS = {"button", "input", "select", "textarea", "fieldset", "details", "summary", "label",
                  "form"}
 _CONTROL_ATTRS = ("aria-pressed", "aria-checked", "role", "tabindex", "contenteditable")
@@ -587,7 +582,7 @@ _GROWS = {
 _ENGINE_GROWS = ("main", "flex:1 0 auto")
 
 # The opaque ground under the footer: the --surface token, the ground every chrome surface (header,
-# footer, cards) shares in both themes. A sticky footer with a transparent background shows the
+# footer, cards) shares. A sticky footer with a transparent background shows the
 # content sliding under it.
 _GROUND = "background:var(--surface)"
 
@@ -780,7 +775,7 @@ def test_every_portal_page_declares_one_footer_rule_in_tokens():
 
     EVERY PORTAL PAGE IS A TOKEN SURFACE NOW. 404.html, which Caddy serves for any unmatched path,
     once wrote its footer in literal colours; it carries the token block like every other page, so
-    the theme reaches it too. FAILS if any page's footer rule drifts by a character, or if a page
+    the tokens reach it too. FAILS if any page's footer rule drifts by a character, or if a page
     falls back to literal colours."""
     rules = {name: _footer_rule(name, (ROOT / name).read_text(encoding="utf-8")) for name in _portal_pages()}
     literal = [name for name, rule in rules.items() if re.search(r"#[0-9A-Fa-f]{3,6}\b", rule)]
@@ -795,7 +790,7 @@ def test_every_surface_declares_the_one_footer_rule_set(where):
     """ONE FOOTER MEANS ONE RULE SET, on ALL SEVEN surfaces. portal/index.html is the master; every
     other document and the engine's _CSS carry the same rules, character for character, plus the same
     two @container states and the same return-to-flow rule. Every colour in the set is a token, so the
-    one set themes on every surface.
+    one set reads the same tokens on every surface.
 
     FAILS if any surface's footer rule set drifts by a character, if a surface declares one of the
     rules twice, if a rule goes missing, if a rule writes a literal colour, or if either query or the
@@ -849,7 +844,7 @@ def test_the_centre_zone_holds_the_same_markup_on_every_surface(where):
 # 18.75px, 12.5px at line-height 1.5. Without a margin the 30px box sets the height of the row it
 # stands in and grows every sticky footer by 11.25px; the anchor's negative block margin makes its
 # margin box exactly one text line, so the row is as tall as its text and the artwork overhangs into
-# the footer's own 7px padding. Measured in Chrome at a device scale factor of 1, in both themes: a
+# the footer's own 7px padding. Measured in Chrome at a device scale factor of 1: a
 # lock-up footer is 33.75px on one row (1458px of viewport and up) and 56.5px on two (557px to
 # 1457px), the heights it had with an empty right zone. Below 557px the footer has returned to flow
 # and its zones stack, so the lock-up's row adds one text line there.

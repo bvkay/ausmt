@@ -57,14 +57,14 @@ Generated, not hand-edited: `tools/gen_auscope_icons.py` writes it from
 ## auscope/
 
 The AuScope mark, as every header and the collection figures draw it, 36px square in the header,
-and the icons made from it. The mark pair is derived from the AuScope brand kit's own vector icon,
+and the icons made from it. Both mark files are derived from the AuScope brand kit's own vector icon,
 `2025 AuScope Logo Icon.ai`; `auscope/PROVENANCE.md` records the derivation and the guide's rules for
 using it.
 
 | File | What it is |
 |---|---|
 | `auscope-mark.svg` | The mark in the kit's Royal Blue (#272472) with its lighter swoosh (#A7A2C5), the fills the kit file states. The source of every icon below. |
-| `auscope-mark-white.svg` | The mark in white, the swoosh at 0.302 opacity as the kit's white PNG renders it, for dark grounds only. |
+| `auscope-mark-white.svg` | The mark in white, the swoosh at 0.302 opacity as the kit's white PNG renders it, for dark grounds only. No page draws it: the portal has one appearance, on a light ground. |
 | `icon-180.png` | The apple-touch-icon: the mark at 70 percent of the width on opaque white. Generated. |
 | `icon-192.png`, `icon-512.png` | The same at the sizes a web manifest names; no manifest ships. Generated. |
 | `PROVENANCE.md` | Source, derivation and the icon derivation table. |
@@ -76,19 +76,20 @@ a fresh render. Regenerate them after any change to `auscope-mark.svg`; never ed
 
 `auscope-ncris-colour.png`, `auscope-ncris-white.png`, `auscope-icon-colour.png` and
 `auscope-icon-white.png`, one level up, are the AuScope brand kit's own files, kept verbatim. The
-two lock-up PNGs are drawn at the right of every footer on the pages without the big map, in the map
-page's corner and in About's body, colour on the light theme and white on the dark.
+colour lock-up PNG is drawn at the right of every footer on the pages without the big map, in the map
+page's corner and in About's body. No page draws the white lock-up.
 `auscope-icon-colour.png` is drawn by nothing on the site. `auscope-icon-white.png` is drawn by the
 documentation sidebar's copy of it and composited by `tools/gen_social_card.py`; the engine's
 link-preview cards draw a crop of the white lock-up, pinned against its file.
 
 ## auscope-ncris-colour.png and auscope-ncris-white.png
 
-The AuScope and NCRIS lock-up pair from the AuScope brand kit, the light and dark variants drawn
-30px tall at the right of every footer on the pages without the big map and 44px tall in the map
-page's corner. Committed VERBATIM from the AuScope brand kit ("2025 AuScope Logos"); they are
-third-party trademark assets, so they are never resized, re-encoded or recoloured here, which is why
-each committed file keeps its full 1919x325 resolution.
+The AuScope and NCRIS lock-up pair from the AuScope brand kit. The colour file is drawn 30px tall at
+the right of every footer on the pages without the big map and 44px tall in the map page's corner;
+the white file is drawn by no page, and the link-preview cards crop it. Committed VERBATIM from the
+AuScope brand kit ("2025 AuScope Logos"); they are third-party trademark assets, so they are never
+resized, re-encoded or recoloured here, which is why each committed file keeps its full 1919x325
+resolution.
 
 | File | Source | Dimensions | SHA-256 | Size |
 |---|---|---|---|---|

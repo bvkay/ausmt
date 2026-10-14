@@ -1,8 +1,7 @@
 """The AuScope mark on the collection footprint map, on both surfaces that draw one full size.
 
-It is the vector pair every other surface draws, a Royal Blue variant and a white one, and the theme
-switch shows exactly one: the panel behind it is the --map-panel token, light in the light theme and
-navy in the dark.
+It is the vector mark every header draws, in the brand kit's own colours, on the light --map-panel
+token behind it.
 
 A collection is drawn twice: as the static collection page's <figure class="collmap"> (the engine,
 engine/extract/_pages.py) and as the SPA's own collScatter in the collection-detail hero
@@ -35,9 +34,7 @@ DRAWER = ROOT / "src" / "drawer.js"
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
 MARK_SRC = "/vendor/auscope/auscope-mark.svg"
-MARK_DARK = "/vendor/auscope/auscope-mark-white.svg"
-MARK_IMG = (f'<img class="collmark theme-light" src="{MARK_SRC}" alt="AuScope" width="42" height="42">'
-            f'<img class="collmark theme-dark" src="{MARK_DARK}" alt="AuScope" width="42" height="42">')
+MARK_IMG = f'<img class="collmark" src="{MARK_SRC}" alt="AuScope" width="42" height="42">'
 # The PNG the mark once was. It stays committed for its other consumers and no collection map names it.
 RETIRED_PNG = "auscope-icon-white.png"
 
@@ -87,10 +84,9 @@ def test_the_spa_detail_hero_draws_the_same_mark_and_the_list_card_does_not():
     assert 'class="collscatter-panel" style="max-width:${cap}px"' in src, \
         "the mark's panel must be capped at the same width the map is"
     assert src.count(MARK_IMG) == 1, \
-        f"drawer.js must draw the mark pair {MARK_IMG!r} exactly once, got {src.count(MARK_IMG)}"
-    assert src.count(MARK_SRC) == 1 and src.count(MARK_DARK) == 1, \
-        "drawer.js must name each variant exactly once"
-    assert RETIRED_PNG not in src, "the collection map draws the vector pair, not the retired PNG"
+        f"drawer.js must draw the mark {MARK_IMG!r} exactly once, got {src.count(MARK_IMG)}"
+    assert src.count(MARK_SRC) == 1, "drawer.js must name the mark exactly once"
+    assert RETIRED_PNG not in src, "the collection map draws the vector mark, not the retired PNG"
     assert "collScatter(ss,720,true)" in src, \
         "the collection-detail hero draws the full-size map and takes the mark"
     assert "collScatter(ss)" in src, \

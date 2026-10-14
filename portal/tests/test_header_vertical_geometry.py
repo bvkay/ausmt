@@ -44,7 +44,7 @@ floor, so from 761px up the header is the tabs' floor plus its padding and borde
 
     header  = 2 x 8px + 1px + max(36px, 24.5px, line-box(tagline), 40px)  =  57px
 
-Measured in Chrome at a device scale factor of 1, in both themes, on every chrome surface: 57px from
+Measured in Chrome at a device scale factor of 1, on every chrome surface: 57px from
 761px up, 134px from 451px to 760px, 170px from 384px to 450px and 216px below 384px, where the
 stacked zones add the mark's row, the tab rows and the tagline's line.
 
@@ -67,10 +67,10 @@ content is held separately: tests/test_header_geometry_parity.py compares every 
 markup with the contract token by token, and with the contextual counts moved to the footer no zone
 of the header varies by page any more.
 
-ONE MARK BOX, ON EVERY SURFACE. The identity zone opens with the mark pair, so the mark's declared
+ONE MARK BOX, ON EVERY SURFACE. The identity zone opens with the mark, so the mark's declared
 box is a term of the first line and the fingerprint carries it: a mark taller than the tabs' floor
 would set the header's height at every width. tests/test_header_geometry_parity.py holds the markup
-half, that every identity zone is the mark pair and the name and nothing else.
+half, that every identity zone is the mark and the name and nothing else.
 """
 import re
 from pathlib import Path

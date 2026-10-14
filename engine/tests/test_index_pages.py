@@ -148,28 +148,25 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 
 # The fetched assets a page in this tier may carry, restated (not weakened). The rule was "no src at
 # all", which was the right rule while the pages fetched no image: it kept out build-time reads,
-# inlined copies and every external fetch. The header's mark pair, the footer's lock-up pair and the
+# inlined copies and every external fetch. The header's mark, the footer's lock-up and the
 # collection figure's mark make an exception worth stating precisely rather than loosening the rule
 # to "images are fine": same-origin files, served by the portal image, cached once for the whole
 # site. What stays forbidden is everything the strict rule was protecting: no http, no https, no
 # protocol-relative and no data URI may ever appear as a src, and no OTHER path may either. The lists
 # below are EXACT and ORDERED, so an extra asset, or the same asset in the wrong slot, fails.
 #
-# The header carries one image, as a PAIR of files: the AuScope mark opening the identity zone, the
-# brand kit's vector icon in its own colours and in white. The footer carries one, as a pair too: the
-# AuScope and NCRIS lock-up closing the right region, the brand kit's colour and white PNGs. One file
-# of each pair is for the light ground and one for the dark (portal/vendor/auscope/PROVENANCE.md: the
-# white files sit on dark grounds only); the theme rules show one file of each pair, but the markup
-# names both.
-ALLOWED_HEADER_SRCS = ["/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg"]
-ALLOWED_FOOTER_SRCS = ["/vendor/auscope-ncris-colour.png", "/vendor/auscope-ncris-white.png"]
+# The header carries one image: the AuScope mark opening the identity zone, the brand kit's vector
+# icon in its own colours. The footer carries one: the AuScope and NCRIS lock-up closing the right
+# region, the brand kit's colour PNG. The white files sat on dark grounds only
+# (portal/vendor/auscope/PROVENANCE.md) and no page names them.
+ALLOWED_HEADER_SRCS = ["/vendor/auscope/auscope-mark.svg"]
+ALLOWED_FOOTER_SRCS = ["/vendor/auscope-ncris-colour.png"]
 
 # The collection page draws the one thing in this tier that carries a mark in its BODY: the member
-# footprint map, which puts the AuScope mark pair in the panel's bottom-left corner. That mark is a
+# footprint map, which puts the AuScope mark in the panel's bottom-left corner. That mark is a
 # CAPTION on a figure, not chrome. Keyed by the page's own path so that no OTHER page kind can
 # quietly grow a body mark.
-ALLOWED_BODY_SRCS = {"collections/idxcoll.html": ["/vendor/auscope/auscope-mark.svg",
-                                                  "/vendor/auscope/auscope-mark-white.svg"]}
+ALLOWED_BODY_SRCS = {"collections/idxcoll.html": ["/vendor/auscope/auscope-mark.svg"]}
 
 # RESTATED, WHICH MEANS THE SAME SURFACE. The strict rule was `"src=" not in page`: a raw substring
 # test, blind to nothing. An allow-list parsed from double-quoted attributes alone would be NARROWER
@@ -182,12 +179,6 @@ _SRC_ATTR = re.compile(r"""src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
 # The two dash glyphs no page may carry, built from their code points so this file carries neither.
 _DASHES = (chr(0x2014), chr(0x2013))
 
-
-# The appearance script, the FIRST script in every page's head and the one script every page loads:
-# it writes <html data-theme> before the first paint, so the page opens in the reader's theme. It
-# is a same-origin file under /src like every other script here, because the pages are served under
-# a CSP whose script-src is 'self' alone.
-HEAD_SCRIPT_SRCS = ["/src/theme.js"]
 
 # The terminal-dialog modules a survey page carries at the END of its body, and only when a
 # time-series card can open the dialog (engine/extract/_pages.py survey_page). Same-origin files
@@ -206,18 +197,17 @@ def _body_scripts(page):
 
 
 def _page_scripts(page):
-    """Every script file a page may load, in document order: the head's one, then the body's."""
-    return HEAD_SCRIPT_SRCS + _body_scripts(page)
+    """Every script file a page may load, in document order. The head loads none."""
+    return _body_scripts(page)
 
 
 def _allowed_srcs(rel, page=""):
-    """The exact, ordered src list this page kind may carry, in DOCUMENT order: the head's
-    appearance script, the header's mark pair, then whatever body mark the kind is named for, then
-    the footer's lock-up pair, then the scripts the page's body earns (the dialog's three, the hub's
-    one).
+    """The exact, ordered src list this page kind may carry, in DOCUMENT order: the header's mark,
+    then whatever body mark the kind is named for, then the footer's lock-up, then the scripts the
+    page's body earns (the dialog's three, the hub's one).
     The order is the assertion, so the body mark has to be spliced between the chrome groups rather
     than appended after them."""
-    return (HEAD_SCRIPT_SRCS + ALLOWED_HEADER_SRCS + ALLOWED_BODY_SRCS.get(rel, [])
+    return (ALLOWED_HEADER_SRCS + ALLOWED_BODY_SRCS.get(rel, [])
             + ALLOWED_FOOTER_SRCS + _body_scripts(page))
 
 
@@ -238,31 +228,24 @@ _INLINE_HANDLER = re.compile(r"<[A-Za-z][^>]*\son[a-z]+\s*=", re.I)
 
 def _assert_scripts_are_files(page, rel):
     """Every script element is a same-origin file this page may load, or a ld+json block, which is
-    data rather than code; the head's FIRST script is the appearance script, ahead of every other
-    script and of the stylesheet; and no start tag carries an inline event handler."""
+    data rather than code; the head loads no script file; and no start tag carries an inline event
+    handler."""
     for tag in re.findall(r"<script\b[^>]*>", page):
         assert tag == '<script type="application/ld+json">' or \
             tag in {f'<script src="{s}">' for s in _page_scripts(page)}, \
             f"{rel}: no inline script may appear on a page in this tier, got {tag}"
     head = page.split("</head>", 1)[0]
-    first = re.search(r"<script\b[^>]*>", head)
-    assert first and first.group(0) == '<script src="/src/theme.js">', \
-        f"{rel}: the head's first script must be the appearance script, got {first and first.group(0)}"
-    assert head.index('<script src="/src/theme.js">') < head.index("<style>"), \
-        f"{rel}: the appearance script must run before the stylesheet is parsed"
-    assert page.count('<script src="/src/theme.js"></script>') == 1, \
-        f"{rel}: the appearance script loads exactly once"
+    assert not re.search(r"<script\b[^>]*\bsrc=", head), f"{rel}: the head loads no script file"
     assert not _INLINE_HANDLER.search(page), \
         f"{rel}: no inline event handler may appear: {_INLINE_HANDLER.search(page).group(0)!r}"
 
 
-def test_index_pages_carry_no_script_and_only_the_chrome_pairs(built):
+def test_index_pages_carry_no_script_and_only_the_chrome_images(built):
     """FAILS IF an index page grows an inline script or handler, a stylesheet link, or any fetched
-    asset beyond the allow-listed header mark pair and footer lock-up pair, the appearance script in
-    the head and, on the surveys hub alone, its one same-origin controls script. The entity pages'
-    determinism posture (stdlib-only build, everything else inline, no network at build) is
-    inherited, not re-litigated; the two pairs and the scripts are the named exceptions and every
-    one is same-origin.
+    asset beyond the allow-listed header mark and footer lock-up and, on the surveys hub alone, its
+    one same-origin controls script. The entity pages' determinism posture (stdlib-only build,
+    everything else inline, no network at build) is inherited, not re-litigated; the two images and
+    the script are the named exceptions and every one is same-origin.
 
     A ld+json block is data, not code: nothing in it executes, and the hub pages carry one so a
     search result can show the trail back to the root. It is stripped before the guard rather than
@@ -273,7 +256,7 @@ def test_index_pages_carry_no_script_and_only_the_chrome_pairs(built):
         srcs = _page_srcs(page, rel)
         assert srcs == _allowed_srcs(rel, page), \
             f"{rel}: the only fetched assets may be {_allowed_srcs(rel, page)}, got {srcs}"
-        assert HEADER_MARKS in _header(page), f"{rel}: the header's identity zone opens with the mark pair"
+        assert HEADER_MARKS in _header(page), f"{rel}: the header's identity zone opens with the mark"
         assert FOOTER_LOCKUP in _footer(page), f"{rel}: the footer's right region closes on the lock-up"
         assert "auscope-ncris" not in _header(page), f"{rel}: the header names no lock-up file"
         assert "rel=\"stylesheet\"" not in page, f"{rel}: styles stay inline"
@@ -760,10 +743,9 @@ def test_the_surveys_hub_leads_with_the_owners_lede_and_a_forward_arrow():
 def test_the_hub_locator_grows_and_its_container_steps_back():
     """The locator map is the card's only picture and was too small to read at a glance;
     it grows about ten percent. The PANEL around it sits close to the card's own fill so the
-    Australia outline reads as the object rather than as a box on a box: in the dark appearance the
-    panel IS the card's fill, and in the light one it is nearer the white card than the page ground
-    is. The panel takes its colour from the theme through its class, never as a literal, so the
-    one map serves both appearances. The shared-symbol geometry is untouched, which is what keeps
+    Australia outline reads as the object rather than as a box on a box: it is nearer the white card
+    than the page ground is. The panel takes its colour from the tokens through its class, never as a
+    literal. The shared-symbol geometry is untouched, which is what keeps
     the budget pin honest."""
     pages = _pages_module()
     page = pages.surveys_index_page(rows=_synthetic_rows(), base=BASE)
@@ -779,24 +761,19 @@ def test_the_hub_locator_grows_and_its_container_steps_back():
                           'Australia"><rect class="mm-panel mm-rule" '), \
         f"the map panel is the SVG's first element, drawn by class: {svg[:200]!r}"
     assert "style=" not in svg and 'fill="#' not in svg and 'stroke="#' not in svg, \
-        "the panel and the coast carry no colour of their own; the theme supplies it"
-    css = _css(page)
-    for which in ("light", "dark"):
-        tokens = _theme(css, which)
-        assert _contrast(tokens["--map-panel"], tokens["--surface"]) < \
-            _contrast(tokens["--bg"], tokens["--surface"]), \
-            f"{which}: the map panel must sit nearer the card's fill than the page ground does"
-    assert _theme(css, "dark")["--map-panel"] == _theme(css, "dark")["--surface"], \
-        "in the dark appearance the map panel is the card's own fill"
+        "the panel and the coast carry no colour of their own; the tokens supply it"
+    tokens = _tokens(_css(page))
+    assert _contrast(tokens["--map-panel"], tokens["--surface"]) < \
+        _contrast(tokens["--bg"], tokens["--surface"]), \
+        "the map panel must sit nearer the card's fill than the page ground does"
     assert "#16242f" not in page, "the darker panel shade that read as a box on a box stays out"
 
 
 def test_the_card_names_its_organisation_more_loudly_than_its_location():
     """Organisation and location share one line with no labels, so the only thing that can tell
     a reader which is which is ink: the organisation in the body text token, the location in the
-    muted one, so the organisation reads louder against the card in BOTH appearances. FAILS IF the
-    two collapse to one token, the organisation stops out-contrasting the location on either ground,
-    or a label is introduced."""
+    muted one, so the organisation reads louder against the card. FAILS IF the two collapse to one
+    token, the organisation stops out-contrasting the location, or a label is introduced."""
     pages = _pages_module()
     page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
     css = page.split("<style>", 1)[1].split("</style>", 1)[0]
@@ -810,11 +787,10 @@ def test_the_card_names_its_organisation_more_loudly_than_its_location():
     assert (orgn.group(1), loc.group(1)) == ("--text", "--muted"), \
         f"the organisation takes the body text token and the location the muted one: " \
         f"{orgn.group(1)} / {loc.group(1)}"
-    for which in ("light", "dark"):
-        tokens = _theme(css, which)
-        assert _contrast(tokens["--text"], tokens["--surface"]) > \
-            _contrast(tokens["--muted"], tokens["--surface"]), \
-            f"{which}: the organisation must read LOUDER than the location on the card"
+    tokens = _tokens(css)
+    assert _contrast(tokens["--text"], tokens["--surface"]) > \
+        _contrast(tokens["--muted"], tokens["--surface"]), \
+        "the organisation must read LOUDER than the location on the card"
 
 
 def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
@@ -853,12 +829,10 @@ AUSCOPE_URL = "https://www.auscope.org.au"
 # navigate the tab it came from. One literal in one order, the portal documents' own spelling.
 NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
 
-# The header's identity zone, the AuScope mark pair and then AusMT's name linking the root, and its
-# right zone, the tagline; each exactly as the pages write it.
-MARK_FILES = ("/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg")
-HEADER_MARKS = (f'<img class="brandmark theme-light" src="{MARK_FILES[0]}" alt="AuScope" width="36" '
-                f'height="36"><img class="brandmark theme-dark" src="{MARK_FILES[1]}" alt="AuScope" '
-                'width="36" height="36">')
+# The header's identity zone, the AuScope mark and then AusMT's name linking the root, and its right
+# zone, the tagline; each exactly as the pages write it.
+MARK_FILE = "/vendor/auscope/auscope-mark.svg"
+HEADER_MARKS = f'<img class="brandmark" src="{MARK_FILE}" alt="AuScope" width="36" height="36">'
 HEADER_IDENTITY = ('<div class="hzone hleft">\n'
                    f"    {HEADER_MARKS}\n"
                    '    <a class="wordmark" href="/"><b>Aus</b>MT</a>\n'
@@ -867,27 +841,15 @@ HEADER_RIGHT = ('<div class="hzone hright"><div class="tagline">Magnetotelluric 
                 '</div></div>')
 # The footer's lock-up, after the page's status in its right region.
 FOOTER_LOCKUP = (f'<a class="orglockup" href="{AUSCOPE_URL}" {NEW_TAB}>'
-                 '<img class="theme-light" src="/vendor/auscope-ncris-colour.png" '
-                 'alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" '
-                 'src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" '
+                 '<img src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" '
                  'width="1919" height="325"></a>')
 
-# The retired footer control, by its classes and its hook. The appearance choice lives on /about.html
-# and in the map's welcome dialog, so no generated page names any of these, in markup or in its sheet.
+# The retired footer control, by its classes and its hook. No generated page names any of these, in
+# markup or in its sheet.
 RETIRED_CONTROL = ("themectl", "themesep", "data-theme-choice", "aria-pressed")
 
-# The theme switch, verbatim on every surface and in this order: the dark file of each pair hidden
-# by default, then the pair swapped under <html data-theme="dark">. The one one-class rule in the
-# sheet that sets display on a variant is .brandmark, which ties with the first rule and comes before
-# the switch, so the switch wins.
-THEME_RULES = ('.theme-dark{display:none}',
-               ':root[data-theme="dark"] .theme-light{display:none}',
-               ':root[data-theme="dark"] .theme-dark{display:block}')
-
-# The token block, as portal/index.html's :root states it: the house style by default and the dark
-# appearance under <html data-theme="dark">, which restates only what differs. Every chrome colour
-# on a page is one of these names; the ramp (--lpmt to --gds) is restated by neither block's
-# differences, because a legend must not change meaning with the theme.
+# The token block, as portal/index.html's :root states it: the house style, the portal's one
+# appearance. Every chrome colour on a page is one of these names.
 LIGHT_TOKENS = [
     ("--bg", "#F2F2F1"), ("--surface", "#FFFFFF"), ("--surface-2", "#F2F3F2"), ("--line", "#CED4DA"),
     ("--text", "#333333"), ("--muted", "#6C757D"), ("--heading", "#282572"),
@@ -902,19 +864,7 @@ LIGHT_TOKENS = [
     ("--sans", "'Libre Franklin',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif"),
     ("color-scheme", "light"),
 ]
-DARK_TOKENS = [
-    ("--bg", "#11182D"), ("--surface", "#18213D"), ("--surface-2", "#1E2B4F"), ("--line", "#2B3557"),
-    ("--text", "#E8EDF1"), ("--muted", "#8FA3B0"), ("--heading", "#FFFFFF"),
-    ("--accent", "#EF7256"), ("--accent-ink", "#16110B"),
-    ("--dot-edge", "#11182D"),
-    ("--ok", "#5BAE6A"), ("--part", "#D9A23B"), ("--no", "#E2938B"), ("--unk", "#5A6E7D"),
-    ("--map-bg", "#0F1626"), ("--map-panel", "#18213D"), ("--map-line", "#222C4E"),
-    ("--coast-fill", "#1D3140"), ("--coast-line", "#3A5266"),
-    ("--shadow", "none"),
-    ("color-scheme", "dark"),
-]
 _LIGHT_BLOCK = re.compile(r"(?m)^\s*:root\{([^}]*)\}")
-_DARK_BLOCK = re.compile(r':root\[data-theme="dark"\]\{([^}]*)\}')
 
 
 def _css(page):
@@ -927,13 +877,9 @@ def _declarations(body):
             (d.strip() for d in " ".join(body.split()).split(";")) if part]
 
 
-def _theme(css, which):
-    """{token: value} as one appearance resolves it: the light block alone, or the light block with
-    the dark block's restatements over it, which is what the cascade does."""
-    out = dict(_declarations(_LIGHT_BLOCK.search(css).group(1)))
-    if which == "dark":
-        out.update(_declarations(_DARK_BLOCK.search(css).group(1)))
-    return out
+def _tokens(css):
+    """{token: value} as the token block declares it."""
+    return dict(_declarations(_LIGHT_BLOCK.search(css).group(1)))
 
 
 def _contrast(a, b):
@@ -1079,7 +1025,7 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
     nothing else. The separators are U+00B7, written in the centre as the numeric
     reference so a mis-decoded read of this file cannot smuggle a hyphen past the pin.
 
-    The footer fetches the lock-up pair and nothing else, and links AuScope twice, from the centre's
+    The footer fetches the lock-up and nothing else, and links AuScope twice, from the centre's
     name and from the lock-up. Releases and About this build stay out of the footer on every
     surface; /about.html carries the running build's identity and the route to the citable releases
     in its own body (portal/tests/test_about_uniform_chrome.py). A per-page machine link is asserted
@@ -1089,7 +1035,7 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
     FAILS IF the one-line footer survives anywhere, if the three regions are not present with their
     exact strings, if a region's links move or retarget, if the copyright clause or the retired
     footer logo comes back, if the lock-up leaves the right region or another image joins it, if a
-    retired control comes back (the appearance control included), or if the footer differs between
+    retired control comes back (the retired appearance control included), or if the footer differs between
     page kinds."""
     seen = {}
     for rel, (_active, label, href, _slot) in _kinds(built).items():
@@ -1131,10 +1077,10 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
         # fetched.
         assert foot.count(FOOTER_LOCKUP) == 1 and foot.count("<a ") == 3, \
             f"{rel}: the right region closes on the lock-up, the footer's third and last anchor: {foot!r}"
-        assert re.findall(r'src="([^"]+)"', foot) == ALLOWED_FOOTER_SRCS and foot.count("src=") == 2, \
-            f"{rel}: the footer fetches the lock-up pair and nothing else: {foot!r}"
-        assert foot.count("<img") == 2 and "orglogo" not in foot, \
-            f"{rel}: the lock-up pair is the footer's only image: {foot!r}"
+        assert re.findall(r'src="([^"]+)"', foot) == ALLOWED_FOOTER_SRCS and foot.count("src=") == 1, \
+            f"{rel}: the footer fetches the lock-up and nothing else: {foot!r}"
+        assert foot.count("<img") == 1 and "orglogo" not in foot, \
+            f"{rel}: the lock-up is the footer's only image: {foot!r}"
         for control in ("<button", "<input", "<select", "<fieldset", " role=", "aria-pressed"):
             assert control not in foot, \
                 f"{rel}: the footer carries no control, found {control!r}: {foot!r}"
@@ -1330,46 +1276,29 @@ def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
 
 
 def test_every_page_kind_opens_its_identity_zone_with_the_mark_and_the_name(built):
-    """The identity block. Every surface of the site carries the same identity zone: the AuScope mark
-    pair, then AusMT's name linking the root, and nothing else. FAILS IF a page kind puts any other
-    image of any kind in the zone, names either mark file other than once in its header, drops the
-    mark's sizing rule or places it after the theme switch (it sets display:block and ties with the
-    switch's first rule, so after it the white mark would paint on the light ground), or loses a
-    theme rule: without the switch both files of each pair would paint at once. The three theme rules
-    are each declared once and in order, and no rule that selects a variant image may set display at
-    a specificity above the switch."""
+    """The identity block. Every surface of the site carries the same identity zone: the AuScope mark,
+    then AusMT's name linking the root, and nothing else. FAILS IF a page kind puts any other image
+    of any kind in the zone, names the mark file other than once in its header, or drops the mark's
+    sizing rule."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         head = _header(page)
         assert HEADER_IDENTITY in head, \
-            f"{rel}: the identity zone is the mark pair and the name, and nothing else"
+            f"{rel}: the identity zone is the mark and the name, and nothing else"
         zone = head.split('<div class="hzone hleft">', 1)[1].split('<div class="hzone hcenter">', 1)[0]
-        assert zone.count("<img") == 2, f"{rel}: the mark pair is the zone's only image: {zone!r}"
+        assert zone.count("<img") == 1, f"{rel}: the mark is the zone's only image: {zone!r}"
         for tag in ("<svg", "<picture", "<object", "<embed", "<canvas", "style="):
             assert tag not in zone, f"{rel}: the identity zone carries no other image, found {tag!r}: {zone!r}"
-        for src in MARK_FILES:
-            assert head.count(src) == 1, f"{rel}: the header names {src} once, found {head.count(src)}"
+        assert head.count(MARK_FILE) == 1, f"{rel}: the header names {MARK_FILE} once, found {head.count(MARK_FILE)}"
         css = _css(page)
         mark_rule = ".brandmark{height:36px;width:36px;display:block;flex:none}"
         assert css.count(mark_rule) == 1, f"{rel}: the mark's sizing rule is declared once"
-        # Anchored to the line: the lock-up's own default, below, carries the first rule's text
-        # inside a longer selector and must not answer for it.
-        found = [[m.start() for m in re.finditer(r"(?m)^[ \t]*" + re.escape(rule) + r"$", css)]
-                 for rule in THEME_RULES]
-        assert all(len(f) == 1 for f in found), \
-            f"{rel}: each of the three theme rules is declared exactly once: {found}"
-        at = [f[0] for f in found]
-        assert at == sorted(at), f"{rel}: the three theme rules must be in order: {at}"
-        assert css.index(mark_rule) < at[0], f"{rel}: the mark's rule must come before the switch"
-        sizing = re.search(r"\.orglockup img\{([^}]*)\}", css)
-        assert sizing and "display" not in sizing.group(1), \
-            f"{rel}: the lock-up sizing rule must not set display, or it outranks the theme switch"
         assert "/vendor/brand/ausmt-mark.svg" not in page, \
             f"{rel}: the AusMT mark is not chrome on this tier"
 
 
 # The parent-organisation mark that closed a header's right zone as an icon, WITHDRAWN on every
-# surface: the header opens with the AuScope mark pair and the footer closes on the full lock-up.
+# surface: the header opens with the AuScope mark and the footer closes on the full lock-up.
 # What this asserts is that the emitter puts the icon form on NO page kind, in no zone. The portal
 # surface's half of the same rule is held in portal/tests/test_header_geometry_parity.py.
 ORG_MARK_IMG = '<a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>'
@@ -1405,8 +1334,8 @@ def test_no_page_kind_carries_the_auscope_org_mark_in_its_header(built):
 
 # The site's raster AuScope icon. It stays committed for the consumers that need it (the docs
 # sidebar copy and the social card are made from it), and no page in this tier names it: the header
-# and the collection figure draw the vector mark pair under /vendor/auscope/ and the footer the
-# lock-up PNGs.
+# and the collection figure draw the vector mark under /vendor/auscope/ and the footer the lock-up
+# PNG.
 LEGACY_ORG_ASSETS = ("auscope-icon-white.png",)
 
 # The raster colour icon, which this tier must NOT grow either. It is committed and unreferenced by
@@ -1422,33 +1351,33 @@ def test_no_page_kind_draws_the_spa_maps_colour_watermark(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         assert COLOUR_ASSET not in page, (
             f"{rel}: the AuScope colour icon is unreferenced by the site chrome and belongs to no "
-            "page in this tier; the collection figure draws the vector mark pair")
+            "page in this tier; the collection figure draws the vector mark")
 
-# How often each AuScope file is NAMED per page kind. The mark pair is named once by every header,
+# How often each AuScope file is NAMED per page kind. The mark is named once by every header,
 # and once more on the collection page, whose member-footprint figure carries it as a caption. The
 # identity pin above reads the header and the src allow-list holds each kind's src attributes
 # exactly and in order; neither bounds how often a file is NAMED, so a url() in the inline CSS or a
 # preload link would carry it a second time and pass both.
-VECTOR_ASSETS = ("auscope/auscope-mark.svg", "auscope/auscope-mark-white.svg")
+VECTOR_ASSETS = ("auscope/auscope-mark.svg",)
 VECTOR_ASSET_DEFAULT = 1
-VECTOR_ASSET_PER_KIND = {"collections/idxcoll.html": {"auscope/auscope-mark.svg": 2,
-                                                      "auscope/auscope-mark-white.svg": 2}}
-# The lock-up pair, the brand kit's PNGs, named exactly once on every page kind: in the footer and
+VECTOR_ASSET_PER_KIND = {"collections/idxcoll.html": {"auscope/auscope-mark.svg": 2}}
+# The lock-up, the brand kit's colour PNG, named exactly once on every page kind: in the footer and
 # nowhere else. Counted by file name, so a url() or a preload in any quoting form counts too.
-RASTER_ASSETS = ("auscope-ncris-colour.png", "auscope-ncris-white.png")
+RASTER_ASSETS = ("auscope-ncris-colour.png",)
+# The white files sat on dark grounds only; no page kind names either.
+WHITE_ASSETS = ("auscope/auscope-mark-white.svg", "auscope-ncris-white.png")
 
 
 def test_no_page_kind_names_the_raster_auscope_icon(built):
     """FAILS IF any generated page names the raster AuScope icon, in any slot. It would also fail the
     src allow-list, but only as an unexplained count; this says which file and why it may not be
-    here. The white lock-up PNG is the footer's theme-dark lock-up on every page, held below by its
-    count and by the footer literal."""
+    here."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         for asset in LEGACY_ORG_ASSETS:
             assert asset not in page, (
                 f"{rel}: {asset} is unreferenced by the site chrome; this tier draws the vector "
-                "mark pair under /vendor/auscope/ and the lock-up PNGs under /vendor/")
+                "mark under /vendor/auscope/ and the lock-up PNG under /vendor/")
 
 
 def test_no_page_kind_names_an_auscope_file_beyond_the_slots_that_keep_it(built):
@@ -1467,6 +1396,8 @@ def test_no_page_kind_names_an_auscope_file_beyond_the_slots_that_keep_it(built)
         for asset in RASTER_ASSETS:
             got = page.count(asset)
             assert got == 1, f"{rel}: {asset} is named once, in the footer; found {got}"
+        for asset in WHITE_ASSETS:
+            assert asset not in page, f"{rel}: names {asset}, which sat on dark grounds only"
 
 
 def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built):
@@ -1493,28 +1424,23 @@ def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built
 # Appearance: one token block, and the maps drawn from it
 # ==================================================================================================
 def test_every_page_kind_carries_the_token_block_once_and_no_literal_chrome_colour(built):
-    """Every page states the token block ONCE, at the top of its stylesheet: the house style as the
-    default and the dark appearance under <html data-theme="dark">, each with exactly the names and
-    values portal/index.html's :root carries, in its order. Every chrome colour in the sheet is then
-    one of those names: outside the two blocks the stylesheet carries no colour literal at all, so an
-    appearance cannot miss a rule.
+    """Every page states the token block ONCE, at the top of its stylesheet: the house style, with
+    exactly the names and values portal/index.html's :root carries, in its order. Every chrome colour
+    in the sheet is then one of those names: outside the block the stylesheet carries no colour
+    literal at all.
 
     FAILS IF the block is missing, doubled, out of order, drifts by a value, sits below a rule that
     reads it, or if a literal colour comes back anywhere else in the sheet."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         css = _css(page)
-        assert len(_LIGHT_BLOCK.findall(css)) == 1 and len(_DARK_BLOCK.findall(css)) == 1, \
-            f"{rel}: the token block appears exactly once"
+        assert len(_LIGHT_BLOCK.findall(css)) == 1, f"{rel}: the token block appears exactly once"
         light = _LIGHT_BLOCK.search(css)
-        dark = _DARK_BLOCK.search(css)
         assert _declarations(light.group(1)) == LIGHT_TOKENS, \
-            f"{rel}: the light block must be the house style, name for name and value for value"
-        assert _declarations(dark.group(1)) == DARK_TOKENS, \
-            f"{rel}: the dark block must restate exactly the dark appearance's differences"
-        assert css.lstrip().startswith(":root{") and light.end() < dark.start() \
-            < css.index("body{"), f"{rel}: the two blocks open the sheet, light then dark"
-        rest = css[:light.start()] + css[light.end():dark.start()] + css[dark.end():]
+            f"{rel}: the token block must be the house style, name for name and value for value"
+        assert css.lstrip().startswith(":root{") and light.end() < css.index("body{"), \
+            f"{rel}: the block opens the sheet"
+        rest = css[:light.start()] + css[light.end():]
         literal = re.findall(r"#[0-9A-Fa-f]{3,8}\b", rest)
         assert not literal, f"{rel}: chrome colours must be tokens, found literals {literal}"
         used = set(re.findall(r"var\((--[\w-]+)\)", rest))
@@ -1527,29 +1453,27 @@ def test_every_page_kind_carries_the_token_block_once_and_no_literal_chrome_colo
                     f"nothing: {inline!r}")
 
 
-def test_the_type_ramp_is_the_portals_and_the_same_in_both_appearances(built):
-    """The data-type ramp is a data encoding, not chrome: the page maps draw it byte for byte as the
-    portal's TYPE_COL and the --lpmt, --bbmt, --amt and --gds tokens state it, and it is the SAME in
-    both appearances, because a legend must not change meaning with the theme. The raster collection
-    card has no theme, so its map colours are the dark appearance's own map tokens.
+# The raster collection card's map colours, as engine/extract/_pages.py states them: a navy ground,
+# the one its white wordmark and tagline inks are chosen for. A PNG reads no stylesheet, so these
+# are literals and no token restates them.
+RASTER_CARD_MAP = ("#18213D", "#222C4E", "#1D3140", "#3A5266")
 
-    FAILS IF a ramp value drifts, if the dark block restates a ramp token, or if the raster card's
-    colours stop being the dark map tokens."""
+
+def test_the_type_ramp_is_the_portals_and_the_raster_card_keeps_its_ground(built):
+    """The data-type ramp is a data encoding, not chrome: the page maps draw it byte for byte as the
+    portal's TYPE_COL and the --lpmt, --bbmt, --amt and --gds tokens state it.
+
+    FAILS IF a ramp value drifts, or if the raster card's map colours move off its navy ground."""
     pages = _pages_module()
     assert pages._TYPE_COL == {"LPMT": "#3F88C8", "BBMT": "#FFC14F", "AMT": "#9FCB5A",
                                "GDS": "#CE348A"}, f"the ramp must be the portal's: {pages._TYPE_COL}"
     css = _css((built / "pages" / "surveys" / "idx-a.html").read_text(encoding="utf-8"))
-    for which in ("light", "dark"):
-        tokens = _theme(css, which)
-        for ty, token in (("LPMT", "--lpmt"), ("BBMT", "--bbmt"), ("AMT", "--amt"), ("GDS", "--gds")):
-            assert tokens[token] == pages._TYPE_COL[ty], \
-                f"{which}: {token} is {tokens[token]}, the maps draw {ty} in {pages._TYPE_COL[ty]}"
-    assert not {"--lpmt", "--bbmt", "--amt", "--gds"} & set(dict(DARK_TOKENS)), \
-        "the dark block must not restate the ramp"
-    dark = _theme(css, "dark")
+    tokens = _tokens(css)
+    for ty, token in (("LPMT", "--lpmt"), ("BBMT", "--bbmt"), ("AMT", "--amt"), ("GDS", "--gds")):
+        assert tokens[token] == pages._TYPE_COL[ty], \
+            f"{token} is {tokens[token]}, the maps draw {ty} in {pages._TYPE_COL[ty]}"
     assert (pages._MAP_PANEL, pages._MAP_PANEL_LINE, pages._COAST_FILL, pages._COAST_LINE) == \
-        (dark["--map-panel"], dark["--map-line"], dark["--coast-fill"], dark["--coast-line"]), \
-        "the raster card's map colours are the dark appearance's map tokens"
+        RASTER_CARD_MAP, "the raster card's map keeps its navy ground"
 
 
 def test_the_maps_take_every_colour_but_the_data_from_their_classes(built):
@@ -1583,7 +1507,7 @@ def test_the_maps_take_every_colour_but_the_data_from_their_classes(built):
         assert re.search(r'<svg [^>]*><rect class="mm-panel mm-rule" ', svg), \
             f"{name}: the panel is the SVG's first element, drawn by class"
         assert "style=" not in svg, f"{name}: a map carries no inline style"
-        assert 'stroke="#' not in svg, f"{name}: no stroke literal; the theme supplies every line"
+        assert 'stroke="#' not in svg, f"{name}: no stroke literal; the tokens supply every line"
         fills = re.findall(r'<(\w+)[^>]*\sfill="(#[0-9A-Fa-f]{6})"', svg)
         assert all(tag in ("g", "circle") for tag, _f in fills), \
             f"{name}: only station marks carry a literal fill: {fills}"

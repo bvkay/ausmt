@@ -1,30 +1,20 @@
-"""The appearance tokens: the AuScope house style as the light theme, the navy palette as the dark.
+"""The appearance tokens: the AuScope house style, the portal's one appearance.
 
-Every portal page declares the same two :root blocks, copied rather than shared because the portal
-ships as classic static pages with no template step, and the engine's pages sheet declares them too.
-These pins hold every copy to the contract values (tests/chrome_contract.py) AND to each other, so an
-edit to one file's block that forgets the others fails here rather than shipping a split palette.
-
-The theme itself is chosen by src/theme.js, which writes data-theme on <html> before first paint. It
-can only do that if it is the FIRST script in <head> and runs before the stylesheet: a later script
-paints one frame in the wrong theme. It is a file, not an inline block, because the deployed CSP allows
-no inline script on these pages.
+Every portal page declares the same :root block, copied rather than shared because the portal ships
+as classic static pages with no template step, and the engine's pages sheet declares it too. These
+pins hold every copy to the contract values (tests/chrome_contract.py) AND to each other, so an edit
+to one file's block that forgets the others fails here rather than shipping a split palette. That no
+surface declares a second appearance is held in test_one_appearance.py.
 
 Each assertion states its failure criterion:
 
-  * TARGETS - FAILS if any page's light or dark block is missing a token, carries an extra one, or
-    holds a value other than the contract's. Non-vacuous: the previous palette (--ink, --panel,
-    --copper) fails every line.
-  * PARITY - FAILS if the two blocks are not identical across the six pages and the engine's sheet.
-  * THE RAMP IS THEME-INDEPENDENT - FAILS if the dark block redeclares a data-type colour.
+  * TARGETS - FAILS if any page's block is missing a token, carries an extra one, or holds a value
+    other than the contract's. Non-vacuous: the previous palette (--ink, --panel, --copper) fails
+    every line.
+  * PARITY - FAILS if the block is not identical across the six pages and the engine's sheet.
   * RETIRED TOKENS - FAILS if any page or the engine's sheet still declares or reads --ink, --panel,
     --panel-2 or --copper.
-  * THE SCRIPT - FAILS if a page does not load /src/theme.js, loads it anywhere but first in <head>,
-    loads it after its <style>, or inlines it.
-  * THE CONTROL - FAILS if the appearance row is not the contract row, once, in index.html's welcome
-    dialog and in about.html's Appearance section, if any other page or the engine's sheet carries
-    it, if src/theme.js stops wiring and checking the radios named "appearance", if it keeps a hook
-    for a control no page carries, or if its window.AusmtTheme interface changes.
+  * NO INLINE SCRIPT - FAILS if a page other than add-survey.html carries an inline script block.
   * ONE CARD STYLE - FAILS if a card on the page ground loses the --line border, the 4px radius
     or the --shadow token in its base rule. Non-vacuous: the add-survey advisory (6px, no shadow), its
     fieldset and panels and the compact survey list (8px, no shadow) fail before the house style.
@@ -42,9 +32,8 @@ from pathlib import Path
 
 import pytest
 
-from chrome_contract import (ABOUT_APPEARANCE, DARK, LIGHT, RAMP, RETIRED_TOKENS, THEME_SCRIPT,
-                             WELCOME_APPEARANCE, WORDMARK_FAMILY, flat, token_blocks)
-from engine_chrome import PAGES_PY, function_source, namespace
+from chrome_contract import LIGHT, RAMP, RETIRED_TOKENS, WORDMARK_FAMILY, token_block
+from engine_chrome import PAGES_PY, namespace
 
 ROOT = Path(__file__).resolve().parent.parent   # portal/
 PAGES = ("index.html", "about.html", "add-survey.html", "brand.html", "releases.html", "404.html")
@@ -61,34 +50,28 @@ def test_the_page_set_is_the_one_the_portal_ships():
 
 @pytest.mark.parametrize("name", PAGES)
 def test_every_page_declares_the_contract_tokens(name):
-    light, dark = token_blocks(_text(name))
-    assert light == LIGHT, f"{name}: the light block differs from the contract:\n  got  {light}\n  want {LIGHT}"
-    assert dark == DARK, f"{name}: the dark block differs from the contract:\n  got  {dark}\n  want {DARK}"
+    block = token_block(_text(name))
+    assert block == LIGHT, f"{name}: the token block differs from the contract:\n  got  {block}\n  want {LIGHT}"
 
 
 def test_the_engine_sheet_declares_the_contract_tokens():
-    """The generated pages wear the same appearance, so their sheet carries the same two blocks."""
-    light, dark = token_blocks(PAGES_PY.read_text(encoding="utf-8"))
-    assert light == LIGHT, f"engine/extract/_pages.py: the light block differs:\n  got  {light}\n  want {LIGHT}"
-    assert dark == DARK, f"engine/extract/_pages.py: the dark block differs:\n  got  {dark}\n  want {DARK}"
+    """The generated pages wear the same appearance, so their sheet carries the same block."""
+    block = token_block(PAGES_PY.read_text(encoding="utf-8"))
+    assert block == LIGHT, f"engine/extract/_pages.py: the token block differs:\n  got  {block}\n  want {LIGHT}"
 
 
 def test_cross_file_parity():
     """The blocks are compared with each other as well as with the contract, so a contract edit that
     reaches some copies and not others is a failure here before it is a visible split."""
-    seen = {name: token_blocks(_text(name)) for name in PAGES}
+    seen = {name: token_block(_text(name)) for name in PAGES}
     ref = seen[PAGES[0]]
-    for name, blocks in seen.items():
-        assert blocks == ref, f"{name}: the token blocks diverge from {PAGES[0]}"
+    for name, block in seen.items():
+        assert block == ref, f"{name}: the token block diverges from {PAGES[0]}"
 
 
-def test_the_data_ramp_is_the_same_in_both_themes():
-    """A legend must not change meaning with the theme, so the dark block never restates the ramp."""
+def test_the_data_ramp_is_declared_with_the_chrome_tokens():
     for token in RAMP:
-        assert token in LIGHT and token not in DARK, token
-    for name in PAGES:
-        _light, dark = token_blocks(_text(name))
-        assert not set(RAMP) & set(dark), f"{name}: the dark block redeclares a data-type colour"
+        assert token in LIGHT, token
 
 
 @pytest.mark.parametrize("name", PAGES)
@@ -104,42 +87,6 @@ def test_no_portal_script_reads_a_retired_token():
         text = path.read_text(encoding="utf-8")
         for token in RETIRED_TOKENS:
             assert f"var({token})" not in text, f"src/{path.name}: reads the retired {token}"
-
-
-def _head(text):
-    return text.split("<head>", 1)[1].split("</head>", 1)[0]
-
-
-@pytest.mark.parametrize("name", PAGES)
-def test_the_appearance_script_runs_first_in_head(name):
-    head = _head(_text(name))
-    opens = re.findall(r"<script\b[^>]*>", head)
-    assert opens, f"{name}: <head> carries no script at all"
-    assert opens[0] + "</script>" == THEME_SCRIPT and head.count(opens[0] + "</script>") == 1, (
-        f"{name}: the first script element in <head> must be {THEME_SCRIPT}, so data-theme is written "
-        f"before anything paints; got {opens[0]!r}")
-    assert head.count(THEME_SCRIPT) == 1, f"{name}: the appearance script is loaded more than once"
-    assert head.index(THEME_SCRIPT) < head.index("<style"), (
-        f"{name}: the appearance script must run before the stylesheet")
-
-
-def test_the_engine_shell_loads_the_appearance_script_first():
-    """Read from the document _shell returns, in the order it writes it: the JSON-LD blocks are
-    assembled earlier in the function and interpolated into the head, so they must follow the
-    appearance script there."""
-    shell = function_source("_shell")
-    assert "<!DOCTYPE html>" in shell, "engine/extract/_pages.py: _shell no longer writes the document"
-    head = shell[shell.index("<!DOCTYPE html>"):].split("</head>", 1)[0]
-    assert THEME_SCRIPT in head, "engine/extract/_pages.py: _shell must load /src/theme.js in the head"
-    at = head.index(THEME_SCRIPT)
-    assert at < head.index("<style>"), (
-        "engine/extract/_pages.py: _shell must load /src/theme.js before its stylesheet")
-    first_script = re.search(r"<script\b[^>]*>(?:</script>)?", head)
-    assert first_script and first_script.group(0) == THEME_SCRIPT, (
-        "engine/extract/_pages.py: /src/theme.js must be the first script the head writes")
-    if "{ld}" in head:
-        assert at < head.index("{ld}"), (
-            "engine/extract/_pages.py: the JSON-LD blocks must follow the appearance script")
 
 
 # Every card on a page ground, by page. A card is a --surface box sitting on --bg; a raised row inside a
@@ -199,78 +146,13 @@ def test_every_card_takes_the_house_style_card_rules(name, selector):
         f"  got  {got}\n  want {CARD_STYLE}")
 
 
-def test_the_appearance_script_ships_and_is_never_inlined():
-    script = ROOT / "src" / "theme.js"
-    assert script.is_file(), "portal/src/theme.js is missing"
-    body = script.read_text(encoding="utf-8")
-    assert "ausmt:theme" in body and "data-theme" in body, "theme.js must set data-theme and announce it"
+def test_no_page_carries_an_inline_script():
     for name in PAGES:
         if name == "add-survey.html":
             continue                     # the one page whose CSP allows its own inline application block
         inline = re.findall(r"<script(?![^>]*\bsrc=)(?![^>]*application/ld\+json)[^>]*>(.*?)</script>",
                             _text(name), re.S)
         assert not [b for b in inline if b.strip()], f"{name}: carries an inline script"
-
-
-# The appearance row's two homes, and what src/theme.js must do with it. The radios are read on
-# change, through one listener on document, and checked to match the stored choice whenever it is
-# applied; nothing on any page carries another kind of appearance control.
-_HOMES = {"index.html": WELCOME_APPEARANCE, "about.html": ABOUT_APPEARANCE}
-_WIRING = ("document.querySelectorAll('input[name=\"appearance\"]')",
-           'r.name === "appearance" && r.checked',
-           "radios[i].checked = radios[i].value === c")
-_RETIRED_HOOKS = ("data-theme-choice", "aria-pressed", "welcomeTheme", '"click"')
-_INTERFACE = ("window.AusmtTheme = { get: choice, resolved: function () { return resolve(choice()); }, "
-              "set: set };")
-
-
-@pytest.mark.parametrize("name", PAGES)
-def test_the_appearance_row_lives_in_the_welcome_dialog_and_on_about_alone(name):
-    """THE CONTROL, page by page. FAILS if index.html's welcome dialog or about.html's Appearance
-    section stops carrying the contract row exactly once, or if any other page carries a radio named
-    "appearance": the row has two homes, and the footer is not one of them."""
-    text = _text(name)
-    if name in _HOMES:
-        assert flat(text).count(flat(_HOMES[name])) == 1, (
-            f"{name}: the appearance row must be the contract row, once:\n  want {_HOMES[name]!r}")
-        assert text.count('name="appearance"') == 3, (
-            f"{name}: the page carries the three appearance radios and no others")
-    else:
-        assert 'name="appearance"' not in text, f"{name}: the appearance row lives in two places only"
-    if name == "index.html":
-        dialog = text.split('<div id="introWelcome"', 1)[1].split("</fieldset>", 1)[0]
-        assert flat(WELCOME_APPEARANCE).rsplit("</fieldset>", 1)[0] in flat(dialog), (
-            "index.html: the appearance row sits inside the welcome dialog")
-    if name == "about.html":
-        section = text.split('<section id="appearance">', 1)[1].split("</section>", 1)[0]
-        assert flat(ABOUT_APPEARANCE) in flat(section), (
-            "about.html: the appearance row sits inside the Appearance section")
-
-
-def test_the_engine_pages_carry_no_appearance_row():
-    """The engine's pages reach the choice through the header's About link. FAILS if the engine's
-    source writes a radio named "appearance" or the retired button hook."""
-    source = PAGES_PY.read_text(encoding="utf-8")
-    for gone in ('name="appearance"', "data-theme-choice", "themectl"):
-        assert gone not in source, f"engine/extract/_pages.py: carries {gone!r}"
-
-
-def test_the_appearance_script_wires_the_radios_and_nothing_else():
-    """THE CONTROL, script side. FAILS if src/theme.js stops reading a change on the radios named
-    "appearance" or stops checking the one that matches the stored choice, if it keeps a hook for a
-    control no page carries (a data-theme-choice element, a pressed state, a click listener, radios
-    named welcomeTheme), or if the window.AusmtTheme interface its callers use changes."""
-    script = (ROOT / "src" / "theme.js").read_text(encoding="utf-8")
-    for wire in _WIRING:
-        assert wire in script, f"src/theme.js: the radios must be wired by {wire!r}"
-    for gone in _RETIRED_HOOKS:
-        assert gone not in script, f"src/theme.js: {gone!r} serves a control no page carries"
-    assert script.count(_INTERFACE) == 1, f"src/theme.js: the interface must stay {_INTERFACE!r}"
-    accepted = re.search(r'if \(c !== "light" && c !== "dark" && c !== "system"\) return;', script)
-    assert accepted, "src/theme.js: set() must accept exactly light, dark and system"
-    values = re.findall(r'name="appearance" value="([a-z]+)"', WELCOME_APPEARANCE)
-    assert values == ["light", "dark", "system"], (
-        f"the row offers exactly the three choices set() accepts, in order: {values}")
 
 
 # A served font file, by extension, in any slot a page or a sheet could name one: a src, a url() or a

@@ -8,24 +8,15 @@ const _OSM_CREDIT='\u00a9 <a href="https://www.openstreetmap.org/copyright" targ
 const _PM_CREDIT=_OSM_CREDIT+', \u00a9 <a href="https://protomaps.com" target="_blank" rel="noopener noreferrer">Protomaps</a>';
 const _CARTO_CREDIT=_OSM_CREDIT+', \u00a9 <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>';
 var _bmCfg=(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.basemap)||{};
-// A theme token's current value, for what is drawn outside CSS (dot edges, shapes); a headless harness with
-// no stylesheet reads every token empty.
+// A token's value, for what is drawn outside CSS (dot edges, shapes); a headless harness with no
+// stylesheet reads every token empty.
 function themeToken(name){
   return typeof getComputedStyle==="function"?getComputedStyle(document.documentElement).getPropertyValue(name).trim():"";}
-function resolvedTheme(){return document.documentElement.getAttribute("data-theme")==="dark"?"dark":"light";}
 // The two pmtiles layers state the SAME credit and Leaflet prints it once: they are one basemap split at
-// the z7 crossover, drawn in the flavour of the resolved theme and remounted when it changes. The new pair
-// is added before the old pair leaves, or the region layer's minZoom alone would snap the view to z7.
-let _basemap=[];
-function mountBasemap(flavor){
-  const next=[
-    protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor,lang:"en",maxZoom:7,maxDataZoom:6,attribution:_PM_CREDIT}).addTo(map),
-    protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor,lang:"en",minZoom:7,maxZoom:18,maxDataZoom:15,attribution:_PM_CREDIT}).addTo(map)];
-  _basemap.forEach(l=>map.removeLayer(l));
-  _basemap=next;
-}
+// the z7 crossover, in the protomaps light flavour the house style sits on.
 if(_bmCfg.provider==="pmtiles"&&window.protomapsL){
-  mountBasemap(resolvedTheme());
+  protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor:"light",lang:"en",maxZoom:7,maxDataZoom:6,attribution:_PM_CREDIT}).addTo(map);
+  protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor:"light",lang:"en",minZoom:7,maxZoom:18,maxDataZoom:15,attribution:_PM_CREDIT}).addTo(map);
 }else{
   var _bmKey=_bmCfg.carto_api_key?("?api_key="+encodeURIComponent(_bmCfg.carto_api_key)):"";
   L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"+_bmKey,{maxZoom:18,attribution:_CARTO_CREDIT}).addTo(map);
@@ -56,7 +47,7 @@ const drawn=new L.FeatureGroup().addTo(map);
 L.drawLocal.draw.toolbar.buttons.polygon="Draw polygon selection";
 L.drawLocal.draw.toolbar.buttons.rectangle="Draw rectangle selection";
 L.drawLocal.edit.toolbar.buttons.remove="Clear drawn shapes";
-// The shape colour is the --accent token, read here and again on every theme change.
+// The shape colour is the --accent token.
 function shapeStyle(){return {color:themeToken("--accent"),weight:2};}
 // A named reference, so the SELECTION panel's
 // Draw rectangle/polygon buttons can REUSE this control's own mode handlers - see armDraw below.
@@ -218,14 +209,6 @@ if(_mapCont&&_mapCont.addEventListener){
 // Restyle every marker on each zoom step so radius/weight track the tier. preferCanvas is on
 // (map creation) so a full restyle of ~1200 circleMarkers per step is acceptable; registered once here.
 map.on("zoomend",restyleForZoom);
-// A theme change redraws what CSS cannot reach: the basemap flavour, every dot's edge and the shape colour.
-document.addEventListener("ausmt:theme",e=>{
-  if(_basemap.length)mountBasemap(e.detail.theme);
-  const edge=themeToken("--dot-edge"),shape=shapeStyle();
-  ST.forEach(s=>{if(s.marker)s.marker.setStyle({color:edge});});
-  drawControl.setDrawingOptions({polygon:{shapeOptions:shape},rectangle:{shapeOptions:shape}});
-  drawn.eachLayer(l=>{if(l.setStyle)l.setStyle({color:shape.color});});
-});
 
 function hull(points){const pts=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);if(pts.length<3)return pts;
   const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);const lo=[],hi=[];

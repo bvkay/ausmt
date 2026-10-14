@@ -1689,7 +1689,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!doc.getElementById("howToUse"), "#howToUse was retired with the 'How AusMT works' panel");
   ok(doc.getElementById("welcomeTour"), "#welcomeTour (the welcome popup's tour button) is missing");
 
-  // THE SPA HEADER'S AuScope PRESENCE. The identity zone is the AuScope mark pair and the h1-wrapped
+  // THE SPA HEADER'S AuScope PRESENCE. The identity zone is the AuScope mark and the h1-wrapped
   // wordmark, the right zone is the tagline alone, and the header links AuScope nowhere: the lock-up
   // closes the other pages' footers and takes this page's map corner. The icon PNG that once closed the
   // right zone stays withdrawn. Asserted against the REAL index.html DOM rather than its source text, so
@@ -1704,13 +1704,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify([..._hdr.querySelectorAll("img")].map(i => i.getAttribute("src"))));
   const _left = _hdr.querySelector(".hleft");
   const _drawn = _left ? [..._left.querySelectorAll("img, svg, picture, object, embed, canvas")] : [];
-  ok(_drawn.length === 2 && _drawn.every(e => e.tagName === "IMG") &&
-     _drawn[0].getAttribute("src") === "/vendor/auscope/auscope-mark.svg" &&
-     _drawn[1].getAttribute("src") === "/vendor/auscope/auscope-mark-white.svg",
-    "the identity zone draws the AuScope mark pair and nothing else, got " + JSON.stringify(_drawn.map(e => e.outerHTML)));
+  ok(_drawn.length === 1 && _drawn[0].tagName === "IMG" &&
+     _drawn[0].getAttribute("src") === "/vendor/auscope/auscope-mark.svg",
+    "the identity zone draws the AuScope mark and nothing else, got " + JSON.stringify(_drawn.map(e => e.outerHTML)));
   const _items = _left ? [..._left.children].map(e => e.tagName.toLowerCase() + "." + e.className) : [];
-  ok(JSON.stringify(_items) === JSON.stringify(["img.brandmark theme-light", "img.brandmark theme-dark", "h1.brandh1"]),
-    "the identity zone is the mark pair and the heading-wrapped wordmark alone, got " + JSON.stringify(_items));
+  ok(JSON.stringify(_items) === JSON.stringify(["img.brandmark", "h1.brandh1"]),
+    "the identity zone is the mark and the heading-wrapped wordmark alone, got " + JSON.stringify(_items));
   const _right = _hdr.querySelector(".hright");
   ok(_right, "the header keeps its right zone");
   const _outbound = [..._hdr.querySelectorAll("a")].filter(a => (a.getAttribute("href") || "").indexOf("auscope.org.au") >= 0);
@@ -1719,18 +1718,17 @@ async function bootFreshWindow(dataMap, url, preBoot) {
      !_right.querySelector("img") && !_right.querySelector(".counts"),
     "the right zone is the tagline alone; the counts moved to the footer and the lock-up to the map's corner");
 
-  // THE MAP WATERMARK. The AuScope and NCRIS lock-up pair in the map's bottom-right corner, for the reason
+  // THE MAP WATERMARK. The AuScope and NCRIS lock-up in the map's bottom-right corner, for the reason
   // the chrome could not give: the map is what people screenshot into talks and reports, and a screenshot
   // carries no header or footer. Driven off the REAL index.html DOM, so a lock-up that moved out of the map
   // container, grew a link around it or lost its alt text fails here.
   const _mapEl = doc.getElementById("map");
   ok(_mapEl, "index.html must carry the Leaflet map container");
   const _locks = [..._mapEl.querySelectorAll("img.maplock")];
-  ok(_locks.length === 2,
-    "the map must carry the lock-up pair inside its own container, found " + _locks.length);
-  ok(_locks.length === 2 && _locks[0].getAttribute("src") === "/vendor/auscope-ncris-colour.png" &&
-     _locks[1].getAttribute("src") === "/vendor/auscope-ncris-white.png",
-    "the watermark must be the AuScope and NCRIS lock-up pair, got " + JSON.stringify(_locks.map(m => m.getAttribute("src"))));
+  ok(_locks.length === 1,
+    "the map must carry the lock-up inside its own container, found " + _locks.length);
+  ok(_locks.length === 1 && _locks[0].getAttribute("src") === "/vendor/auscope-ncris-colour.png",
+    "the watermark must be the AuScope and NCRIS colour lock-up, got " + JSON.stringify(_locks.map(m => m.getAttribute("src"))));
   ok(_locks.every(m => m.getAttribute("alt") === "AuScope and NCRIS"),
     "the watermark is attribution and must name both organisations in its alt text");
   ok(_locks.every(m => !m.closest("a")),
@@ -3813,8 +3811,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "in the taller Select pane and the rail becomes a one-way door. Got: " + JSON.stringify(_segCss));
   const _scaleCss = (html.match(/\.leaflet-control-scale-line\{[^}]*\}/) || [""])[0];
   ok(/text-shadow:\s*none/.test(_scaleCss),
-    "the scale bar must clear Leaflet's WHITE text-shadow: it is meant for a light basemap and reads " +
-    "as a halo around near-white text on the dark legend. Got: " + JSON.stringify(_scaleCss));
+    "the scale bar must clear Leaflet's WHITE text-shadow: it is meant for a light basemap and draws " +
+    "a white halo around the text, and the scale bar keeps no white halo on the light legend. Got: " + JSON.stringify(_scaleCss));
 
   A.setSidebarMode("browse");
   doc.getElementById("selAll").click();
@@ -5002,8 +5000,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   //       the ramp CVD-safe. The old ramp FAILS this (red→amber rises, amber→green falls), so this pin is
   //       red on a revert even if someone re-shades the endpoints;
   //   (c) null stays the separate "not evaluated" grey #5A6E7D — never the ramp's low end;
-  //   (d) the drawer renders the ramp as a .qvdot swatch beside PLAIN text (a dark low end can't be a text
-  //       colour on the dark panel), and no completeness VALUE takes qColor as its text colour any more.
+  //   (d) the drawer renders the ramp as a .qvdot swatch beside PLAIN text (the ramp hexes are marker fills
+  //       on the white surface, not text inks), and no completeness VALUE takes qColor as its text colour any more.
   ok(A.qColor(2) === "#2a3b66", "CVD: qColor(2) (low end) must be the dark slate-blue #2a3b66, got " + A.qColor(2));
   ok(A.qColor(3.5) === "#6e7f46", "CVD: qColor(3.5) (mid) must be the olive #6e7f46, got " + A.qColor(3.5));
   ok(A.qColor(5) === "#f2e27e", "CVD: qColor(5) (high end) must be the pale warm yellow #f2e27e, got " + A.qColor(5));
@@ -5026,7 +5024,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "HIDDEN: the .qvdot completeness swatch must be absent while the completeness row is hidden");
   const _rampTextColours = [...doc.getElementById("drawer").querySelectorAll('[style*="color:#"]')]
     .filter(el => /color:\s*#(2a3b66|6e7f46|f2e27e)/i.test(el.getAttribute("style") || ""));
-  ok(_rampTextColours.length === 0, "CVD: no drawer element may take a ramp hex as its TEXT colour (dark ends are unreadable on the dark panel)");
+  ok(_rampTextColours.length === 0, "CVD: no drawer element may take a ramp hex as its TEXT colour (the ramp hexes are marker fills on the white surface, not text inks)");
   doc.getElementById("drawer").classList.remove("open");
 
   // FINAL em-dash DOM sweep. Render the two rich drawer surfaces (station + survey story) and sweep the

@@ -40,8 +40,9 @@ def test_leaflet_and_jszip_assets_are_vendored():
 
 def test_vendor_files_present_and_nonempty():
     # The libraries, then the AuScope brand kit's own PNGs: the white icon (the docs sidebar copy and
-    # the social card are made from it), the AuScope and NCRIS lock-up pair every header draws, colour
-    # for the light theme and white for the dark, and the colour icon, which no surface draws. Their
+    # the social card are made from it), the AuScope and NCRIS lock-up in colour, which every footer
+    # without the big map draws, and in white, which the raster cards crop, and the colour icon, which
+    # no surface draws. Their
     # bytes are held in tests/test_header_geometry_parity.py, tests/test_footer_regions.py and
     # tests/test_map_watermark.py; what this inventory says is that the portal ships them at all.
     for name in ("leaflet.js", "leaflet.css", "jszip.min.js",

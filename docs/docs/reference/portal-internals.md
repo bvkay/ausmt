@@ -16,24 +16,24 @@ section, and the pins named in these notes are the authority on the behaviour th
 
 ```text
 The token block is DUPLICATED verbatim in every portal page and in engine/extract/_pages.py's
-sheet: a light block on :root (the AuScope house style) and a dark block on
-:root[data-theme="dark"] (the navy palette). src/theme.js writes data-theme on <html> before first
-paint, so the stylesheet never reads anything else to choose. Roles, not colours, name the
+sheet: one block on :root, the AuScope house style and the portal's one appearance. No stylesheet
+declares a second block, a data-theme selector or a prefers-color-scheme query, and no script
+chooses an appearance (tests/test_one_appearance.py). A browser that still holds the retired
+"ausmt_theme" localStorage entry is unaffected: no script reads the key, so the page paints the
+house style from its stylesheet alone, with nothing to flash. Roles, not colours, name the
 tokens: --bg is the page ground; --surface the header, footer, rail, drawer, dialogs and cards;
 --surface-2 inputs, inactive tabs, chips and raised rows; --line rules and borders; --text,
 --muted and --heading the three inks; --accent links, the active tab, selection and focus rings,
 with --accent-ink for text on it. A card on the page ground (the About and Releases cards, the
 survey cards and the compact survey list, every card on add-survey.html) takes a --line border, a
-4px radius and --shadow, which the dark block sets to none. The data-type ramp (--lpmt, --bbmt,
---amt, --gds) is declared once, in the light block, because a legend must not change meaning with
-the theme. Pinned by tests/test_theme_tokens.py.
+4px radius and --shadow. The data-type ramp (--lpmt, --bbmt, --amt, --gds) is declared in the same
+block; it is a data encoding, not chrome. Pinned by tests/test_theme_tokens.py.
 ```
 
 #### --no is rendered as TEXT on --surface and --surface-2
 
 ```text
---no is rendered as TEXT on --surface and --surface-2. The dark theme's danger red clears WCAG AA
-on both (6.63:1 and 5.80:1); the house style's #EA1E31 reads 4.44:1 on white and 3.99:1 on
+--no is rendered as TEXT on --surface and --surface-2. The house style's #EA1E31 reads 4.44:1 on white and 3.99:1 on
 --surface-2, a hair under the 4.5:1 floor for small text, so a status that matters is never carried
 by the colour alone (every status chip and indicator also carries a glyph or a word).
 ```
@@ -49,9 +49,8 @@ tests/test_header_geometry_parity.py.
 #### The identity zone is the AuScope mark and AusMT's name
 
 ```text
-The identity zone is the AuScope mark pair and AusMT's name on every surface: the brand kit's
-vector icon, vendor/auscope/auscope-mark.svg for the light theme and its white twin for the dark,
-36px square, then the name set at the AuScope logo's own proportions scaled to that mark. The
+The identity zone is the AuScope mark and AusMT's name on every surface: the brand kit's
+vector icon, vendor/auscope/auscope-mark.svg, 36px square, then the name set at the AuScope logo's own proportions scaled to that mark. The
 zone's 12px gap is the logo's gap from mark to text, the 24.5px name has a cap height 0.48 of the
 mark, and "Aus" is set at 900 against "MT" at 300, tracked at .02em, as "Au" is heavy against "Scope". The name's
 line-height is 1, so its line box is its font size and the 36px mark sets the zone's height, short
@@ -83,23 +82,11 @@ viewport. Stated character-identically on every surface; pinned by
 tests/test_header_geometry_parity.py and tests/test_header_vertical_geometry.py.
 ```
 
-#### The theme switch: .theme-dark is hidden, and the dark theme swaps the pair
-
-```text
-The theme switch: .theme-dark is hidden, and the dark theme hides .theme-light and shows
-.theme-dark. The three rules keep that order on every surface. The first is one class, so it ties
-with .brandmark, which sets display:block on both mark variants; the mark's rule comes before the
-switch on every surface, so the switch wins. No rule that selects a variant may set display at a
-higher specificity, which is why .orglockup img, .maplock and .collmark state their size and not
-their display (a display:block there would show a white file in the light theme as well). The
-white variants sit only on the dark ground.
-```
-
 #### The ACTIVE view is filled with --accent and lettered in --accent-ink ...
 
 ```text
-The ACTIVE view is filled with --accent and lettered in --accent-ink: white on Royal Blue in the
-     light theme (13.14:1) and near-black on coral in the dark (6.44:1), both above AA. Every view
+The ACTIVE view is filled with --accent and lettered in --accent-ink: white on Royal Blue
+     (13.14:1), above AA. Every view
      control keeps a 40px click target. Inactive buttons read as buttons, not muted links.
 The static header and this one must agree on the container's wrap mode: nowrap and wrap hand
      zero-basis flex children different resolved widths. Pinned pairwise by
@@ -111,16 +98,16 @@ The static header and this one must agree on the container's wrap mode: nowrap a
 ```text
 The AuScope and NCRIS lock-up, bottom right of the MAP: a screenshot carries no header and no
 footer, so this is the attribution that travels with the image. It is the brand kit's colour PNG on
-the light basemap and its white PNG on the dark, 44px tall with the width following the artwork,
+the light basemap, 44px tall with the width following the artwork,
 and its inset equals its own height, the style guide's breathing space; that corner holds nothing
 else: the attribution control sits top right and the legend bottom left. It draws at 80 percent
-opacity, opacity:.8 exactly, the one change permitted on it: both files keep their own colours,
+opacity, opacity:.8 exactly, the one change permitted on it: the file keeps its own colours,
 with no filter, tint or blend. pointer-events:none and a z-index below Leaflet's control and popup
 layers keep it out of hit testing, and the legend stacks above it. The lock-up is about 260px wide,
 so a narrow map brings the expanded legend to it: measured with the rail open, the legend overlaps
 the lock-up's left end from 761px to about 852px of viewport, and the clear space against the
-legend holds from about 897px. Below 900px neither variant is drawn, so the two never meet, by a rule anchored on #map so
-it outranks the theme switch. The map page's footer carries no lock-up of its own.
+legend holds from about 897px. Below 900px the lock-up is not drawn, so the two never meet. The
+map page's footer carries no lock-up of its own.
 ```
 
 #### The map's attribution, collapsed to one glyph
@@ -160,8 +147,8 @@ so the label never activates its checkbox. .coll and .treegroup are shared betwe
 #### The three link sites must be given the site accent, or they take the ...
 
 ```text
-The three link sites must be given the site accent, or they take the UA's near-invisible dark blue
-on the navy tiles and go purple once followed. :visited is stated explicitly, because an identifier
+The three link sites must be given the site accent, or they take the UA's own link blue and go
+purple once followed. :visited is stated explicitly, because an identifier
 is not consumed by being clicked.
 ```
 
@@ -262,8 +249,8 @@ absolute corner placement.
 #### text-shadow:none is the point: Leaflet ships this control with a WHITE ...
 
 ```text
-text-shadow:none is the point: Leaflet ships this control with a WHITE text-shadow, which is a halo
-around near-white text on this dark panel. Weight drops to 500 for the same reason.
+text-shadow:none is the point: Leaflet ships this control with a WHITE text-shadow, a halo the
+house style draws around no text. Weight drops to 500 for the same reason.
 ```
 
 #### Twin of the static collection page's .collmap/.collmark rule ...
@@ -387,11 +374,9 @@ view. Click-closes the drawer, and sits beneath the drawer and its resize handle
 ```text
 First-visit welcome popup: role=dialog, focus-managed, closed by Esc, click-out or "Browse
 immediately". "Don't show this again" gates persistence via the localStorage key; ?tour=1 is the
-on-demand way back into the tour. The Appearance row (Light, Dark, Follow system) is applied and
-saved the moment it changes, by src/theme.js and independently of the checkbox: a visitor who
-picks a theme and dismisses the popup for this visit only still keeps the theme. Its radios are
-named appearance because the same row is About's section 9, the choice's home for a visitor who
-dismissed the popup; no footer carries an appearance control.
+on-demand way back into the tour. The popup offers the tour, browsing straight away and the
+dismissal checkbox, and nothing else: the portal has one appearance, so there is no choice to offer
+(tests/test_one_appearance.py).
 The wget dialog: the command is SHOWN, scrollable, with its run instructions, before anything
 lands on a clipboard. Filled and wired by fetchdialog.js showWgetDialog(); the same markup rides every
 generated survey page, driven by page-fetch.js.
@@ -451,8 +436,8 @@ no progress bar, no download-manager panel and no completion claim.
 #### tokens, header and map chrome
 
 ```text
-The token block, light on :root and dark on :root[data-theme="dark"], DUPLICATED verbatim in every
-       portal page and in the engine's sheet. See docs: portal internals, index.html.
+The token block on :root, DUPLICATED verbatim in every portal page and in the engine's sheet. See
+       docs: portal internals, index.html.
 
 --lpmt, --bbmt, --amt and --gds MUST equal src/state.js TYPE_COL byte-for-byte: a legend swatch and its
        map dot are one claim held in two files. Pinned by tests/test_type_palette_separability.py.
@@ -463,18 +448,14 @@ Three-zone header. The side zones must take equal ZERO-basis shares (flex:1 1 0,
      grows with its own content and the centred tabs land at a different x per view; pinned by
      tests/test_header_geometry_parity.py. See docs: portal internals, index.html.
 
-The AuScope mark is 36px square and its rule comes before the theme switch it ties with; the name is
-     set at the AuScope logo's proportions in 'Calibre' over --sans. See docs: portal internals,
-     index.html.
+The AuScope mark is 36px square; the name is set at the AuScope logo's proportions in 'Calibre' over
+     --sans. See docs: portal internals, index.html.
 
 The heading wraps the wordmark and takes no type of its own, so the identity block measures as it
      does on every other surface; the page name is clipped.
 
 The tagline sits on one line and ends in an ellipsis inside its zone where the zone is narrower. See
      docs: portal internals, index.html.
-
-The theme switch, three rules in this order, outranked by nothing that selects a variant. See docs:
-     portal internals, index.html.
 
 The ACTIVE view is filled with --accent and lettered in --accent-ink, and every view control keeps a
      40px click target. See docs: portal internals, index.html.
@@ -488,8 +469,6 @@ Mute the basemap only: station overlays render outside the tile pane, so they ke
 
 The AuScope and NCRIS lock-up, bottom right of the MAP, 44px tall, inset by its own height and drawn
      at 80 percent opacity. See docs: portal internals, index.html.
-
-Anchored on the map's id so it outranks the theme switch that shows the dark variant.
 
 The map's attribution, collapsed to one glyph in the top-right corner. See docs: portal internals,
      index.html.
@@ -525,11 +504,11 @@ Dim backdrop behind the drawer, never on the map view. Its z-index sits BELOW th
 Tiles reuse .prod/.prodgrid verbatim. An UNRECORDED level stays visible as .prod.dis with a HOLLOW
      dot, so the six-slot chain keeps its shape on every survey.
 
-The three link sites must be given the site accent, or they take the UA's near-invisible dark blue on
-     the navy tiles and go purple once followed. See docs: portal internals, index.html.
+The three link sites must be given the site accent, or they take the UA's own link blue and go
+     purple once followed. See docs: portal internals, index.html.
 
-Links inside .meta tables must be given the site accent, or they fall back to the UA default dark
-     blue, unreadable on the dark panel.
+Links inside .meta tables must be given the site accent, or they fall back to the UA default link
+     blue.
 
 Self-hosted identifier logos (ORCID next to an investigator, ROR next to an organisation) - small,
      baseline-aligned, non-shrinking; vendor pngs are same-origin (CSP-safe).
@@ -560,8 +539,8 @@ min-width is plots.js's design width (W=372), so the modal svg can never render 
 
 Screening indicator list: glyph, label and state word, so a colour-blind reader sees the word too.
 
-The ramp's dark low end cannot be a text colour on this panel, so it rides the dot and the value
-     stays plain readable text.
+The completeness ramp is dot material, not a text colour, so it rides the dot and the value stays
+     plain readable text.
 
 FOUR across at the cap and at a plain 1500px viewport, never a fifth: the 352px floor packs four into
      1460px of grid content. See docs: portal internals, index.html.
@@ -594,7 +573,7 @@ At narrow widths the three zones stack full-width and left-align, so the centred
 
 #tree flex-fills on every view; body.tree-tall is still toggled by main.js and is inert here.
 
-The org NAME is the ROR link, given the accent colour so the <a> is readable on the dark panel.
+The org NAME is the ROR link, given the accent colour so the <a> reads as a link.
 
 This sheet must carry NO rule for .introoverlay, .intropanel, .introclose, .introhero, .introtiles,
      .introtile or .introtour, and no element here may carry those ids or classes; pinned by
@@ -651,8 +630,8 @@ The four TYPE rows are real toggle BUTTONS proxying the rail's #typeBoxes checkb
 The metric scale bar, re-parented out of the Leaflet corner (main.js buildScaleBar) under its OWN
      class, so the legend's dot and parenting pins are untouched. See docs: portal internals, index.html.
 
-text-shadow:none is the point: Leaflet ships this control with a WHITE text-shadow, which is a halo
-     around near-white text on this dark panel. See docs: portal internals, index.html.
+text-shadow:none is the point: Leaflet ships this control with a WHITE text-shadow, a halo the
+     house style draws around no text. See docs: portal internals, index.html.
 
 Collapsible ONLY on small widths. On desktop the body is always shown and the toggle hidden, so a
      narrow-built legend can never get stuck collapsed with no way to expand it.
@@ -723,15 +702,13 @@ and the ladder must be re-measured, and no source-read pin can see the header ge
 tests/test_about_uniform_chrome.py holds the shape and the values at 375px and 1280px.
 ```
 
-#### The AuScope-NCRIS lock-up in the body, the pair the footer carries ...
+#### The AuScope-NCRIS lock-up in the body, the file the footer carries ...
 
 ```text
-The AuScope-NCRIS lock-up in the body, the pair the footer carries, drawn larger: the brand kit's
-colour PNG on the light ground and its white PNG on the dark, of which the theme switch shows one.
-The images declare the artwork's intrinsic 1919x325 and the rule draws them 320px wide with
-height:auto, so the declared height sets the proportion and never the size. The wrapper takes no
-line box of its own and the images state no display, so the switch can show either without a
-descender gap and without being outranked.
+The AuScope-NCRIS lock-up in the body, the file the footer carries, drawn larger: the brand kit's
+colour PNG. The image declares the artwork's intrinsic 1919x325 and the rule draws it 320px wide
+with height:auto, so the declared height sets the proportion and never the size. The wrapper takes
+no line box of its own, so no descender gap opens under it.
 ```
 
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
@@ -759,11 +736,10 @@ control, because none of the three tabs is this page. The page carries no counts
 map, filter or selection to report, so the live ids (nVis/nSel/nTot) stay off it.
 ```
 
-#### About is the two-minute front door: it answers seven questions, hands ...
+#### About is the two-minute front door: it answers seven questions and hands off
 
 ```text
-About is the two-minute front door: it answers seven questions, hands off, then offers the
-appearance choice. Every deeper topic is a link into the docs site, and every target was fetched
+About is the two-minute front door: it answers seven questions and hands off. Every deeper topic is a link into the docs site, and every target was fetched
 and returned 200 before it was written here. The #howto and #api ids are kept, because other
 surfaces deep-link them.
 ```
@@ -792,20 +768,6 @@ releases-page pins hold it here. No version chip: this is a route, not the runni
 identity.
 ```
 
-#### The appearance choice's second home
-
-```text
-The appearance choice's second home: the welcome dialog's row, on a page every header reaches, so
-a reader who dismissed the welcome dialog can still change the theme. The three radios are named
-appearance, as the dialog's are, and src/theme.js, the first script in this page's head, sets the
-choice on change and checks the radio that matches the stored choice; the page needs no script of
-its own. The .appearance rules set the row in muted text with a muted semibold legend, inline
-labels with a 5px gap and accent-coloured radios, at 14px against the page's 16px body. It is
-section 9, after the hand-off, because it is a setting rather than an answer.
-tests/test_about_copy_batch.py holds its words, its row, its rules and its place, and
-tests/test_theme_tokens.py holds the row to the welcome dialog's.
-```
-
 #### The site's ONE footer
 
 ```text
@@ -819,8 +781,8 @@ contentinfo landmark.
 ```text
 LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. The organisation's name is the
 acknowledgement's one link, and the line carries no copyright clause. About has no status to report
-and carries the appearance choice as its section 9, not as a footer control, so the right zone is
-the AuScope and NCRIS lock-up alone: the brand kit's colour and white PNGs, linking AuScope in a new
+and the footer carries no control, so the right zone is the AuScope and NCRIS lock-up alone: the
+brand kit's colour PNG, linking AuScope in a new
 tab with rel="noopener noreferrer", at the bottom right of the page.
 ```
 
@@ -841,13 +803,11 @@ flex-wrap is a term of the header's HEIGHT: three 112px tabs must be free to sta
 viewport. Character-identical on every surface wearing the chrome.
 ```
 
-#### AA text contrast on the status-chip tints: the PASS tint is light ...
+#### AA text contrast on the status-chip tints
 
 ```text
-AA text contrast on the status-chip tints: in the dark theme the PASS tint is light enough for --ok
-text to clear 4.5:1 (4.65:1), the FAIL tint for --no text (4.74:1) and the WARNING tint for --part
-(4.56:1). The house style's status inks are darker than the navy palette's and sit on a white
-ground, so each chip also carries its level as a word.
+AA text contrast on the status-chip tints: the house style's status inks sit on a white ground,
+and each chip also carries its level as a word, so a level is never carried by colour alone.
 ```
 
 #### One footer, three regions: the MTCAT link LEFT, the AuScope ...
@@ -960,7 +920,7 @@ is never asked here.
 LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. The organisation's name is the
 acknowledgement's one link, and the line carries no copyright clause. The page has no status and
 the footer carries no control, so the right zone is the AuScope and NCRIS lock-up alone, the brand
-kit's colour and white PNGs linking AuScope in a new tab, at the bottom right of the page.
+kit's colour PNG linking AuScope in a new tab, at the bottom right of the page.
 ```
 
 #### INFO-block coords, decimal (Geotools style) or DMS ('LATITUDE ...
@@ -2171,7 +2131,7 @@ start with one funding row
 #### The token block every portal page declares verbatim
 
 ```text
-The token block every portal page declares verbatim, light and dark; see the index.html notes.
+The token block every portal page declares verbatim; see the index.html notes.
 tests/test_theme_tokens.py holds every copy to the same values.
 ```
 
@@ -2225,7 +2185,7 @@ main, not a child of it: only a body-level footer is a contentinfo landmark.
 LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. The organisation's name is the
 acknowledgement's one link, and the line carries no copyright clause. The page has no status and
 the footer carries no control, so the right zone is the AuScope and NCRIS lock-up alone, the brand
-kit's colour and white PNGs linking AuScope in a new tab, at the bottom right of the page.
+kit's colour PNG linking AuScope in a new tab, at the bottom right of the page.
 ```
 
 ## portal/brand.html
@@ -2278,7 +2238,7 @@ with the same mark.
 LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. The organisation's name is the
 acknowledgement's one link, and the line carries no copyright clause. The page has no status and
 the footer carries no control, so the right zone is the AuScope and NCRIS lock-up alone, the brand
-kit's colour and white PNGs linking AuScope in a new tab, at the bottom right of the page.
+kit's colour PNG linking AuScope in a new tab, at the bottom right of the page.
 ```
 
 ## portal/404.html
@@ -2288,13 +2248,12 @@ kit's colour and white PNGs linking AuScope in a new tab, at the bottom right of
 ```text
 One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope and
 NCRIS lock-up RIGHT. The rule set below is index.html's, character for character: this page carries
-the token block like every other, so the theme reaches the page Caddy serves for any unmatched path
+the token block like every other, so the tokens reach the page Caddy serves for any unmatched path
 too. The two .orglockup rules are shared with every surface whose footer draws the lock-up: 30px
 tall with the width following the artwork, and a negative block margin of 5.625px that makes the
 anchor's margin box one footer text line (12.5px at line-height 1.5), so the lock-up never sets a
 row's height and the sticky footer keeps the height its text gives it, 33.75px on one row and 56.5px
-on two. The lock-up's light and dark variants are this page's only pair, so it carries the three
-theme-switch rules beside them. tests/test_footer_regions.py holds all seven surfaces identical.
+on two. tests/test_footer_regions.py holds all seven surfaces identical.
 STICKY, not fixed: it keeps its own box in flow, so body is a viewport-tall column and the last line
 is never hidden under it; below 560px of viewport it returns to ordinary flow.
 ```
@@ -2302,8 +2261,8 @@ is never hidden under it; below 560px of viewport it returns to ordinary flow.
 #### LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up
 
 ```text
-LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. Every href, every src and the
-appearance script are root-absolute, because this document answers any address at any depth.
+LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. Every href and every src are
+root-absolute, because this document answers any address at any depth.
 ```
 
 ## portal/src/analytics-shim.js
@@ -3772,7 +3731,7 @@ BENEATH the station dots; dots are COLOURED BY MEMBER SURVEY with a small legend
 AU_OUTLINE is absent (e.g. the headless harness doesn't load the vendor asset) - dots + legend still
 render. The projection is a plain equirectangular fit of the fixed AU box, so the outline and the dots
 stay registered; the canvas aspect matches the box to avoid squashing. The panel, the coastline and
-the dot edges are theme tokens (--map-panel, .mm-coast and .mm-dot in index.html); the member colours
+the dot edges are tokens (--map-panel, .mm-coast and .mm-dot in index.html); the member colours
 are data and stay literal.
 ```
 
@@ -3782,7 +3741,7 @@ are data and stay literal.
 Fluid (viewBox + width:100%) so it scales inside its container; `maxW` optionally raises the max-width
 cap (the detail-page hero gives it more room than a list card). W stays the viewBox coordinate space so
 the geometry is identical regardless of rendered size.
-`mark` puts the AuScope mark pair in the panel's bottom-left corner, matching the static collection page's
+`mark` puts the AuScope mark in the panel's bottom-left corner, matching the static collection page's
 figure. Off by default: the list card is a thumbnail with no corner to spare, and the detail hero is the
 full-size map this belongs on. The mark is a sibling of the SVG inside a panel capped at the same width,
 never an <image> in the SVG, so the geometry stays what the colour and dot pins measure.
@@ -4994,26 +4953,22 @@ OpenStreetMap data, so both name OSM; the second name is the provider that built
 The links open the way every outbound anchor on this site opens.
 ```
 
-#### A theme token's current value, for what is drawn outside CSS
+#### A token's value, for what is drawn outside CSS
 
 ```text
-A theme token's current value, for what is drawn outside CSS: Leaflet strokes the station dots on a
-canvas and leaflet.draw styles a shape from options, so neither can read a var(). They read the
-token with getComputedStyle when they are built and again when src/theme.js announces a change. A
-headless harness with no stylesheet reads every token empty, which is why the read is guarded.
+A token's value, for what is drawn outside CSS: Leaflet strokes the station dots on a canvas and
+leaflet.draw styles a shape from options, so neither can read a var(). They read the token with
+getComputedStyle when they are built. A headless harness with no stylesheet reads every token empty, which is why the read is guarded.
 ```
 
 #### The two pmtiles layers state the SAME credit and Leaflet prints it once
 
 ```text
 The two pmtiles layers state the SAME credit and Leaflet prints it once: they are one basemap split at
-the z7 crossover. The protomaps renderer paints a named flavour, so the pair is built by one
-function that takes it: "light" when data-theme is light and "dark" when it is dark, mounted at start
-in the resolved theme and remounted on "ausmt:theme" (the new pair is added before the old pair is
-removed, because once the world layer is gone the region layer's minZoom of 7 is the map's only floor
-and Leaflet snaps a wider view to it; the credit text is identical, so the attribution control still
-prints it once). The CARTO fallback is a raster
-and keeps its light tiles. Pinned by tests/test_map_theme.py and driven by tools/map_theme_test.js.
+the z7 crossover. The protomaps renderer paints a named flavour, and both layers take "light", the
+flavour the house style sits on; they are mounted once and never remounted. The CARTO fallback is a
+raster and keeps its light tiles. Pinned by tests/test_map_colours.py and driven by
+tools/map_colours_test.js.
 ```
 
 #### Mounted after the basemap so the control collects the layer already on ...
@@ -5074,11 +5029,10 @@ Returns what this pass painted. The app ignores the value; the jsdom driver call
 reads it, because under a stubbed Leaflet the layer contents are unreadable Proxies.
 ```
 
-#### The shape colour is the --accent token, read here and again on every theme change
+#### The shape colour is the --accent token
 
 ```text
-The shape colour is the --accent token, read here and again on every theme change: Royal Blue on the
-light basemap and coral on the dark. The guided tour draws its demo rectangle in the same style, so a
+The shape colour is the --accent token, Royal Blue on the light basemap. The guided tour draws its demo rectangle in the same style, so a
 demonstrated selection looks like a hand-drawn one.
 ```
 
@@ -5258,15 +5212,6 @@ Mark that the USER has taken control of the map, so the corrector never fights a
 Gated on genuine user gestures ONLY: Leaflet's dragstart is user-initiated (a programmatic setView/
 fitBounds does NOT fire it), and the container wheel/touch listeners catch scroll- and pinch-zoom.
 movestart is deliberately NOT used - it also fires on the app's own programmatic moves.
-```
-
-#### A theme change redraws what CSS cannot reach
-
-```text
-A theme change redraws what CSS cannot reach: the basemap flavour, every station dot's edge (the
---dot-edge token, near-black on the light basemap and the navy ground on the dark) and the shape
-colour, including any shape already drawn. The dot FILL is the data-type ramp, which does not change
-with the theme.
 ```
 
 #### A click on the MAP BACKGROUND closes an open drawer (survey OR station)
@@ -5627,10 +5572,10 @@ that publishes no download index (a corpus with no verified routes ships no file
 the access rule: a withheld or coordinate-gated station is simply not in it.
 ```
 
-#### The data-type ramp, the same in both themes so a legend never changes meaning ...
+#### The data-type ramp, a data encoding rather than chrome
 
 ```text
-The data-type ramp, the same in both themes so a legend never changes meaning with the theme: LPMT
+The data-type ramp, a data encoding rather than chrome: LPMT
 #3F88C8 (blue), BBMT #FFC14F (amber), AMT #9FCB5A (green), GDS #CE348A (magenta), the AuScope house
 style's. These are the map-marker colours; the --lpmt/--bbmt/--amt/--gds tokens carry the SAME hexes
 so the legend, the type-filter swatches and the map agree byte for byte, and the engine's _TYPE_COL
@@ -5641,8 +5586,8 @@ LP/BB SEPARABILITY was the pair the review reported ("Long Period and Broadband 
 similar"): small marks are discriminated by VALUE, not hue. The house ramp puts the pair on opposite
 ends of the blue-yellow axis, 53.2 dE00 apart with a 26.9 L* gap, and 68.2 / 61.7 under simulated
 deuteranopia / protanopia, which is the axis a red-green deficient reader keeps. Every pair is at
-least 27.1 dE00 apart, and no type comes within the palette floor of either theme's accent, either
-page ground, the card surface or the dot edge. All of it is recomputed and gated in
+least 27.1 dE00 apart, and no type comes within the palette floor of the accent, the page ground,
+the card surface or the dot edge. All of it is recomputed and gated in
 tests/test_type_palette_separability.py; the floors are stated there, not here.
 ```
 
@@ -5651,8 +5596,8 @@ tests/test_type_palette_separability.py; the floors are stated there, not here.
 ```text
 The INK a type chip needs: .chip's near-black clears WCAG AA on LPMT (4.97:1), BBMT (11.61:1) and
 AMT (9.98:1), and GDS takes white (4.68:1 against 4.01:1 for the default). A per-type override,
-never a blanket flip. The ink is a literal rather than a theme token because the chip sits on the
-ramp, which does not change with the theme.
+never a blanket flip. The ink is a literal rather than a token because the chip sits on the ramp,
+which is data rather than chrome.
 ```
 
 #### The time-series levels the portal OFFERS, [token, label, gloss], IN THE ...
@@ -5777,30 +5722,10 @@ luminance rises monotonically 0.046 → 0.75 along the lerp path), so the ramp s
 dichromacies: simulated low↔high separation deutan 106.8 / protan 103.1 / tritan 69.1 dE76. The olive
 mid kept the ramp off the navy palette's data-type and status colours (every stop ≥17 dE00). Against
 the house-style ramp the pale top stop sits 13.6 dE00 from BBMT's amber and the olive mid 8.7 from
-the light theme's --ok green; the completeness dot is drawer material that always sits beside its
+the --ok green; the completeness dot is drawer material that always sits beside its
 own readable value, never a map mark, so the two are not read for each other. The null/"not
 evaluated" grey #5A6E7D stays clearly apart from the dark low end (dE00 20, L* 45 vs 26). The dark low end is marker-fill/dot material, so drawer text must not take
 qColor as a text colour; it renders a .qvdot swatch beside plain readable text instead.
-```
-
-## portal/src/theme.js
-
-#### The appearance, chosen before first paint
-
-```text
-The house style is the light theme and the default; the navy palette is the dark one. The visitor's
-choice is stored as localStorage "ausmt_theme" = "light", "dark" or "system" (anything else, or
-nothing, means light), resolved against prefers-color-scheme for "system", and written to
-<html data-theme="light|dark">, which is the only hook the stylesheets read. The script is the
-FIRST script in every page's <head>, static and generated, and runs synchronously, so the first
-paint is already in the chosen theme. It is a file, root-anchored as /src/theme.js so a page served
-at any depth finds it, because the deployed CSP allows no inline script.
-
-The control needs no script of its own: radio inputs named appearance set the choice on change, and
-the one whose value matches the stored choice is checked whenever it is applied. The row has two
-homes, the map's welcome popup and About's Appearance section, each offering Light, Dark and Follow
-system; no footer carries a control and no button hook is wired. A change dispatches "ausmt:theme"
-on document, which map.js answers for what CSS cannot reach.
 ```
 
 ## portal/src/tour.js
@@ -6158,28 +6083,3 @@ Coordinates are [longitude, latitude] in WGS84. `coast` is an array of closed ri
 `borders` is an array of open polylines. collScatter projects both through the SAME fixed-Australia
 transform it uses for the station dots, so the outline stays registered to the dots automatically.
 ```
-
-## portal/src/theme.js
-
-The appearance script. It runs synchronously as the first script in every page's head, static and
-engine-generated alike, and writes the resolved theme to `html[data-theme]` before the first paint so
-nothing flashes. It is an external file because the deployed Content Security Policy allows no inline
-script (`script-src 'self'`), and for the same reason no control it serves carries an inline handler.
-
-The stored choice is `localStorage["ausmt_theme"]`, one of `light`, `dark` or `system`; anything else,
-including no entry at all, means `light`, because the AuScope house style is the site's default face.
-`system` resolves through `prefers-color-scheme` and follows it live. The
-stylesheets key on the resolved attribute alone (`:root[data-theme="dark"]` carries the second token
-block), so a page needs no media query of its own.
-
-The control needs no script of its own. Radio inputs named `appearance` set the choice on change, and
-a choice is saved at once, independently of the welcome dialog's own "don't show this again" state.
-The row has two homes: the welcome dialog's Appearance row on the map page, shown on a first visit,
-and the Appearance section on `about.html`, which every header reaches. No footer carries a control
-and the script wires no button. Whenever the choice is applied, the radio whose value matches it is
-checked.
-
-When the resolved theme changes, the script dispatches `ausmt:theme` on `document` with
-`detail.theme`, which is the hook for anything drawn outside CSS: map.js re-mounts the basemap in the
-other flavour and restyles the dot edges from the `--dot-edge` token. `window.AusmtTheme` exposes
-`get()` (the stored choice), `resolved()` and `set(choice)` for the same callers.

@@ -3,12 +3,13 @@
 The static pages and the engine's generated pages each carry their own copy of this chrome, because
 the portal ships as classic static pages with no template step. These literals are the contract those
 copies are compared against: the appearance tokens, the header's identity and tagline, the lock-up
-the footers and the map carry, the footer's regions and the appearance row. A pin compares a surface
+the footers and the map carry, and the footer's regions. A pin compares a surface
 with these strings rather than with another surface, so two copies that drift together still fail.
 """
 import re
 
-# The two token blocks, light (the AuScope house style) and dark. Every page declares both verbatim.
+# The token block, the AuScope house style and the portal's one appearance. Every page declares it
+# verbatim.
 LIGHT = {
     "--bg": "#F2F2F1", "--surface": "#FFFFFF", "--surface-2": "#F2F3F2", "--line": "#CED4DA",
     "--text": "#333333", "--muted": "#6C757D", "--heading": "#282572", "--accent": "#282572",
@@ -22,37 +23,23 @@ LIGHT = {
     "--sans": "'Libre Franklin',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif",
     "color-scheme": "light",
 }
-DARK = {
-    "--bg": "#11182D", "--surface": "#18213D", "--surface-2": "#1E2B4F", "--line": "#2B3557",
-    "--text": "#E8EDF1", "--muted": "#8FA3B0", "--heading": "#FFFFFF", "--accent": "#EF7256",
-    "--accent-ink": "#16110B",
-    "--dot-edge": "#11182D",
-    "--ok": "#5BAE6A", "--part": "#D9A23B", "--no": "#E2938B", "--unk": "#5A6E7D",
-    "--map-bg": "#0F1626", "--map-panel": "#18213D", "--map-line": "#222C4E", "--coast-fill": "#1D3140",
-    "--coast-line": "#3A5266",
-    "--shadow": "none",
-    "color-scheme": "dark",
-}
-# The data-type ramp is deliberately absent from the dark block: a legend must not change meaning with
-# the theme.
+# The data-type ramp, a data encoding rather than chrome.
 RAMP = ("--lpmt", "--bbmt", "--amt", "--gds")
 
 # The tokens the previous palette used for chrome. No surface declares or reads them.
 RETIRED_TOKENS = ("--ink", "--panel", "--panel-2", "--copper")
 
-THEME_SCRIPT = '<script src="/src/theme.js"></script>'
-
 ICON_BLOCK = ('<link rel="icon" href="/favicon.ico" sizes="any">\n'
               '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">\n'
               '<link rel="apple-touch-icon" href="/vendor/auscope/icon-180.png">')
 
-# The AuScope mark pair, the brand kit's vector icon in its own colours and in white. It opens every
-# header's identity zone, 36px square, and the collection figures and the icons draw the same files.
+# The AuScope mark, the brand kit's vector icon in its own colours. It opens every header's identity
+# zone, 36px square, and the collection figures and the icons draw the same file.
 MARK_LIGHT = "/vendor/auscope/auscope-mark.svg"
-MARK_DARK = "/vendor/auscope/auscope-mark-white.svg"
 MARK_SIZE = 36
-MARK_PAIR = (f'<img class="brandmark theme-light" src="{MARK_LIGHT}" alt="AuScope" width="36" height="36">'
-             f'<img class="brandmark theme-dark" src="{MARK_DARK}" alt="AuScope" width="36" height="36">')
+MARK = f'<img class="brandmark" src="{MARK_LIGHT}" alt="AuScope" width="36" height="36">'
+# The white files, which only a dark ground took. No surface names either.
+WHITE_FILES = ("/vendor/auscope/auscope-mark-white.svg", "/vendor/auscope-ncris-white.png")
 
 # AusMT's name, set at the AuScope logo's own proportions scaled to the 36px mark: the identity zone's
 # 12px gap from mark to name, a 24.5px size whose cap height is 0.48 of the mark, and "Aus" heavy
@@ -67,9 +54,8 @@ INDEX_IDENTITY = (f'<h1 class="brandh1"><span class="wordmark">{NAME}</span>'
                   '<span class="visually-hidden">: Magnetotelluric Data Discovery &amp; Access</span></h1>')
 PAGE_IDENTITY = f'<a class="wordmark" href="/">{NAME}</a>'
 
-# The identity zone's rules, verbatim on every surface. The mark's rule sets display, so it ties with
-# the switch's first rule on specificity and must come BEFORE the switch. The heading rule is the
-# homepage's alone, the one surface whose name is wrapped in its h1.
+# The identity zone's rules, verbatim on every surface. The heading rule is the homepage's alone, the
+# one surface whose name is wrapped in its h1.
 BRANDMARK_RULE = ".brandmark{height:36px;width:36px;display:block;flex:none}"
 WORDMARK_RULES = (".wordmark{font-family:'Calibre',var(--sans);font-weight:300;font-size:24.5px;"
                   "letter-spacing:.02em;line-height:1;color:var(--heading);text-decoration:none}",
@@ -82,15 +68,13 @@ TAGLINE_RULE = (".tagline{color:var(--muted);font-size:14px;white-space:nowrap;m
                 "overflow:hidden;text-overflow:ellipsis}")
 RIGHT_ZONE = f'<div class="hzone hright"><div class="tagline">{TAGLINE}</div></div>'
 
-# The AuScope and NCRIS lock-up is the AuScope brand kit's own colour and white PNGs, named at their
-# intrinsic 1919 by 325. It closes the right of every footer on the pages without the big map, linked
-# to AuScope, and it takes the map's corner on index.html, unlinked. No header carries it.
+# The AuScope and NCRIS lock-up is the AuScope brand kit's own colour PNG, named at its intrinsic 1919
+# by 325. It closes the right of every footer on the pages without the big map, linked to AuScope, and
+# it takes the map's corner on index.html, unlinked. No header carries it.
 LOCKUP_LIGHT = "/vendor/auscope-ncris-colour.png"
-LOCKUP_DARK = "/vendor/auscope-ncris-white.png"
 LOCKUP_PIXELS = (1919, 325)
 LOCKUP = ('<a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">'
-          f'<img class="theme-light" src="{LOCKUP_LIGHT}" alt="AuScope and NCRIS" width="1919" height="325">'
-          f'<img class="theme-dark" src="{LOCKUP_DARK}" alt="AuScope and NCRIS" width="1919" height="325"></a>')
+          f'<img src="{LOCKUP_LIGHT}" alt="AuScope and NCRIS" width="1919" height="325"></a>')
 # The footer lock-up's rules. It is drawn 30px tall with the width following the artwork, and where
 # its zone is narrower, object-fit:contain keeps the artwork's proportion inside the box. The negative
 # block margin makes the anchor's margin box one footer text line, 12.5px at line-height 1.5, so the
@@ -104,29 +88,8 @@ LOCKUP_RULES = (".orglockup{display:inline-block;line-height:0;margin:-5.625px 0
 LOCKUP_FOOTERS = ("404.html", "about.html", "add-survey.html", "brand.html", "releases.html",
                   "engine/extract/_pages.py")
 
-# The map's corner on index.html: the same pair, unlinked, 44px tall and inset by its own height.
-MAP_LOCKUP = (f'<img class="maplock theme-light" src="{LOCKUP_LIGHT}" alt="AuScope and NCRIS" '
-              'width="1919" height="325">'
-              f'<img class="maplock theme-dark" src="{LOCKUP_DARK}" alt="AuScope and NCRIS" '
-              'width="1919" height="325">')
-
-# The switch, verbatim on every surface and in this order. Its first rule is one class, so it ties on
-# specificity with .brandmark, which sets display:block on both variants; the switch FOLLOWS that rule
-# on every surface, and nothing that selects a variant at a higher specificity may set display.
-THEME_RULES = ('.theme-dark{display:none}',
-               ':root[data-theme="dark"] .theme-light{display:none}',
-               ':root[data-theme="dark"] .theme-dark{display:block}')
-
-# The appearance choice: three radios named "appearance", which src/theme.js reads on change and
-# checks to match the stored choice. The same row has two homes, the map page's welcome dialog and
-# About's Appearance section, and differs between them only by the fieldset's class. No footer
-# carries it.
-APPEARANCE_CHOICES = ('<label><input type="radio" name="appearance" value="light"> Light</label>'
-                      '<label><input type="radio" name="appearance" value="dark"> Dark</label>'
-                      '<label><input type="radio" name="appearance" value="system"> Follow system</label>')
-WELCOME_APPEARANCE = ('<fieldset class="introwelcome-appearance"><legend>Appearance</legend>'
-                      f'{APPEARANCE_CHOICES}</fieldset>')
-ABOUT_APPEARANCE = f'<fieldset class="appearance"><legend>Appearance</legend>{APPEARANCE_CHOICES}</fieldset>'
+# The map's corner on index.html: the same file, unlinked, 44px tall and inset by its own height.
+MAP_LOCKUP = f'<img class="maplock" src="{LOCKUP_LIGHT}" alt="AuScope and NCRIS" width="1919" height="325">'
 
 # The centre line as a reader sees it, and as markup: the organisation's name is its one link, to the
 # parent organisation's address, opening in a new tab that is handed no opener and no referrer.
@@ -150,14 +113,11 @@ def flat(markup):
     return " ".join(markup.split())
 
 
-def token_blocks(text):
-    """(light, dark) declarations of a document's token blocks, as dicts. The light block is the
-    :root rule that declares --bg; quotes may arrive escaped from a Python source string."""
+def token_block(text):
+    """The declarations of a document's token block, as a dict: the :root rule that declares --bg."""
     light = [b for b in re.findall(r":root\{([^}]*)\}", text) if "--bg:" in b]
-    dark = re.findall(r':root\[data-theme=\\?"dark\\?"\]\{([^}]*)\}', text)
-    assert len(light) == 1, f"expected one light token block, found {len(light)}"
-    assert len(dark) == 1, f"expected one dark token block, found {len(dark)}"
-    return _decls(light[0]), _decls(dark[0])
+    assert len(light) == 1, f"expected one token block, found {len(light)}"
+    return _decls(light[0])
 
 
 def _decls(body):
@@ -172,7 +132,7 @@ def _decls(body):
 # The header, by zone. index.html writes exactly this; every other surface differs only where the
 # contract says it may: the name is a link with no heading, Map is a link, the current page's
 # control carries class="active", and the engine's pages root-anchor About. The identity zone is the
-# mark pair and the name, and the right zone is the tagline.
+# mark and the name, and the right zone is the tagline.
 def header_markup(surface, active=None):
     """The header's inner markup for `surface` ("index", "page" or "engine"), active control named."""
     def cls(name, base=None):
@@ -183,7 +143,7 @@ def header_markup(surface, active=None):
     else:
         identity, nav_map = PAGE_IDENTITY, f'<a id="navMap"{cls("navMap")} href="/">Map</a>'
     about = "/about.html" if surface == "engine" else "about.html"
-    return ('<div class="hzone hleft">' + MARK_PAIR + identity + '</div>'
+    return ('<div class="hzone hleft">' + MARK + identity + '</div>'
             '<div class="hzone hcenter"><nav>' + nav_map +
             f'<a id="navSurveys"{cls("navSurveys")} href="/surveys">Surveys</a>'
             f'<a id="navCollections"{cls("navCollections")} href="/collections">Collections</a></nav>'

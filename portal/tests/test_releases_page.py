@@ -9,18 +9,17 @@ plus the chrome that makes it look like the rest of the portal.
 
 Each assertion states its failure criterion:
 
-  * PALETTE - FAILS if releases.html's two token blocks, light and dark, are not identical to
-    about.html's. (tests/test_theme_tokens.py pins every page against the contract; this holds the two
+  * PALETTE - FAILS if releases.html's token block is not identical to about.html's. (tests/test_theme_tokens.py pins every page against the contract; this holds the two
     sibling pages against each other from this page's own module.)
   * HEADER PARITY - FAILS if releases.html's header is not the same three-zone header about.html
     carries: the same nav ids in the same order, the same four centre items in the same order, the
-    AuScope mark pair as its only images, the tagline in the right zone, no lock-up and no counts.
+    AuScope mark as its only image, the tagline in the right zone, no lock-up and no counts.
     Non-vacuous: a page with a hand-rolled header trips every line.
   * NO APP STATE - FAILS if the page carries index's live map-state ids (nVis/nSel/nTot), which have no
     meaning on a page with no map, no filter and no selection.
   * FOOTER CHROME - FAILS if the footer keeps the retired About-this-build popover or a version
     chip, loses the bottom-left MTCAT link, or carries anything in its right region but the AuScope
-    and NCRIS lock-up pair (the page has no status, and no footer carries a control).
+    and NCRIS lock-up (the page has no status, and no footer carries a control).
   * NO INLINE SCRIPT - FAILS if the page carries an inline <script> block. The deployed CSP for every
     page except add-survey.html is script-src 'self' with no 'unsafe-inline' (@strictPages in
     deploy/docker/caddy/Caddyfile is a `not path /add-survey.html` matcher, so a NEW page picks up the
@@ -45,7 +44,7 @@ from pathlib import Path
 
 import pytest
 
-from chrome_contract import token_blocks
+from chrome_contract import token_block
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 RELEASES = ROOT / "releases.html"
@@ -120,12 +119,11 @@ def test_releases_page_exists():
 # --- chrome ---------------------------------------------------------------------------------------
 
 def test_palette_matches_about():
-    rel = token_blocks(RELEASES.read_text(encoding="utf-8"))
-    abt = token_blocks(ABOUT.read_text(encoding="utf-8"))
-    for theme, mine, theirs in (("light", rel[0], abt[0]), ("dark", rel[1], abt[1])):
-        assert mine == theirs, (
-            f"releases.html's {theme} tokens differ from about.html's; the token blocks are declared "
-            f"verbatim on every page and must not split-brain:\n  releases {mine}\n  about    {theirs}")
+    mine = token_block(RELEASES.read_text(encoding="utf-8"))
+    theirs = token_block(ABOUT.read_text(encoding="utf-8"))
+    assert mine == theirs, (
+        f"releases.html's tokens differ from about.html's; the token block is declared verbatim on "
+        f"every page and must not split-brain:\n  releases {mine}\n  about    {theirs}")
 
 
 def _nav_ids(path):
@@ -168,8 +166,8 @@ def test_header_parity_releases_matches_about():
         f"releases.html header items must run {expected}; got {_centre_order(RELEASES)}")
 
     imgs = [a.get("src") for (t, a, _n) in _header(RELEASES) if t == "img"]
-    assert imgs == ["/vendor/auscope/auscope-mark.svg", "/vendor/auscope/auscope-mark-white.svg"], (
-        f"the header's only images are the AuScope mark pair that opens it; found {imgs}")
+    assert imgs == ["/vendor/auscope/auscope-mark.svg"], (
+        f"the header's only image is the AuScope mark that opens it; found {imgs}")
     lockups = [a for (_t, a, _n) in _header(RELEASES) if "orglockup" in _classes(a)]
     assert not lockups, f"the lock-up left the header for the footer; found {len(lockups)}"
     taglines = [a for (_t, a, _n) in _header(RELEASES) if "tagline" in _classes(a)]
@@ -192,11 +190,10 @@ def test_no_live_app_state_ids():
 
 def test_footer_chrome_matches_the_other_pages():
     """The one-footer rule took Releases and About this build out of the right region, and the
-    AuScope and NCRIS lock-up closes it. The footer carries no control; the appearance choice is in
-    the map's welcome dialog and in About's section 9.
+    AuScope and NCRIS lock-up closes it. The footer carries no control.
     FAILS if the popover or a version chip comes back here, if the MTCAT link leaves the bottom-left,
-    if the footer names any image but the lock-up pair, or if the right region holds anything but
-    the lock-up's anchor and its two images. The strings and the targets are held for all six
+    if the footer names any image but the lock-up, or if the right region holds anything but the
+    lock-up's anchor and its image. The strings and the targets are held for all six
     documents at once in tests/test_footer_regions.py; this is the same shape asserted from this
     page's own parsed DOM."""
     els = _footer(RELEASES)
@@ -213,17 +210,16 @@ def test_footer_chrome_matches_the_other_pages():
         "the machine-readable MTCAT link is pinned bottom-left in the footer on every page")
 
     imgs = [(a.get("class"), a.get("src")) for (t, a, _ab) in els if t == "img"]
-    assert imgs == [("theme-light", "/vendor/auscope-ncris-colour.png"),
-                    ("theme-dark", "/vendor/auscope-ncris-white.png")], (
-        f"the footer's only images are the lock-up pair, colour then white; found {imgs}")
+    assert imgs == [(None, "/vendor/auscope-ncris-colour.png")], (
+        f"the footer's only image is the colour lock-up; found {imgs}")
     zones = [_classes(a) for (t, a, _ab) in els if "fzone" in _classes(a)]
     assert zones == [{"fzone", "fleft"}, {"fzone", "fcenter"}, {"fzone", "fright"}], (
         f"the footer is the three zones in order; found {zones}")
     # The right zone is the footer's last child, so every element after it in document order sits
-    # inside it or follows it, and all of them must be the lock-up's anchor and its two images.
+    # inside it or follows it, and all of them must be the lock-up's anchor and its image.
     after = els[[i for i, (t, a, _ab) in enumerate(els) if "fright" in _classes(a)][0] + 1:]
     assert [(t, a.get("class")) for (t, a, _ab) in after] == [
-        ("a", "orglockup"), ("img", "theme-light"), ("img", "theme-dark")], (
+        ("a", "orglockup"), ("img", None)], (
         f"the footer's right region is the lock-up alone on a page with no status; found {after}")
     anchor = after[0][1]
     assert anchor.get("href") == "https://www.auscope.org.au" and anchor.get("target") == "_blank" \

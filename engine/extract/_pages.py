@@ -136,9 +136,8 @@ _FETCH_SCRIPTS = ("/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js
 
 # The portal's own data-type ramp (portal/src/state.js TYPE_COL and the --lpmt, --bbmt, --amt and
 # --gds tokens), byte for byte, so the page maps and the SPA map speak one colour language. It is a
-# data encoding, not chrome: the same four values in both appearances, because a legend must not
-# change meaning with the theme. Every mark drawn in it takes a var(--dot-edge) stroke (.mm-dots),
-# which is what keeps the lighter hues legible on the light map panel.
+# data encoding, not chrome. Every mark drawn in it takes a var(--dot-edge) stroke (.mm-dots), which
+# is what keeps the lighter hues legible on the light map panel.
 _TYPE_COL = {"LPMT": "#3F88C8", "BBMT": "#FFC14F", "AMT": "#9FCB5A", "GDS": "#CE348A"}
 _TYPE_FALLBACK = "#4FC3D9"
 
@@ -147,10 +146,9 @@ _TYPE_FALLBACK = "#4FC3D9"
 # same colour and its legend could not disambiguate them (AusLAMP: 14 members, 8 colours, 6 reused).
 _COLL_PAL = ("#2E8FA3", "#EF7256", "#8A5FC0", "#5BAE6A", "#3F6FC4", "#C255A0", "#D9A23B", "#A85454")
 
-# The raster collection card's map colours. The SVG panels take the theme tokens through their
-# classes (.mm-panel, .mm-rule, .mm-coast, .mm-line); a PNG has no theme, so the card is drawn on the
-# dark ground in exactly the dark appearance's --map-panel, --map-line, --coast-fill and --coast-line,
-# and the card and the page it previews in that appearance draw one map.
+# The raster collection card's map colours. The SVG panels take the tokens through their classes
+# (.mm-panel, .mm-rule, .mm-coast, .mm-line); a PNG reads no stylesheet, so the card states its own
+# navy ground here, the ground its white wordmark and tagline inks are chosen for.
 _MAP_PANEL = "#18213D"
 _MAP_PANEL_LINE = "#222C4E"
 _COAST_FILL = "#1D3140"
@@ -378,7 +376,7 @@ def _minimap_height(width) -> int:
 
 def _outline_paths(p) -> str:
     """The schematic coast rings and state borders, projected by `p`. Colours come from the page's
-    theme through the classes, so the geometry carries no colour of its own."""
+    tokens through the classes, so the geometry carries no colour of its own."""
     def path(ring, close=True):
         d = "M" + "L".join(f"{x},{y}" for x, y in (p(lo, la) for lo, la in ring))
         return d + ("Z" if close else "")
@@ -570,15 +568,6 @@ _CSS = """
     --sans:'Libre Franklin',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
     color-scheme:light;
   }
-  :root[data-theme="dark"]{
-    --bg:#11182D; --surface:#18213D; --surface-2:#1E2B4F; --line:#2B3557;
-    --text:#E8EDF1; --muted:#8FA3B0; --heading:#FFFFFF; --accent:#EF7256; --accent-ink:#16110B;
-    --dot-edge:#11182D;
-    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
-    --map-bg:#0F1626; --map-panel:#18213D; --map-line:#222C4E; --coast-fill:#1D3140; --coast-line:#3A5266;
-    --shadow:none;
-    color-scheme:dark;
-  }
   body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:16px/1.55 var(--sans)}
   main{max-width:840px;width:min(100% - 2.5rem,840px);margin:0 auto;padding:1.6rem 1.25rem 2.2rem;flex:1 0 auto}
   @media(min-width:1180px){main{max-width:1120px;width:min(100% - 2.5rem,1120px)}}
@@ -700,9 +689,6 @@ _CSS = """
   header.site nav a.active{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
-  .theme-dark{display:none}
-  :root[data-theme="dark"] .theme-light{display:none}
-  :root[data-theme="dark"] .theme-dark{display:block}
   .counts{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
   .counts b{color:var(--text)}
   @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
@@ -793,12 +779,10 @@ def _site_header(active="") -> str:
     About beside them as the smaller outlined supporting control. The right zone is the tagline,
     the same on every page; a page's contextual status rides the footer instead.
 
-    THE FETCHED ASSETS ARE NAMED. The mark is a PAIR of same-origin files, the AuScope brand kit's
-    vector icon in the kit's colours and in white, drawn 36px square. The .theme-light and
-    .theme-dark rules show the one that matches <html data-theme>, and the white file never sits on
-    the light ground. Both are served by the portal image beside these pages: not a build-time read
-    and not an external fetch. engine/tests/test_index_pages.py holds the header's src allow-list
-    to these two files.
+    THE FETCHED ASSET IS NAMED. The mark is one same-origin file, the AuScope brand kit's vector
+    icon in the kit's colours, drawn 36px square. It is served by the portal image beside these
+    pages: not a build-time read and not an external fetch. engine/tests/test_index_pages.py holds
+    the header's src allow-list to that file.
 
     THE WORDMARK'S FAMILY. 'Calibre' leads the wordmark's stack because AuScope's licence covers
     this site. No sheet declares an @font-face for it, so a reader without the face installed sees
@@ -806,14 +790,14 @@ def _site_header(active="") -> str:
 
     VERSION SKEW. /vendor/* and /src/* are served from the portal image and the pages tree from the
     data volume, so the two can be a deploy apart. A pages tree that names a file the running image
-    does not serve renders alt text in place of an image and loses its appearance script, so the
-    portal image goes out first, and /vendor/auscope/auscope-mark.svg (every header's mark and the
-    collection figure's corner mark), /vendor/auscope-ncris-colour.png (every footer's lock-up) and
-    /src/theme.js each answering 200 is the check before the pages tree is swapped.
+    does not serve renders alt text in place of an image, so the portal image goes out first, and
+    /vendor/auscope/auscope-mark.svg (every header's mark and the collection figure's corner mark)
+    and /vendor/auscope-ncris-colour.png (every footer's lock-up) each answering 200 is the check
+    before the pages tree is swapped.
 
     The identity block sits inside the zero-basis .hleft zone, so it cannot move the centre tab
     group: a zero-basis side hands its leftover space out evenly whatever it holds
-    (portal/tests/test_header_geometry_parity.py). The mark pair, the tagline and the About control
+    (portal/tests/test_header_geometry_parity.py). The mark, the tagline and the About control
     are each one unbroken literal, because that pin reads this emitter against portal/index.html's
     header, element for element."""
     tabs = "".join(
@@ -821,7 +805,7 @@ def _site_header(active="") -> str:
         for i, lbl, h in _NAV_TABS)
     return ('<header class="site">\n'
             '  <div class="hzone hleft">\n'
-            '    <img class="brandmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36"><img class="brandmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="36" height="36">\n'
+            '    <img class="brandmark" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="36" height="36">\n'
             '    <a class="wordmark" href="/"><b>Aus</b>MT</a>\n'
             '  </div>\n'
             '  <div class="hzone hcenter">\n'
@@ -856,13 +840,11 @@ def _site_footer(status="") -> str:
     lock-up sits at the bottom right of every page in this tier. The status is what the page can
     actually state (the surveys hub's catalogue counts) and is empty elsewhere, because a counter
     that cannot count the page it is on is decoration pretending to be data. The lock-up is the
-    brand kit's colour and white PNG pair, which the theme switch shows one of, linking the same
-    address as the centre's name, so the footer carries two anchors to it.
-    engine/tests/test_index_pages.py holds the footer's src allow-list to those two files. Its
-    rules draw it 30px tall, and a negative block margin makes its margin box one footer text line
-    (12.5px at line-height 1.5), so the lock-up never sets a row's height and the sticky footer is
-    as tall as its text makes it. The footer carries no appearance control: the choice lives on
-    /about.html and in the map's welcome dialog, both wired by /src/theme.js.
+    brand kit's colour PNG, linking the same address as the centre's name, so the footer carries two
+    anchors to it. engine/tests/test_index_pages.py holds the footer's src allow-list to that file.
+    Its rules draw it 30px tall, and a negative block margin makes its margin box one footer text
+    line (12.5px at line-height 1.5), so the lock-up never sets a row's height and the sticky footer
+    is as tall as its text makes it. The footer carries no control.
 
     Both anchors to the parent organisation open in a new tab and hand the opened page no handle
     on this one: target="_blank" grants window.opener, from which the opened document could
@@ -880,7 +862,7 @@ def _site_footer(status="") -> str:
             'rel="noopener noreferrer">AuScope</a> &#183; '
             "Data licences vary by survey</div>\n"
             f'<div class="fzone fright">{status}'
-            '<a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img class="theme-light" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"><img class="theme-dark" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>\n'
+            '<a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>\n'
             "</footer>\n")
 
 
@@ -931,10 +913,6 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="UTF-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
-        # The appearance script is the FIRST script in the head and runs before the stylesheet is
-        # parsed, so the first paint is already in the reader's chosen theme. It is a same-origin
-        # file because the CSP's script-src is 'self' alone, and nothing on the page calls it.
-        '<script src="/src/theme.js"></script>\n'
         f"{robots}"
         f"<title>{_e(title)}</title>\n"
         f"{desc_meta}"
@@ -1957,12 +1935,11 @@ def _collection_scatter(member_labels, member_points, title, *, width=560, legen
     # part of this fixed-extent panel that is always open ocean (the nearest coastline in the bottom
     # 120 viewBox units is Tasmania, at x=326 of 560), so the overlay cannot reach the geography at
     # any rendered width. The legend is a sibling of the figure, so it is out of reach by structure.
-    # This is the legend=True form alone: the hub card has no panel padding to spare. The mark is a
-    # pair, the inked file for the light map panel and the white one for the dark, and the theme
-    # rules show the one that matches the page; the white file never sits on the light panel.
+    # This is the legend=True form alone: the hub card has no panel padding to spare. The mark is
+    # the inked file, drawn on the light map panel.
     return (f'<figure class="collmap">{svg}'
             # One unbroken literal: portal/tests/test_collection_map_mark.py reads this source.
-            '<img class="collmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="42" height="42"><img class="collmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="42" height="42">'
+            '<img class="collmark" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="42" height="42">'
             "</figure>"
             f'<p class="colllegend">{"".join(legend_rows)}</p>')
 

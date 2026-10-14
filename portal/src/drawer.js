@@ -1458,7 +1458,7 @@ function collScatter(ss,maxW,mark){
     return `<circle class="mm-dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="${col(s.survey)}" fill-opacity=".9"><title>${esc(s.id)} · ${esc(s.survey)}</title></circle>`;}).join("");
   const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${cap}px;background:var(--map-panel);border:1px solid var(--line);border-radius:8px" role="img" aria-label="Member stations over Australia">${outline}${dots}</svg>`;
   const legend=`<div class="collscatter-legend">`+members.map(sv=>`<span class="csl-item"><span class="csl-dot" style="background:${col(sv)}"></span>${esc(sv)}</span>`).join("")+`</div>`;
-  const panel=mark?`<div class="collscatter-panel" style="max-width:${cap}px">${svg}<img class="collmark theme-light" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="42" height="42"><img class="collmark theme-dark" src="/vendor/auscope/auscope-mark-white.svg" alt="AuScope" width="42" height="42"></div>`:svg;
+  const panel=mark?`<div class="collscatter-panel" style="max-width:${cap}px">${svg}<img class="collmark" src="/vendor/auscope/auscope-mark.svg" alt="AuScope" width="42" height="42"></div>`:svg;
   return `<div class="collscatter">${panel}${legend}</div>`;
 }
 function openCollectionPage(cid){

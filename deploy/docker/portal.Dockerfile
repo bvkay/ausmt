@@ -25,14 +25,13 @@
 #     index.html's footer carries the name alone. about.html carries one more, the "Learn more
 #     about AuScope" link in its Who enables AusMT section. No header links AuScope. All of them are
 #     NAVIGATION links, not resource loads: CSP does not govern <a href> targets. The images those
-#     pages fetch are vendored and served from 'self' under img-src: the AuScope mark pair
-#     (vendor/auscope/auscope-mark.svg and its white twin), fetched by every header and by the
-#     collection figures, and the brand kit's lock-up PNG pair (vendor/auscope-ncris-colour.png and
-#     vendor/auscope-ncris-white.png), fetched by every footer without the big map, by index.html's
-#     map corner and by about.html's body; each pair ships both files and CSS shows the one the
-#     appearance selects. The kit's icon PNGs (vendor/auscope-icon-colour.png, auscope-icon-white.png)
-#     are fetched by no page here and still ship: the docs site's sidebar copy and
-#     tools/gen_social_card.py are made from the white icon.
+#     pages fetch are vendored and served from 'self' under img-src: the AuScope mark
+#     (vendor/auscope/auscope-mark.svg), fetched by every header and by the collection figures, and
+#     the brand kit's colour lock-up PNG (vendor/auscope-ncris-colour.png), fetched by every footer
+#     without the big map, by index.html's map corner and by about.html's body. Their white twins
+#     ship and no page fetches them. The kit's icon PNGs (vendor/auscope-icon-colour.png,
+#     auscope-icon-white.png) are fetched by no page here and still ship: the docs site's sidebar
+#     copy and tools/gen_social_card.py are made from the white icon.
 #   - the auscope.org.au METADATA, which loads nothing: the JSON-LD publisher URL and the WebSite
 #     node's own url on index.html, every page's rel=canonical, and og:url plus og:image on
 #     index.html, about.html, releases.html and add-survey.html (brand.html is noindex and
