@@ -164,8 +164,8 @@ The small standalone identity document the portal footer reads. A consumer polls
  "engine_commit": "0d705eaaa22ded1564f6d36e349ef5d5761b3e69",
  "source_commit": "2a6624e",
  "generated": "2026-07-27T08:08:07.007756+00:00",
- "mt_metadata_version": "1.0.9",
- "mth5_version": "0.6.8"
+ "mt_metadata_version": "1.0.10",
+ "mth5_version": "0.6.9"
 }
 ```
 
@@ -182,6 +182,15 @@ The small standalone identity document the portal footer reads. A consumer polls
 
 `build_id` changes whenever anything that could change the output changed, including a metadata-only
 edit. Compare it rather than the `generated` timestamp alone.
+
+The two library versions are the strings each library declares about itself. The engine pins
+mt_metadata to the commit that upstream tag v1.0.11 names, because v1.0.11 is not on PyPI, and that
+commit declares `1.0.10`. A build on the pin therefore reports `"mt_metadata_version": "1.0.10"`,
+the same string PyPI's older 1.0.10 release reports. When v1.0.11 reaches PyPI the pin becomes
+`mt_metadata==1.0.11` and the key follows whatever that release declares. mth5 is pinned to PyPI's
+0.6.9. The pins and their reasons are in `engine/environments/README.md`. A build that ran on a
+mt_metadata without the pinned commit's bounded field-tree memo says so in its log, as a
+`[mth5] WARN` line at start, not in this document.
 
 The document is a few hundred bytes and every response carries an `ETag`, so a conditional request costs
 a `304` when nothing has changed.

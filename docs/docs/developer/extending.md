@@ -126,8 +126,9 @@ deprecation WARNING that fires only on a real value, and ship a script under `au
 ```bash
 # engine (clean all-pip venv recommended)
 cd engine
-pip install -r requirements-dev.txt          # tests + the core stack (mt_metadata/mth5 are core deps)
-pip install -r environments/requirements-mtmetadata-lock.txt   # the PINNED stack CI runs; see the ABI note in that dir
+pip install -r environments/requirements-mtmetadata-lock.txt   # the PINNED stack CI runs, FIRST
+pip install -c environments/requirements-mtmetadata-lock.txt -r requirements-dev.txt   # tooling, held to the lock
+pip install --no-deps -e .                    # the engine package
 python scripts/verify.py                      # tests + build + mtcat schema check
 python -m extract.build_portal --surveys ../../ausmt-surveys/surveys --out ../portal/data --products products
 
@@ -135,6 +136,11 @@ python -m extract.build_portal --surveys ../../ausmt-surveys/surveys --out ../po
 cd ../portal
 python3 -m http.server 8000                   # then open http://localhost:8000/
 ```
+
+The lock goes first because it pins mt_metadata to a git commit that reports itself as `1.0.10`: a
+pip that already holds PyPI's `1.0.10` keeps it and skips the pin. In an env that already has
+mt_metadata, add `--force-reinstall` to the lock install. The reasons are in
+`engine/environments/README.md`.
 
 The portal can fetch data from a remote base by setting `deployment.data_base_url` in
 `portal.config.yaml` and regenerating `config.js` (`python tools/gen_config.py --check` is the CI drift

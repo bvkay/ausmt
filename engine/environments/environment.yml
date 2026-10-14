@@ -11,8 +11,9 @@ dependencies:
   - pip
   - pip:
     # MT stack + the scientific deps it pulls, pinned to the TESTED set (keep in step with the locks).
-    - mt_metadata==1.0.9
-    - mth5==0.6.8
+    # mt_metadata: the commit tag v1.0.11 names (not on PyPI; it declares version 1.0.10).
+    - mt_metadata @ git+https://github.com/kujaku11/mt_metadata.git@22350c51fb176b57ec3bce6f1aeab1b44a9b8c6a
+    - mth5==0.6.9
     - scipy==1.17.1
     - pandas==3.0.3
     - xarray==2026.4.0

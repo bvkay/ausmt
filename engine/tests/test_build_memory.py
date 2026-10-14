@@ -1,5 +1,5 @@
-"""Build memory: the MTH5 arm must emit-and-release, so a build's peak RSS is bounded by one
-station-sized unit of MTH5 work plus a small corpus-wide index, never by the number of stations.
+"""Build memory: a build's peak RSS is bounded by one station-sized unit of MTH5 work plus a small
+corpus-wide index, never by the number of stations.
 
 The incident: the engine was OOM-killed by the kernel five times in one
 night ("Killed process (python) anon-rss:13,740,244 kB" on a 14 GB box) at ~2,580 stations, one
@@ -13,11 +13,24 @@ mean the memo never hits and pins every class, its json tree and its pydantic-co
 life of the process: 7.6 MiB per served station, linear, unbounded (8.9 GiB at 1,182 served stations
 here, 13.7 GB at 2,580 in production, a projected 41-59 GiB at 8,000).
 
+The pinned mt_metadata bounds that memo itself: kujaku11/mt_metadata#289 holds its class keys weakly
+(97c09616) and reuses the class built for an added field (6a361343), so the engine does not empty it.
+A mt_metadata without #289 (PyPI's 1.0.10 declares the same version string as the pin) still gets the
+bound: the engine detects the strong-keyed memo, warns at build start and empties it per unit.
+
 What is pinned here, and what each pin fails on:
 
-  * the leak itself: after N station-sized MTH5 units, the class-keyed memo is empty and the count of
-    live pydantic model classes is what it was after the FIRST unit. FAILS on unmodified code with
-    the memo at ~25 entries and ~50 classes per station and climbing.
+  * the leak itself: after N station-sized MTH5 units, written or read, neither the field-tree memo
+    nor the count of live pydantic model classes is larger than after the FIRST unit. FAILS on a
+    library that keys the memo strongly on per-group classes: ~25 entries and ~50 classes per
+    station, climbing.
+  * the engine leaves that memo to a library that bounds it: clear_field_caches is never called by
+    MTH5 work on the pinned stack, whose memo is a WeakKeyDictionary.
+  * the engine bounds a memo the library does not: with the memo swapped for a plain dict and the
+    added-field class reuse switched off (the pre-#289 library), the memo and the live class count
+    still stay at the first unit's level, and the build-start check names the library as unbounded.
+  * that fallback is for the plain dict alone: a memo of any other type is the library's own design,
+    so the engine neither empties it nor warns.
   * the bound, end to end: two synthetic corpora built by the real CLI with the production flag set,
     the SAME largest survey in each and 10x the surveys in the second, and the peak RSS of the two
     child processes (os.wait4 rusage, independent of anything the engine reports) must not grow with
@@ -56,7 +69,7 @@ import build_portal as bp  # noqa: E402
 # positions, a survey.yaml). Reused so the synthetic corpora are the SAME shape those tests build.
 from test_coord_access import _stage_survey  # noqa: E402
 
-# ---- the regression pin's recorded numbers (measured on the fixed engine, macOS, the pinned
+# ---- the regression pin's recorded numbers (measured on the fixed engine, macOS, the earlier
 # mt_metadata 1.0.9 / mth5 0.6.8 stack; a Linux glibc box measures lower absolute peaks) ----
 # corpora: A = 2 surveys x 10 stations (20), B = 20 surveys x 10 stations (200); same largest survey.
 # The 180-station delta halves the slope's noise against the 80-station delta first used (two runs of
@@ -95,54 +108,168 @@ def _live_model_classes() -> int:
 
 
 def _memo_len() -> int:
+    """Entries in mt_metadata's field-tree memo after a full collect: a weak-keyed memo's length
+    depends on when cyclic garbage was collected, so the count is taken on what is reachable."""
     from mt_metadata.base import pydantic_helpers as ph  # noqa: PLC0415
+    gc.collect()
     return len(ph._FIELDS_TREE_CACHE)
 
 
-def test_mth5_unit_releases_metadata_classes(tmp_path):
-    """The leak. Runs the tier-1 unit (_write_tf_mth5 over ONE station: write + the round-trip gate)
-    over the two sample EDIs three times each, exactly as emit_station_mth5 does per served station,
-    then a tier-2 bundle of both, and asserts after every unit that (a) the class-keyed field-tree
-    memo is empty and (b) the number of live pydantic model classes has not moved from what it was
-    after the first unit. FAILS on unmodified code: the memo gains ~25 entries and ~50 classes per
-    station and never gives them back."""
-    assert len(SAMPLE_EDIS) >= 2, "the sample survey ships two EDIs"
-    out = tmp_path / "h5"
-    out.mkdir()
+def _pre_289_library(monkeypatch) -> None:
+    """Swap the pinned mt_metadata for the behaviour it had before kujaku11/mt_metadata#289: the
+    field-tree memo is a plain class-keyed dict (no 97c09616) and add_new_field builds a fresh class
+    every call (no 6a361343). Either half alone stays bounded; together they leak per station."""
+    from mt_metadata.base import metadata as md  # noqa: PLC0415
+    from mt_metadata.base import pydantic_helpers as ph  # noqa: PLC0415
+    monkeypatch.setattr(ph, "_FIELDS_TREE_CACHE", {})
+    monkeypatch.setattr(md, "_new_field_key", lambda *_a, **_k: None)
+
+
+def _census_units(out: Path) -> tuple[list, list]:
+    """Tier-1 units over the sample EDIs (three each), a tier-2 bundle, then the MTH5-input reader
+    over that bundle; the memo size and live model class count after every unit.
+
+    Each tier-1 unit is what emit_station_mth5 does per served station (write plus the round-trip
+    gate). The bundle puts every station into one file. The reader is the MTH5-input arm (a survey
+    shipping transfer_functions/mth5/*.h5, read by process_mth5 through
+    _mth5.records_and_components, one get_transfer_function per station): the same leak class, so the
+    same bound, counted after every station and again after the file closes."""
+    import _mth5 as m5  # noqa: PLC0415
     units = [(p, {"id": f"{p.stem}_{k}"}) for k in range(3) for p in SAMPLE_EDIS]
-    classes_after_first = None
-    memo_after = []
-    classes_after = []
+    memo_after, classes_after = [], []
     for i, (p, r) in enumerate(units):
         n = bp._write_tf_mth5([(p, r)], "memo-survey", "Memo Survey", out / f"{r['id']}.h5")
         assert n == 1, f"unit {i} did not write (the fixture must pass the gate)"
         memo_after.append(_memo_len())
         classes_after.append(_live_model_classes())
-        if classes_after_first is None:
-            classes_after_first = classes_after[-1]
-    # a tier-2 bundle: every station into one file, released per station INSIDE the open file
-    n = bp._write_tf_mth5(units[:2], "memo-survey", "Memo Survey", out / "bundle-tf.h5")
-    assert n == 2
+    assert bp._write_tf_mth5(units[:2], "memo-survey", "Memo Survey", out / "bundle-tf.h5") == 2
     memo_after.append(_memo_len())
     classes_after.append(_live_model_classes())
-    # the MTH5-INPUT arm (a survey shipping transfer_functions/mth5/*.h5, read by process_mth5 through
-    # _mth5.records_and_components, one get_transfer_function per station): the same leak class, so
-    # the same per-station release. Read the bundle just written and census after every station.
-    import _mth5 as m5  # noqa: PLC0415
     n_read = 0
     for _rec, _per, _comp in m5.records_and_components(out / "bundle-tf.h5"):
         n_read += 1
         memo_after.append(_memo_len())
         classes_after.append(_live_model_classes())
     assert n_read == 2, "the reader must yield both stations of the bundle"
-    memo_after.append(_memo_len())            # after the reader closed the file
+    memo_after.append(_memo_len())
     classes_after.append(_live_model_classes())
-    assert all(m == 0 for m in memo_after), (
-        f"mt_metadata's class-keyed field-tree memo must be released after every MTH5 unit "
-        f"(written OR read); observed sizes per unit: {memo_after}")
+    return memo_after, classes_after
+
+
+def test_pinned_library_holds_the_field_tree_memo_weakly():
+    """The library behaviour the engine leaves the memo to. FAILS on a mt_metadata without
+    kujaku11/mt_metadata#289 (PyPI's 1.0.10), whose memo is a plain class-keyed dict."""
+    import weakref  # noqa: PLC0415
+    from mt_metadata.base import pydantic_helpers as ph  # noqa: PLC0415
+    assert isinstance(ph._FIELDS_TREE_CACHE, weakref.WeakKeyDictionary), (
+        f"the installed mt_metadata keys its field-tree memo strongly "
+        f"({type(ph._FIELDS_TREE_CACHE).__name__}); install environments/requirements-mtmetadata-lock.txt")
+
+
+def test_mth5_units_do_not_grow_metadata_classes(tmp_path):
+    """The leak. Runs the tier-1 unit (_write_tf_mth5 over ONE station: write + the round-trip gate)
+    over the two sample EDIs three times each, exactly as emit_station_mth5 does per served station,
+    then a tier-2 bundle of both, then the MTH5-input reader, and asserts after every unit that
+    neither the field-tree memo nor the number of live pydantic model classes is larger than after
+    the first unit. FAILS when neither the library nor the engine bounds the memo: ~25 entries and
+    ~50 classes per station, never given back."""
+    assert len(SAMPLE_EDIS) >= 2, "the sample survey ships two EDIs"
+    out = tmp_path / "h5"
+    out.mkdir()
+    memo_after, classes_after = _census_units(out)
+    classes_after_first = classes_after[0]
+    assert max(memo_after) <= memo_after[0], (
+        f"mt_metadata's field-tree memo must not grow with the number of MTH5 units written or read "
+        f"(sizes per unit: {memo_after})")
     assert max(classes_after) <= classes_after_first, (
         f"live pydantic model classes must not grow with the number of MTH5 units written or read "
         f"(after first unit: {classes_after_first}; per unit: {classes_after})")
+
+
+def test_mth5_units_leave_the_library_field_tree_memo_alone(tmp_path, monkeypatch):
+    """The pinned mt_metadata bounds its own field-tree memo: kujaku11/mt_metadata#289 holds the memo's
+    class keys weakly (97c09616) and reuses the class built for an added field (6a361343), so the
+    classes mth5 creates per group do not accumulate. An engine that empties the memo after every
+    MTH5 unit only forces every static class back through mt_metadata's on-disk field cache.
+    Runs a tier-1 unit, a tier-2 bundle and the MTH5-input reader over the sample EDIs with
+    clear_field_caches counted, and FAILS if the engine called it at all."""
+    from mt_metadata.base import pydantic_helpers as ph  # noqa: PLC0415
+    import _mth5 as m5  # noqa: PLC0415
+    calls = []
+    real_clear = ph.clear_field_caches
+
+    def counted_clear():
+        calls.append(1)
+        real_clear()
+
+    monkeypatch.setattr(ph, "clear_field_caches", counted_clear)
+    out = tmp_path / "h5"
+    out.mkdir()
+    units = [(p, {"id": p.stem}) for p in SAMPLE_EDIS]
+    assert bp._write_tf_mth5(units[:1], "memo-survey", "Memo Survey", out / "one.h5") == 1
+    assert bp._write_tf_mth5(units, "memo-survey", "Memo Survey", out / "bundle-tf.h5") == len(units)
+    assert sum(1 for _ in m5.records_and_components(out / "bundle-tf.h5")) == len(units)
+    assert not calls, (
+        f"the engine emptied mt_metadata's field-tree memo {len(calls)} times over one station unit, "
+        f"one bundle and one read; the pinned library bounds that memo itself")
+
+
+def test_engine_bounds_a_field_tree_memo_the_library_does_not(tmp_path, monkeypatch):
+    """The same census as the leak pin, on the pre-#289 library: the memo and the live class count
+    after every unit must stay at the first unit's level. FAILS on an engine that leaves a strong-keyed
+    memo alone: about 25 entries per station unit, climbing."""
+    _pre_289_library(monkeypatch)
+    out = tmp_path / "h5"
+    out.mkdir()
+    memo_after, classes_after = _census_units(out)
+    assert max(memo_after) <= memo_after[0], (
+        f"a strong-keyed field-tree memo must be emptied by the engine per MTH5 unit "
+        f"(sizes per unit: {memo_after})")
+    assert max(classes_after) <= classes_after[0], (
+        f"live pydantic model classes must not grow with a strong-keyed memo "
+        f"(per unit: {classes_after})")
+
+
+def test_build_start_names_a_library_that_does_not_bound_its_memo(monkeypatch):
+    """The version string cannot tell PyPI's 1.0.10 from the pinned commit, so the build checks the
+    memo itself: the pinned library reads as bounding it and yields no warning; the pre-#289 library
+    reads as needing the engine and yields a warning that names the lock file. FAILS on an engine
+    that has no such check."""
+    import _mth5 as m5  # noqa: PLC0415
+    assert m5.field_tree_memo_mode() == "library"
+    assert m5.field_tree_memo_warning() is None
+    _pre_289_library(monkeypatch)
+    assert m5.field_tree_memo_mode() == "engine"
+    msg = m5.field_tree_memo_warning()
+    assert msg and "requirements-mtmetadata-lock.txt" in msg, msg
+
+
+def test_engine_empties_only_a_plain_dict_memo(monkeypatch):
+    """The fallback clear is for one known shape, the pre-#289 plain class-keyed dict. Any other memo
+    (a dict subclass such as a bounded LRU, a weak-valued mapping, an object with no clear) is the
+    library's own design: the engine neither empties it nor warns. FAILS on an engine that treats
+    every memo that is not a WeakKeyDictionary as leaking, which also raises inside the per-unit
+    finally blocks on a memo with no clear method."""
+    import collections  # noqa: PLC0415
+    import weakref  # noqa: PLC0415
+    from mt_metadata.base import pydantic_helpers as ph  # noqa: PLC0415
+    import _mth5 as m5  # noqa: PLC0415
+    calls = []
+    monkeypatch.setattr(ph, "clear_field_caches", lambda: calls.append(1))
+
+    class BoundedMemo(collections.OrderedDict):
+        pass
+
+    for memo in (collections.OrderedDict(), BoundedMemo(), weakref.WeakValueDictionary(), object(), None):
+        monkeypatch.setattr(ph, "_FIELDS_TREE_CACHE", memo)
+        assert m5.field_tree_memo_mode() != "engine", type(memo).__name__
+        assert m5.field_tree_memo_warning() is None, type(memo).__name__
+        m5.release_field_tree_memo()
+    assert not calls, f"the engine emptied a memo that is not a plain dict {len(calls)} times"
+    monkeypatch.setattr(ph, "_FIELDS_TREE_CACHE", {})
+    assert m5.field_tree_memo_mode() == "engine"
+    m5.release_field_tree_memo()
+    assert len(calls) == 1
 
 
 # --------------------------------------------------------------------------- the end-to-end bound

@@ -4502,42 +4502,6 @@ def _tensor_max_abs_diff(a, b):
     return float(np.nanmax(diff)) if diff.size else 0.0
 
 
-def _release_mth5_metadata_classes() -> None:
-    """Emit-and-release for the MTH5 arm. Called after EVERY station-sized unit of MTH5 work (each
-    add_transfer_function in the writers, each get_transfer_function in the round-trip gate).
-
-    WHY. The build was not holding the corpus. On the pinned stack every mth5 0.6.8 group/dataset
-    instantiation calls add_attributes_to_metadata_class_pydantic, which builds a FRESH
-    pydantic model class via create_model (about 75 classes per served station across the
-    tier-1 file, the tier-2 bundle and the gate's reopen), and mt_metadata 1.0.9's to_dict then
-    memoises each class's field tree in the module-global, class-KEYED dict
-    mt_metadata.base.pydantic_helpers._FIELDS_TREE_CACHE. A class-keyed memo of classes that
-    are never reused can never hit; it only pins every class, its ~300 KB json tree and its
-    pydantic-core validator/serializer for the life of the process. Profiled at 7.6 MiB per
-    served station, linear and unbounded, 78% of the peak footprint, all of it inside
-    _write_tf_mth5; parsing, the cache, the XML arm, the zips and the corpus-wide emissions are
-    flat.
-
-    The library's own clear_field_caches() empties that memo; the classes then have no holder and the
-    ordinary cyclic GC frees them. Cost: the next lookup of a STATIC class re-reads its tree from
-    mt_metadata's on-disk cache (the same source the memo was filled from), so the served bytes cannot
-    change; measured full-corpus build time did not rise. Guarded so a future mt_metadata without the
-    helper degrades to the old behaviour rather than failing the build (the memory regression pin in
-    tests/test_build_memory.py would then go RED, which is the right way to learn about it).
-
-    CONCURRENCY (for the survey-parallel build): this clears a PROCESS-GLOBAL memo. On the pinned
-    mt_metadata 1.0.9 its RLock is held from the cycle-breaking sentinel write through the final store
-    (get_all_fields_serializable's whole body is one `with _CACHE_LOCK`), so a clear from another
-    thread cannot split a computation; but with THREAD workers one worker's release evicts what
-    another is about to look up again, and the per-unit bound this gives is per process, not per
-    thread. Worker PROCESSES each own their memo and keep the bound; that build should use processes."""
-    try:
-        from mt_metadata.base.pydantic_helpers import clear_field_caches  # noqa: PLC0415
-    except Exception:  # noqa: BLE001  (a different mt_metadata layout: no memo to release)
-        return
-    clear_field_caches()
-
-
 def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
     """Blocking round-trip gate. Reopen a built survey MTH5 and compare every stored TF's impedance tensor
     (and tipper) + coordinates to a FRESH parse of its source EDI, exact-or-tolerance. Also asserts the
@@ -4583,10 +4547,7 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
             report["mismatches"].append({"station": "*",
                                          "reason": f"time-series samples present (n_samples={_max_samples})"})
         for _, row in tfs.iterrows():
-            # Release the PREVIOUS station's dynamically created metadata classes before reading the
-            # next one, so a 764-station bundle's gate runs flat instead of holding every reopened TF's
-            # class tree until the file closes (see _release_mth5_metadata_classes).
-            _release_mth5_metadata_classes()
+            m5.release_field_tree_memo()   # the previous station's classes, when the library keeps them
             sid = row["station"]
             src = by_key.get((row.get("survey"), sid)) or by_key.get((None, sid))
             if src is None:
@@ -4633,7 +4594,7 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
             m.close_mth5()
         except Exception as ex:  # noqa: BLE001
             report["mismatches"].append({"station": "*", "reason": f"close failed: {type(ex).__name__}"})
-        _release_mth5_metadata_classes()   # the last station's classes + the reopen's own group classes
+        m5.release_field_tree_memo()
     ok = report["tf_only"] and not report["mismatches"]
     return ok, report
 
@@ -4707,10 +4668,9 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None, failure_rows=None,
                 else:
                     failure_rows.append(_fail_row)
             finally:
-                # Emit-and-release, per station, INSIDE the open file: the memory bound is then one
-                # station's transient, not one bundle's (a 764-station survey stays flat). See
-                # _release_mth5_metadata_classes for the measured why.
-                _release_mth5_metadata_classes()
+                # Per station, inside the open file, so a bundle stays flat on a library that does
+                # not bound its own field-tree memo (see _mth5.field_tree_memo_mode).
+                m5.release_field_tree_memo()
     finally:
         # Guarded: one h5 close failure must NOT abort the whole portal build; the round-trip gate
         # below withholds this file if the close left it unreadable.
@@ -5173,7 +5133,7 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
                     # count is bounded by construction rather than by the corpus.
                     print(f"  [h5] WARN {p.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
                 finally:
-                    _release_mth5_metadata_classes()   # per station, same bound as _write_tf_mth5
+                    m5.release_field_tree_memo()   # per station, same bound as _write_tf_mth5
     finally:
         # Guarded like the survey writer above: withhold-not-crash at the file, never the corpus.
         try:
@@ -5758,6 +5718,11 @@ def _main_build(argv=None):
     # Resolve the served-tool versions ONCE (the single source of truth) - reused by the
     # cache salt below and folded into build.json / build_provenance.json / mtcat as additive keys.
     LIB_VERSIONS = lib_versions()
+    # The served version key cannot tell a mt_metadata that bounds its field-tree memo from one that
+    # does not (both report 1.0.10), so the memo is checked directly and a leaking library is named.
+    _memo_warn = m5.field_tree_memo_warning()
+    if _memo_warn:
+        print(_memo_warn, file=sys.stderr)
 
     # === Incremental build cache ===
     # OFF by default; a no-op without --cache-dir. Keyed by source-EDI content sha + the engine
