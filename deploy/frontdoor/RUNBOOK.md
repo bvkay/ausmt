@@ -378,27 +378,31 @@ curl -sS -o /dev/null -w '%{http_code} %{url_effective}\n' -L https://ausmt.au/d
 curl -sSI http://ausmt.au/ | grep -i location               # hop 1: https://ausmt.au/
 ```
 
-9.2c **Path-URL contract legs (tier 1, owner ruling 2026-08-18).** The three published shapes must
-     each answer a permanent 301 into the portal's hash route on the canonical name. These are the
-     PUBLISHED URL contract (`/surveys/<slug>`, `/stations/<ausmt_id>`, `/collections/<id>`), the
-     form that goes into emails, talks, papers and programme pages. `./doctor.sh` runs the survey
-     leg as a gate (pinned on vulcan-2022).
+9.2c **Path-URL contract legs (tier 3; the contract is section 9P).** The three published shapes
+     (`/surveys/<slug>`, `/stations/<ausmt_id>`, `/collections/<id>`) each answer 200 with the
+     prerendered landing page, whose rel=canonical is that exact URL. These are the PUBLISHED URL
+     contract, the form that goes into emails, talks, papers and programme pages. `./doctor.sh` runs
+     the survey leg and both hub pages as a gate (pinned on vulcan-2022).
 ```sh
-curl -sSI https://ausmt.auscope.org.au/surveys/vulcan-2022 | grep -iE '^(HTTP|location)'
-#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/#/survey/vulcan-2022
-curl -sSI https://ausmt.auscope.org.au/stations/au.vulcan-2022.MBV07 | grep -iE '^(HTTP|location)'
-#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/#/station/au.vulcan-2022.MBV07
-curl -sSI https://ausmt.auscope.org.au/collections/auslamp | grep -iE '^(HTTP|location)'
-#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/#/collection/auslamp
-# a query on a path-shaped link is preserved BEFORE the fragment, never eaten:
-curl -sSI 'https://ausmt.auscope.org.au/surveys/vulcan-2022?utm=1' | grep -i location
-#   expect: location: https://ausmt.auscope.org.au/?utm=1#/survey/vulcan-2022
-# a bare prefix (no id) lands on the portal root, not a broken empty-fragment URL:
-curl -sSI https://ausmt.auscope.org.au/surveys/ | grep -i location
-#   expect: location: https://ausmt.auscope.org.au/
-# a LEGACY-name path link takes two hops by design (host 301 with the path preserved, THEN the
-# canonical block's fragment mapping) and ends at the hash route:
+N=https://ausmt.auscope.org.au
+for u in /surveys/vulcan-2022 /stations/au.vulcan-2022.MBV07 /collections/auslamp /surveys /collections; do
+  curl -sS -o /dev/null -w "%{http_code} $u\n" "$N$u"
+done
+#   expect: 200 for each
+curl -sS $N/surveys/vulcan-2022 | grep -o 'rel="canonical" href="[^"]*"'
+#   expect: rel="canonical" href="https://ausmt.auscope.org.au/surveys/vulcan-2022"
+# a query on a path-shaped link passes through to the same page:
+curl -sS -o /dev/null -w '%{http_code}\n' "$N/surveys/vulcan-2022?utm=1"
+#   expect: 200
+# a trailing slash is folded box-side, in one hop, onto the published form:
+curl -sSI $N/surveys/vulcan-2022/ | grep -iE '^(HTTP|location)'
+#   expect: HTTP/2 301  and  location: /surveys/vulcan-2022
+# a bare /stations has no index page and lands on the portal root:
+curl -sSI $N/stations | grep -iE '^(HTTP|location)'
+#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/
+# a LEGACY-name path link takes one host 301 (path preserved), then the canonical name serves the page:
 curl -sS -o /dev/null -w '%{http_code} %{url_effective}\n' -L 'https://ausmt.au/surveys/vulcan-2022'
+#   expect: 200 https://ausmt.auscope.org.au/surveys/vulcan-2022
 ```
 
 9.3  **Wall checks from OUTSIDE (the public wall).** The public subset must be served; every other
@@ -593,9 +597,10 @@ canonical TLS certificate is present with days-to-expiry (WARN inside the renewa
 `AUSMT_LEGACY_REDIRECT_NAME` is set, the LEGACY certificate too (missing = FAIL, the redirect contract
 is down) plus the explicit HTTPS 301 leg (the legacy name must answer `https://.../data/mtcat.schema.json`
 with a 301 to the same path on the canonical name; both legs are skipped cleanly when the var is
-unset); the path-URL contract leg (`https://<canonical>/surveys/vulcan-2022` must 301 to
-`/#/survey/vulcan-2022`; skipped cleanly if the edge gives no response at all, since the container
-check already covers a down edge); the time-series hand-off table (the container-mounted `ts-routes.map`
+unset); the path-URL contract leg (`https://<canonical>/surveys/vulcan-2022` must serve the tier-3
+landing page with its rel=canonical at that URL, and `/surveys` and `/collections` their index pages;
+skipped cleanly if the edge gives no response at all, since the container check already covers a down
+edge); the time-series hand-off table (the container-mounted `ts-routes.map`
 must hash-match the repo copy, an OPEN route must 302 to the exact NCI `Location` the table names, and a
 route the table does NOT name must 404 - set `AUSMT_DOCTOR_TS_WITHHELD_PATH` to a real suppressed
 station's route once the corpus has one); tailscale is up and the box peer is visible; the zombie count is under threshold (section 13);
