@@ -166,10 +166,12 @@ sudo mkdir -p /srv/ausmt && sudo systemctl daemon-reload && sudo mount /srv/ausm
      `AUSMT_PUBLISH_KEEP=1` to the box's
      `deploy/.env` before step 9 (`make publish` and the reconcile unit both read it). Provisioning
      refuses a data root that is not a mount point, so the tree lives in a directory on the root disk,
-     bind-mounted at `/srv/ausmt` in place of the volume line cloud-init wrote:
+     bind-mounted at `/srv/ausmt` in place of the volume line cloud-init wrote. cloud-init separates
+     that line's fields with tabs and the fallback of 4.2 with spaces, so the patterns match either
+     (`[[:space:]]`); `deploy/tests/test_runbook_nectar_fstab.py` runs this step's two `sed` commands on both:
 ```sh
 sudo mkdir -p /var/lib/ausmt-proof /srv/ausmt
-sudo sed -i 's|^LABEL=ausmt-data |#&|' /etc/fstab                  # park the volume line
+sudo sed -i 's|^LABEL=ausmt-data[[:space:]]|#&|' /etc/fstab         # park the volume line
 echo '/var/lib/ausmt-proof /srv/ausmt none bind 0 0' | sudo tee -a /etc/fstab
 sudo systemctl daemon-reload && sudo mount /srv/ausmt && mountpoint /srv/ausmt
 ```
@@ -181,7 +183,7 @@ sudo systemctl stop docker.socket docker.service          # both stacks down
 sudo mkdir -p /mnt/ausmt-new && sudo mount LABEL=ausmt-data /mnt/ausmt-new
 sudo rsync -aH /var/lib/ausmt-proof/ /mnt/ausmt-new/      # -H keeps the links between builds
 sudo umount /mnt/ausmt-new /srv/ausmt
-sudo sed -i -e '\|^/var/lib/ausmt-proof |d' -e 's|^#\(LABEL=ausmt-data \)|\1|' /etc/fstab
+sudo sed -i -e '\|^/var/lib/ausmt-proof[[:space:]]|d' -e 's|^#\(LABEL=ausmt-data[[:space:]]\)|\1|' /etc/fstab
 sudo systemctl daemon-reload && sudo mount /srv/ausmt && mountpoint /srv/ausmt
 sudo systemctl start docker                               # both stacks up
 sudo ausmt-doctor-serve
