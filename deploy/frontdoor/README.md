@@ -56,11 +56,12 @@ exceeds 7.
 `install-frontdoor.sh` renders the roll block unchanged, so every host that runs it, ausmt-serve
 through `deploy/nectar/provision-serve.sh` included, picks up the depth on its next deploy pass.
 
-The hourly timer replaces the interim drop-in that made the daily timer hourly on the box. On a box
-that carries it, install the shipped timer and remove the drop-in:
+The shipped timer is hourly. The cutover handover of 2026-10-14 offered an hourly drop-in for the
+box's daily timer (`ausmt-frontdoor-logs.timer.d/hourly.conf`); whether it was applied is not
+confirmed. Install the shipped timer, and remove the drop-in if the box carries one:
 ```sh
 sudo cp deploy/frontdoor/ausmt-frontdoor-logs.timer /etc/systemd/system/
-sudo rm /etc/systemd/system/ausmt-frontdoor-logs.timer.d/hourly.conf
+sudo rm -f /etc/systemd/system/ausmt-frontdoor-logs.timer.d/hourly.conf
 sudo systemctl daemon-reload
 systemctl list-timers ausmt-frontdoor-logs.timer --no-pager      # next run within the hour
 ```

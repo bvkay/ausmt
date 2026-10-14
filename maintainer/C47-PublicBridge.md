@@ -110,8 +110,8 @@ at-edge guarantees:
 
 ## D5. Log shipping (box pulls, never push)
 
-A box-side systemd oneshot+timer (`ausmt-frontdoor-logs.{service,timer}`, fires hourly since
-2026-10-14, the 03:00 run before the 03:35 C45 fold; it fired daily at 03:25 UTC before that) runs `ship-frontdoor-logs.sh`, an rsync-over-ssh **pull** of
+A box-side systemd oneshot+timer (`ausmt-frontdoor-logs.{service,timer}`) runs
+`ship-frontdoor-logs.sh`, an rsync-over-ssh **pull** of
 `access-frontdoor*.json` from the VPS into the box log dir. Pull, not push, on purpose: the front-door
 tag is granted **no inbound path to the box** (that is wall 2's whole point); the box initiates the
 copy instead (`ausmt-box → tag:ausmt-frontdoor:22`), a separate ACL grant that never widens the
@@ -119,6 +119,12 @@ front-door tag. Same trust model, script shape, and "no hostname in git" discipl
 off-box backup pull (`pull-backup.sh`). The masking already happened at the edge — the shipper moves
 already-masked bytes and never sees a full client IP. The units ship in the front-door subtree
 (`deploy/frontdoor/`) though they install on the box, because they are part of this deliverable.
+
+The repository ships the timer hourly, the 03:00 run landing before the 03:35 C45 fold; it was
+designed daily at 03:25 UTC. On 2026-10-14 the cutover handover offered the owner an hourly drop-in
+for the box's installed daily timer; it is not confirmed applied, so the box runs the hourly cadence
+once the shipped timer is installed there (`deploy/frontdoor/README.md`, "Log retention and the
+pull cadence").
 
 ## D6. Invariants
 

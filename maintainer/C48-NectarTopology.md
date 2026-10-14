@@ -490,10 +490,12 @@ section 1A of `AusMT_2026/NECTAR-CUTOVER-CHECKLIST-2026-10-13.md`.
   request `cutover-1791961947` answered 200 and reached ausmt-serve's log; `sudo ausmt-doctor-serve`
   was all PASS at 07:13 UTC, its DNS line included. The box's log pull was repointed at 07:32 UTC.
   Rollback is both A records back to 203.101.226.191 while ausmt-test exists.
-* **Log retention.** On busy days the front door rolled its 10 MB log more often than the box's
-  daily pull could collect, so an hourly pull was installed as a systemd drop-in on the box. The
-  repository now ships the hourly timer and a roll depth of 49 (`deploy/frontdoor/README.md`, "Log
-  retention and the pull cadence").
+* **Log retention.** At `roll_keep 5` with a daily pull, exactly five rolls reached the box in 7 of
+  the 24 daily windows from 20 September to 13 October, five being the cap, so rolls on those days
+  were deleted before the pull. On 2026-10-14 the handover offered the owner an hourly systemd
+  drop-in for the box's daily timer; it is not confirmed applied. The repository now ships the
+  hourly timer and a roll depth of 49 (`deploy/frontdoor/README.md`, "Log retention and the pull
+  cadence").
 
 ## Provenance
 
