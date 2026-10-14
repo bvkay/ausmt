@@ -153,3 +153,29 @@ def test_the_survey_level_table_uses_the_level_vocabulary():
                                      ("level1", LEVEL1),
                                      LEVEL2,
                                      ("level3", LEVEL3)]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
+def test_the_files_tab_glosses_are_the_choosers_glosses():
+    """FAILS IF a station's Files tab describes a level in words other than TS_LEVELS gives it, so the
+    Files tab and the Download rows gloss one level two ways. Level 1 as a whole takes the gloss of
+    level1_mth5, the one Level 1 format offered."""
+    src = DRAWER_JS.read_text(encoding="utf-8")
+    drawer = {vocab: gloss for gloss, vocab in
+              re.findall(r'tsLevelRow\("[^"]+","([^"]*)","(\w+)"\)', src)}
+    glosses = {tok: gloss for tok, _label, gloss in _state_tables()["levels"]}
+    assert drawer == {"raw_packed": glosses["raw_packed"],
+                      "level0": glosses["level0"],
+                      "level1": glosses["level1_mth5"]}
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
+def test_the_survey_level_table_glosses_packed_raw_as_the_chooser_does():
+    """FAILS IF the survey drawer's data-at-every-level table describes packed raw time series in
+    words other than TS_LEVELS gives it."""
+    src = DRAWER_JS.read_text(encoding="utf-8")
+    m = re.search(r"const DATA_LEVEL_SLOTS=(\[.*?\]);", src, re.S)
+    assert m, "drawer.js must keep DATA_LEVEL_SLOTS"
+    slots = {key: desc for key, _name, desc in json.loads(re.sub(r",\s*\]$", "]", m.group(1)))}
+    glosses = {tok: gloss for tok, _label, gloss in _state_tables()["levels"]}
+    assert slots["raw_packed"] == glosses["raw_packed"]

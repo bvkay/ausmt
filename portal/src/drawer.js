@@ -362,7 +362,7 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   const dot=st=>`<span class="pdot" style="background:var(--${st==="ok"?"ok":st==="part"?"part":st==="no"?"no":"unk"})"></span>`;
   const row=it=>`<div class="prod ${it.d?"":"dis"}" ${attrs(it.d)}>${dot(it.st)}<div>${esc(it.n)} ${it.origin?roleChip(it.origin):""}<small>${esc(it.sub)}</small></div></div>`;
   const tsRows=[
-    [tsLevelRow("Packed raw time series","telemetry data streamed from site loggers","raw_packed"),tsActionRows(["raw_packed"])],
+    [tsLevelRow("Packed raw time series","as recorded, packed by the custodian","raw_packed"),tsActionRows(["raw_packed"])],
     [tsLevelRow("Level 0 (Edited Time Series)","instrument-recorded, full resolution","level0"),tsActionRows(["level0"])],
     [tsLevelRow("Level 1 (Transformed Time Series)","calibrated, resampled, filtered","level1"),
      tsActionRows(["level1_mth5"])],
@@ -1261,7 +1261,7 @@ const REES_LEVELS_DOI="https://doi.org/10.1080/22020586.2019.12073015";
 // [identifies key, tile name, one-line description]. See docs: portal internals, drawer.js.
 const DATA_LEVEL_SLOTS=[
   ["collection","Collection","the umbrella record for everything this survey deposited"],
-  ["raw_packed","Packed raw time series","telemetry data streamed from site loggers"],
+  ["raw_packed","Packed raw time series","as recorded, packed by the custodian"],
   ["level0","Level 0 (Edited Time Series)","instrument-recorded, full resolution"],
   ["level1","Level 1 (Transformed Time Series)","MTH5: calibrated, resampled, filtered"],
   ["level2","Level 2 (Transfer Functions)","derived frequency-domain processed data"],
