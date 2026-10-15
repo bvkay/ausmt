@@ -463,14 +463,17 @@ is reported separately under `file_written_by` rather than being published as th
 A run is an acquisition, so a run is published only where a source states one. Most of the corpus
 therefore carries no `runs` key at all: mt_metadata instantiates a placeholder run for every file it
 reads, with a run id synthesised from the station name, a 0 Hz rate, a 1980 epoch window and an
-unnamed logger, and none of that is a source assertion. The values published here come from the
-`>INFO` block the custodian wrote, read by the dialect extractors described in
-[the build lifecycle](../developer/build-lifecycle.md#the-build-step-by-step).
+unnamed logger, and none of that is a source assertion. The values published here come from two
+sources. The survey's curated acquisition sheet,
+[`run-metadata.csv`](survey-yaml.md#113-run-metadatacsv-the-curated-acquisition-sheet), is applied
+first; the `>INFO` block the custodian wrote, read by the dialect extractors described in
+[the build lifecycle](../developer/build-lifecycle.md#the-build-step-by-step), fills whatever the
+sheet leaves unsaid.
 
 | Member | Type | Definition |
 |---|---|---|
 | `id` | string | The run's identifier: the source's own where the source declares one, otherwise a curated local id assigned once and stored in the survey package. Never regenerated, so correcting a timestamp or a serial cannot rename a run. |
-| `time_period` | object | `start`, and `end` where the source states one. ISO 8601 UTC. `end` is ABSENT when unknown, never null. |
+| `time_period` | object | `start`, and `end` where the source states one. ISO 8601 UTC. `end` is ABSENT when unknown, never null. `time_basis` where the acquisition sheet states how the times reached UTC (see below). |
 | `sample_rate_hz` | number | The run's nominal rate. Present whenever any channel declares a rate. |
 | `data_logger` | object | `manufacturer`, `model`, `serial_number` and `identifiers[]`, each present only where the source states it. |
 | `channels` | array | The channels acquired in this run. |
@@ -486,7 +489,45 @@ never published: they are library defaults, and no corpus source declares one.
 | `measurement_azimuth_deg` | number | Sensor orientation where the source states it. |
 | `dipole_length_m` | number | Electric channels only. |
 | `contact_resistance` | object | Electric channels only: `source_value` always, plus `value` and `unit` where the unit is one the build parses. The source string is never discarded. |
-| `sensor` | object | Magnetic channels only: the same shape as `data_logger`. |
+| `sensor` | object | Magnetic channels only: the same shape as `data_logger`. From the acquisition sheet, an axis carries the induction coil named for it, and an axis naming no coil carries the station's magnetometer unit (see below). |
+
+`time_period.time_basis` records how the published `start` and `end` reached UTC. Both values publish
+UTC times; the member says what was done to get there.
+
+| `time_basis` | Meaning |
+|---|---|
+| absent | The source stated UTC. Every `time_period` read from a `>INFO` block is this case. |
+| `utc` | The acquisition sheet states that the source clock kept UTC. |
+| `corrected -8 h from a local clock` | The source recorded a UTC+8 local clock. The published times are that value moved back 8 hours, so they are UTC, and this member records the correction. |
+
+A source whose clock offset is not known publishes no `time_period` at all, and so does a sheet row
+whose `time_basis` is outside this vocabulary: a window whose basis cannot be stated is not
+published as UTC. The build never shifts a time itself; the correction is made when the sheet is
+written and the sheet states it.
+
+A magnetic sensor from the acquisition sheet is one of two kinds. An induction coil measures one
+axis, so `hx`, `hy` and `hz` each carry their own coil, with its own serial number and PID. A
+magnetometer is one unit measuring all three axes, so it is published as the `sensor` of every
+`h` axis that names no coil: the same object, PIDs included, repeated on each. Where an axis names
+both, the coil is published there and the build writes a curation note. `hz` carries a coil only
+where the sheet names a Bz coil for it; the coil manufacturer and model the axes share never imply
+a third coil on their own.
+
+```json
+"time_period": { "start": "2014-06-02T01:30:00+00:00", "end": "2014-07-15T23:10:00+00:00",
+                 "time_basis": "corrected -8 h from a local clock" },
+"channels": [
+  { "component": "hx",
+    "sensor": { "manufacturer": "Bartington", "model": "Mag03MS70", "serial_number": "4440",
+                "identifiers": [ { "scheme": "DOI", "identifier": "10.82388/example" } ] } },
+  { "component": "hy",
+    "sensor": { "manufacturer": "Bartington", "model": "Mag03MS70", "serial_number": "4440",
+                "identifiers": [ { "scheme": "DOI", "identifier": "10.82388/example" } ] } },
+  { "component": "hz",
+    "sensor": { "manufacturer": "Bartington", "model": "Mag03MS70", "serial_number": "4440",
+                "identifiers": [ { "scheme": "DOI", "identifier": "10.82388/example" } ] } }
+]
+```
 
 ### 1.17 resources
 
