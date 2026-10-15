@@ -237,3 +237,225 @@ def test_date_only_and_inverted_time_windows_go_absent_with_notes():
                         station_id="OK1", notes=notes)
     assert doc["run"]["time_period"]["end"] == "2014-12-10T02:00:00Z"
     assert notes == []
+
+
+# ---- the extended contract: Bz coil, magnetometer, time basis -----------------------------------
+#
+# sensor_* columns are induction coils, one per axis; magnetometer_* is ONE three-axis fluxgate unit
+# that becomes the sensor of every h axis naming no coil. time_basis records how a row's times
+# reached UTC. Every new column is optional, so a file written to the 18-column contract must
+# publish exactly what it published before the extension: the golden pins below were captured from
+# the 18-column engine and are compared byte for byte.
+
+LEGACY = HERE / "fixtures" / "runsheet" / "legacy-18.csv"
+LEGACY_GOLDEN = HERE / "fixtures" / "runsheet" / "legacy-18-runs.json"
+LEGACY_BUILD_GOLDEN = HERE / "fixtures" / "runsheet" / "legacy-18-built-runs.json"
+# The last fixture station's transfer function carries a tipper, so hz is corroborated with no
+# sensor named for it.
+_LEGACY_COMPS = {"L05": "ZT"}
+
+_NEW = ("sensor_bz_serial,sensor_bz_pid,magnetometer_manufacturer,magnetometer_model,"
+        "magnetometer_serial,magnetometer_pid,time_basis")
+_CORRECTED = "corrected -8 h from a local clock"
+
+
+def legacy_runs_blob(sheet_dir) -> str:
+    """Every station of a sheet through load, merge and station_runs, serialised as the build
+    serialises station.json, with the curation notes each produced."""
+    rows, notes = rs.load(sheet_dir)
+    out = {"load_notes": notes}
+    for sid in sorted(rows):
+        station_notes: list = []
+        doc = rs.merge(None, rows[sid], sid, station_notes)
+        runs, rnotes = bp.station_runs(doc, {sid: [f"{sid}-r01"]}, sid, _LEGACY_COMPS.get(sid, "Z"))
+        out[sid] = {"runs": runs, "notes": station_notes + rnotes}
+    return json.dumps(out, indent=1, ensure_ascii=False) + "\n"
+
+
+def built_runs_blob(out) -> str:
+    doc = json.loads((out / "products" / "example-survey" / "EXAMPLE01" / "station.json")
+                     .read_text(encoding="utf-8"))
+    return json.dumps(doc["runs"], indent=1, ensure_ascii=False) + "\n"
+
+
+def _row(**cells) -> dict:
+    """One loaded sheet row: every whitelisted column present, blank unless named."""
+    return {c: cells.get(c, "") for c in rs.COLUMNS if c != "station_id"}
+
+
+def _channels(row, comps="Z", notes=None):
+    doc = rs.merge(None, row, "S1", notes if notes is not None else [])
+    runs, _ = bp.station_runs(doc, {"S1": ["S1-r01"]}, "S1", comps)
+    return runs[0], {c["component"]: c for c in runs[0].get("channels") or []}
+
+
+_COIL = dict(sensor_manufacturer="LEMI", sensor_model="LEMI-120",
+             sensor_bx_serial="125", sensor_bx_pid="https://doi.org/10.82388/fixture-bx",
+             sensor_by_serial="126", sensor_by_pid="https://doi.org/10.82388/fixture-by")
+_MAG = dict(magnetometer_manufacturer="Bartington", magnetometer_model="Mag03MS70",
+            magnetometer_serial="4440", magnetometer_pid="https://doi.org/10.82388/fixture-mag")
+_MAG_SENSOR = {"manufacturer": "Bartington", "model": "Mag03MS70", "serial_number": "4440",
+               "identifiers": [{"scheme": "DOI", "identifier": "10.82388/fixture-mag"}]}
+
+
+def test_a_legacy_18_column_sheet_publishes_byte_identical_runs(tmp_path):
+    shutil.copy(LEGACY, tmp_path / rs.FILENAME)
+    assert legacy_runs_blob(tmp_path) == LEGACY_GOLDEN.read_text(encoding="utf-8")
+
+
+def test_a_legacy_18_column_sheet_builds_byte_identical_station_runs(tmp_path):
+    pytest.importorskip("mt_metadata")
+    out = _build(tmp_path, _HEADER + "\n" + _ROW + "\n")
+    assert built_runs_blob(out) == LEGACY_BUILD_GOLDEN.read_text(encoding="utf-8")
+
+
+def test_the_extended_columns_are_whitelisted_and_unknown_ones_still_ignored(tmp_path):
+    """Forward tolerance: an unknown column is read past, never ingested, and named in a
+    curation note. Every extended column is on the whitelist, so none of them is named."""
+    _write_sheet(tmp_path, _HEADER + "," + _NEW + ",next_column\n" + _ROW
+                 + ",127,https://doi.org/10.82388/fixture-bz,,,,,utc,anything\n")
+    rows, notes = rs.load(tmp_path)
+    assert rows["EXAMPLE01"]["sensor_bz_serial"] == "127"
+    assert rows["EXAMPLE01"]["time_basis"] == "utc"
+    assert "next_column" not in rows["EXAMPLE01"]
+    unknown = [n for n in notes if "non-whitelist" in n]
+    assert len(unknown) == 1 and "next_column" in unknown[0], notes
+    for column in _NEW.split(","):
+        assert column not in unknown[0]
+
+
+def test_a_bz_coil_becomes_the_hz_sensor():
+    run, ch = _channels(_row(**_COIL, sensor_bz_serial="127",
+                             sensor_bz_pid="https://doi.org/10.82388/fixture-bz"))
+    assert ch["hz"]["sensor"] == {"manufacturer": "LEMI", "model": "LEMI-120",
+                                  "serial_number": "127",
+                                  "identifiers": [{"scheme": "DOI",
+                                                   "identifier": "10.82388/fixture-bz"}]}
+    assert ch["hx"]["sensor"]["serial_number"] == "125"
+
+
+def test_the_shared_coil_columns_alone_never_imply_a_bz_coil():
+    """Manufacturer and model are shared by all three coils, and most stations deployed no Bz coil,
+    so hz gains a coil only from a bz cell of its own."""
+    _run, ch = _channels(_row(**_COIL))
+    assert "hz" not in ch
+
+
+def test_a_magnetometer_is_the_sensor_of_every_h_axis():
+    _run, ch = _channels(_row(**_MAG))
+    for axis in ("hx", "hy", "hz"):
+        assert ch[axis]["sensor"] == _MAG_SENSOR, axis
+
+
+def test_a_coil_wins_over_the_magnetometer_on_an_axis_that_names_both():
+    notes: list = []
+    _run, ch = _channels(_row(**_COIL, **_MAG), notes=notes)
+    assert ch["hx"]["sensor"]["serial_number"] == "125"
+    assert ch["hy"]["sensor"]["serial_number"] == "126"
+    assert ch["hz"]["sensor"] == _MAG_SENSOR
+    assert any("S1" in n and "hx" in n and "hy" in n and "magnetometer" in n for n in notes), notes
+
+    notes = []
+    _run, ch = _channels(_row(**_COIL, **_MAG, sensor_bz_serial="127"), notes=notes)
+    assert ch["hz"]["sensor"]["serial_number"] == "127"
+    assert all(c["sensor"] != _MAG_SENSOR for c in ch.values() if "sensor" in c)
+
+
+def test_the_time_basis_is_carried_on_the_time_period():
+    run, _ = _channels(_row(start="2022-02-12T02:09:58+00:00", time_basis=_CORRECTED))
+    assert run["time_period"] == {"start": "2022-02-12T02:09:58+00:00", "time_basis": _CORRECTED}
+    run, _ = _channels(_row(start="2022-02-12T02:09:58+00:00", end="2022-02-13T02:00:00+00:00",
+                            time_basis="utc"))
+    assert run["time_period"]["time_basis"] == "utc"
+    run, _ = _channels(_row(start="2022-02-12T02:09:58+00:00"))
+    assert "time_basis" not in run["time_period"]
+
+
+def test_a_time_basis_outside_the_vocabulary_withholds_the_window():
+    """The basis says whether the times are UTC at all, so a value the vocabulary does not hold
+    leaves the window unpublishable; the cell is free text and never reaches the document."""
+    notes: list = []
+    doc = rs.merge(None, _row(start="2022-02-12T10:09:58+00:00", time_basis="local, see notes"),
+                   "S1", notes)
+    assert "time_period" not in doc["run"]
+    assert "local, see notes" not in json.dumps(doc)
+    assert any("S1" in n and "time_basis" in n for n in notes), notes
+
+
+def _edi_with_window():
+    edi = rf._Doc()
+    edi.run("time_period", {"start": "2022-02-12T02:09:58+00:00",
+                            "end": "2022-02-13T02:00:00+00:00"},
+            rf.STRUCTURED_DIALECT, fact="time_period")
+    return edi.doc
+
+
+def test_a_window_withheld_for_its_basis_is_not_refilled_from_the_header():
+    """The sheet decided the station's window cannot be published as UTC; the header's window is
+    the same logger's clock, so the merge must not publish it in the sheet's place."""
+    notes: list = []
+    doc = rs.merge(_edi_with_window(),
+                   _row(start="2022-02-12T10:09:58+00:00", time_basis="local, see notes"),
+                   "S1", notes)
+    assert "time_period" not in doc["run"]
+    assert "time_period" not in doc["facts"]
+    assert any("S1" in n and "left absent" in n for n in notes), notes
+
+
+def test_a_sheet_row_without_times_still_takes_the_header_window():
+    doc = rs.merge(_edi_with_window(), _row(sample_rate_hz="500"), "S1", [])
+    assert doc["run"]["time_period"]["start"] == "2022-02-12T02:09:58+00:00"
+
+
+def test_a_time_basis_without_a_window_asserts_nothing():
+    doc = rs.merge(None, _row(time_basis=_CORRECTED), "S1", [])
+    assert doc["run"] == {} and doc["facts"] == []
+
+
+def test_the_schema_vocabulary_is_the_engine_vocabulary():
+    prop = SCHEMA["definitions"]["time_period"]["properties"]["time_basis"]
+    assert tuple(prop["enum"]) == rs.TIME_BASES
+
+
+def test_an_extended_sheet_builds_a_valid_station(tmp_path):
+    pytest.importorskip("mt_metadata")
+    jsonschema = pytest.importorskip("jsonschema")
+    row = _ROW + ",127,https://doi.org/10.82388/fixture-bz," + ",".join(_MAG.values()) + "," + _CORRECTED
+    out = _build(tmp_path, _HEADER + "," + _NEW + "\n" + row + "\n")
+    doc = json.loads((out / "products" / "example-survey" / "EXAMPLE01" / "station.json")
+                     .read_text(encoding="utf-8"))
+    run = doc["runs"][0]
+    assert run["time_period"]["time_basis"] == _CORRECTED
+    channels = {c["component"]: c for c in run["channels"]}
+    assert channels["hz"]["sensor"]["identifiers"] == [{"scheme": "DOI",
+                                                        "identifier": "10.82388/fixture-bz"}]
+    validator = jsonschema.Draft7Validator(SCHEMA, format_checker=jsonschema.FormatChecker())
+    validator.validate(doc)
+    run["time_period"]["time_basis"] = "local clock"
+    assert list(validator.iter_errors(doc)), "the schema must refuse a basis outside its vocabulary"
+
+
+def test_an_embargoed_survey_serves_no_runs_from_the_extended_sheet(tmp_path):
+    pytest.importorskip("mt_metadata")
+    staged = tmp_path / "surveys"
+    shutil.copytree(SURVEYS / "example-survey", staged / "example-survey")
+    package = qualify_lemimt(staged / "example-survey")
+    yaml_path = package / "survey.yaml"
+    yaml_path.write_text(yaml_path.read_text(encoding="utf-8").replace(
+        "access:\n  level: open", 'access:\n  level: embargoed\n  embargo_until: "2099-01-01"', 1),
+        encoding="utf-8")
+    row = _ROW + ",127,https://doi.org/10.82388/fixture-bz," + ",".join(_MAG.values()) + ",utc"
+    (package / "run-metadata.csv").write_text(_HEADER + "," + _NEW + "\n" + row + "\n",
+                                              encoding="utf-8")
+    out = tmp_path / "data"
+    r = subprocess.run(
+        [sys.executable, "-m", "extract.build_portal", "--surveys", str(staged),
+         "--out", str(out), "--no-validate"],
+        cwd=str(ROOT), capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    doc = json.loads((out / "products" / "example-survey" / "EXAMPLE01" / "station.json")
+                     .read_text(encoding="utf-8"))
+    assert doc.get("withheld") is True and "runs" not in doc
+    for path in sorted(out.rglob("*")):
+        if path.is_file() and path.suffix in (".json", ".html", ".xml", ".txt", ".csv"):
+            assert "fixture-mag" not in path.read_text(encoding="utf-8", errors="ignore"), path

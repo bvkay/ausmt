@@ -68,6 +68,14 @@
      "type": "string",
      "description": "absent when unknown (open-world), never null",
      "format": "date-time"
+    },
+    "time_basis": {
+     "type": "string",
+     "enum": [
+      "utc",
+      "corrected -8 h from a local clock"
+     ],
+     "description": "how start and end reached UTC, stated only by a curated per-station acquisition record; absent means utc. 'utc': the source clock kept UTC. 'corrected -8 h from a local clock': the source recorded a UTC+8 local clock and the published start and end are that value moved back 8 hours, so the published times ARE UTC and this member records the correction applied. A source whose offset is not known publishes no time_period at all"
     }
    }
   },

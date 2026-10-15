@@ -18,6 +18,8 @@ location within a survey, carrying one or more transfer-function products and th
 ```text
 survey-slug/
 ├── survey.yaml            (survey metadata, credit, identifiers, provenance, access)
+├── run-ids.yaml           (where a station publishes runs: the persistent run ids)
+├── run-metadata.csv       (optional: curated per-station acquisition facts)
 ├── README.md              (generated at intake when absent)
 ├── LICENSE.md             (generated at intake when absent)
 └── transfer_functions/
@@ -38,8 +40,11 @@ in `build_report.json`. The build also writes its own canonical EMTF XML for eve
 the served data tree rather than back into the package;
 [Transfer functions](../science/transfer-functions.md) owns that statement.
 
-There is no per-station side sheet: station metadata lives in each transfer-function file and in
-`survey.yaml`. Submitter-side provenance lives in `survey.yaml`'s `processing.*` and free-text fields;
+Station metadata lives in each transfer-function file and in `survey.yaml`. The one per-station side
+sheet is `run-metadata.csv`, which carries curated acquisition facts (times, logger, sensors, PIDs)
+under a closed column list; see
+[`run-metadata.csv`](../reference/survey-yaml.md#113-run-metadatacsv-the-curated-acquisition-sheet).
+Submitter-side provenance lives in `survey.yaml`'s `processing.*` and free-text fields;
 there is no separate provenance file.
 
 Derived products are never stored in the package. The engine generates them at build time, so they can

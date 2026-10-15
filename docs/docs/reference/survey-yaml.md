@@ -801,6 +801,46 @@ transfer function. A reprocessing is a MAJOR bump of the package, as
 station's own source file states about its processing is read into its
 [station product](station-products.md#19-processing).
 
+### 11.3 `run-metadata.csv`, the curated acquisition sheet
+
+A SEPARATE FILE beside `survey.yaml`, optional, with one row per published station. It carries the
+acquisition facts the custodian's field records hold (times, logger, sensors and their PIDs), which
+the build publishes as the station's [`runs`](station-products.md#116-runs). It is written by the
+surveys repository's distillation tools from the field sheets, never by hand from a raw sheet: field
+sheets carry crew names and free-text notes, and no column below can hold either.
+
+The build reads it as a WHITELIST. Only the columns in the table are read. Any other column is
+ignored, never published, and named in a curation note in `build_report.json`, so a file written for
+a later contract still builds and loses only the columns this engine does not know. Every column
+except `station_id` is optional, and a blank or `-` cell asserts nothing.
+
+| Column | Publishes as | Rule |
+|---|---|---|
+| `station_id` | the row's station | The published station id, byte for byte; nothing is matched fuzzily. A repeated id refuses the whole file, and a row naming no published station is reported by name. |
+| `start`, `end` | `time_period.start`, `time_period.end` | A full ISO 8601 date-time. A date alone goes absent with a curation note, and an `end` at or before its `start` is dropped with one. |
+| `time_basis` | `time_period.time_basis` | `utc` or `corrected -8 h from a local clock`; blank means `utc`. Any other value withholds the window, with a note, and the EDI header's window is not used in its place. |
+| `sample_rate_hz` | `sample_rate_hz` | A positive number. |
+| `dipole_length_ex_m`, `dipole_length_ey_m` | `ex`, `ey` `dipole_length_m` | A positive number. |
+| `azimuth_ex_deg`, `azimuth_ey_deg` | `ex`, `ey` `measurement_azimuth_deg` | A number. |
+| `logger_manufacturer`, `logger_model`, `logger_serial`, `logger_pid` | `data_logger` | |
+| `sensor_manufacturer`, `sensor_model` | every coil `sensor` | Induction coils only. Shared by the three axes. |
+| `sensor_bx_serial`, `sensor_bx_pid` | `hx` `sensor` | The Bx coil. |
+| `sensor_by_serial`, `sensor_by_pid` | `hy` `sensor` | The By coil. |
+| `sensor_bz_serial`, `sensor_bz_pid` | `hz` `sensor` | The Bz coil. `hz` gains a coil only from one of these two cells, never from the shared manufacturer and model alone. |
+| `magnetometer_manufacturer`, `magnetometer_model`, `magnetometer_serial`, `magnetometer_pid` | `hx`, `hy`, `hz` `sensor` | One three-axis unit, such as a fluxgate. It is the sensor of every axis that names no coil. |
+
+A `*_pid` cell is a DOI, with or without the `https://doi.org/` resolver prefix; it is published as an
+`identifiers` row with scheme `DOI`, and a value that is not a DOI is not published.
+
+| Rule | Why it is that way |
+|---|---|
+| The sheet never supplies a run id | Ids come from `run-ids.yaml` alone, assigned once and never regenerated. A station with sheet facts but no stored id publishes no `runs`, and the gap is reported. |
+| The sheet is applied before the station's `>INFO` facts | It is the curated record. The header fills whatever the sheet leaves unsaid, and a sample rate or dipole length the two state differently is reported with both values. |
+| A coil wins over the magnetometer on its own axis | An axis naming both cannot carry two sensors. The coil is published there and the build writes a curation note. |
+| Every published time is UTC | A local clock is corrected when the sheet is written, and `time_basis` states the correction. The build never shifts a time itself, and a row whose clock offset is not known carries no time. |
+| One run per station | No source yet describes two acquisitions at one station in a form the build can separate, so a sheet row is one run. |
+| A withheld survey publishes no `runs` | An embargoed or `metadata_only` survey serves the withheld station record, which has no `runs`, whatever the sheet holds. |
+
 ---
 
 ## 12 Collection membership
@@ -1284,4 +1324,5 @@ migration. New packages use the structured form.
 
 `survey.yaml` describes the package as a whole; it is the package's primary metadata record.
 Station-level information (coordinates, deployment dates, sensor orientations) comes from the
-transfer-function files themselves. See [Survey package](../data-model/survey-package.md).
+transfer-function files themselves, and curated acquisition facts from the package's
+[`run-metadata.csv`](#113-run-metadatacsv-the-curated-acquisition-sheet). See [Survey package](../data-model/survey-package.md).

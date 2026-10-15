@@ -1,0 +1,61 @@
+[
+ {
+  "id": "EXAMPLE01-r01",
+  "time_period": {
+   "start": "2022-02-12T07:59:23+00:00",
+   "end": "2022-02-14T09:20:24+00:00"
+  },
+  "sample_rate_hz": 1000.0,
+  "data_logger": {
+   "manufacturer": "LEMI",
+   "model": "LEMI-423",
+   "serial_number": "#0040",
+   "identifiers": [
+    {
+     "scheme": "DOI",
+     "identifier": "10.82388/c7ea5dpq"
+    }
+   ]
+  },
+  "channels": [
+   {
+    "component": "ex",
+    "measurement_azimuth_deg": 0.0,
+    "dipole_length_m": 52.0
+   },
+   {
+    "component": "ey",
+    "measurement_azimuth_deg": 90.0,
+    "dipole_length_m": 51.5
+   },
+   {
+    "component": "hx",
+    "sensor": {
+     "manufacturer": "LEMI",
+     "model": "LEMI-120",
+     "serial_number": "125",
+     "identifiers": [
+      {
+       "scheme": "DOI",
+       "identifier": "10.82388/ahbao8tk"
+      }
+     ]
+    }
+   },
+   {
+    "component": "hy",
+    "sensor": {
+     "manufacturer": "LEMI",
+     "model": "LEMI-120",
+     "serial_number": "126",
+     "identifiers": [
+      {
+       "scheme": "DOI",
+       "identifier": "10.82388/1nhybg3w"
+      }
+     ]
+    }
+   }
+  ]
+ }
+]

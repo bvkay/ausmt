@@ -11,7 +11,11 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
+
+from gateway.tests.conftest import VENDORED_VALIDATOR_DIR, require_validator_dir
 
 _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 _SYNC = _FIXTURES / "sync_vendored_validator.py"
@@ -48,6 +52,10 @@ def test_vendored_validator_matches_pin():
     assert actual == pin.get("sha256"), (
         f"vendored validator sha256 {actual} != PIN {pin.get('sha256')} - the vendored copy drifted; "
         "run sync_vendored_validator.py --write from a dev box, or revert the edit.")
+    contract = hashlib.sha256(sync.VENDORED_CONTRACT.read_bytes()).hexdigest()
+    assert contract == pin.get("contract_sha256"), (
+        f"vendored run_metadata_contract.py sha256 {contract} != PIN {pin.get('contract_sha256')}; "
+        "run sync_vendored_validator.py --write from a dev box, or revert the edit.")
     # The PIN also records provenance — sane shape so a broken PIN is caught here too.
     assert pin.get("source_commit"), "PIN missing source_commit"
     assert pin.get("source_repo") == "ausmt-surveys", pin
@@ -78,3 +86,44 @@ def test_validator_orcid_checksum_matches_shared_vectors():
     assert not mismatches, (
         "vendored validator orcid_checksum_ok disagrees with orcid_vectors.json "
         f"(input, expected, got): {mismatches}")
+
+
+_RUN_METADATA_YAML = """\
+slug: runmeta-survey-2026
+project_name: Run Metadata Survey
+name: Run Metadata Survey
+version: 1.0.0
+country: Australia
+region: South Australia
+organisation:
+  name: University of Example
+license: CC-BY-4.0
+access:
+  level: open
+  embargo_until: null
+"""
+
+
+def test_vendored_validator_checks_run_metadata(tmp_path, monkeypatch):
+    # The vendored validator imports run_metadata_contract.py from its own directory and FAILs any
+    # package carrying run-metadata.csv when that module is absent, so the pair must be vendored
+    # together. FAILS IF the contract module is missing beside the vendored validator, or the
+    # vendored pair refuses a minimal valid run-metadata.csv.
+    monkeypatch.setenv("AUSMT_FORCE_VENDORED_VALIDATOR", "1")
+    validator_dir = require_validator_dir()
+    assert validator_dir == VENDORED_VALIDATOR_DIR
+    pkg = tmp_path / "runmeta-survey-2026"
+    (pkg / "transfer_functions" / "edi").mkdir(parents=True)
+    (pkg / "survey.yaml").write_text(_RUN_METADATA_YAML, encoding="utf-8")
+    (pkg / "README.md").write_text("# Run Metadata Survey\n", encoding="utf-8")
+    (pkg / "LICENSE.md").write_text("CC-BY-4.0\n", encoding="utf-8")
+    (pkg / "transfer_functions" / "edi" / "S01.edi").write_text(
+        ">HEAD\n  DATAID=S01\n  LAT=-30:08:45.2\n  LONG=136:58:12.0\n>END\n"
+        ">FREQ ORDER=INC //1\n  1.0\n", encoding="utf-8")
+    (pkg / "run-metadata.csv").write_text("station_id,sample_rate_hz\nS01,128\n", encoding="utf-8")
+    report = tmp_path / "report.json"
+    subprocess.run([sys.executable, str(validator_dir / "validate_survey.py"), str(pkg),
+                    "--json", str(report)], capture_output=True, text=True, check=False)
+    items = [i for i in json.loads(report.read_text(encoding="utf-8"))["items"]
+             if i["check"] == "run_metadata"]
+    assert [i["level"] for i in items] == ["PASS"], items

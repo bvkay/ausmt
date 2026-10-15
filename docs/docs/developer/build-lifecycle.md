@@ -56,7 +56,10 @@ and the output is byte-identical to a build from before the flag existed.
    an uncertain parse emits nothing: a missing field beats a confidently wrong number. Three facts
    the corpus carries are declined rather than extracted, and the LEMIMT `SITE` line's `S-<rate>Hz`
    band is one of them: it records the merging of downsampled EDI files, not the rate the station was
-   acquired at.
+   acquired at. A survey's curated acquisition sheet,
+   [`run-metadata.csv`](../reference/survey-yaml.md#113-run-metadatacsv-the-curated-acquisition-sheet),
+   is merged over these facts by `extract/_runsheet.py`: the sheet is applied first and the `>INFO`
+   block fills whatever it leaves unsaid.
 5. Derive: TF rows, science diagnostics, catalogue rows; coordinate QC and declared coordinate
    resolutions applied; station-id variants disambiguated.
 6. QC: duplicate `ausmt_id` values fail the build (exit 2); other findings go to `qc_report.json`.

@@ -647,6 +647,143 @@ def _check_run_ids(doc, known_ids, r, *, authority_complete: bool) -> None:
                                  f"duplicates")
 
 
+# The per-station acquisition facts, `run-metadata.csv` beside survey.yaml. Its column list, PID
+# form, time-basis vocabulary and instrument-class rule live in run_metadata_contract.py beside
+# this file, shared with the tools that write it.
+RUN_METADATA_FILE = "run-metadata.csv"
+
+
+def _run_metadata_contract():
+    """The contract module beside this file, or None when this file was copied without it."""
+    import importlib.util  # noqa: PLC0415
+    path = Path(__file__).resolve().parent / "run_metadata_contract.py"
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("run_metadata_contract", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _check_run_metadata(path: Path, known_ids, r, *, authority_complete: bool) -> None:
+    """Validate run-metadata.csv against the contract and the ids this package publishes.
+
+    FAIL-CLOSED: the build reads every cell of this file into station.json, so a column it does
+    not know, a row for a station it does not serve, a rate that is not a number, a PID in a
+    second form, a fluxgate recorded in the coil columns (published as one sensor per horizontal
+    axis and none on hz) or a coil recorded as the magnetometer is refused here. The station-id
+    authority is _station_id_authority's, degrading to a WARNING exactly as run-ids.yaml does.
+
+    ABSENT file: this is never called, so every package without one reports unchanged."""
+    import csv  # noqa: PLC0415
+    check = "run_metadata"
+    contract = _run_metadata_contract()
+    if contract is None:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} is present but run_metadata_contract.py is not "
+                             f"beside this validator, so the file cannot be checked")
+        return
+    try:
+        with path.open(newline="", encoding="utf-8-sig") as fh:
+            reader = csv.reader(fh)
+            header = next(reader, [])
+            body = list(reader)
+    except (OSError, UnicodeDecodeError, csv.Error) as e:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} cannot be read as UTF-8 CSV: {e}")
+        return
+    header = [h.strip() for h in header]
+    unknown = [h for h in header if h not in contract.COLUMNS]
+    if unknown:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} has column(s) outside the contract: "
+                             f"{_sample(unknown)}. The build reads only the contract's columns")
+    repeated = sorted({h for h in header if header.count(h) > 1})
+    if repeated:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} repeats column(s) {_sample(repeated)}")
+    if "station_id" not in header:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} has no station_id column; every row is keyed "
+                             f"by the published station id")
+        return
+    rows = []
+    for n, cells in enumerate(body, start=2):
+        if not any(c.strip() for c in cells):
+            continue
+        if len(cells) != len(header):
+            r.add("FAIL", check, f"{RUN_METADATA_FILE} line {n} has {len(cells)} cells for "
+                                 f"{len(header)} columns")
+            continue
+        rows.append((n, {h: c.strip() for h, c in zip(header, cells)}))
+    seen, blank_ids, unknown_ids = {}, [], []
+    bad = {"rate": [], "pid": [], "basis": [], "fluxgate": [], "coil": []}
+    for n, row in rows:
+        sid = row["station_id"]
+        if not sid:
+            blank_ids.append(str(n))
+            continue
+        seen.setdefault(sid, []).append(n)
+        if sid not in known_ids:
+            unknown_ids.append(sid)
+        rate = row.get("sample_rate_hz", "")
+        if rate:
+            try:
+                ok = math.isfinite(float(rate)) and float(rate) > 0
+            except ValueError:
+                ok = False
+            if not ok:
+                bad["rate"].append(f"{sid}: {rate!r}")
+        for col in contract.PID_COLUMNS:
+            if row.get(col) and not contract.pid_ok(row[col]):
+                bad["pid"].append(f"{sid} {col}: {row[col]!r}")
+        if row.get("time_basis") and row["time_basis"] not in contract.TIME_BASIS:
+            bad["basis"].append(f"{sid}: {row['time_basis']!r}")
+        if contract.instrument_class(row.get("sensor_manufacturer"),
+                                     row.get("sensor_model")) == "fluxgate":
+            bad["fluxgate"].append(f"{sid}: {row.get('sensor_manufacturer', '')} "
+                                   f"{row.get('sensor_model', '')}".rstrip())
+        if contract.instrument_class(row.get("magnetometer_manufacturer"),
+                                     row.get("magnetometer_model")) == "coil":
+            bad["coil"].append(f"{sid}: {row.get('magnetometer_manufacturer', '')} "
+                               f"{row.get('magnetometer_model', '')}".rstrip())
+    if blank_ids:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} has {len(blank_ids)} row(s) with no "
+                             f"station_id (lines {_sample(blank_ids)})")
+    repeated_ids = sorted(s for s, lines in seen.items() if len(lines) > 1)
+    if repeated_ids:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} has more than one row for {len(repeated_ids)} "
+                             f"station(s): {_sample(repeated_ids)}. The build publishes one run "
+                             f"per station")
+    if unknown_ids:
+        msg = (f"{RUN_METADATA_FILE} names {len(unknown_ids)} station(s) this package does not "
+               f"publish: {_sample(unknown_ids)}")
+        if authority_complete:
+            r.add("FAIL", check, msg + ". The published ids are the station_ids map values plus "
+                                       "each unmapped EDI's DATAID, and every source file resolved")
+        else:
+            r.add("WARNING", check, msg + ". Not every EDI yields a DATAID or a station_ids "
+                                          "entry, so check the rows against the catalogue")
+    if bad["rate"]:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} sample_rate_hz is not a positive number on "
+                             f"{len(bad['rate'])} row(s): {_sample(bad['rate'])}. A schedule of "
+                             f"several rates has no single rate; leave the cell blank")
+    if bad["pid"]:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} has {len(bad['pid'])} PID cell(s) outside the "
+                             f"one form https://doi.org/10.82388/<suffix>: {_sample(bad['pid'])}")
+    if bad["basis"]:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} time_basis is outside the vocabulary "
+                             f"{list(contract.TIME_BASIS)} on {len(bad['basis'])} row(s): "
+                             f"{_sample(bad['basis'])}")
+    if bad["fluxgate"]:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} records a fluxgate in the coil columns "
+                             f"sensor_* on {len(bad['fluxgate'])} row(s): "
+                             f"{_sample(bad['fluxgate'])}. A fluxgate unit belongs in "
+                             f"magnetometer_*")
+    if bad["coil"]:
+        r.add("FAIL", check, f"{RUN_METADATA_FILE} records an induction coil in magnetometer_* "
+                             f"on {len(bad['coil'])} row(s): {_sample(bad['coil'])}. Coils belong "
+                             f"in sensor_*, one per axis")
+    if not [i for i in r.items if i["check"] == check and i["level"] == "FAIL"]:
+        r.add("PASS", check, f"{RUN_METADATA_FILE}: {len(seen)} station(s), {len(header)} "
+                             f"contract column(s)")
+
+
 def _ts_iso_date(value) -> bool:
     """Whether a register date is an ISO YYYY-MM-DD day.
 
@@ -2117,6 +2254,9 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
             r.add("FAIL", "ts_index", f"{TS_INDEX_FILE} is not valid YAML: {e}")
         else:
             _check_ts_index(ts_index_doc, known, r, authority_complete=complete)
+    run_metadata_path = folder / RUN_METADATA_FILE
+    if run_metadata_path.exists():
+        _check_run_metadata(run_metadata_path, known, r, authority_complete=complete)
     # The slug MUST equal the package folder name: the directory IS the slug, and every downstream
     # identifier/URL is au.<slug>.<station>. A divergence silently forks the survey's identity, so
     # this is a FAIL (the _template states the slug must equal the folder name).
