@@ -502,7 +502,8 @@ UTC times; the member says what was done to get there.
 
 A source whose clock offset is not known publishes no `time_period` at all, and so does a sheet row
 whose `time_basis` is outside this vocabulary: a window whose basis cannot be stated is not
-published as UTC. The build never shifts a time itself; the correction is made when the sheet is
+published as UTC, and the station's own header window is not published in its place. The build
+never shifts a time itself; the correction is made when the sheet is
 written and the sheet states it.
 
 A magnetic sensor from the acquisition sheet is one of two kinds. An induction coil measures one

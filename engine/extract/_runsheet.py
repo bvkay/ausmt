@@ -140,6 +140,13 @@ def load(pkgdir) -> tuple[dict, list]:
     return out, notes
 
 
+def _window_withheld(row) -> bool:
+    """True when the sheet states a window but its time_basis is outside TIME_BASES: the sheet has
+    then decided the station publishes no window, and no other source may supply one."""
+    basis = _text(row.get("time_basis"))
+    return bool(_text(row.get("start")) and basis and basis not in TIME_BASES)
+
+
 def _magnetometer(row) -> dict:
     """The row's three-axis magnetometer unit, as a fresh object per call so no two channels share
     one mutable instrument. {} when the row names none."""
@@ -156,7 +163,7 @@ def _sheet_doc(row, station_id="", notes=None) -> dict:
     doc.dialect("survey_run_metadata")
     start, end, inverted = _window(row)
     basis = _text(row.get("time_basis"))
-    if start and basis and basis not in TIME_BASES:
+    if start and _window_withheld(row):
         # The value is free text, so it is never quoted into a note either.
         if notes is not None:
             notes.append(f"curation: {station_id} time_basis is not one of "
@@ -226,18 +233,23 @@ def _sheet_doc(row, station_id="", notes=None) -> dict:
 def merge(edi_facts, sheet_row, station_id, notes) -> dict:
     """One run_facts document from both sources. The sheet is applied FIRST (the accumulator keeps
     the first writer, so the curated record outranks the >INFO scrape), then the EDI document
-    refills whatever the sheet left unsaid. A field both sources state differently is a curation
-    signal, reported by name with both values - never silently resolved."""
+    refills whatever the sheet left unsaid, except a window the sheet withheld for its time_basis.
+    A field both sources state differently is a curation signal, reported by name with both
+    values - never silently resolved."""
     if not sheet_row:
         return edi_facts
     merged = _Doc()
     merged.doc = _sheet_doc(sheet_row, station_id=station_id, notes=notes)
     edi = edi_facts or _blank_document()
+    withheld = {"time_period"} if _window_withheld(sheet_row) else set()
     for name in edi.get("dialects") or []:
         merged.dialect(name)
     for fact in edi.get("facts") or []:
-        merged.fact(fact)
+        if fact not in withheld:
+            merged.fact(fact)
     for key, value in (edi.get("run") or {}).items():
+        if key in withheld:
+            continue
         if key in merged.doc["run"]:
             if key == "sample_rate_hz" and value != merged.doc["run"][key]:
                 notes.append(f"curation: {station_id} run.{key} differs between the survey run "

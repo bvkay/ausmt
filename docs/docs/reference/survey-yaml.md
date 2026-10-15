@@ -818,7 +818,7 @@ except `station_id` is optional, and a blank or `-` cell asserts nothing.
 |---|---|---|
 | `station_id` | the row's station | The published station id, byte for byte; nothing is matched fuzzily. A repeated id refuses the whole file, and a row naming no published station is reported by name. |
 | `start`, `end` | `time_period.start`, `time_period.end` | A full ISO 8601 date-time. A date alone goes absent with a curation note, and an `end` at or before its `start` is dropped with one. |
-| `time_basis` | `time_period.time_basis` | `utc` or `corrected -8 h from a local clock`; blank means `utc`. Any other value withholds the window, with a note. |
+| `time_basis` | `time_period.time_basis` | `utc` or `corrected -8 h from a local clock`; blank means `utc`. Any other value withholds the window, with a note, and the EDI header's window is not used in its place. |
 | `sample_rate_hz` | `sample_rate_hz` | A positive number. |
 | `dipole_length_ex_m`, `dipole_length_ey_m` | `ex`, `ey` `dipole_length_m` | A positive number. |
 | `azimuth_ex_deg`, `azimuth_ey_deg` | `ex`, `ey` `measurement_azimuth_deg` | A number. |
