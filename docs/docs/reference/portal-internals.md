@@ -314,6 +314,9 @@ first paint because catalogue.json and surveys.json are phase-1 products. It is 
 completeness beside the time-series levels, so the chooser names every data level AusMT handles,
 and it is the slot a Level 3 (Model Inputs and Outputs) option will sit after once survey records
 carry model DOI links.
+
+The chooser carries no note beneath it: the option labels name the levels, and what each option
+keeps is stated here and on the external archives page (tests/test_level_labels.py).
 ```
 
 #### Discoverability: these arm the SAME rectangle/polygon draw handlers as ...
