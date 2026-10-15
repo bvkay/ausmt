@@ -382,6 +382,31 @@ def test_a_time_basis_outside_the_vocabulary_withholds_the_window():
     assert any("S1" in n and "time_basis" in n for n in notes), notes
 
 
+def _edi_with_window():
+    edi = rf._Doc()
+    edi.run("time_period", {"start": "2022-02-12T02:09:58+00:00",
+                            "end": "2022-02-13T02:00:00+00:00"},
+            rf.STRUCTURED_DIALECT, fact="time_period")
+    return edi.doc
+
+
+def test_a_window_withheld_for_its_basis_is_not_refilled_from_the_header():
+    """The sheet decided the station's window cannot be published as UTC; the header's window is
+    the same logger's clock, so the merge must not publish it in the sheet's place."""
+    notes: list = []
+    doc = rs.merge(_edi_with_window(),
+                   _row(start="2022-02-12T10:09:58+00:00", time_basis="local, see notes"),
+                   "S1", notes)
+    assert "time_period" not in doc["run"]
+    assert "time_period" not in doc["facts"]
+    assert any("S1" in n and "left absent" in n for n in notes), notes
+
+
+def test_a_sheet_row_without_times_still_takes_the_header_window():
+    doc = rs.merge(_edi_with_window(), _row(sample_rate_hz="500"), "S1", [])
+    assert doc["run"]["time_period"]["start"] == "2022-02-12T02:09:58+00:00"
+
+
 def test_a_time_basis_without_a_window_asserts_nothing():
     doc = rs.merge(None, _row(time_basis=_CORRECTED), "S1", [])
     assert doc["run"] == {} and doc["facts"] == []
