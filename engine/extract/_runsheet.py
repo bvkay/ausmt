@@ -10,6 +10,11 @@ fuzzy station matching here: `station_id` must equal the corpus station id byte-
 sheet (extract/_tools/distill_run_metadata.py) owns the sheet-to-corpus id join, so the join is
 reviewed by a human before it enters the corpus, and the build stays deterministic.
 
+Magnetic sensors: the sensor_* columns describe induction coils, one per axis (bx, by, bz) under
+one shared manufacturer and model; the magnetometer_* columns describe one three-axis unit, which is
+published as the sensor of hx, hy and hz wherever that axis names no coil. `time_basis` says how the
+row's times reached UTC and rides the run's time_period.
+
 Run IDS are deliberately absent from this file: the per-survey run-id store (run-ids.yaml,
 extract/_runids) remains the only id authority, so a station with sheet facts but no stored id
 still publishes no runs[] and the gap is reported.
@@ -35,8 +40,15 @@ COLUMNS = (
     "sensor_manufacturer", "sensor_model",
     "sensor_bx_serial", "sensor_bx_pid",
     "sensor_by_serial", "sensor_by_pid",
+    "sensor_bz_serial", "sensor_bz_pid",
+    "magnetometer_manufacturer", "magnetometer_model", "magnetometer_serial", "magnetometer_pid",
+    "time_basis",
 )
 _REQUIRED = ("station_id",)
+
+# How a row's start and end reached UTC. Closed, because the cell is the one sheet value that says
+# whether the times are UTC at all; the schema's time_period.time_basis enum is pinned to it.
+TIME_BASES = ("utc", "corrected -8 h from a local clock")
 
 # Merge conflicts are reported per field; these are the scalar run/channel paths compared.
 _CONFLICT_PATHS = (
@@ -128,13 +140,28 @@ def load(pkgdir) -> tuple[dict, list]:
     return out, notes
 
 
+def _magnetometer(row) -> dict:
+    """The row's three-axis magnetometer unit, as a fresh object per call so no two channels share
+    one mutable instrument. {} when the row names none."""
+    return _instrument(row.get("magnetometer_manufacturer"), row.get("magnetometer_model"),
+                       row.get("magnetometer_serial"), row.get("magnetometer_pid"))
+
+
 def _sheet_doc(row, station_id="", notes=None) -> dict:
     """A run_facts-shaped document holding ONLY what the sheet asserts, every value classed
     CURATOR_SUPPLIED (the sheet is the custodian's curated record, not a scrape). Values the
-    schema cannot publish (date-only times, inverted windows) go absent WITH a curation note."""
+    schema cannot publish (date-only times, inverted windows, a window whose time_basis is outside
+    TIME_BASES) go absent WITH a curation note."""
     doc = _Doc()
     doc.dialect("survey_run_metadata")
     start, end, inverted = _window(row)
+    basis = _text(row.get("time_basis"))
+    if start and basis and basis not in TIME_BASES:
+        # The value is free text, so it is never quoted into a note either.
+        if notes is not None:
+            notes.append(f"curation: {station_id} time_basis is not one of "
+                         f"{', '.join(TIME_BASES)}; the run window is left absent")
+        start = end = None
     if notes is not None:
         for member in ("start", "end"):
             v = _text(row.get(member))
@@ -149,6 +176,8 @@ def _sheet_doc(row, station_id="", notes=None) -> dict:
         period = {"start": start}
         if end:
             period["end"] = end
+        if basis:
+            period["time_basis"] = basis
         doc.run("time_period", period, CURATOR_SUPPLIED, fact="time_period")
     rate = _number(row.get("sample_rate_hz"))
     if rate:
@@ -169,11 +198,28 @@ def _sheet_doc(row, station_id="", notes=None) -> dict:
                 doc.channel(axis, "measurement_azimuth_deg", float(azimuth), CURATOR_SUPPLIED)
             except ValueError:
                 pass
-    for axis, comp in (("bx", "hx"), ("by", "hy")):
-        sensor = _instrument(row.get("sensor_manufacturer"), row.get("sensor_model"),
-                             row.get(f"sensor_{axis}_serial"), row.get(f"sensor_{axis}_pid"))
+    # sensor_* columns are induction coils, one per axis, sharing one manufacturer and model.
+    # magnetometer_* is ONE three-axis unit and becomes the sensor of every h axis naming no coil.
+    coils = {}
+    for axis, comp in (("bx", "hx"), ("by", "hy"), ("bz", "hz")):
+        serial, pid = row.get(f"sensor_{axis}_serial"), row.get(f"sensor_{axis}_pid")
+        if axis == "bz" and not (_text(serial) or _text(pid)):
+            # Most stations deployed no Bz coil, so the shared columns alone never imply one.
+            continue
+        coils[comp] = _instrument(row.get("sensor_manufacturer"), row.get("sensor_model"),
+                                  serial, pid)
+    displaced = []
+    for comp in ("hx", "hy", "hz"):
+        sensor = coils.get(comp)
+        if not sensor:
+            sensor = _magnetometer(row)
+        elif _magnetometer(row):
+            displaced.append(comp)
         if sensor:
             doc.channel(comp, "sensor", sensor, CURATOR_SUPPLIED, fact="sensor")
+    if displaced and notes is not None:
+        notes.append(f"curation: {station_id} names a coil and a magnetometer on "
+                     f"{', '.join(displaced)}; the coil is published as the sensor there")
     return doc.doc
 
 

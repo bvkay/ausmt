@@ -3277,7 +3277,9 @@ def station_runs(run_facts, run_ids, station_id, comps):
     if period.get("start"):
         # `end` is ABSENT when unknown, never null: absence is the open-world statement that the
         # source did not say when the acquisition stopped.
-        run["time_period"] = {k: period[k] for k in ("start", "end") if period.get(k)}
+        # `time_basis` is stated only by a survey's run-metadata.csv; absent means the times were
+        # UTC as stated.
+        run["time_period"] = {k: period[k] for k in ("start", "end", "time_basis") if period.get(k)}
     if src.get("sample_rate_hz"):
         run["sample_rate_hz"] = src["sample_rate_hz"]
     if src.get("data_logger"):

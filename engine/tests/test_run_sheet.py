@@ -250,7 +250,8 @@ def test_date_only_and_inverted_time_windows_go_absent_with_notes():
 LEGACY = HERE / "fixtures" / "runsheet" / "legacy-18.csv"
 LEGACY_GOLDEN = HERE / "fixtures" / "runsheet" / "legacy-18-runs.json"
 LEGACY_BUILD_GOLDEN = HERE / "fixtures" / "runsheet" / "legacy-18-built-runs.json"
-# L05's transfer function carries a tipper, so hz is corroborated with no sensor named for it.
+# The last fixture station's transfer function carries a tipper, so hz is corroborated with no
+# sensor named for it.
 _LEGACY_COMPS = {"L05": "ZT"}
 
 _NEW = ("sensor_bz_serial,sensor_bz_pid,magnetometer_manufacturer,magnetometer_model,"
@@ -309,8 +310,8 @@ def test_a_legacy_18_column_sheet_builds_byte_identical_station_runs(tmp_path):
 
 
 def test_the_extended_columns_are_whitelisted_and_unknown_ones_still_ignored(tmp_path):
-    """Forward tolerance is the existing contract and stays: an unknown column is read past,
-    never ingested, and named in a curation note. The new columns are no longer unknown."""
+    """Forward tolerance: an unknown column is read past, never ingested, and named in a
+    curation note. Every extended column is on the whitelist, so none of them is named."""
     _write_sheet(tmp_path, _HEADER + "," + _NEW + ",next_column\n" + _ROW
                  + ",127,https://doi.org/10.82388/fixture-bz,,,,,utc,anything\n")
     rows, notes = rs.load(tmp_path)
