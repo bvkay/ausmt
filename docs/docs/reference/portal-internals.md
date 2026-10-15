@@ -419,8 +419,8 @@ own data licence.
 RIGHT. The live counts, and nothing after them: the footer names no data build. One SHELL, a
 contextual SLOT: #footerCounts is the same element in the same place on every view and
 #countSlot's content is what changes (filters.js updateCounts); the markup here is the MAP form.
-The map page's footer carries no lock-up, because the map's corner does. The footer carries no control: the appearance choice is
-the welcome dialog's Appearance row and About's section 9.
+The map page's footer carries no lock-up, because the map's corner does. The footer carries no
+control.
 ```
 
 #### PROGRESS BELONGS TO THE BROWSER: the 302 hands the bytes ...
