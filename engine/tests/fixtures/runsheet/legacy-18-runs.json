@@ -1,0 +1,245 @@
+{
+ "load_notes": [],
+ "L01": {
+  "runs": [
+   {
+    "id": "L01-r01",
+    "time_period": {
+     "start": "2022-02-12T07:59:23+00:00",
+     "end": "2022-02-14T09:20:24+00:00"
+    },
+    "sample_rate_hz": 1000.0,
+    "data_logger": {
+     "manufacturer": "LEMI",
+     "model": "LEMI-423",
+     "serial_number": "#0040",
+     "identifiers": [
+      {
+       "scheme": "DOI",
+       "identifier": "10.82388/fixture-l01"
+      }
+     ]
+    },
+    "channels": [
+     {
+      "component": "ex",
+      "measurement_azimuth_deg": 0.0,
+      "dipole_length_m": 52.0
+     },
+     {
+      "component": "ey",
+      "measurement_azimuth_deg": 90.0,
+      "dipole_length_m": 51.5
+     },
+     {
+      "component": "hx",
+      "sensor": {
+       "manufacturer": "LEMI",
+       "model": "LEMI-120",
+       "serial_number": "125",
+       "identifiers": [
+        {
+         "scheme": "DOI",
+         "identifier": "10.82388/fixture-bx01"
+        }
+       ]
+      }
+     },
+     {
+      "component": "hy",
+      "sensor": {
+       "manufacturer": "LEMI",
+       "model": "LEMI-120",
+       "serial_number": "126",
+       "identifiers": [
+        {
+         "scheme": "DOI",
+         "identifier": "10.82388/fixture-by01"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  ],
+  "notes": []
+ },
+ "L02": {
+  "runs": [
+   {
+    "id": "L02-r01",
+    "time_period": {
+     "start": "2019-05-01T00:00:00Z",
+     "end": "2019-05-20T00:00:00Z"
+    },
+    "sample_rate_hz": 500.0,
+    "data_logger": {
+     "manufacturer": "Earth Data",
+     "model": "PR6-24",
+     "serial_number": "62001"
+    },
+    "channels": [
+     {
+      "component": "ex",
+      "measurement_azimuth_deg": 0.0,
+      "dipole_length_m": 100.0
+     },
+     {
+      "component": "ey",
+      "measurement_azimuth_deg": 90.0,
+      "dipole_length_m": 100.0
+     },
+     {
+      "component": "hx",
+      "sensor": {
+       "manufacturer": "LEMI",
+       "model": "LEMI-120"
+      }
+     },
+     {
+      "component": "hy",
+      "sensor": {
+       "manufacturer": "LEMI",
+       "model": "LEMI-120"
+      }
+     }
+    ]
+   }
+  ],
+  "notes": []
+ },
+ "L03": {
+  "runs": [
+   {
+    "id": "L03-r01",
+    "time_period": {
+     "start": "2014-09-20T07:12:00Z"
+    },
+    "sample_rate_hz": 1.0,
+    "data_logger": {
+     "manufacturer": "LEMI",
+     "model": "LEMI-417",
+     "serial_number": "0021",
+     "identifiers": [
+      {
+       "scheme": "DOI",
+       "identifier": "10.82388/fixture-l03"
+      }
+     ]
+    },
+    "channels": [
+     {
+      "component": "ex",
+      "measurement_azimuth_deg": 0.0,
+      "dipole_length_m": 40.0
+     },
+     {
+      "component": "ey",
+      "measurement_azimuth_deg": 90.0,
+      "dipole_length_m": 40.0
+     },
+     {
+      "component": "hx",
+      "sensor": {
+       "manufacturer": "Bartington",
+       "model": "Mag03MS70",
+       "serial_number": "4440"
+      }
+     },
+     {
+      "component": "hy",
+      "sensor": {
+       "manufacturer": "Bartington",
+       "model": "Mag03MS70",
+       "serial_number": "4440"
+      }
+     }
+    ]
+   }
+  ],
+  "notes": [
+   "curation: L03 run end '2014-10-18' is not a full date-time; left absent (schema types time_period as date-time)"
+  ]
+ },
+ "L04": {
+  "runs": [
+   {
+    "id": "L04-r01",
+    "time_period": {
+     "start": "2014-10-19T00:05:31Z"
+    },
+    "channels": [
+     {
+      "component": "ex"
+     },
+     {
+      "component": "ey"
+     },
+     {
+      "component": "hx"
+     },
+     {
+      "component": "hy"
+     }
+    ]
+   }
+  ],
+  "notes": [
+   "curation: L04 run end '2014-10-18T06:00:00Z' is not after start '2014-10-19T00:05:31Z'; end left absent - verify the sheet row"
+  ]
+ },
+ "L05": {
+  "runs": [
+   {
+    "id": "L05-r01",
+    "time_period": {
+     "start": "2016-03-01T02:00:00+00:00"
+    },
+    "sample_rate_hz": 128.0,
+    "data_logger": {
+     "manufacturer": "Phoenix",
+     "model": "MTU-5C",
+     "serial_number": "2301"
+    },
+    "channels": [
+     {
+      "component": "ex",
+      "measurement_azimuth_deg": 5.0,
+      "dipole_length_m": 60.0
+     },
+     {
+      "component": "ey",
+      "measurement_azimuth_deg": 95.0,
+      "dipole_length_m": 61.0
+     },
+     {
+      "component": "hx",
+      "sensor": {
+       "manufacturer": "Phoenix",
+       "model": "MTC-150",
+       "serial_number": "8801",
+       "identifiers": [
+        {
+         "scheme": "DOI",
+         "identifier": "10.82388/fixture-bx05"
+        }
+       ]
+      }
+     },
+     {
+      "component": "hy",
+      "sensor": {
+       "manufacturer": "Phoenix",
+       "model": "MTC-150",
+       "serial_number": "8802"
+      }
+     },
+     {
+      "component": "hz"
+     }
+    ]
+   }
+  ],
+  "notes": []
+ }
+}
