@@ -110,13 +110,12 @@ _NO_CREDIT_MARKS = ("mapcredit", "https://www.openstreetmap.org/copyright", "htt
 # literal string in ONE order so seven surfaces cannot each spell it differently.
 _NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
 
-# The SPA's status: the live station counts, painted by src/filters.js into #countSlot, then the short
-# data build id main.js renderBuildId writes into #buildId. The wrapper carries the counts' own styling;
-# the slot's content changes with the view.
+# The SPA's status: the live station counts, painted by src/filters.js into #countSlot, and nothing
+# after them. The wrapper carries the counts' own styling; the slot's content changes with the view.
 INDEX_STATUS = ('<div class="counts" id="footerCounts"><span id="countSlot" title="stations passing the '
                 'current filters · stations selected · total stations in the catalogue">'
                 '<b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> '
-                'total</span><span id="buildId"></span></div>')
+                'total</span></div>')
 # A generated page's status, as a probe the engine's footer must carry verbatim at the head of its
 # right zone, before the lock-up.
 ENGINE_STATUS = '<span class="counts">probe status</span>'

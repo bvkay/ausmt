@@ -30,7 +30,7 @@ async function loadPhase1(){
     fetchOptional("build_provenance.json",null),
     fetchOptional("collections.json",{}),
     // build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence (older
-    // builds predate it); the footer only renders the "data build …" line when this resolves. See docs:
+    // builds predate it); the new-build check compares against it. See docs:
     // portal internals, data.js.
     fetchOptional("build.json",null),
     // Optional coordinate-policy markers (ausmt_id -> 'generalised'|'withheld'), emitted by the engine ONLY

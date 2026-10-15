@@ -413,13 +413,10 @@ own data licence.
 #### RIGHT
 
 ```text
-RIGHT. The live counts, then the data build they were counted from, and nothing after that. One
-SHELL, a contextual SLOT: #footerCounts is the same element in the same place on every view and
+RIGHT. The live counts, and nothing after them: the footer names no data build. One SHELL, a
+contextual SLOT: #footerCounts is the same element in the same place on every view and
 #countSlot's content is what changes (filters.js updateCounts); the markup here is the MAP form.
-#buildId sits outside the slot, so no view rewrites it: main.js renderBuildId writes the short build
-id and date there at boot (" · data build <first 12 characters> · <date>", with the full id in its
-title), and leaves it empty when build.json did not load. The map page's footer carries no
-lock-up, because the map's corner does. The footer carries no control: the appearance choice is
+The map page's footer carries no lock-up, because the map's corner does. The footer carries no control: the appearance choice is
 the welcome dialog's Appearance row and About's section 9.
 ```
 
@@ -2330,7 +2327,7 @@ first paint, so the optionals must not wait on each other either.
 
 ```text
 build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence
-(older builds predate it); the footer only renders the "data build …" line when this resolves.
+(older builds predate it); the new-build check compares against it, and no page text shows it.
 No skew-handshake check here yet (comparing this against a contract hash the portal itself
 carries); that waits on the contract-hash plumbing.
 ```
@@ -4786,23 +4783,6 @@ Explicit keyboard activation. A <button> already activates on Enter/Space in a b
 default action is CANCELLED here so the browser cannot then synthesise its own click on top of this
 handler (one keypress must be one flip, not two). It also makes the keyboard path directly drivable
 in the headless jsdom harness, which does not synthesise clicks from key events.
-```
-
-#### "data build <short id> · <date>" footer text, or "" when build.json ...
-
-```text
-"data build <short id> · <date>" footer text, or "" when build.json didn't resolve (older
-builds predate it - BUILDID is null - so the placeholder must stay empty, not show stale/undefined
-text). Split from the DOM write below so a test can assert the VALUE binding (BUILDID -> text)
-without needing a real DOM (mirrors buildState()'s station0/export0 value-binding pattern).
-
-the emitter (build_identity() in engine/extract/build_portal.py) is
-already fixed to never fold Python's None into build_id - an unresolved source_commit renders as
-the WORD "unknown" there, never "None". This function still must not display either literal word
-to a visitor: a build_id containing "None" (an older/foreign build predating that fix) or
-"unknown" (the legitimate no-surveys-commit case) is display-DEFENDED here by dropping the short-id
-segment entirely, keeping only the date (when known) - the full raw id still goes in a title attr
-for anyone who needs to trace it, via renderBuildId() below.
 ```
 
 #### ---- two-phase boot ...
