@@ -6,13 +6,16 @@
 # clones the sibling checkout is absent, so those oracles resolve to THIS vendored copy instead of
 # skipping — the contract stays unconditionally executable.
 #
+# run_metadata_contract.py is vendored beside it from the same sibling commit: the validator imports
+# it from its own directory and FAILs any package carrying run-metadata.csv when it is absent.
+#
 # This PIN records the exact bytes vendored and where they came from. gateway/tests/
-# test_vendored_validator.py asserts the vendored file's sha256 == the sha256 below, so any drift
-# INSIDE this monorepo (an accidental edit to the vendored copy) fails loudly. To REFRESH from a newer
+# test_vendored_validator.py asserts each vendored file's sha256 == its sha256 below, so any drift
+# INSIDE this monorepo (an accidental edit to a vendored copy) fails loudly. To REFRESH from a newer
 # sibling, run gateway/tests/fixtures/sync_vendored_validator.py (it rewrites this PIN).
 #
 # The sha256 is of the LF-normalized bytes: the monorepo's `.gitattributes` (`* text=auto eol=lf`)
-# stores + checks out this file as LF on EVERY platform, and production runs the sibling's LF blob, so
+# stores + checks out these files as LF on EVERY platform, and production runs the sibling's LF blobs, so
 # the pin must record the LF form a fresh checkout actually sees (the source checks out CRLF on a
 # Windows dev box; sync_vendored_validator.py --write normalizes to LF before pinning).
 #
@@ -20,6 +23,8 @@
 
 source_repo: ausmt-surveys
 source_path: _validation/validate_survey.py
-source_commit: 8aa27b32114afcfb3db1df411469808a26f6bfbc
+source_commit: e43adee501d8bf95e619699bc99b817e2e19d552
 line_endings: lf
 sha256: 9b6fb1675b0253f43f080de036c562516211a11dcbb49774a500cfc0f63d10b1
+contract_source_path: _validation/run_metadata_contract.py
+contract_sha256: 999dc95843d90e14b2dad5005e442e83f4d6c05a26e9ccf5909f936497a3b4b9
