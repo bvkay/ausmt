@@ -5201,6 +5201,27 @@ emulating a 375 x 812 touch phone, on the five-station interaction fixture at zo
 Leaflet: a click between two dots 8.6px apart raised the chooser with both stations as 44px rows and
 opened neither, and a click 6px beside an isolated dot opened that station.
 
+**A tap in Select on the phone layout toggles.** Every dot has one click handler, `onMarkerClick`.
+While the phone layout is active on the map view (`sheetActive()`) and the panel is in Select
+(`sidebarMode==="select"`), it passes `toggleSelected` (`filters.js`) to `onStationTap` as the action,
+so a tap adds its station to the selection or takes it out and the drawer stays shut; when the tap
+reaches more than one dot the chooser lists them, each entry carrying `aria-pressed` for whether it
+is selected, and the entry chosen is toggled. A fine pointer at these widths reaches only the dot it
+clicked (the reach takes no tolerance without a coarse pointer). In Browse, and at every width above
+900px whatever the mode, the handler does what it did: `onStationTap` on a coarse pointer and
+`openStation` otherwise. `toggleSelected` clears any drawn shape first, because `refresh()` re-derives
+the selection from shapes, and adds a station only when it passes the filters and has a position.
+
+A tap or a view selection draws no shape, so on the phone layout a selected dot carries the stroke a
+drawn selection shape carries: the `--accent` token at weight 2 (`markSelection`, `SEL_MARK_W`). A dot
+that leaves the selection takes back the `--dot-edge` stroke at its zoom's weight, and
+`restyleForZoom` re-marks the selected dots after it restyles every dot. `paintPhoneSelection` passes
+the selection on the phone layout and nothing above 900px, so a desktop window never marks a dot.
+`interaction_test.js` drives the bound handler at the phone query and in the tablet band (a tap
+toggles, a second tap untoggles, the stroke follows, the peek row's counts follow, Browse opens the
+drawer, above 900px Select opens the drawer), a coarse window drives the chooser in Select and in
+Browse, and the desktop leg holds that a click in Select still opens the drawer.
+
 #### THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here
 
 ```text

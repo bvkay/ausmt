@@ -336,11 +336,16 @@ function selectInView(bounds){
   selected=new Set(stationsInView(bounds===undefined?_mapView():bounds));
   updateSel();}
 function _phoneSel(){return typeof sheetPhone==="function"&&sheetPhone();}
+function toggleSelected(i){const s=ST[i];if(!s)return;
+  if(hasShapes())drawn.clearLayers();
+  if(selected.has(i))selected.delete(i);else if(hasPosition(s)&&visible.indexOf(s)>=0)selected.add(i);
+  updateSel();}
 function paintInViewCount(){const n=document.getElementById("selInViewN");
   if(n&&_phoneSel())n.textContent=_countN(stationsInView(_mapView()).length)+" in view";}
 function paintPhoneSelection(){
   const phone=_phoneSel(),h=document.getElementById("selHint");
   if(h&&!selected.size)h.textContent=(phone&&h.dataset.phone)||SEL_HINT_EMPTY;
+  if(typeof markSelection==="function")markSelection(phone?selected:null);
   if(!phone)return;
   paintInViewCount();}
 const _selInView=document.getElementById("selInView");

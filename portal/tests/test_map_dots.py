@@ -202,26 +202,32 @@ def test_station_markers_carry_their_own_click_and_never_bubble():
     assert "s.marker.options.bubblingMouseEvents=false" in code, \
         "a station marker must set bubblingMouseEvents:false, or its click opens the drawer and the " \
         "background handler immediately closes it"
-    assert 's.marker.on("click",()=>openStation(s.i))' in code, \
-        "a station marker click must open that station"
+    assert 's.marker.on("click",e=>onMarkerClick(s,e));' in code, \
+        "a station marker click goes through onMarkerClick"
+    assert "elseopenStation(s.i);}" in code.replace("\n", ""), "a station marker click must open that station"
 
 
 def test_a_coarse_pointer_taps_with_tolerance_and_asks_when_a_tap_is_ambiguous():
     """THE TAP RULE. On a coarse pointer the map is built on a canvas renderer with an 8px hit
     tolerance, and a dot tap goes through onStationTap, which opens the station when the tap reaches
     one dot and lists them when it reaches more. On a fine pointer the map keeps Leaflet's own renderer
-    and a dot click opens its station directly, so a desktop is untouched. FAILS IF the tolerance or
-    either branch goes, or if the coarse branch replaces the desktop one instead of sitting beside it.
-    COMMENT-STRIPPED, for the reason the click pin above is."""
+    and a dot click opens its station directly, so a desktop is untouched. Ahead of both, a tap in
+    Select on the phone layout toggles its station (through onStationTap, so an ambiguous tap still
+    asks). FAILS IF the tolerance or any branch goes, if the coarse branch replaces the desktop one
+    instead of sitting beside it, or if the phone toggle is reached on any condition but the phone
+    layout in Select. COMMENT-STRIPPED, for the reason the click pin above is."""
     code = _code(_map_src()).replace(" ", "")
     assert "constTAP_TOLERANCE=8;" in code, "the coarse-pointer tolerance is 8px"
     assert "L.canvas({tolerance:TAP_TOLERANCE})" in code, "a coarse pointer builds the canvas with the tolerance"
     assert "...(COARSE_POINTER?{renderer:L.canvas({tolerance:TAP_TOLERANCE})}:{})" in code, (
         "the renderer joins the map's options only on a coarse pointer")
-    assert 'if(COARSE_POINTER)s.marker.on("click",e=>onStationTap(s,e));' in code, (
-        "a coarse-pointer dot tap goes through onStationTap")
-    assert 'elses.marker.on("click",()=>openStation(s.i));' in code, (
-        "a fine-pointer dot click still opens its station directly")
+    assert ("functiononMarkerClick(s,e){if(phoneSelecting())onStationTap(s,e,toggleSelected);"
+            "elseif(COARSE_POINTER)onStationTap(s,e);elseopenStation(s.i);}") in code.replace("\n", ""), (
+        "a phone tap in Select toggles, a coarse-pointer dot tap goes through onStationTap, and a "
+        "fine-pointer dot click still opens its station directly")
+    assert ('functionphoneSelecting(){returntypeofsheetActive==="function"&&sheetActive()&&'
+            'typeofsidebarMode!=="undefined"&&sidebarMode==="select";}') in code, (
+        "the toggle is reached only on the phone layout's map view in Select")
 
 
 # ------------------------------------------------------------- behaviour pins

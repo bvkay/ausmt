@@ -6736,6 +6736,93 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ok(/^Clear selection/.test(sdoc.getElementById("clearSel").textContent.trim()),
       "phone select: the Clear selection control stays in the pane");
     view = VIEW;
+
+    // TAP TO TOGGLE. In Select a tap adds its station and a second tap takes it out, and the drawer stays
+    // shut; in Browse a tap opens the drawer as it always has. A selected dot takes the stroke a drawn
+    // selection shape takes, the accent at weight 2, and gives it back when it leaves the selection.
+    const drawerEl = sdoc.getElementById("drawer");
+    const drawerOn = () => drawerEl.classList.contains("open");
+    const at = (id, x, y) => { const s = sa.station(id); proj[s.lat + "," + s.lon] = { x, y }; };
+    const tapIn = (a, id, x, y) => { const mk = a.stationMarker(id);
+      ok(mk && (mk.handlers.click || []).length === 1, "phone toggle: station " + id + " carries one tap handler");
+      mk.handlers.click[0]({ containerPoint: { x, y } }); };
+    const tap = (id, x, y) => tapIn(sa, id, x, y);
+    const stroke = (a, id) => a.stationMarker(id).__rec.style || {};
+    const peek = () => sdoc.getElementById("footerCounts").textContent;
+    at("A1", 100, 100); at("A2", 300, 300);
+    sa.setSidebarMode("select");
+    tap("A1", 100, 100);
+    ok(JSON.stringify(ids()) === JSON.stringify(["A1"]) && !drawerOn(),
+      "phone toggle: in Select a tap adds its station and opens no drawer, got " + JSON.stringify(ids()) + " drawer " + drawerOn());
+    ok(stroke(sa, "A1").weight === 2 && "color" in stroke(sa, "A1"),
+      "phone toggle: a selected dot takes the selection shape's stroke, got " + JSON.stringify(stroke(sa, "A1")));
+    ok(/1 selected/.test(peek()), "phone toggle: the peek row's counts follow the selection, got " + JSON.stringify(peek()));
+    tap("A1", 100, 100);
+    ok(ids().length === 0 && !drawerOn(), "phone toggle: a second tap takes the station out, got " + JSON.stringify(ids()));
+    ok(stroke(sa, "A1").weight === 0, "phone toggle: an unselected dot gives the stroke back, got " + JSON.stringify(stroke(sa, "A1")));
+    ok(/0 selected/.test(peek()), "phone toggle: the peek row's counts follow the removal, got " + JSON.stringify(peek()));
+    // A tap after a view selection adds to it or takes from it.
+    sa.selectInView(VIEW);
+    tap("A2", 300, 300);
+    ok(JSON.stringify(ids()) === JSON.stringify(["A1", "B1", "D1"]),
+      "phone toggle: a tap takes a station out of a view selection, got " + JSON.stringify(ids()));
+    click(sdoc.getElementById("clearSel"));
+    ok(stroke(sa, "A1").weight === 0 && stroke(sa, "B1").weight === 0, "phone toggle: Clear gives every stroke back");
+    sa.setSidebarMode("browse");
+    tap("A1", 100, 100);
+    ok(drawerOn() && ids().length === 0, "phone toggle: in Browse a tap opens the drawer and selects nothing");
+    sa.closeDrawer();
+    // The tablet band is the same layout: a tap in Select toggles there too.
+    qs.card = true; fireChange();
+    sa.setSidebarMode("select");
+    tap("A2", 300, 300);
+    ok(JSON.stringify(ids()) === JSON.stringify(["A2"]) && !drawerOn(),
+      "phone toggle: in the tablet band a tap in Select toggles, got " + JSON.stringify(ids()));
+    tap("A2", 300, 300);
+    ok(ids().length === 0, "phone toggle: in the tablet band a second tap untoggles");
+    // Above 900px a click in Select opens the drawer, as on the desktop.
+    qs.phone = false; fireChange();
+    tap("A1", 100, 100);
+    ok(drawerOn() && ids().length === 0, "phone toggle: above 900px a click in Select opens the drawer and selects nothing");
+    ok(stroke(sa, "A1").weight !== 2, "phone toggle: above 900px no dot is marked");
+    sa.closeDrawer();
+    qs.phone = true; qs.card = false; fireChange();
+    sa.setSidebarMode("browse");
+
+    // THE CHOOSER IN SELECT. On a coarse pointer a tap that reaches two dots lists them, each saying
+    // whether it is selected, and the one chosen is toggled; nothing opens.
+    qs.coarse = true;
+    const cw = await selBoot();
+    qs.coarse = false;
+    const ca = cw.__api, cdoc = cw.document;
+    at("A1", 100, 100); at("A2", 108, 100);
+    ca.setSidebarMode("select");
+    tapIn(ca, "A1", 104, 100);
+    let ch = cdoc.getElementById("tapChooser");
+    ok(ch && ch.querySelectorAll("button.tapchooser-item").length === 2,
+      "phone chooser: in Select a tap between two dots lists both");
+    let items = [...ch.querySelectorAll("button.tapchooser-item")];
+    ok(items.every(b => b.getAttribute("aria-pressed") === "false"),
+      "phone chooser: each entry says it is not selected, got " + JSON.stringify(items.map(b => b.getAttribute("aria-pressed"))));
+    items[1].dispatchEvent(new cw.MouseEvent("click", { bubbles: true }));
+    ok(!cdoc.getElementById("tapChooser") && !cdoc.getElementById("drawer").classList.contains("open"),
+      "phone chooser: choosing an entry closes the chooser and opens no drawer");
+    ok(JSON.stringify(ca.selIds()) === JSON.stringify(["A2"]), "phone chooser: the entry chosen is toggled in, got " + JSON.stringify(ca.selIds()));
+    tapIn(ca, "A1", 104, 100);
+    items = [...cdoc.querySelectorAll("#tapChooser button.tapchooser-item")];
+    ok(items[0].getAttribute("aria-pressed") === "false" && items[1].getAttribute("aria-pressed") === "true",
+      "phone chooser: the selected entry says so");
+    items[1].dispatchEvent(new cw.MouseEvent("click", { bubbles: true }));
+    ok(ca.selIds().length === 0, "phone chooser: choosing a selected entry toggles it out, got " + JSON.stringify(ca.selIds()));
+    ca.setSidebarMode("browse");
+    tapIn(ca, "A1", 104, 100);
+    items = [...cdoc.querySelectorAll("#tapChooser button.tapchooser-item")];
+    ok(items.length === 2 && items.every(b => !b.hasAttribute("aria-pressed")),
+      "phone chooser: in Browse the entries open stations and carry no pressed state");
+    items[0].dispatchEvent(new cw.MouseEvent("click", { bubbles: true }));
+    ok(cdoc.getElementById("drawer").classList.contains("open") && ca.selIds().length === 0,
+      "phone chooser: in Browse the entry chosen opens its drawer");
+    ca.closeDrawer();
   }
 
   // ---- DESKTOP: the sheet takes no part above 900px -------------------------------------------------
@@ -6752,6 +6839,14 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ok(/toolbar/.test(doc.getElementById("selHint").textContent) || A.selCount() > 0,
       "desktop: the selection hint keeps the desktop wording, got " + JSON.stringify(doc.getElementById("selHint").textContent));
     win.__api.closeDrawer();
+    // In Select a station click opens its drawer and toggles nothing, as it always has here.
+    A.setSidebarMode("select");
+    const selBefore = A.selCount();
+    A.stationMarker("A1").handlers.click[0]({});
+    ok(d.classList.contains("open") && A.selCount() === selBefore && A.sidebarMode() === "select",
+      "desktop: in Select a station click opens its drawer and leaves the selection alone");
+    win.__api.closeDrawer();
+    A.setSidebarMode("browse");
   }
 
   process.exit(0);
