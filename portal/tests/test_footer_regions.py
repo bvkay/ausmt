@@ -46,6 +46,9 @@ Each assertion states its failure criterion:
   * GEOMETRY - FAILS if any surface stops being a wrapping flex row or a query container, if a side
     zone stops taking the equal zero basis, if the centre stops being content-sized or centred, if
     either state below one row goes, or if a 375px viewport collides instead of stacking.
+  * THE ABOUT LINK AT PHONE WIDTHS - FAILS if a surface whose header carries About (the map page
+    aside) stops ending its footer's left zone with an About link to the same address, drawn only at
+    900px and narrower where the phone header hides the header's, or if a surface without one grows it.
   * THE MAP PAGE'S PHONE FORM - FAILS if, at 900px and narrower, index.html's footer stays on
     screen, or its contents stop riding the bottom sheet as the footer writes them. Every other
     surface, and the map page above 900px, keeps the constant footer.
@@ -76,9 +79,10 @@ from pathlib import Path
 
 import pytest
 
-from chrome_contract import (FOOTER_CENTRE, FOOTER_CENTRE_MARKUP, FOOTER_LINE, LOCKUP, LOCKUP_FOOTERS,
-                             LOCKUP_HEIGHT, LOCKUP_LIGHT, LOCKUP_RULES, entities, flat)
-from engine_chrome import function_source, site_footer
+from chrome_contract import (FOOTER_ABOUT_RULES, FOOTER_CENTRE, FOOTER_CENTRE_MARKUP, FOOTER_LINE, LOCKUP,
+                             LOCKUP_FOOTERS, LOCKUP_HEIGHT, LOCKUP_LIGHT, LOCKUP_RULES, entities, flat,
+                             footer_about)
+from engine_chrome import function_source, site_footer, site_header
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 INDEX = ROOT / "index.html"
@@ -335,6 +339,38 @@ _LEFT_LINK = r'<a class="apilink" href="([^"]+)" title="[^"]*">(.*)</a>'
 _ENGINE_LEFT_LINK = r'<a (?:class="apilink" )?href="([^"]+)"(?: title="[^"]*")?>(.*)</a>'
 
 
+_HEADER_ABOUT = re.compile(r'<a class="about" href="([^"]+)">About</a>')
+
+
+def _header_about(where):
+    """The header About link's address on a surface, or None where its header carries none."""
+    if where == ENGINE:
+        head = site_header()
+    else:
+        text = _text(where)
+        head = text.split("<header", 1)[1].split("</header>", 1)[0] if "<header" in text else ""
+    hit = _HEADER_ABOUT.search(head)
+    return hit.group(1) if hit else None
+
+
+def _footer_about_href(where):
+    """The address the footer's About link must carry, or None where the footer carries none."""
+    return None if where == "index.html" else _header_about(where)
+
+
+def _left_without_about(where, left):
+    """The left zone with its About link taken off the end, which must be there exactly when the
+    surface's footer owes one."""
+    href = _footer_about_href(where)
+    if href is None:
+        assert "fabout" not in left, f"{where}: this footer carries no About link: {left!r}"
+        return left
+    tail = footer_about(href)
+    assert left.endswith(tail), (
+        f"{where}: the left zone ends with the About link {tail!r}, the header's address, got {left!r}")
+    return left[:-len(tail)].rstrip()
+
+
 @pytest.mark.parametrize("where", SURFACES)
 def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(where):
     """REGIONS and STRINGS, on all seven surfaces. FAILS if a region is missing, out of order or holds
@@ -346,7 +382,8 @@ def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(
     record (MTCAT JSON)"), the centre (it carried the copyright clause, and then the address as the
     link's text) and the right region (it held the appearance control, and then nothing)."""
     regions = _regions(where, _foot(where))
-    link = re.fullmatch(_ENGINE_LEFT_LINK if where == ENGINE else _LEFT_LINK, regions["left"], re.S)
+    left = _left_without_about(where, regions["left"])
+    link = re.fullmatch(_ENGINE_LEFT_LINK if where == ENGINE else _LEFT_LINK, left, re.S)
     assert link, f"{where}: the left zone holds the MTCAT link and nothing else: {regions['left']!r}"
     label = " ".join(entities(link.group(2)).split())
     assert label == f"{LEFT_LABEL} {ARROW}", (
@@ -392,7 +429,7 @@ def test_the_surfaces_agree_on_where_the_footer_points():
         f"index.html's MTCAT link must stay at data/mtcat.json, got {idx_left}")
     assert "/" + idx_left[0] == MTCAT, (
         f"the SPA's relative MTCAT link must resolve to the engine's {MTCAT}, got {idx_left[0]}")
-    eng_left = _regions("engine/extract/_pages.py", _engine_footer())["left"]
+    eng_left = _left_without_about(ENGINE, _regions(ENGINE, _engine_footer())["left"])
     assert re.findall(r'href="([^"]+)"', eng_left) == [MTCAT], (
         f"the engine footer's MTCAT link must target {MTCAT}")
 
@@ -767,6 +804,40 @@ def test_the_map_pages_phone_footer_leaves_the_viewport_and_its_contents_ride_th
             continue
         assert _PHONE_FOOTER not in "".join(_phone_block(_text(where)).split()), (
             f"{where}: the constant footer holds on every surface but the map page")
+
+
+def test_the_footers_owing_about_are_the_static_surfaces_whose_header_carries_it():
+    """FAILS if the set of footers carrying About drifts from the surfaces whose header carries it,
+    the map page aside: four today, the three portal pages with the header link and every page the
+    engine emits. The About page marks its own header link active and is where the link would go, so
+    it owes none. Non-vacuous: a header that drops About, or a page that gains it, moves this set."""
+    owing = sorted(w for w in SURFACES if _footer_about_href(w))
+    assert owing == sorted(("add-survey.html", "brand.html", "releases.html", ENGINE)), owing
+
+
+@pytest.mark.parametrize("where", SURFACES)
+def test_a_footer_carries_about_at_phone_widths_where_the_header_hides_it(where):
+    """THE ABOUT LINK AT PHONE WIDTHS. The phone header hides About at 900px and narrower, so the
+    footer on every surface whose header carries it ends its left zone with an About link to the same
+    address: hidden by a base rule, drawn by a rule inside the phone query, and holding no target. The
+    map page's footer leaves the screen at those widths and its sheet carries About instead.
+
+    FAILS if a footer owing the link drops it, retargets it or opens it in a new tab, if either rule
+    drifts, goes missing, is declared twice or sits on a surface without the link, or if the base
+    rule moves inside a query."""
+    text, href = _text(where), _footer_about_href(where)
+    foot = _foot(where)
+    if href is None:
+        assert "fabout" not in foot and "fabout" not in text, (
+            f"{where}: a surface whose footer carries no About link declares no .fabout rule")
+        return
+    tail = footer_about(href)
+    assert foot.count('class="fabout"') == 1 and tail in foot, (
+        f"{where}: the footer carries exactly one About link, {tail!r}")
+    for rule in FOOTER_ABOUT_RULES:
+        assert text.count(rule) == 1, f"{where}: expected exactly one {rule!r}, found {text.count(rule)}"
+    assert FOOTER_ABOUT_RULES[0] in _outside_queries(text), (
+        f"{where}: the base rule hides the link outside every query")
 
 
 @pytest.mark.parametrize("where", SURFACES)

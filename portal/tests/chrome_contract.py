@@ -109,6 +109,19 @@ PHONE_HEADER = ("@media (max-width:900px){"
                 ":root header nav a,:root header nav button{flex:0 0 auto;min-width:44px;min-height:44px;"
                 "padding:0 8px;font-size:12px}}")
 
+# THE FOOTER'S ABOUT LINK. PHONE_HEADER hides the header's About at 900px and narrower, so every footer
+# on a surface whose header carries About ends its left zone with an About link to the same address,
+# drawn only at those widths. The map page is the exception: its footer leaves the screen there and
+# the sheet carries its About link.
+FOOTER_ABOUT_RULES = (".fabout{display:none}",
+                      "@media (max-width:900px){.fabout{display:inline;margin-left:18px}}")
+
+
+def footer_about(href):
+    """The footer's About link to `href`, the header About link's own address."""
+    return f'<a class="fabout" href="{href}">About</a>'
+
+
 # THE SAFE AREAS, one rule on every surface that carries the footer. With viewport-fit=cover a page
 # draws under a phone's rounded corners, notch and home indicator, so on a touch screen the page keeps
 # its content clear of the side insets and the footer clears the bottom one. env() resolves to 0px

@@ -704,6 +704,8 @@ _CSS = """
   .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
   .orglockup{display:inline-block;line-height:0;margin:-5.625px 0}
   .orglockup img{height:30px;width:auto;max-width:100%;object-fit:contain}
+  .fabout{display:none}
+  @media (max-width:900px){.fabout{display:inline;margin-left:18px}}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
@@ -857,9 +859,13 @@ def _site_footer(status="") -> str:
     IT IS WRITTEN AFTER </main>, as the page's own bottom edge rather than the reading column's: a
     footer inside main is not a contentinfo landmark, and set in the 840px measure it could not hold
     the bold acknowledgement on one line at any viewport. The rules that keep it on screen are in
-    _CSS beside the ones that lay its regions out."""
+    _CSS beside the ones that lay its regions out.
+
+    The left zone ends with an About link to the header's own address, drawn only at 900px and
+    narrower, where the phone header hides the header's About; the rule pair is the static pages'."""
     return ("\n<footer>\n"
-            f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">MTCAT JSON {_ARROW_OUT}</a></div>\n'
+            f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">MTCAT JSON {_ARROW_OUT}</a>'
+            '<a class="fabout" href="/about.html">About</a></div>\n'
             '<div class="fzone fcenter">AusMT is enabled by '
             '<a href="https://www.auscope.org.au" target="_blank" '
             'rel="noopener noreferrer">AuScope</a> &#183; '

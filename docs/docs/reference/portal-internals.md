@@ -743,6 +743,20 @@ About link, the MTCAT link and the AuScope line exactly as the footer writes the
 target. The header hides About at these widths, so this link is the phone's route to About.
 `tests/test_footer_regions.py` pins the phone form; every other surface keeps the constant footer.
 
+**About in the static footers.** The phone header hides About on every surface, so each footer
+whose page carries About in its header (`add-survey.html`, `brand.html`, `releases.html` and every
+page `engine/extract/_pages.py` emits) ends its left zone with `<a class="fabout">` to the header
+link's own address. `.fabout{display:none}` hides it above 900px, and inside `@media
+(max-width:900px)` it is drawn inline, 18px after the MTCAT link (the footer's own column gap). The
+About page marks its header link active and is the page the link would open, so its footer carries
+none; neither does the not-found page, whose header has no About. `FOOTER_ABOUT_RULES` in
+`portal/tests/chrome_contract.py` holds the rule pair, and `tests/test_footer_regions.py` and
+`engine/tests/test_index_pages.py` hold the markup. Measured in the same pane at 375 x 812, with the
+pages in a 375px frame: on `releases.html`, `brand.html`, `add-survey.html` and a page built from the
+engine's own header, footer and stylesheet, the link showed beside MTCAT JSON and hit-tested to
+itself, and the document stayed 375px wide; at 901px and 1024px it was not drawn, and the two-row
+footer stayed 57px tall at 800px, 900px, 901px and 1024px.
+
 **The /surveys controls on a phone.** On the engine's /surveys page each control is a label
 holding its select, laid out in a wrapping flex row; a flex item's floor is its content, so a select
 as wide as its longest option pushed the page sideways (the Organisation select reached 474px on a

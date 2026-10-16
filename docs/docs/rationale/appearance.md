@@ -75,7 +75,8 @@ name at the left, and the section tabs at the right, each at least 44px square s
 (Owner decision 2026-10-14). The tagline is hidden. On the map page the tabs are Surveys and
 Collections, with no Map tab, because the page is the map; the Surveys, Collections, About and other
 static pages show Map, Surveys and Collections in the same row. About leaves the header at these
-widths and becomes a link at the end of the map page's sheet. The row is the same on every page, as
+widths and becomes a link at the end of the map page's sheet, and on the other pages a link beside
+the catalogue link at the left of the footer. The row is the same on every page, as
 the desktop header is.
 
 900px is the line between the two layouts (Owner decision 2026-10-16). Above it the side-by-side map
