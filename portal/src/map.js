@@ -1,8 +1,14 @@
 "use strict";
 // Map + layers + markers. See docs: portal internals, map.js.
 const AU_HOME_BOUNDS=L.latLngBounds([[-44.5,111.5],[-10,155]]);
+// A coarse pointer reaches a dot within TAP_TOLERANCE px of its edge, and a tap that reaches more than one
+// dot lists them instead of opening whichever was drawn last. See docs: portal internals, map.js.
+const TAP_TOLERANCE=8;
+function _coarsePointer(){
+  try{return !!(typeof window!=="undefined"&&window.matchMedia&&window.matchMedia("(pointer:coarse)").matches);}catch(e){return false;}}
+const COARSE_POINTER=_coarsePointer();
 // THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here. See docs: portal internals, map.js.
-const map=L.map("map",{preferCanvas:true,attributionControl:false}).fitBounds(AU_HOME_BOUNDS);
+const map=L.map("map",{preferCanvas:true,attributionControl:false,...(COARSE_POINTER?{renderer:L.canvas({tolerance:TAP_TOLERANCE})}:{})}).fitBounds(AU_HOME_BOUNDS);
 // The basemap is config-driven. See docs: portal internals, map.js.
 const _OSM_CREDIT='\u00a9 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 const _PM_CREDIT=_OSM_CREDIT+', \u00a9 <a href="https://protomaps.com" target="_blank" rel="noopener noreferrer">Protomaps</a>';
@@ -156,7 +162,8 @@ function buildMarkers(){const z=curZoom(),w=weightForZoom(z),edge=themeToken("--
   // drawer. See docs: portal internals, map.js.
   s.marker.options.bubblingMouseEvents=false;
   s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // Hover shows station + survey only
-  s.marker.on("click",()=>openStation(s.i));});
+  if(COARSE_POINTER)s.marker.on("click",e=>onStationTap(s,e));
+  else s.marker.on("click",()=>openStation(s.i));});
   // Home frame: the FIXED Australia box, NOT the station extent. See docs: portal internals, map.js.
   const pts=ST.filter(hasPosition).map(s=>[s.lat,s.lon]);
   if(pts.length){
@@ -169,6 +176,53 @@ function buildMarkers(){const z=curZoom(),w=weightForZoom(z),edge=themeToken("--
     // Schedule an unconditional re-fit once layout settles - the real correction (see _mapDeferredHomeRefit).
     _scheduleDeferredHomeRefit();
   }
+}
+// PURE: how far from a dot centre a tap still hits it, as the canvas renderer reckons a circle marker.
+function tapReach(r,w,tol){return r+(w>0?w/2:0)+tol;}
+// PURE: the indices of the dots a tap reaches, nearest first and then in catalogue order.
+function tapCandidates(tap,pts,reach){
+  return pts.map(p=>({i:p.i,d:Math.sqrt((p.x-tap.x)*(p.x-tap.x)+(p.y-tap.y)*(p.y-tap.y))}))
+    .filter(c=>c.d<=reach).sort((a,b)=>a.d-b.d||a.i-b.i).map(c=>c.i);}
+// A dot tap on a coarse pointer: one reachable dot opens, several raise the chooser. See docs: portal
+// internals, map.js.
+function onStationTap(s,e){
+  const tap=e&&e.containerPoint;
+  if(!tap||typeof tap.x!=="number"||typeof map.latLngToContainerPoint!=="function"){openStation(s.i);return;}
+  const z=curZoom(),reach=tapReach(radiusForZoom(z),weightForZoom(z),TAP_TOLERANCE),pts=[];
+  (typeof visible!=="undefined"?visible:[]).forEach(v=>{if(!v.marker||!hasPosition(v))return;
+    const p=map.latLngToContainerPoint([v.lat,v.lon]);if(p&&typeof p.x==="number")pts.push({i:v.i,x:p.x,y:p.y});});
+  const near=tapCandidates(tap,pts,reach);
+  if(near.length<=1){openStation(s.i);return;}
+  showTapChooser(near,tap);
+}
+function closeTapChooser(){const el=document.getElementById("tapChooser");if(el&&el.parentNode)el.parentNode.removeChild(el);}
+// The chooser sits in #content beside the map, outside Leaflet's container, so its taps never reach the map.
+function showTapChooser(idxs,tap){
+  closeTapChooser();
+  const host=document.getElementById("content");if(!host)return;
+  const box=document.createElement("div");box.id="tapChooser";box.className="tapchooser";
+  box.setAttribute("role","dialog");box.setAttribute("aria-label","Stations at this spot");
+  const head=document.createElement("div");head.className="tapchooser-head";
+  const title=document.createElement("span");title.textContent=idxs.length+" stations here";
+  const x=document.createElement("button");x.type="button";x.className="tapchooser-close";
+  x.setAttribute("aria-label","Close");x.textContent="\u00d7";x.onclick=closeTapChooser;
+  head.append(title,x);box.appendChild(head);
+  const list=document.createElement("div");list.className="tapchooser-list";
+  idxs.forEach(i=>{const st=ST[i];if(!st)return;
+    const b=document.createElement("button");b.type="button";b.className="tapchooser-item";
+    const id=document.createElement("span");id.className="tc-id";id.textContent=st.id;
+    const sv=document.createElement("span");sv.className="tc-sv";sv.textContent=st.survey;
+    b.append(id,sv);b.onclick=()=>{closeTapChooser();openStation(i);};list.appendChild(b);});
+  box.appendChild(list);
+  const w=host.clientWidth||0,h=host.clientHeight||0;
+  box.style.left=Math.max(8,Math.min(Math.max(8,w-248),tap.x-120))+"px";
+  if(h&&tap.y>h/2)box.style.bottom=Math.max(8,h-tap.y+12)+"px";else box.style.top=(tap.y+12)+"px";
+  host.appendChild(box);
+  const first=list.querySelector("button");if(first&&first.focus)first.focus({preventScroll:true});
+}
+if(COARSE_POINTER){
+  map.on("click movestart zoomstart",closeTapChooser);
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")closeTapChooser();});
 }
 // One-shot corrector, called from the setView("map") 60ms timer AFTER invalidateSize has repaired the
 // container size. See docs: portal internals, map.js.

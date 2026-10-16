@@ -28,8 +28,9 @@ const mapSrc = fs.readFileSync(path.join(SRC, "map.js"), "utf8");
 const WANT = [
   { kind: "const", names: ["DOT_R_FLOOR", "DOT_R_CEIL", "DOT_R_SLOPE", "DOT_R_Z0", "DOT_R_BASE",
                            "DOT_R_Z4", "DOT_R_Z5", "DOT_W_Z4", "DOT_W_Z5", "DOT_W_Z6", "DOT_W_HIGH",
-                           "MARKER_FILL_OPACITY", "MARKER_DIM_FILL", "MARKER_DIM_STROKE"] },
-  { kind: "fn", names: ["radiusForZoom", "weightForZoom", "hasPosition", "dimStyleFor"] },
+                           "MARKER_FILL_OPACITY", "MARKER_DIM_FILL", "MARKER_DIM_STROKE", "TAP_TOLERANCE"] },
+  { kind: "fn", names: ["radiusForZoom", "weightForZoom", "hasPosition", "dimStyleFor", "tapReach",
+                        "tapCandidates"] },
 ];
 // NOTE for anyone adding a name here: the brace matcher below treats a quote character as a string
 // delimiter WITHOUT skipping comments first, so an apostrophe inside a comment in an extracted function
@@ -63,7 +64,7 @@ const ctx = { Math, console, Set, Map, Array, Object, Number, isFinite, JSON };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
 vm.runInContext(code + "\nglobalThis.__api={DOT_R_FLOOR,DOT_R_CEIL,DOT_R_BASE,DOT_R_Z4,DOT_R_Z5,DOT_W_Z4,DOT_W_Z5,DOT_W_Z6,DOT_W_HIGH," +
-  "radiusForZoom,weightForZoom,hasPosition,dimStyleFor};", ctx);
+  "radiusForZoom,weightForZoom,hasPosition,dimStyleFor,TAP_TOLERANCE,tapReach,tapCandidates};", ctx);
 const A = ctx.__api;
 
 let failed = 0;
@@ -137,6 +138,25 @@ ok(A.dimStyleFor("Spread", "Compact").fillOpacity > 0,
   "a non-focused survey must stay visible, not hidden");
 ok(A.dimStyleFor("Spread", null).fillOpacity === A.dimStyleFor("Compact", "Compact").fillOpacity,
   "with no focus every survey renders at full strength");
+
+// ---- a tap on a coarse pointer ------------------------------------------------------------------
+// A finger reaches a dot within TAP_TOLERANCE px of its edge, the reach Leaflet's canvas hit test gives
+// a circle marker on a renderer built with that tolerance: radius, plus half the stroke, plus the
+// tolerance. At the national view a dot is 1.8px with no stroke, so the reach is 9.8px.
+ok(A.TAP_TOLERANCE === 8, "the coarse-pointer tap tolerance is 8px, got " + A.TAP_TOLERANCE);
+const reach4 = A.tapReach(A.radiusForZoom(4), A.weightForZoom(4), A.TAP_TOLERANCE);
+ok(Math.abs(reach4 - 9.8) < 1e-9, "at z4 a tap reaches a dot from 9.8px, got " + reach4);
+ok(A.tapReach(3, 1.5, 8) === 11.75, "the stroke adds half its weight to the reach");
+// A tap 6px from an isolated dot is a hit on that dot alone: it opens, as a tap on the dot did.
+const lone = A.tapCandidates({ x: 106, y: 100 }, [{ i: 4, x: 100, y: 100 }, { i: 7, x: 160, y: 100 }], reach4);
+ok(JSON.stringify(lone) === "[4]", "a tap 6px from an isolated dot must reach that dot alone, got " + JSON.stringify(lone));
+// A tap between two dots 10px apart reaches both, so the reader is asked which one.
+const pair = A.tapCandidates({ x: 105, y: 100 }, [{ i: 9, x: 110, y: 100 }, { i: 2, x: 100, y: 100 }], reach4);
+ok(JSON.stringify(pair) === "[2,9]", "a tap between two dots must reach both, nearest first and then by index, got " + JSON.stringify(pair));
+const nearer = A.tapCandidates({ x: 103, y: 100 }, [{ i: 9, x: 100, y: 100 }, { i: 2, x: 110, y: 100 }], reach4);
+ok(JSON.stringify(nearer) === "[9,2]", "the nearer dot is listed first, got " + JSON.stringify(nearer));
+ok(A.tapCandidates({ x: 112, y: 100 }, [{ i: 1, x: 100, y: 100 }], reach4).length === 0,
+  "a tap 12px from a dot is beyond the 9.8px reach and reaches nothing");
 
 if (failed) { console.error(failed + " map-dot assertion(s) failed"); process.exit(1); }
 console.log("MAP DOTS OK");

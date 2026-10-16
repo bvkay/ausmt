@@ -1444,6 +1444,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(doc.getElementById("drawer").innerHTML.indexOf(_f5dot.id) >= 0,
     "the drawer must show the station that was clicked (" + _f5dot.id + ")");
   A.closeDrawer();
+  // A FINE POINTER IS UNTOUCHED by the coarse-pointer tap rule. jsdom has no matchMedia, which is how a
+  // desktop answers the coarse query here: the map keeps Leaflet's own renderer (no renderer option at
+  // all) and the click above opened its station with no chooser.
+  ok(JSON.stringify(Object.keys(mapMade[0].opts)) === JSON.stringify(["preferCanvas", "attributionControl"]),
+    "desktop: the map is built with exactly preferCanvas and attributionControl, got " + JSON.stringify(mapMade[0].opts));
+  ok(!doc.getElementById("tapChooser"), "desktop: a station click never raises the tap chooser");
 
   A.buildAuslampSet(); A.refresh();       // restore the boot-built membership for the rest of the run
 
@@ -6212,6 +6218,86 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     const _gsv = doc.querySelector('meta[name="google-site-verification"]');
     ok(_gsv && /^[A-Za-z0-9_-]{20,}$/.test(_gsv.getAttribute("content") || ""),
       "map-chrome: index.html must carry the google-site-verification meta with a token-shaped content");
+  }
+
+  // ---- PHONE: the coarse-pointer tap tolerance and the multi-station chooser ----------------------
+  // A fresh window whose matchMedia answers (pointer:coarse), with the three Leaflet factories the tap
+  // rule reaches recorded: the map's options, the canvas renderer's options and every station dot.
+  // latLngToContainerPoint is a table this leg sets, so each case places the dots in container pixels
+  // and taps beside them. HONESTY: this records the app's CALLS and its DOM; whether Leaflet's canvas
+  // fires a click at a given pixel is Leaflet's hit test, pinned on its own terms in map_dots_test.js.
+  {
+    const made = { opts: null, canvas: [] };
+    const proj = Object.create(null);
+    let far = 0;
+    const phoneWin = await bootFreshWindow(DATAMAP, undefined, w => {
+      w.matchMedia = (q) => ({ matches: /\(\s*pointer\s*:\s*coarse\s*\)/.test(q), media: q,
+        addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+      const pm = Object.create(null);
+      pm.latLngToContainerPoint = (ll) => {
+        const k = ll[0] + "," + ll[1];
+        if (!proj[k]) { far += 1; proj[k] = { x: 1000 + 100 * far, y: 1000 }; }
+        return proj[k];
+      };
+      pm.getContainer = () => w.document.getElementById("map");
+      // Leaflet returns the map from each of these, which is what L.map(...).fitBounds(...) relies on.
+      ["on", "addLayer", "fitBounds", "setView", "invalidateSize", "addControl"].forEach(fn => { pm[fn] = () => pm.__self; });
+      const base = w.L;
+      w.L = new Proxy(function () { }, {
+        get: (tg, prop) => {
+          if (prop === "then") return undefined;
+          if (prop === "map") return (id, o) => { made.opts = o || {}; return recProxy(pm); };
+          if (prop === "canvas") return (o) => { made.canvas.push(o); return { options: o }; };
+          if (prop === "circleMarker") return (ll, o) => recLayer("circleMarker", ll, o, true);
+          return base[prop];
+        },
+        apply: () => stub(), construct: () => stub(),
+      });
+    });
+    const pa = phoneWin.__api, pdoc = phoneWin.document;
+    ok(made.canvas.length === 1 && made.canvas[0].tolerance === 8,
+      "phone: a coarse pointer builds one canvas renderer with an 8px tolerance, got " + JSON.stringify(made.canvas));
+    ok(made.opts.renderer && made.opts.renderer.options.tolerance === 8 && made.opts.preferCanvas === true &&
+      made.opts.attributionControl === false,
+      "phone: the map takes that renderer beside its own two options, got " + JSON.stringify(made.opts));
+    const st = (id) => pa.station(id);
+    const at = (id, x, y) => { const s = st(id); proj[s.lat + "," + s.lon] = { x, y }; };
+    const tap = (id, x, y) => { const mk = pa.stationMarker(id); ok(mk && (mk.handlers.click || []).length === 1,
+      "phone: " + id + " carries one tap handler"); mk.handlers.click[0]({ containerPoint: { x, y } }); };
+    const drawerOn = () => pdoc.getElementById("drawer").classList.contains("open");
+    // A tap 6px from an isolated dot opens that station, as a tap on the dot does.
+    at("A1", 100, 100);
+    tap("A1", 106, 100);
+    ok(drawerOn() && pdoc.getElementById("drawer").innerHTML.indexOf("A1") >= 0,
+      "phone: a tap 6px from an isolated dot must open that station");
+    ok(!pdoc.getElementById("tapChooser"), "phone: a tap that reaches one dot raises no chooser");
+    pa.closeDrawer();
+    // A tap between two dots 10px apart reaches both: the chooser lists them, and nothing opens yet.
+    at("A2", 110, 100);
+    tap("A1", 105, 100);
+    const ch = pdoc.getElementById("tapChooser");
+    ok(ch && ch.getAttribute("role") === "dialog", "phone: a tap between two dots must raise the chooser");
+    ok(!drawerOn(), "phone: an ambiguous tap must not open either station before the reader chooses");
+    const items = [...ch.querySelectorAll("button.tapchooser-item")];
+    ok(items.length === 2, "phone: the chooser lists the two stations the tap reached, got " + items.length);
+    ok(/A1/.test(items[0].textContent) && /A2/.test(items[1].textContent) &&
+      items.every(b => /Alpha Survey/.test(b.textContent)),
+      "phone: each entry names its station and its survey, equal distances in catalogue order, got " +
+      JSON.stringify(items.map(b => b.textContent)));
+    items[1].dispatchEvent(new phoneWin.MouseEvent("click", { bubbles: true }));
+    ok(!pdoc.getElementById("tapChooser"), "phone: choosing an entry closes the chooser");
+    ok(drawerOn() && pdoc.getElementById("drawer").innerHTML.indexOf("A2") >= 0,
+      "phone: choosing an entry opens that station");
+    pa.closeDrawer();
+    // Escape and the chooser's own close control both dismiss it without opening anything.
+    tap("A1", 105, 100);
+    pdoc.dispatchEvent(new phoneWin.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    ok(!pdoc.getElementById("tapChooser") && !drawerOn(), "phone: Escape dismisses the chooser and opens nothing");
+    tap("A1", 105, 100);
+    const close = pdoc.querySelector("#tapChooser .tapchooser-close");
+    ok(close && close.getAttribute("aria-label") === "Close", "phone: the chooser carries a labelled close control");
+    close.dispatchEvent(new phoneWin.MouseEvent("click", { bubbles: true }));
+    ok(!pdoc.getElementById("tapChooser") && !drawerOn(), "phone: the close control dismisses the chooser");
   }
 
   process.exit(0);

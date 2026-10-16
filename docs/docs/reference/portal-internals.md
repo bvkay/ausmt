@@ -4978,6 +4978,29 @@ here as AU_HOME_BOUNDS and shared by the initial fit and buildMarkers()'s HOME_B
 cannot drift apart.
 ```
 
+#### A coarse pointer reaches a dot within TAP_TOLERANCE px of its edge
+
+A station dot is 1.8px in radius at the national view, and in a simulation of 2,000 thumb taps on a
+375 x 390 map at zoom 3, 95 percent had more than one station within 10px
+(`AusMT_2026/mobile-audit/measurements.json`, `markers`). So on a coarse pointer
+(`matchMedia("(pointer:coarse)")`, read once at load into `COARSE_POINTER`) the map is built on
+`L.canvas({tolerance:8})`: Leaflet's canvas hit test then counts a tap as on a dot when it lands
+within the dot's radius, plus half its stroke, plus 8px (`tapReach`), which is 9.8px at the national
+view.
+
+The dot's click handler on a coarse pointer is `onStationTap`. It projects every visible dot to
+container pixels and asks `tapCandidates` which of them the tap reaches, nearest first and then in
+catalogue order. One dot opens that station, as a tap always did. More than one raises a small
+chooser (`#tapChooser`, a `role="dialog"` listing each station's id and survey as 44px buttons, with
+a labelled close control): choosing an entry opens it, and the close control, Escape, a tap on the
+map, a pan or a zoom dismiss it. The chooser is built with `createElement` and `textContent` and
+sits in `#content` beside the map rather than inside Leaflet's container, so its taps never reach the
+map. On a fine pointer the map takes no renderer option, so Leaflet builds its own, and a dot click
+opens its station directly, exactly as before. `tools/map_dots_test.js` pins the reach and the
+candidates on plain numbers (a tap 6px from an isolated dot reaches it alone; a tap between two dots
+10px apart reaches both); `tools/interaction_test.js` boots a window that answers the coarse query
+and drives both cases through the bound handler and the chooser.
+
 #### THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here
 
 ```text
