@@ -563,7 +563,9 @@ def test_every_footer_is_a_wrapping_flex_row_whose_side_zones_take_equal_zero_ba
 #
 # THE RETURN TO FLOW IS A MEASUREMENT: at 560px and below at least one surface is a three-row footer,
 # which on a phone would sit over most of the screen, so below it the footer is an ordinary block at
-# the end of the document.
+# the end of the document. The map page returns its footer to flow from 760px down as well, where the
+# page scrolls and the panel follows the map; that phone form is pinned in tests/test_phone_chrome.py,
+# and the rules here read the base rules outside every query.
 _FLOW_BELOW = 560
 _STICKY = ("position:sticky", "bottom:0")
 

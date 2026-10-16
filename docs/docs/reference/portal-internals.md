@@ -90,11 +90,11 @@ engine's sheets.
 ```text
 The right zone is the tagline, "Magnetotelluric Data Discovery & Access", at 14px in --muted, on
 one line. The zone is zero-basis, so a nowrap line wider than the zone would spill out of its left
-edge and paint over the centre zone's right end, 92px of it at 761px of viewport: all of the About
-control and the end of the Collections tab. The tagline also takes min-width:0, overflow:hidden and
-text-overflow:ellipsis, so where the zone is narrower than the line it ends in an ellipsis inside
-the zone. Measured in Chrome with the fallback stack, that band runs from 761px to 976px of
-viewport. Stated character-identically on every surface; pinned by
+edge and paint over the centre zone's right end, all of the About control and the end of the
+Collections tab. The tagline also takes min-width:0, overflow:hidden and text-overflow:ellipsis, so
+where the zone is narrower than the line it ends in an ellipsis inside the zone. Measured in Chrome
+with the fallback stack, that band ran up to 976px of viewport; at 900px and narrower the phone row
+hides the tagline, so the band now starts at 901px. Stated character-identically on every surface; pinned by
 tests/test_header_geometry_parity.py and tests/test_header_vertical_geometry.py.
 ```
 
@@ -577,8 +577,8 @@ The hand-off snackbar sits ABOVE #toast so the two can coexist (a hand-off can f
      within its dwell). It carries at most one action button; it never carries a progress bar. See docs:
      portal internals, index.html.
 
-At narrow widths the three zones stack full-width and left-align, so the centred nav and the
-       right-aligned counts do not read as stranded fragments once they wrap.
+At 900px and narrower the three zones give way to the one phone row (PHONE_HEADER in
+       portal/tests/chrome_contract.py): the mark and the name at left, the tabs at right.
 
 ```
 
@@ -717,6 +717,9 @@ safe-area insets, with the drag handle hidden. Its plots are `max-width:100%; he
 372px design width scales down to the drawer; the viewBox keeps the drawing's proportions. Because
 the closed drawer is fixed rather than absolute, it does not widen the document: 375px, where an
 absolute closed drawer made it 758px (`horizontal` in the measurements file).
+
+In the same Chromium pane at 375 x 812 the open drawer measured 375 x 812 at the origin, its close
+control and tabs 44px tall, and its three plots 338px wide with nothing scrolling sideways.
 
 **The /surveys controls on a phone.** On the engine's /surveys page each control is a label
 holding its select, laid out in a wrapping flex row; a flex item's floor is its content, so a select
@@ -5013,7 +5016,10 @@ map. On a fine pointer the map takes no renderer option, so Leaflet builds its o
 opens its station directly, exactly as before. `tools/map_dots_test.js` pins the reach and the
 candidates on plain numbers (a tap 6px from an isolated dot reaches it alone; a tap between two dots
 10px apart reaches both); `tools/interaction_test.js` boots a window that answers the coarse query
-and drives both cases through the bound handler and the chooser.
+and drives both cases through the bound handler and the chooser. In the desktop app's Chromium pane
+emulating a 375 x 812 touch phone, on the five-station interaction fixture at zoom 3 with the real
+Leaflet: a click between two dots 8.6px apart raised the chooser with both stations as 44px rows and
+opened neither, and a click 6px beside an isolated dot opened that station.
 
 #### THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here
 
