@@ -5040,11 +5040,21 @@ chooser (`#tapChooser`, a `role="dialog"` listing each station's id and survey a
 a labelled close control): choosing an entry opens it, and the close control, Escape, a tap on the
 map, a pan or a zoom dismiss it. The chooser is built with `createElement` and `textContent` and
 sits in `#content` beside the map rather than inside Leaflet's container, so its taps never reach the
-map. On a fine pointer the map takes no renderer option, so Leaflet builds its own, and a dot click
+map. The bottom sheet stacks over `#content`, so on the phone layout the chooser keeps to the map the
+sheet leaves clear (`sheetClearArea` in `sheet.js`, read from the sheet's own box): `tapChooserBox`
+places it below the tap when it fits there, above the tap when it fits there, and otherwise against
+the outer edge of the side with more room, 8px in from the clear map's edges, with an inline
+`max-height` of the clear height less 16px; beside the tablet card the clear map starts right of the
+card. Off the phone layout the chooser keeps the placement it always had. In the same pane at
+375 x 812, with the sheet at half (its edge at 406), a tap 2px above the sheet edge raised the
+chooser from 258 to 392 with its close control and both rows hit-testing to themselves; at peek
+(edge 692) the same tap placed it from 544 to 678. At 765 x 1024 with the card at half, a tap at
+x 600 placed it from 480 to 720 across, right of the card's 436. On a fine pointer the map takes no renderer option, so Leaflet builds its own, and a dot click
 opens its station directly, exactly as before. `tools/map_dots_test.js` pins the reach and the
 candidates on plain numbers (a tap 6px from an isolated dot reaches it alone; a tap between two dots
-10px apart reaches both); `tools/interaction_test.js` boots a window that answers the coarse query
-and drives both cases through the bound handler and the chooser. In the desktop app's Chromium pane
+10px apart reaches both) and the chooser's placement inside a clear area; `tools/interaction_test.js` boots a window that answers the coarse query
+and drives both cases through the bound handler and the chooser; a second window that also answers
+the phone query holds the chooser above the sheet edge at half and at peek. In the desktop app's Chromium pane
 emulating a 375 x 812 touch phone, on the five-station interaction fixture at zoom 3 with the real
 Leaflet: a click between two dots 8.6px apart raised the chooser with both stations as 44px rows and
 opened neither, and a click 6px beside an isolated dot opened that station.
@@ -5661,7 +5671,9 @@ drawer goes back to where `index.html` declares it, in `.content`.
 After a station opens in the sheet, `sheetRecentre` pans the map (`map.panBy`, unanimated under
 reduced motion) so the station sits at the centre of the part of the map the sheet leaves clear:
 above the sheet on a phone, right of the 420px card from 761px (`sheetFreeArea`). A station with no
-position is not panned.
+position is not panned. `sheetClearArea` gives the same area in the content box's pixels for the
+tap chooser in `map.js`, taking the visible height from the sheet's own box once the page has laid
+it out and from the current snap height before then.
 
 #### Width changes
 

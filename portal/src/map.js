@@ -183,8 +183,7 @@ function tapReach(r,w,tol){return r+(w>0?w/2:0)+tol;}
 function tapCandidates(tap,pts,reach){
   return pts.map(p=>({i:p.i,d:Math.sqrt((p.x-tap.x)*(p.x-tap.x)+(p.y-tap.y)*(p.y-tap.y))}))
     .filter(c=>c.d<=reach).sort((a,b)=>a.d-b.d||a.i-b.i).map(c=>c.i);}
-// A dot tap on a coarse pointer: one reachable dot opens, several raise the chooser. See docs: portal
-// internals, map.js.
+// A dot tap on a coarse pointer. See docs: portal internals, map.js.
 function onStationTap(s,e){
   const tap=e&&e.containerPoint;
   if(!tap||typeof tap.x!=="number"||typeof map.latLngToContainerPoint!=="function"){openStation(s.i);return;}
@@ -195,8 +194,18 @@ function onStationTap(s,e){
   if(near.length<=1){openStation(s.i);return;}
   showTapChooser(near,tap);
 }
+// PURE: the chooser box in the clear map. See docs: portal internals, map.js.
+function tapChooserBox(tap,area,natural){
+  const pad=8,gap=12,wide=240;
+  const cap=Math.max(0,area.bottom-area.top-2*pad),need=natural>0?Math.min(natural,cap):cap;
+  const left=Math.max(area.left+pad,Math.min(Math.max(area.left+pad,area.right-wide-pad),tap.x-wide/2));
+  let top;
+  if(tap.y+gap+need<=area.bottom-pad)top=tap.y+gap;
+  else if(tap.y-gap-need>=area.top+pad)top=tap.y-gap-need;
+  else top=(area.bottom-tap.y>tap.y-area.top)?area.bottom-pad-need:area.top+pad;
+  return {left:left,top:top,maxHeight:need};}
 function closeTapChooser(){const el=document.getElementById("tapChooser");if(el&&el.parentNode)el.parentNode.removeChild(el);}
-// The chooser sits in #content beside the map, outside Leaflet's container, so its taps never reach the map.
+// The chooser sits in #content, outside Leaflet, so its taps never reach the map.
 function showTapChooser(idxs,tap){
   closeTapChooser();
   const host=document.getElementById("content");if(!host)return;
@@ -215,9 +224,16 @@ function showTapChooser(idxs,tap){
     b.append(id,sv);b.onclick=()=>{closeTapChooser();openStation(i);};list.appendChild(b);});
   box.appendChild(list);
   const w=host.clientWidth||0,h=host.clientHeight||0;
-  box.style.left=Math.max(8,Math.min(Math.max(8,w-248),tap.x-120))+"px";
-  if(h&&tap.y>h/2)box.style.bottom=Math.max(8,h-tap.y+12)+"px";else box.style.top=(tap.y+12)+"px";
-  host.appendChild(box);
+  if(typeof sheetActive==="function"&&sheetActive()){
+    host.appendChild(box);
+    const hostTop=host.getBoundingClientRect?host.getBoundingClientRect().top:0;
+    const p=tapChooserBox(tap,sheetClearArea(w,h,hostTop),box.scrollHeight||0);
+    box.style.left=p.left+"px";box.style.top=p.top+"px";box.style.maxHeight=p.maxHeight+"px";
+  }else{
+    box.style.left=Math.max(8,Math.min(Math.max(8,w-248),tap.x-120))+"px";
+    if(h&&tap.y>h/2)box.style.bottom=Math.max(8,h-tap.y+12)+"px";else box.style.top=(tap.y+12)+"px";
+    host.appendChild(box);
+  }
   const first=list.querySelector("button");if(first&&first.focus)first.focus({preventScroll:true});
 }
 if(COARSE_POINTER){

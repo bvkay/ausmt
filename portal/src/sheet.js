@@ -55,6 +55,12 @@ function sheetReleaseDrawer(){
 function sheetFreeArea(w,h,card,visible){
   return card?{left:Math.min(w,SHEET_CARD_GAP_PX+SHEET_CARD_W_PX),top:0,right:w,bottom:h}
              :{left:0,top:0,right:w,bottom:Math.max(0,h-visible)};}
+// See docs: portal internals, sheet.js.
+function sheetClearArea(w,h,hostTop){
+  let vis=sheetSnapHeights()[sheetSnapState()];
+  const r=_sheetEl&&_sheetEl.getBoundingClientRect?_sheetEl.getBoundingClientRect():null;
+  if(r&&r.height>0)vis=hostTop+h-r.top;
+  return sheetFreeArea(w,h,sheetCard(),Math.max(0,Math.min(h,vis)));}
 function sheetRecentre(ll){
   if(!sheetActive()||typeof map==="undefined"||!map||typeof map.panBy!=="function"||
      typeof map.getSize!=="function"||typeof map.latLngToContainerPoint!=="function")return;

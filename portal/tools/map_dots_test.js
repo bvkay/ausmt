@@ -30,7 +30,7 @@ const WANT = [
                            "DOT_R_Z4", "DOT_R_Z5", "DOT_W_Z4", "DOT_W_Z5", "DOT_W_Z6", "DOT_W_HIGH",
                            "MARKER_FILL_OPACITY", "MARKER_DIM_FILL", "MARKER_DIM_STROKE", "TAP_TOLERANCE"] },
   { kind: "fn", names: ["radiusForZoom", "weightForZoom", "hasPosition", "dimStyleFor", "tapReach",
-                        "tapCandidates"] },
+                        "tapCandidates", "tapChooserBox"] },
 ];
 // NOTE for anyone adding a name here: the brace matcher below treats a quote character as a string
 // delimiter WITHOUT skipping comments first, so an apostrophe inside a comment in an extracted function
@@ -64,7 +64,7 @@ const ctx = { Math, console, Set, Map, Array, Object, Number, isFinite, JSON };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
 vm.runInContext(code + "\nglobalThis.__api={DOT_R_FLOOR,DOT_R_CEIL,DOT_R_BASE,DOT_R_Z4,DOT_R_Z5,DOT_W_Z4,DOT_W_Z5,DOT_W_Z6,DOT_W_HIGH," +
-  "radiusForZoom,weightForZoom,hasPosition,dimStyleFor,TAP_TOLERANCE,tapReach,tapCandidates};", ctx);
+  "radiusForZoom,weightForZoom,hasPosition,dimStyleFor,TAP_TOLERANCE,tapReach,tapCandidates,tapChooserBox};", ctx);
 const A = ctx.__api;
 
 let failed = 0;
@@ -157,6 +157,38 @@ const nearer = A.tapCandidates({ x: 103, y: 100 }, [{ i: 9, x: 100, y: 100 }, { 
 ok(JSON.stringify(nearer) === "[9,2]", "the nearer dot is listed first, got " + JSON.stringify(nearer));
 ok(A.tapCandidates({ x: 112, y: 100 }, [{ i: 1, x: 100, y: 100 }], reach4).length === 0,
   "a tap 12px from a dot is beyond the 9.8px reach and reaches nothing");
+
+// ---- where the chooser goes -----------------------------------------------------------------------
+// The box is placed inside the map the sheet leaves clear (host pixels), 8px in from its edges and
+// 12px from the tap: below the tap when it fits, above when it fits there, else against the outer
+// edge of the side with more room. It is never taller than the clear map less 16px. On a 375 x 760
+// map with the sheet at half, the clear map is 0 to 354.
+const half = { left: 0, top: 0, right: 375, bottom: 354 };
+const fits = (b, a) => b.top >= a.top + 8 && b.top + b.maxHeight <= a.bottom - 8 &&
+  b.left >= a.left + 8 && b.left + 240 <= a.right - 8;
+let b = A.tapChooserBox({ x: 104, y: 352 }, half, 140);
+ok(b.top === 352 - 12 - 140 && b.maxHeight === 140 && fits(b, half),
+  "a tap 2px above the sheet opens the chooser above the tap, got " + JSON.stringify(b));
+b = A.tapChooserBox({ x: 104, y: 40 }, half, 140);
+ok(b.top === 52 && b.maxHeight === 140 && fits(b, half), "a tap near the top opens it below the tap, got " + JSON.stringify(b));
+b = A.tapChooserBox({ x: 104, y: 200 }, half, 352);
+ok(b.maxHeight === 338 && b.top === 8 && fits(b, half),
+  "a box taller than the clear map is capped at the clear height less 16px, got " + JSON.stringify(b));
+b = A.tapChooserBox({ x: 104, y: 300 }, half, 0);
+ok(b.maxHeight === 338 && fits(b, half), "an unmeasured box takes the whole clear height, got " + JSON.stringify(b));
+b = A.tapChooserBox({ x: 104, y: 330 }, half, 330);
+ok(b.top === 8 && b.maxHeight === 330 && fits(b, half),
+  "when neither side fits and the room is above, it sits against the top of the clear map, got " + JSON.stringify(b));
+b = A.tapChooserBox({ x: 104, y: 60 }, half, 300);
+ok(b.top === 354 - 8 - 300 && fits(b, half),
+  "and against the sheet edge when the room is below, got " + JSON.stringify(b));
+// Beside the 420px card the clear map starts at 436, so the box never slides under the card.
+const card = { left: 436, top: 0, right: 768, bottom: 972 };
+b = A.tapChooserBox({ x: 450, y: 300 }, card, 140);
+ok(b.left === 444 && b.top === 312 && fits(b, card), "beside the card the box stays right of it, got " + JSON.stringify(b));
+// With the whole map clear the left edge is the one the chooser always had.
+b = A.tapChooserBox({ x: 370, y: 100 }, { left: 0, top: 0, right: 375, bottom: 760 }, 140);
+ok(b.left === 375 - 248, "the box keeps 8px from the right edge, got " + JSON.stringify(b));
 
 if (failed) { console.error(failed + " map-dot assertion(s) failed"); process.exit(1); }
 console.log("MAP DOTS OK");

@@ -14,7 +14,8 @@ The driver FAILS (and so does this test) if:
 - a survey-name Find query blanks the map (passes() must also match s.survey);
 - at a phone media query the bottom sheet does not cycle, drag-snap, host the drawer at half, hand the
   filters back at their previous height on Back and Escape, carry the counts in its peek row, or
-  degrade to its half default without src/sheet.js; or, at desktop width, the sheet touches anything.
+  degrade to its half default without src/sheet.js; or, at desktop width, the sheet touches anything;
+- on a coarse pointer at a phone media query, the multi-station chooser reaches under the sheet.
 
 Skips when Node or the jsdom dev-dependency is absent (CI runs `npm ci` in portal/ first)."""
 import json

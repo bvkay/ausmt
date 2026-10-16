@@ -6301,6 +6301,82 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ok(!pdoc.getElementById("tapChooser") && !drawerOn(), "phone: the close control dismisses the chooser");
   }
 
+  // ---- PHONE: the chooser keeps to the map the sheet leaves clear ---------------------------------
+  // A window that answers both the coarse pointer and the phone query, so the sheet is live under the
+  // chooser. jsdom has no layout, so the content box and the sheet are given the 375 x 812 phone
+  // geometry measured in a browser: the map 52 to 812 under the header, the sheet at half from 406.
+  // The chooser stacks under the sheet, so every row it draws must lie above the sheet edge.
+  {
+    const proj = Object.create(null);
+    let far = 0;
+    const cw = await bootFreshWindow(DATAMAP, undefined, w => {
+      Object.defineProperty(w, "innerHeight", { value: 812, configurable: true });
+      w.matchMedia = (q) => ({ matches: /\(\s*pointer\s*:\s*coarse\s*\)/.test(q) || /max-width\s*:\s*900px/.test(q), media: q,
+        addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+      const pm = Object.create(null);
+      pm.latLngToContainerPoint = (ll) => {
+        const k = ll[0] + "," + ll[1];
+        if (!proj[k]) { far += 1; proj[k] = { x: 1000 + 100 * far, y: 1000 }; }
+        return proj[k];
+      };
+      pm.getContainer = () => w.document.getElementById("map");
+      ["on", "addLayer", "fitBounds", "setView", "invalidateSize", "addControl", "panBy"].forEach(fn => { pm[fn] = () => pm.__self; });
+      pm.getSize = () => ({ x: 375, y: 760 });
+      const base = w.L;
+      w.L = new Proxy(function () { }, {
+        get: (tg, prop) => {
+          if (prop === "then") return undefined;
+          if (prop === "map") return () => recProxy(pm);
+          if (prop === "canvas") return (o) => ({ options: o });
+          if (prop === "circleMarker") return (ll, o) => recLayer("circleMarker", ll, o, true);
+          return base[prop];
+        },
+        apply: () => stub(), construct: () => stub(),
+      });
+    });
+    const ca = cw.__api, cdoc = cw.document;
+    const host = cdoc.getElementById("content"), csheet = cdoc.getElementById("sheet");
+    Object.defineProperty(host, "clientWidth", { value: 375, configurable: true });
+    Object.defineProperty(host, "clientHeight", { value: 760, configurable: true });
+    host.getBoundingClientRect = () => ({ top: 52, left: 0, right: 375, bottom: 812, width: 375, height: 760 });
+    const sheetAt = (top) => { csheet.getBoundingClientRect = () => ({ top, left: 0, right: 375, bottom: top + 760, width: 375, height: 760 }); };
+    const at = (id, x, y) => { const s = ca.station(id); proj[s.lat + "," + s.lon] = { x, y }; };
+    const tap = (id, x, y) => ca.stationMarker(id).handlers.click[0]({ containerPoint: { x, y } });
+    const px = (v) => (v === "" ? NaN : parseFloat(v));
+    const clear = (where, edge) => {
+      const ch = cdoc.getElementById("tapChooser");
+      ok(ch, "chooser over the sheet: a tap between two dots " + where + " must raise the chooser");
+      const top = px(ch.style.top), maxH = px(ch.style.maxHeight);
+      ok(ch.style.bottom === "" && isFinite(top) && isFinite(maxH),
+        "chooser over the sheet: the box is placed by its top and capped by an inline max-height " + where +
+        ", got top " + JSON.stringify(ch.style.top) + " bottom " + JSON.stringify(ch.style.bottom) + " max-height " + JSON.stringify(ch.style.maxHeight));
+      ok(top >= 8 && top + maxH <= edge - 8,
+        "chooser over the sheet: every row lies in the clear map above the sheet edge at " + edge + "px " + where +
+        ", got top " + top + " and max-height " + maxH);
+      ok(maxH >= 2 * 44, "chooser over the sheet: the box keeps room for its head and a row " + where + ", got " + maxH);
+      ch.querySelector(".tapchooser-close").dispatchEvent(new cw.MouseEvent("click", { bubbles: true }));
+    };
+    ok(csheet.dataset.snap === "half", "chooser over the sheet: the sheet starts at half");
+    // At half with no measurable sheet box, the clear map ends at the half snap: 760 - 406 = 354.
+    at("A1", 100, 352); at("A2", 108, 352);
+    tap("A1", 104, 352);
+    clear("2px above the sheet at half (snap heights)", 354);
+    // The same tap with the sheet box measured at half.
+    sheetAt(406);
+    tap("A1", 104, 352);
+    clear("2px above the sheet at half (measured box)", 354);
+    // A tap near the top of the clear map still keeps the box above the sheet.
+    at("A1", 100, 40); at("A2", 108, 40);
+    tap("A1", 104, 40);
+    clear("near the top of the map at half", 354);
+    // At peek the sheet edge is 692 on screen, 640 in the content box.
+    cw.sheetSnap("peek");
+    sheetAt(692);
+    at("A1", 100, 638); at("A2", 108, 638);
+    tap("A1", 104, 638);
+    clear("2px above the sheet at peek", 640);
+  }
+
   // ---- PHONE: the bottom sheet, the drawer in it, and the counts in its peek row ------------------
   // A fresh window whose matchMedia answers the phone query (and, when `card` is set, the tablet band),
   // with every query object kept so a leg can fire a change. The map records panBy, and projects each
