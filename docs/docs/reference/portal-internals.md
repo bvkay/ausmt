@@ -4716,7 +4716,9 @@ and is selected as a drawn shape selects it; the selection exports leave its fil
 exactly as at desktop. A view panned across the antimeridian reports longitudes past 180, so each
 station is also tried at its longitude plus and minus 360. `selectInView()` clears any drawn shape,
 because `refresh()` re-derives the selection from shapes, and replaces the selection with the
-stations in the map's current view (`map.getBounds()`).
+stations in the map's current view (`map.getBounds()`). The map runs under the sheet on a phone and
+under the card in the tablet band, so the view, its count and the selection include the stations the
+panel covers, not only those left visible beside it.
 
 The Select pane shows the control as "Select what's in view" (`#selInView`, a `type="button"` with
 `aria-describedby` pointing at the count) with the number it would take beside it (`#selInViewN`,
@@ -5213,8 +5215,12 @@ views (a 1.8px dot with a 0.5px edge).
 
 The dot's click handler on a coarse pointer is `onStationTap`. It projects every visible dot to
 container pixels and asks `tapCandidates` which of them the tap reaches, nearest first and then in
-catalogue order. One dot opens that station, as a tap always did. More than one raises a small
-chooser (`#tapChooser`, a `role="dialog"` listing each station's id and survey as 44px buttons, with
+catalogue order. The reach is measured from the finger: for a circle marker of radius 10px or less
+Leaflet hands the click the dot's own centre as `containerPoint`, so `tapPoint` reads the point from
+the DOM event (`map.mouseEventToContainerPoint(e.originalEvent)`) and falls back to `containerPoint`
+only when the event carries no position. Measured from the hit dot's centre instead, a tap between
+two dots farther apart than the reach would act on the one Leaflet hit without asking. One dot opens
+that station, as a tap always did. More than one raises a small chooser (`#tapChooser`, a `role="dialog"` listing each station's id and survey as 44px buttons, with
 a labelled close control): choosing an entry opens it, and the close control, Escape, a tap on the
 map, a pan or a zoom dismiss it. The chooser is built with `createElement` and `textContent` and
 sits in `#content` beside the map rather than inside Leaflet's container, so its taps never reach the
@@ -5235,14 +5241,22 @@ and drives both cases through the bound handler and the chooser; a second window
 the phone query holds the chooser above the sheet edge at half and at peek. In the desktop app's Chromium pane
 emulating a 375 x 812 touch phone, on the five-station interaction fixture at zoom 3 with the real
 Leaflet: a click between two dots 8.6px apart raised the chooser with both stations as 44px rows and
-opened neither, and a click 6px beside an isolated dot opened that station.
+opened neither, and a click 6px beside an isolated dot opened that station. In headless Chrome
+emulating a 375 x 812 touch phone (`pointer:coarse` true) on the same fixture with its 36-station
+grid, at zoom 4 (reach 9.8px) with D1 and X22 11px apart, a touch tap at their midpoint in Select
+raised the chooser with both and changed nothing; measured from the hit dot's centre, the same tap
+raised no chooser and took X22 out of the selection.
 
 **A tap in Select on the phone layout toggles.** Every dot has one click handler, `onMarkerClick`.
 While the phone layout is active on the map view (`sheetActive()`) and the panel is in Select
 (`sidebarMode==="select"`), it passes `toggleSelected` (`filters.js`) to `onStationTap` as the action,
 so a tap adds its station to the selection or takes it out and the drawer stays shut; when the tap
 reaches more than one dot the chooser lists them, each entry carrying `aria-pressed` for whether it
-is selected, and the entry chosen is toggled. A fine pointer at these widths reaches only the dot it
+is selected, and the entry chosen is toggled. A selected entry also shows it: at 900px and narrower
+`.tapchooser-item[aria-pressed="true"]` draws a 4px `--accent` bar on its left edge and a tick after
+its id (`.tc-id::after`), so a sighted reader sees which way a choice goes. In that same headless
+run the selected X22 entry computed `rgb(40, 37, 114) 4px 0px 0px 0px inset` and a tick in the same
+colour, and the unselected D1 entry neither. A fine pointer at these widths reaches only the dot it
 clicked (the reach takes no tolerance without a coarse pointer). In Browse, and at every width above
 900px whatever the mode, the handler does what it did: `onStationTap` on a coarse pointer and
 `openStation` otherwise. `toggleSelected` clears any drawn shape first, because `refresh()` re-derives
@@ -5256,7 +5270,10 @@ the selection on the phone layout and nothing above 900px, so a desktop window n
 `interaction_test.js` drives the bound handler at the phone query and in the tablet band (a tap
 toggles, a second tap untoggles, the stroke follows, the peek row's counts follow, Browse opens the
 drawer, above 900px Select opens the drawer), a coarse window drives the chooser in Select and in
-Browse, and the desktop leg holds that a click in Select still opens the drawer.
+Browse and hands it Leaflet's own event shape (the hit dot's centre as `containerPoint`, the finger 5px
+from it in `originalEvent`, a second dot 11px away) to hold that the chooser opens and nothing is
+toggled, and the desktop leg holds that a click in Select still opens the drawer.
+`test_phone_chrome.py` pins the chooser's selected mark to the 900px query.
 
 #### THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here
 

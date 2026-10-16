@@ -91,8 +91,10 @@ floating card at the bottom left, so the map stays in view beside it. The footer
 a phone and its contents, the catalogue link and the line naming AuScope, end the sheet beside the
 About link. On phones and in the tablet card, selecting stations means what is on the screen rather
 than drawing a shape with one finger (Owner decision 2026-10-16): "Select what's in view" takes every
-station the map shows that passes the filters, with the number it would take beside it, and in Select
-a tap on a station adds it or takes it out instead of opening its details. The selection is listed
+station within the map's edges that passes the filters, those under the panel included, with the
+number it would take beside it, and in Select a tap on a station adds it or takes it out instead of
+opening its details. Where a tap lands between stations, a short list asks which one, and marks the
+ones already selected. The selection is listed
 in the sheet, a row per station with a control that removes it, above the downloads, and a selected
 station is ringed in the colour a drawn selection shape is drawn in. The drawing tools, the map's
 toolbar and the panel's two draw buttons, are hidden at these widths, and the downloads are the
