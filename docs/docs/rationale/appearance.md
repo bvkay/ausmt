@@ -75,16 +75,18 @@ name at the left, and the section tabs at the right, each at least 44px square s
 (Owner decision 2026-10-14). The tagline is hidden. On the map page the tabs are Surveys and
 Collections, with no Map tab, because the page is the map; the Surveys, Collections, About and other
 static pages show Map, Surveys and Collections in the same row. About leaves the header at these
-widths and becomes a link at the end of the map page's panel. The row is the same on every page, as
+widths and becomes a link at the end of the map page's sheet. The row is the same on every page, as
 the desktop header is.
 
 900px is the line between the two layouts (Owner decision 2026-10-16). Above it the side-by-side map
-and panel stay exactly as they are on a desktop. Below it the map comes first: on a phone the page
-scrolls, the map takes the top of the screen and the panel, its exports and the footer follow it,
-and a station's details fill the screen. The approved design goes further, with the map filling
-the screen and the panel in a sheet that slides up over it, a floating card on a small tablet; that
-follows in later changes, and the footer's contents move into the sheet then (Owner decision
-2026-10-14). On phones, selecting stations will mean "select what is in view" rather than drawing a
+and panel stay exactly as they are on a desktop. Below it the map comes first: the map fills the
+screen under the header, and the panel lives in a sheet that slides up over it, with three heights a
+thumb can pick: a peek that shows only the counts and Browse and Select, half the screen, and the
+whole screen below the header (Owner decision 2026-10-14). A station's details open in the same sheet,
+in place of the filters, with a Back control that returns to them. From 761px to 900px the sheet is a
+floating card at the bottom left, so the map stays in view beside it. The footer leaves the screen on
+a phone and its contents, the catalogue link and the line naming AuScope, end the sheet beside the
+About link. On phones, selecting stations will mean "select what is in view" rather than drawing a
 shape with one finger, so the drawing tools are already hidden at these widths.
 
 On a touch screen every control a finger is expected to hit is at least 44px in each direction,

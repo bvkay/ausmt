@@ -394,11 +394,6 @@
   .snackbar .snack-note{display:block;color:var(--muted);font-size:12px;margin-top:3px}
   .snackbar .snack-act{flex:none;background:var(--accent);color:var(--accent-ink);border:0;border-radius:4px;
     padding:6px 10px;font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer}
-  @media (max-width:760px){html,body{height:auto}body{overflow:visible;min-height:100vh}main{flex-direction:column;flex:none}
-    aside.filters{width:100%!important;order:2;max-height:none}.resizer{display:none}
-    .content{order:1;flex:none;height:min(55vh,480px);height:min(55svh,480px)}footer{position:static}
-    #drawer{position:fixed;inset:0;width:auto!important;max-width:none;padding:calc(16px + env(safe-area-inset-top,0px)) 18px calc(16px + env(safe-area-inset-bottom,0px))}
-    #drawer svg{max-width:100%;height:auto}#drawerResizer{display:none!important}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
 .emptyoverlay{position:absolute;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;
@@ -569,7 +564,8 @@
   .collmapbtn{color:var(--accent)}
 
   /* See docs: portal internals, index.html, phone and touch. */
-  .panelabout{display:none}
+  .sheet{display:contents}
+  .sheethandle,.sheetpeek,.sheetbar,.sheetfoot{display:none}
   .tapchooser{position:absolute;z-index:1000;width:240px;max-width:calc(100% - 16px);max-height:45%;overflow-y:auto;
     background:var(--surface);border:1px solid var(--accent);border-radius:8px;box-shadow:var(--shadow);font-size:14px}
   .tapchooser-head{display:flex;align-items:center;justify-content:space-between;padding:0 0 0 12px;color:var(--muted);
@@ -583,7 +579,49 @@
   .tapchooser-item .tc-sv{font-size:12.5px;color:var(--muted)}
   @media (max-width:900px){
     .leaflet-draw.leaflet-control{display:none}
-    .panelabout{display:inline-flex;align-items:center;align-self:flex-start;min-height:44px;color:var(--accent);font-size:14px;font-weight:700;text-decoration:none}
+    body{height:100dvh}
+    footer{display:none}
+    .content{overflow:hidden}
+    .resizer,#drawerResizer{display:none!important}
+    .maplegend{left:auto;right:10px}
+    .introwelcome{position:fixed;z-index:1300}
+    .sheet{--sheet-full:calc(100dvh - 52px - env(safe-area-inset-top,0px));--sheet-peek:calc(120px + env(safe-area-inset-bottom,0px));--sheet-snap:50dvh;
+      display:flex;flex-direction:column;position:fixed;left:0;right:0;bottom:0;z-index:1200;height:var(--sheet-full);
+      transform:translateY(calc(var(--sheet-full) - var(--sheet-snap)));transition:transform .18s ease;
+      background:var(--surface);border-top:1px solid var(--line);border-radius:16px 16px 0 0;box-shadow:0 -6px 18px rgba(35,31,32,.12);
+      padding:0 env(safe-area-inset-right,0px) 0 env(safe-area-inset-left,0px)}
+    .sheet[data-snap="peek"]{--sheet-snap:var(--sheet-peek)}
+    .sheet[data-snap="full"]{--sheet-snap:var(--sheet-full)}
+    .sheet::after{content:"";flex:none;height:calc(var(--sheet-full) - var(--sheet-snap));transition:height .18s ease}
+    .sheet.dragging,.sheet.dragging::after{transition:none}
+    .sheet:has(> #filterPane.hidden){display:none}
+    .sheethandle{display:flex;align-items:center;justify-content:center;flex:none;width:100%;min-height:44px;padding:0;border:0;border-radius:16px 16px 0 0;background:none;cursor:grab;touch-action:none}
+    .sheethandle::before{content:"";width:40px;height:5px;border-radius:3px;background:var(--line)}
+    .sheetpeek{display:block;flex:none;padding:0 16px 6px;text-align:center}
+    .sheetbar{flex:none;align-items:center;padding:0 10px}
+    .sheetback{min-height:44px;padding:0 6px;border:0;background:none;color:var(--accent);font-size:14px;font-weight:600}
+    .sheet aside.filters{width:auto!important;min-width:0;flex:1 1 auto;min-height:0;border-right:0;padding:0 16px 16px}
+    .sheet #modeSeg{position:sticky;top:0;z-index:2;box-shadow:0 0 0 6px var(--surface)}
+    .sheet .railcollapse{display:none}
+    .sheet #browseMode,.sheet #treeSection,.sheet .tree{flex:none;overflow:visible}
+    .sheet[data-host="drawer"] aside.filters,.sheet[data-host="drawer"] .sheetpeek{display:none}
+    .sheet[data-host="drawer"] .sheetbar{display:flex}
+    .sheet #drawer{display:none;position:static;transform:none;width:auto!important;max-width:none;flex:1 1 auto;min-height:0;border-left:0;transition:none;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+    .sheet[data-host="drawer"] #drawer{display:block}
+    #drawer svg{max-width:100%;height:auto}
+    .sheetfoot{display:flex;flex-direction:column;gap:6px;margin-top:4px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px;line-height:1.5;color:var(--muted)}
+    .sheetlinks{display:flex;flex-wrap:wrap;gap:0 18px}
+    .sheetfoot a{display:inline-flex;align-items:center;min-height:44px;color:var(--accent);text-decoration:none}
+    .sheetfoot .sheetabout{font-size:14px;font-weight:700}
+    .sheetack{font-weight:700}
+  }
+  @media (max-width:760px){.maplegend{bottom:calc(130px + env(safe-area-inset-bottom,0px))}}
+  @media (min-width:761px) and (max-width:900px){
+    .sheet{--sheet-full:calc(100dvh - 52px - 32px - env(safe-area-inset-top,0px));left:16px;right:auto;bottom:16px;width:420px;border:1px solid var(--line);border-radius:14px}
+  }
+  @supports not (height:1dvh){
+    @media (max-width:900px){body{height:100vh}.sheet{--sheet-full:calc(100vh - 52px - env(safe-area-inset-top,0px));--sheet-snap:50vh}}
+    @media (min-width:761px) and (max-width:900px){.sheet{--sheet-full:calc(100vh - 52px - 32px - env(safe-area-inset-top,0px))}}
   }
   @media (pointer:coarse){
     .typegrid label,.collgroup .coll,.seg button,.leaflet-touch .leaflet-bar a,.maplegend-toggle,.maplegend .legtype,
@@ -623,6 +661,11 @@
 </header>
 
 <main>
+<!-- The phone layout's bottom sheet (src/sheet.js). See docs: portal internals, index.html. -->
+<section class="sheet" id="sheet" data-snap="half" data-host="filters">
+  <button type="button" class="sheethandle" id="sheetHandle" aria-controls="sheet" aria-expanded="true" aria-label="Panel at half height. Tap to change its height, or drag it." title="Tap or drag to change the panel's height"></button>
+  <div class="sheetpeek" id="sheetPeek"></div>
+  <div class="sheetbar"><button type="button" class="sheetback" id="sheetBack">‹ Filters</button></div>
 <aside class="filters" id="filterPane">
   <!-- Two-mode segmented control. Every element id below is shared with filters.js and exports.js, so the control adds
        containers and a mode toggle only. -->
@@ -720,12 +763,17 @@
     </div>
   </section>
   </div><!-- /#selectMode -->
-  <a class="panelabout" href="about.html">About</a>
+  <!-- The footer's contents on the phone layout. See docs: portal internals, index.html. -->
+  <div class="sheetfoot" id="sheetFoot">
+    <div class="sheetlinks"><a class="sheetabout" href="about.html">About</a><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">MTCAT JSON ↗</a></div>
+    <div class="sheetack">AusMT is enabled by <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">AuScope</a> · Data licences vary by survey</div>
+  </div><!-- /#sheetFoot -->
   <!-- The rail collapse control toggles the 36px icon rail, its state persisted in localStorage. As the
        last rail child with margin-top:auto it stays anchored to the bottom, visible while the tree scrolls.
        See docs: portal internals, index.html. -->
   <button type="button" id="sidebarCollapse" class="railcollapse" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">‹</button>
 </aside>
+</section><!-- /#sheet -->
 <div class="resizer" id="resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
 <div class="content" id="content">
   <div id="map"><img class="maplock" src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"></div>

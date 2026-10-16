@@ -700,26 +700,45 @@ before the floor (`AusMT_2026/mobile-audit/measurements.json`, `tap_targets_wxh`
   `#yearTo`) are 16px. iOS Safari zooms the page when a smaller input takes focus; they were 12.5px
   to 13px. The /surveys controls in `engine/extract/_pages.py` take the same 16px.
 
-**Reachability at 760px and narrower.** A stacked layout that locks the body's scroll, holds the
-panel to a fraction of the screen and leaves the footer over it hides Advanced search, the
-Collections filter and all four export buttons on a 375 x 812 phone
-(`AusMT_2026/mobile-audit/measurements.json`, `phone_375x812`). So the page itself scrolls: `html` and `body` give up their 100% height and the
-body its `overflow:hidden`, the map (`.content`) is `min(55svh, 480px)` tall with a `55vh` fallback
-for browsers without `svh`, the panel has no `max-height`, and the footer is static at the end of
-the page. Measured in headless Chrome at 375 x 812 with Select and download open: header 0 to 52,
-map 52 to 499, panel 499 to 1538, footer 1538 to 1637, and the export buttons at 1350 to 1422,
-where a hit test after scrolling returns the Station CSV button itself; the document is 375px wide.
-At 744 x 1133 the map stops at its 480px cap.
+**The phone layout: a map under a bottom sheet.** At 900px and narrower the map page is one screen
+tall (`body{height:100dvh}`) and the map fills it under the 52px header. The panel sits in
+`<section class="sheet" id="sheet">`, a `position:fixed` box at the bottom of the screen that is as tall
+as its full height and is moved down by `transform:translateY()` until only the current snap height
+shows. Three snap heights are selected by `data-snap`: `peek` (120px plus the bottom safe-area inset:
+the handle, the counts and the Browse and Select control), `half` (`50dvh`, the default) and `full`
+(`100dvh` less the 52px header and the top inset). A spacer (`.sheet::after`) fills the part of the
+sheet below the screen's edge, so the panel, which takes the rest of the column, is exactly as tall
+as the part that shows and scrolls inside it; Browse and Select (`#modeSeg`) is sticky at its top.
+Without a script the sheet stays at half and scrolls, which is the whole no-JS behaviour. The sheet
+holds, in order, the handle (`#sheetHandle`, a 44px button), the peek row (`#sheetPeek`, which takes
+the counts on the phone layout), the Back bar (`#sheetBack`, shown only while the drawer is the
+sheet's host) and the panel. Above 900px the wrapper is `display:contents` and its own parts are
+`display:none`, so the panel stays a flex child of `main` and the desktop layout is the same box for
+box: at 1280 x 800 a headless Chrome screenshot of the page is pixel identical with and without
+the sheet.
 
-**The drawer on a phone.** At 760px and narrower the drawer is `position:fixed; inset:0`, so a
-station's details take the whole screen instead of the map's box, padded clear of the top and bottom
-safe-area insets, with the drag handle hidden. Its plots are `max-width:100%; height:auto`, so the
-372px design width scales down to the drawer; the viewBox keeps the drawing's proportions. Because
-the closed drawer is fixed rather than absolute, it does not widen the document: 375px, where an
-absolute closed drawer made it 758px (`horizontal` in the measurements file).
+Measured in the Claude desktop browser pane (Chromium emulating a 375 x 812 touch phone) on the
+interaction fixture: header 0 to 52, map 52 to 812, the sheet at half from 406 with its handle 406 to
+450 and the panel 457 to 812, the document 375px wide. The closed drawer is clipped by
+`.content{overflow:hidden}`; without that it widened the layout viewport to 758px and the phone
+zoomed the whole page out.
 
-In the same Chromium pane at 375 x 812 the open drawer measured 375 x 812 at the origin, its close
-control and tabs 44px tall, and its three plots 338px wide with nothing scrolling sideways.
+**The tablet card.** From 761px to 900px the sheet is a card 420px wide, 16px in from the left and the
+bottom, with a 14px radius, so the map shows beside it; its full height is 32px less. At 800 x 1024 in
+the same pane the card measured 16 to 436 across, its visible half 496 to 1008. The legend moves to
+the bottom right at 900px and narrower, and on a phone it sits above the peek height.
+
+**The drawer in the sheet.** On the phone layout the sheet hosts the drawer in place of the
+filters: `.sheet[data-host="drawer"]` hides the peek row and the panel and shows the Back bar and
+`#drawer`, which inside the sheet is `position:static` with no slide and no width of its own. Its plots
+are `max-width:100%; height:auto`, so the 372px design width scales to the sheet. The welcome and
+fetch dialogs are fixed above the sheet.
+
+**The footer's contents.** On the phone layout the map page's footer leaves the screen
+(`footer{display:none}`) and its contents ride the sheet: the panel ends with `#sheetFoot`, holding an
+About link, the MTCAT link and the AuScope line exactly as the footer writes them, each link a 44px
+target. The header hides About at these widths, so this link is the phone's route to About.
+`tests/test_footer_regions.py` pins the phone form; every other surface keeps the constant footer.
 
 **The /surveys controls on a phone.** On the engine's /surveys page each control is a label
 holding its select, laid out in a wrapping flex row; a flex item's floor is its content, so a select
@@ -734,10 +753,6 @@ the rule; from 761px nothing changes.
 (`.leaflet-draw.leaflet-control`) is not drawn: drawing a polygon with one finger is the selection
 model the phone layout replaces with "select what is in view". The Select and download panel keeps
 its Select all filtered control and its own draw buttons, which arm the same handlers.
-
-**About on a phone.** The phone row hides the header's About control, so the map page's panel
-ends with an About link (`.panelabout`, before the rail's collapse control), hidden above 900px where
-the header still carries About and shown at 900px and narrower as a 44px target.
 
 **Safe areas.** Every page the portal ships and every page the engine emits declares
 `viewport-fit=cover`, so a phone draws the page under its rounded corners, notch and home indicator

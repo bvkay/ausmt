@@ -16,12 +16,19 @@ Each assertion states its failure criterion:
     lets a floor apply to it.
   * INPUTS - FAILS if a text input or select on the map page or the /surveys controls is under 16px
     on a coarse pointer, the size below which iOS Safari zooms the page on focus.
-  * REACHABILITY - FAILS if, at 760px and narrower, the body locks its own scroll, the panel is held
-    to a fraction of the screen, the map takes anything but its capped height, the footer stays
-    pinned over the panel, or the drawer keeps the map's box instead of the screen.
+  * THE SHEET - FAILS if, at 900px and narrower, the map stops filling the screen under the header,
+    the panel leaves its sheet, the sheet loses its handle, its peek row or its Back control, a snap
+    height drifts from peek, half and full, or the sheet stops falling back to half
+    and scrolling inside itself when no script runs.
+  * THE DRAWER IN THE SHEET - FAILS if the sheet stops hiding the filters while it hosts the drawer,
+    or the drawer keeps its desktop slide and width inside the sheet.
+  * THE TABLET CARD - FAILS if, from 761px to 900px, the sheet stops being a 420px card at the
+    bottom left with the map showing beside it.
+  * THE FOOTER'S CONTENTS - FAILS if the map page's footer stays on screen at 900px and narrower, or
+    if the sheet stops ending with the About link, the MTCAT link and the AuScope line, the last two
+    as the footer writes them.
   * PLOTS - FAILS if a drawer plot can be wider than the drawer at a phone width.
-  * ABOUT - FAILS if the map page's panel stops ending with an About link while the header hides
-    About at a phone width.
+  * REDUCED MOTION - FAILS if the sheet's slide escapes the reduced-motion rule.
   * SURVEYS - FAILS if a /surveys control label or select can push the page sideways at a phone width.
   * DRAW TOOLBAR - FAILS if the Leaflet draw toolbar is drawn at 900px and narrower.
   * DESKTOP - FAILS if any of these overrides leaks out of its query into the base rules.
@@ -29,7 +36,8 @@ Each assertion states its failure criterion:
 import re
 from pathlib import Path
 
-from chrome_contract import PHONE_BREAKPOINT, PHONE_HEADER, SAFE_AREA, TAP_TARGET
+from chrome_contract import (FOOTER_CENTRE_MARKUP, FOOTER_LEFT, PHONE_BREAKPOINT, PHONE_HEADER, SAFE_AREA,
+                             TAP_TARGET)
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 INDEX = ROOT / "index.html"
@@ -43,6 +51,12 @@ COARSE_TARGETS = (".typegrid label", ".collgroup .coll", ".seg button", ".leafle
                   ".maplegend-toggle", ".maplegend .legtype", ".dhead .close", ".plotexp", "footer a")
 COARSE_INPUTS = ("#find", "#availSel", "#surveySearch", "#yearFrom", "#yearTo", "#sortSel")
 INTERIM_BELOW = 760
+# The snap heights: peek holds the handle, the counts and the Browse and Select control.
+PEEK = "120px"
+HALF = "50dvh"
+FULL = "100dvh - 52px"
+CARD_FROM = 761
+CARD_WIDTH = "420px"
 
 
 def _text(path):
@@ -157,56 +171,145 @@ def test_coarse_pointer_inputs_are_16px_on_the_map_page_and_the_surveys_page():
             f"engine/extract/_pages.py: {sel} must be 16px under a coarse pointer")
 
 
-def _interim(text):
-    return _rules("".join(_blocks(text, f"@media (max-width:{INTERIM_BELOW}px)")))
+def _phone(text):
+    return _rules("".join(_blocks(text, f"@media (max-width:{PHONE_BREAKPOINT}px)")))
 
 
-def test_below_760px_the_page_scrolls_and_every_panel_control_is_reachable():
-    """FAILS if the body keeps overflow:hidden or its 100% height at a phone width, if the panel keeps a
-    max-height, if the map is not min(55svh, 480px) tall, or if the footer stays sticky over the panel:
-    each of these is one of the four lines that hid Advanced search, Collections and the exports."""
-    rules = _interim(_text(INDEX))
-    body = _decls(rules.get("body", []))
-    assert "overflow:visible" in body and "overflow:hidden" not in body, (
-        f"index.html: below {INTERIM_BELOW}px the body must scroll: {body!r}")
-    assert "height:auto" in _decls(rules.get("html", [])) and "height:auto" in body, (
-        "index.html: below 760px html and body give up their 100% height so the document can grow")
-    panel = _decls(rules.get("aside.filters", []))
-    assert "max-height:none" in panel and "42vh" not in panel, (
-        f"index.html: below {INTERIM_BELOW}px the panel has no max-height: {panel!r}")
-    content = _decls(rules.get(".content", []))
-    assert "height:min(55svh,480px)" in content and "48vh" not in content, (
-        f"index.html: below {INTERIM_BELOW}px the map is min(55svh, 480px) tall: {content!r}")
-    assert "position:static" in _decls(rules.get("footer", [])), (
-        "index.html: below 760px the footer sits at the end of the page")
+def _sheet_markup(text):
+    m = re.search(r'<section class="sheet"[^>]*>(.*?)</section><!-- /#sheet -->', text, re.S)
+    assert m, 'index.html: the panel must sit in <section class="sheet" ...> closed by <!-- /#sheet -->'
+    return m.group(0)
 
 
-def test_below_760px_the_drawer_takes_the_screen_and_its_plots_fit():
-    """FAILS if the drawer keeps the map's box below 760px, if it stops clearing the safe areas, or if a
-    plot keeps its 372px design width inside a narrower drawer."""
-    rules = _interim(_text(INDEX))
-    drawer = _decls(rules.get("#drawer", []))
-    for decl in ("position:fixed", "inset:0", "env(safe-area-inset-top", "env(safe-area-inset-bottom"):
-        assert decl in drawer, f"index.html: below 760px the drawer must declare {decl}: {drawer!r}"
+def test_the_panel_sits_in_a_sheet_with_a_handle_a_peek_row_and_a_back_control():
+    """FAILS if #filterPane leaves the sheet, if the sheet does not open at half with the filters as
+    its host, if the handle is not a labelled button stating the height and whether the sheet is
+    expanded, or if the peek row or the Back control is missing or carries an inline handler."""
+    text = _text(INDEX)
+    sheet = _sheet_markup(text)
+    head = re.match(r"<section ([^>]*)>", sheet).group(1)
+    for attr in ('id="sheet"', 'data-snap="half"', 'data-host="filters"'):
+        assert attr in head, f"index.html: the sheet must declare {attr}: {head!r}"
+    assert '<aside class="filters" id="filterPane">' in sheet, "index.html: #filterPane sits in the sheet"
+    handle = re.search(r'<button ([^>]*id="sheetHandle"[^>]*)>', sheet)
+    assert handle, "index.html: the sheet opens with its handle, a <button id=\"sheetHandle\">"
+    attrs = handle.group(1)
+    for attr in ('type="button"', 'aria-controls="sheet"', 'aria-expanded="true"'):
+        assert attr in attrs, f"index.html: the handle must declare {attr}: {attrs!r}"
+    label = re.search(r'aria-label="([^"]*)"', attrs)
+    assert label and "half" in label.group(1), "index.html: the handle's label names the current height"
+    order = [sheet.index(k) for k in ('id="sheetHandle"', 'id="sheetPeek"', 'id="sheetBack"', 'id="filterPane"')]
+    assert order == sorted(order), "index.html: handle, peek row, Back control, then the panel"
+    assert re.search(r'<button type="button" class="sheetback" id="sheetBack">[^<]*Filters</button>', sheet), (
+        "index.html: the Back control is a button that names where it returns to")
+    assert not re.search(r"\son[a-z]+=", sheet), "index.html: no inline handler in the sheet (CSP)"
+
+
+def test_the_sheet_ends_with_the_footers_contents_and_about():
+    """FAILS if the end of the sheet's content stops carrying the About link, the MTCAT link and the
+    AuScope line, or if either of the last two drifts from the footer's own wording and markup."""
+    text = _text(INDEX)
+    aside = re.search(r'<aside class="filters"[^>]*>(.*?)</aside>', text, re.S).group(1)
+    foot = re.search(r'<div class="sheetfoot" id="sheetFoot">(.*?)</div><!-- /#sheetFoot -->', aside, re.S)
+    assert foot, "index.html: the panel ends with <div class=\"sheetfoot\" id=\"sheetFoot\">"
+    assert aside.index("<!-- /#selectMode -->") < foot.start() < aside.index('id="sidebarCollapse"')
+    body = " ".join(re.sub(r"<!--.*?-->", "", foot.group(1), flags=re.S).split())
+    assert '<a class="sheetabout" href="about.html">About</a>' in body, "the sheet's About link"
+    assert (f'<a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">'
+            f'{FOOTER_LEFT}</a>') in body, "the sheet's MTCAT link is the footer's"
+    assert FOOTER_CENTRE_MARKUP in body, "the sheet's AuScope line is the footer's centre line"
+    assert "panelabout" not in text, "the interim panel About link is replaced by the sheet's"
+    base = _rules(_outside_queries(text))
+    assert "display:none" in _decls(base.get(".sheetfoot", [])), "hidden above 900px, where the footer shows"
+    phone = _phone(text)
+    assert "display:flex" in _decls(phone.get(".sheetfoot", []))
+    for sel in (".sheetfoot a",):
+        decls = _decls(phone.get(sel, []))
+        assert f"min-height:{TAP_TARGET}px" in decls and "display:inline-flex" in decls, (
+            f"index.html: {sel} is a {TAP_TARGET}px target: {decls!r}")
+    assert "display:none" in _decls(phone.get("footer", [])), (
+        "index.html: at 900px and narrower the map page's footer leaves the viewport")
+
+
+def test_below_900px_the_map_fills_the_screen_and_the_sheet_slides_over_it():
+    """FAILS if the page stops being one screen tall at a phone width, if the sheet is not a fixed
+    box moved by translateY, or if a snap height drifts from peek 120px, half 50dvh and full the
+    screen less the 52px header. The default (no data-snap, as with no script) is half."""
+    rules = _phone(_text(INDEX))
+    assert "height:100dvh" in _decls(rules.get("body", [])), "index.html: the page is one screen tall"
+    sheet = _decls(rules.get(".sheet", []))
+    for decl in ("display:flex", "flex-direction:column", "position:fixed", "bottom:0",
+                 f"--sheet-peek:calc({PEEK}+env(safe-area-inset-bottom,0px))", f"--sheet-snap:{HALF}",
+                 f"--sheet-full:calc({FULL}-env(safe-area-inset-top,0px))".replace(" ", ""),
+                 "height:var(--sheet-full)", "transform:translateY(calc(var(--sheet-full)-var(--sheet-snap)))",
+                 "transition:transform"):
+        assert decl.replace(" ", "") in sheet, f"index.html: below 900px the sheet must declare {decl}: {sheet!r}"
+    assert "--sheet-snap:var(--sheet-peek)" in _decls(rules.get('.sheet[data-snap="peek"]', []))
+    assert "--sheet-snap:var(--sheet-full)" in _decls(rules.get('.sheet[data-snap="full"]', []))
+    spacer = _decls(rules.get(".sheet::after", []))
+    assert "height:calc(var(--sheet-full)-var(--sheet-snap))" in spacer, (
+        "index.html: the off-screen part of the sheet is a spacer, so the panel scrolls within what shows")
+    panel = _decls(rules.get(".sheet aside.filters", []))
+    for decl in ("width:auto!important", "flex:1 1 auto", "min-height:0"):
+        assert decl.replace(" ", "") in panel, f"index.html: in the sheet the panel must declare {decl}: {panel!r}"
+    for sel in (".sheet #browseMode", ".sheet #treeSection", ".sheet .tree"):
+        decls = _decls(rules.get(sel, []))
+        assert "flex:none" in decls and "overflow:visible" in decls, (
+            f"index.html: in the sheet {sel} takes its own height, so the sheet scrolls and not the tree")
+    seg = _decls(rules.get(".sheet #modeSeg", []))
+    assert "position:sticky" in seg and "top:0" in seg, "Browse and Select stays at the top of the sheet"
+    handle = _decls(rules.get(".sheethandle", []))
+    assert f"min-height:{TAP_TARGET}px" in handle and "touch-action:none" in handle, handle
+
+
+def test_the_sheet_hosts_the_drawer_in_place_of_the_filters():
+    """FAILS if the filters and the peek row stay drawn while the drawer is the host, or if the
+    drawer keeps its desktop slide, width or hidden state inside the sheet."""
+    rules = _phone(_text(INDEX))
+    for sel in ('.sheet[data-host="drawer"] aside.filters', '.sheet[data-host="drawer"] .sheetpeek'):
+        assert "display:none" in _decls(rules.get(sel, [])), f"index.html: {sel} must be hidden"
+    drawer = _decls(rules.get(".sheet #drawer", []))
+    for decl in ("position:static", "transform:none", "width:auto!important", "flex:1 1 auto", "min-height:0",
+                 "display:none"):
+        assert decl.replace(" ", "") in drawer, f"index.html: in the sheet the drawer must declare {decl}: {drawer!r}"
+    assert "display:block" in _decls(rules.get('.sheet[data-host="drawer"] #drawer', []))
+    assert "display:flex" in _decls(rules.get('.sheet[data-host="drawer"] .sheetbar', []))
     svg = _decls(rules.get("#drawer svg", []))
     assert "max-width:100%" in svg and "height:auto" in svg, (
         f"index.html: a drawer plot must scale to the drawer: {svg!r}")
 
 
-def test_the_panel_ends_with_an_about_link_shown_only_where_the_header_hides_about():
-    """FAILS if the panel's About link goes, is not the panel's last content before the collapse
-    control, or shows at desktop widths where the header still carries About."""
+def test_from_761_to_900px_the_sheet_is_a_card_at_the_bottom_left():
+    """FAILS if the tablet band loses its card: 420px wide, 16px in from the left and the bottom."""
     text = _text(INDEX)
-    aside = re.search(r'<aside class="filters"[^>]*>(.*?)</aside>', text, re.S).group(1)
-    link = '<a class="panelabout" href="about.html">About</a>'
-    assert aside.count(link) == 1, f"index.html: the panel must end with {link}"
-    assert aside.index("<!-- /#selectMode -->") < aside.index(link) < aside.index('id="sidebarCollapse"')
-    assert "display:none" in _decls(_rules(_outside_queries(text)).get(".panelabout", [])), (
-        "index.html: the panel's About link is hidden at desktop widths")
-    shown = _rules("".join(_blocks(text, f"@media (max-width:{PHONE_BREAKPOINT}px)")))
-    assert "display:inline-flex" in _decls(shown.get(".panelabout", [])), (
-        "index.html: at 900px and narrower the panel's About link is shown")
-    assert f"min-height:{TAP_TARGET}px" in _decls(shown.get(".panelabout", []))
+    rules = _rules("".join(_blocks(text, f"@media (min-width:{CARD_FROM}px) and (max-width:{PHONE_BREAKPOINT}px)")))
+    card = _decls(rules.get(".sheet", []))
+    for decl in ("left:16px", "right:auto", "bottom:16px", f"width:{CARD_WIDTH}", "border-radius:14px"):
+        assert decl.replace(" ", "") in card, f"index.html: from {CARD_FROM}px the sheet must declare {decl}: {card!r}"
+
+
+def test_above_900px_the_sheet_takes_no_part_in_the_layout():
+    """FAILS if the sheet wrapper or its phone-only parts draw anything above 900px, where the
+    side-by-side layout must be exactly what it was."""
+    base = _rules(_outside_queries(_text(INDEX)))
+    assert "display:contents" in _decls(base.get(".sheet", [])), (
+        "index.html: above 900px the sheet is display:contents, so the panel stays a flex child of main")
+    for sel in (".sheethandle", ".sheetpeek", ".sheetbar", ".sheetfoot"):
+        assert "display:none" in _decls(base.get(sel, [])), f"index.html: {sel} is hidden above 900px"
+
+
+def test_the_interim_stacked_layout_is_gone():
+    """FAILS if the scrolling stacked layout the sheet replaces comes back at 760px and narrower."""
+    rules = _rules("".join(_blocks(_text(INDEX), f"@media (max-width:{INTERIM_BELOW}px)")))
+    assert "overflow:visible" not in _decls(rules.get("body", []))
+    assert "55svh" not in _decls(rules.get(".content", []))
+    assert "inset:0" not in _decls(rules.get("#drawer", []))
+
+
+def test_reduced_motion_stops_the_sheet_sliding():
+    """FAILS if the reduced-motion rule stops covering every transition, the sheet's included."""
+    text = _text(INDEX)
+    assert "@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}" in text
 
 
 def test_the_draw_toolbar_is_hidden_at_phone_widths():

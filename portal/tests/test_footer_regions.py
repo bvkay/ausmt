@@ -46,6 +46,9 @@ Each assertion states its failure criterion:
   * GEOMETRY - FAILS if any surface stops being a wrapping flex row or a query container, if a side
     zone stops taking the equal zero basis, if the centre stops being content-sized or centred, if
     either state below one row goes, or if a 375px viewport collides instead of stacking.
+  * THE MAP PAGE'S PHONE FORM - FAILS if, at 900px and narrower, index.html's footer stays on
+    screen, or its contents stop riding the bottom sheet as the footer writes them. Every other
+    surface, and the map page above 900px, keeps the constant footer.
   * ONE FOOTER RULE SET, ON ALL SEVEN SURFACES - FAILS if any surface's footer rule set drifts from
     portal/index.html's by a character, or reaches for a literal colour instead of a token.
   * THE RETIRED CONTENT STAYS RETIRED - FAILS if Releases, About this build, the disclosure popover,
@@ -563,9 +566,14 @@ def test_every_footer_is_a_wrapping_flex_row_whose_side_zones_take_equal_zero_ba
 #
 # THE RETURN TO FLOW IS A MEASUREMENT: at 560px and below at least one surface is a three-row footer,
 # which on a phone would sit over most of the screen, so below it the footer is an ordinary block at
-# the end of the document. The map page returns its footer to flow from 760px down as well, where the
-# page scrolls and the panel follows the map; that phone form is pinned in tests/test_phone_chrome.py,
-# and the rules here read the base rules outside every query.
+# the end of the document. The rules here read the base rules outside every query.
+#
+# THE MAP PAGE'S PHONE FORM: at 900px and narrower the map
+# fills the screen under a bottom sheet, so index.html's footer leaves the viewport and its contents
+# ride the sheet instead. The MTCAT link and the centre line end the sheet's content, written as the
+# footer writes them, beside an About link; the live counts move into the sheet's peek row. Every
+# other surface keeps the constant footer at every width. Pinned below and in
+# tests/test_phone_chrome.py.
 _FLOW_BELOW = 560
 _STICKY = ("position:sticky", "bottom:0")
 
@@ -712,6 +720,48 @@ def test_every_surface_returns_the_footer_to_flow_below_the_measured_width():
         assert at > re.search(_FOOTER_RULE, text).start(), (
             f"{where}: the return-to-flow rule must FOLLOW the footer's own rule, or the sticky "
             f"declaration wins at equal specificity and the narrow-width footer stays pinned")
+
+
+_PHONE_QUERY = "@media (max-width:900px){"
+_PHONE_FOOTER = "footer{display:none}"
+
+
+def _phone_block(text):
+    """The bodies of every phone-width query in `text`, brace-matched."""
+    out, i = [], 0
+    while True:
+        at = text.find(_PHONE_QUERY, i)
+        if at < 0:
+            return "".join(out)
+        j = start = at + len(_PHONE_QUERY)
+        depth = 1
+        while depth:
+            depth += {"{": 1, "}": -1}.get(text[j], 0)
+            j += 1
+        out.append(text[start:j - 1])
+        i = j
+
+
+def test_the_map_pages_phone_footer_leaves_the_viewport_and_its_contents_ride_the_sheet():
+    """THE PHONE FORM OF THE MAP PAGE'S FOOTER. FAILS if index.html's footer stays on screen at 900px
+    and narrower, if the sheet stops carrying the footer's left link and centre line as the footer
+    writes them, or if any other surface takes the phone form."""
+    text = _index_text()
+    assert _PHONE_FOOTER in "".join(_phone_block(text).split()), (
+        f"index.html: at 900px and narrower the footer must declare {_PHONE_FOOTER!r}")
+    regions = _regions("index.html", _foot("index.html"))
+    sheet = re.search(r'<div class="sheetfoot" id="sheetFoot">(.*?)</div><!-- /#sheetFoot -->', text, re.S)
+    assert sheet, "index.html: the sheet ends with the footer's contents in #sheetFoot"
+    body = flat(sheet.group(1))
+    for region in ("left", "centre"):
+        assert flat(regions[region]) in body, (
+            f"index.html: the sheet carries the footer's {region} region as the footer writes it: "
+            f"{regions[region]!r} not in {body!r}")
+    for where in SURFACES:
+        if where == "index.html":
+            continue
+        assert _PHONE_FOOTER not in "".join(_phone_block(_text(where)).split()), (
+            f"{where}: the constant footer holds on every surface but the map page")
 
 
 @pytest.mark.parametrize("where", SURFACES)
