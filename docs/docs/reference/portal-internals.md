@@ -684,6 +684,14 @@ before the floor (`AusMT_2026/mobile-audit/measurements.json`, `tap_targets_wxh`
   `#yearTo`) are 16px. iOS Safari zooms the page when a smaller input takes focus; they were 12.5px
   to 13px. The /surveys controls in `engine/extract/_pages.py` take the same 16px.
 
+**Safe areas.** Every page the portal ships and every page the engine emits declares
+`viewport-fit=cover`, so a phone draws the page under its rounded corners, notch and home indicator
+and reports their size through `env(safe-area-inset-*)`. Every surface with a footer carries one rule
+for it, the same text everywhere (`SAFE_AREA` in `portal/tests/chrome_contract.py`): under a coarse
+pointer the body pads its sides by the side insets and the footer pads its bottom to the larger of
+its own 7px and the bottom inset. Where a screen has no inset `env()` resolves to 0px, so nothing
+moves.
+
 ## portal/about.html
 
 #### Search snippet and link preview

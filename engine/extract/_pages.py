@@ -707,6 +707,7 @@ _CSS = """
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
+  @media (pointer:coarse){body{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}footer{padding-bottom:max(7px,env(safe-area-inset-bottom,0px))}}
 """
 
 
@@ -913,7 +914,7 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="UTF-8">\n'
-        '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">\n'
         f"{robots}"
         f"<title>{_e(title)}</title>\n"
         f"{desc_meta}"
