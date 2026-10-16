@@ -89,8 +89,16 @@ whole screen below the header (Owner decision 2026-10-14). A station's details o
 in place of the filters, with a Back control that returns to them. From 761px to 900px the sheet is a
 floating card at the bottom left, so the map stays in view beside it. The footer leaves the screen on
 a phone and its contents, the catalogue link and the line naming AuScope, end the sheet beside the
-About link. On phones, selecting stations will mean "select what is in view" rather than drawing a
-shape with one finger, so the drawing tools are already hidden at these widths.
+About link. On phones and in the tablet card, selecting stations means what is on the screen rather
+than drawing a shape with one finger (Owner decision 2026-10-16): "Select what's in view" takes every
+station within the map's edges that passes the filters, those under the panel included, with the
+number it would take beside it, and in Select a tap on a station adds it or takes it out instead of
+opening its details. Where a tap lands between stations, a short list asks which one, and marks the
+ones already selected. The selection is listed
+in the sheet, a row per station with a control that removes it, above the downloads, and a selected
+station is ringed in the colour a drawn selection shape is drawn in. The drawing tools, the map's
+toolbar and the panel's two draw buttons, are hidden at these widths, and the downloads are the
+desktop's, over the same stations.
 
 On a touch screen every control a finger is expected to hit is at least 44px in each direction,
 and text inputs are 16px, the size below which iOS Safari zooms the page when one is tapped. Pages

@@ -147,7 +147,15 @@ function weightForZoom(z){return z<=4?DOT_W_Z4:z<=5?DOT_W_Z5:z<=6?DOT_W_Z6:DOT_W
 function curZoom(){const z=map.getZoom();return typeof z==="number"&&Number.isFinite(z)?z:4;}
 // One radius for every marker; a zoom never re-routes, because which stations show is a filter answer.
 function restyleForZoom(){const z=curZoom(),w=weightForZoom(z),r=radiusForZoom(z);
-  ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:r,weight:w});});}
+  ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:r,weight:w});});
+  _selMarked.forEach(i=>{const s=ST[i];if(s&&s.marker)s.marker.setStyle(selMarkStyle(true));});}
+const SEL_MARK_W=2;
+let _selMarked=new Set();
+function selMarkStyle(on){return on?{color:themeToken("--accent"),weight:SEL_MARK_W}:{color:themeToken("--dot-edge"),weight:weightForZoom(curZoom())};}
+function markSelection(want){want=want||new Set();
+  _selMarked.forEach(i=>{if(!want.has(i)){const s=ST[i];if(s&&s.marker)s.marker.setStyle(selMarkStyle(false));}});
+  want.forEach(i=>{if(!_selMarked.has(i)){const s=ST[i];if(s&&s.marker)s.marker.setStyle(selMarkStyle(true));}});
+  _selMarked=new Set(want);}
 // The home frame buildMarkers fits to, remembered module-level so the setView("map") 60ms corrector can
 // re-fit to it (null until data is in). See docs: portal internals, map.js.
 let HOME_BOUNDS=null,_fitWasDegenerate=false;
@@ -165,8 +173,7 @@ function buildMarkers(){const z=curZoom(),w=weightForZoom(z),edge=themeToken("--
   // drawer. See docs: portal internals, map.js.
   s.marker.options.bubblingMouseEvents=false;
   s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // Hover shows station + survey only
-  if(COARSE_POINTER)s.marker.on("click",e=>onStationTap(s,e));
-  else s.marker.on("click",()=>openStation(s.i));});
+  s.marker.on("click",e=>onMarkerClick(s,e));});
   // Home frame: the FIXED Australia box, NOT the station extent. See docs: portal internals, map.js.
   const pts=ST.filter(hasPosition).map(s=>[s.lat,s.lon]);
   // A station outside the box drops the box rather than strand the station.
@@ -188,16 +195,26 @@ function tapReach(r,w,tol){return r+(w>0?w/2:0)+tol;}
 function tapCandidates(tap,pts,reach){
   return pts.map(p=>({i:p.i,d:Math.sqrt((p.x-tap.x)*(p.x-tap.x)+(p.y-tap.y)*(p.y-tap.y))}))
     .filter(c=>c.d<=reach).sort((a,b)=>a.d-b.d||a.i-b.i).map(c=>c.i);}
+function phoneSelecting(){return typeof sheetActive==="function"&&sheetActive()&&typeof sidebarMode!=="undefined"&&sidebarMode==="select";}
+function onMarkerClick(s,e){
+  if(phoneSelecting())onStationTap(s,e,toggleSelected);
+  else if(COARSE_POINTER)onStationTap(s,e);
+  else openStation(s.i);}
+function tapPoint(e){
+  const oe=e&&e.originalEvent;
+  if(oe&&typeof oe.clientX==="number"&&typeof map.mouseEventToContainerPoint==="function"){
+    const p=map.mouseEventToContainerPoint(oe);if(p&&typeof p.x==="number"&&typeof p.y==="number")return p;}
+  return e&&e.containerPoint;}
 // A dot tap on a coarse pointer. See docs: portal internals, map.js.
-function onStationTap(s,e){
-  const tap=e&&e.containerPoint;
-  if(!tap||typeof tap.x!=="number"||typeof map.latLngToContainerPoint!=="function"){openStation(s.i);return;}
-  const z=curZoom(),reach=tapReach(radiusForZoom(z),weightForZoom(z),TAP_TOLERANCE),pts=[];
+function onStationTap(s,e,act){
+  const go=act||openStation,tap=tapPoint(e);
+  if(!tap||typeof tap.x!=="number"||typeof map.latLngToContainerPoint!=="function"){go(s.i);return;}
+  const z=curZoom(),reach=tapReach(radiusForZoom(z),weightForZoom(z),COARSE_POINTER?TAP_TOLERANCE:0),pts=[];
   (typeof visible!=="undefined"?visible:[]).forEach(v=>{if(!v.marker||!hasPosition(v))return;
     const p=map.latLngToContainerPoint([v.lat,v.lon]);if(p&&typeof p.x==="number")pts.push({i:v.i,x:p.x,y:p.y});});
   const near=tapCandidates(tap,pts,reach);
-  if(near.length<=1){openStation(s.i);return;}
-  showTapChooser(near,tap);
+  if(near.length<=1){go(s.i);return;}
+  showTapChooser(near,tap,act);
 }
 // PURE: the chooser box in the clear map. See docs: portal internals, map.js.
 function tapChooserBox(tap,area,natural){
@@ -211,7 +228,7 @@ function tapChooserBox(tap,area,natural){
   return {left:left,top:top,maxHeight:need};}
 function closeTapChooser(){const el=document.getElementById("tapChooser");if(el&&el.parentNode)el.parentNode.removeChild(el);}
 // The chooser sits in #content, outside Leaflet, so its taps never reach the map.
-function showTapChooser(idxs,tap){
+function showTapChooser(idxs,tap,act){
   closeTapChooser();
   const host=document.getElementById("content");if(!host)return;
   const box=document.createElement("div");box.id="tapChooser";box.className="tapchooser";
@@ -226,7 +243,8 @@ function showTapChooser(idxs,tap){
     const b=document.createElement("button");b.type="button";b.className="tapchooser-item";
     const id=document.createElement("span");id.className="tc-id";id.textContent=st.id;
     const sv=document.createElement("span");sv.className="tc-sv";sv.textContent=st.survey;
-    b.append(id,sv);b.onclick=()=>{closeTapChooser();openStation(i);};list.appendChild(b);});
+    if(act)b.setAttribute("aria-pressed",String(selected.has(i)));
+    b.append(id,sv);b.onclick=()=>{closeTapChooser();(act||openStation)(i);};list.appendChild(b);});
   box.appendChild(list);
   const w=host.clientWidth||0,h=host.clientHeight||0;
   if(typeof sheetActive==="function"&&sheetActive()){

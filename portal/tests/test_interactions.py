@@ -18,7 +18,13 @@ The driver FAILS (and so does this test) if:
   offset rather than its height, or the full height is read from the card's current box, or the zoom
   control stays under the card in the top-left corner of the card band, or moves anywhere else; or, at desktop
   width, the sheet touches anything;
-- on a coarse pointer at a phone media query, the multi-station chooser reaches under the sheet.
+- on a coarse pointer at a phone media query, the multi-station chooser reaches under the sheet;
+- at a phone media query or in the tablet band, "Select what's in view" selects other than exactly
+  the stations in a stubbed view that pass the filters and have a position, a tap in Select opens
+  the drawer instead of toggling its station, the selection list strays from catalogue order or a
+  removal leaves the counts or the map behind, or an export over a view selection requests other
+  files, or writes other documents, than the desktop does for the same stations;
+- at desktop width, a station click in Select toggles instead of opening its drawer.
 
 Skips when Node or the jsdom dev-dependency is absent (CI runs `npm ci` in portal/ first)."""
 import json

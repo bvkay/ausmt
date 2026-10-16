@@ -35,7 +35,12 @@ Each assertion states its failure criterion:
   * REDUCED MOTION - FAILS if the sheet's slide escapes the reduced-motion rule.
   * ABOUT - FAILS if an about.html card can push the page sideways at a phone width.
   * SURVEYS - FAILS if a /surveys control label or select can push the page sideways at a phone width.
-  * DRAW TOOLBAR - FAILS if the Leaflet draw toolbar is drawn at 900px and narrower.
+  * DRAW TOOLBAR - FAILS if the Leaflet draw toolbar, or the Select pane's own Draw rectangle and
+    Draw polygon buttons, are drawn at 900px and narrower, or if those buttons leave the desktop.
+  * PHONE SELECTION - FAILS if, at 900px and narrower, the Select pane stops offering "Select what's
+    in view" with its count beside it as a 44px control, or if that control is drawn above 900px;
+    or if the selection list leaves the Select pane's selection box, falls below the downloads, is
+    drawn above 900px or when empty, or its rows and remove controls fall under 44px.
   * DESKTOP - FAILS if any of these overrides leaks out of its query into the base rules.
 """
 import re
@@ -375,6 +380,96 @@ def test_the_draw_toolbar_is_hidden_at_phone_widths():
     shown = _rules("".join(_blocks(_text(INDEX), f"@media (max-width:{PHONE_BREAKPOINT}px)")))
     assert "display:none" in _decls(shown.get(".leaflet-draw.leaflet-control", [])), (
         "index.html: the draw toolbar is hidden at 900px and narrower")
+
+
+def _select_pane(text):
+    m = re.search(r'<div id="selectMode"[^>]*>(.*?)</div><!-- /#selectMode -->', text, re.S)
+    assert m, "index.html: the Select pane is <div id=\"selectMode\"> closed by <!-- /#selectMode -->"
+    return m.group(1)
+
+
+def test_the_phone_select_pane_offers_what_is_in_view():
+    """FAILS if the Select pane loses its "Select what's in view" button, the count that describes it
+    or its Clear selection control, if the in-view row is drawn above 900px, or if at 900px and
+    narrower it is not drawn or its buttons fall under the 44px floor."""
+    text = _text(INDEX)
+    pane = _select_pane(text)
+    row = re.search(r'<div class="phonesel inviewrow">(.*?)</div>', pane, re.S)
+    assert row, "index.html: the Select pane carries the in-view row"
+    assert re.search(r'<button type="button" class="primary" id="selInView" aria-describedby="selInViewN">'
+                     r"Select what's in view</button>", row.group(1)), row.group(1)
+    assert '<span class="inviewn" id="selInViewN"></span>' in row.group(1), "the count sits beside the button"
+    assert re.search(r'<button class="wide" id="clearSel">Clear selection<span class="deskonly"> &amp; shapes'
+                     r"</span></button>", pane), "index.html: Clear selection names shapes only where they can be drawn"
+    base = _rules(_outside_queries(text))
+    assert "display:none" in _decls(base.get(".phonesel", [])), "index.html: the in-view row is hidden above 900px"
+    assert ".deskonly" not in " ".join(base), "index.html: nothing hides the desktop's wording above 900px"
+    phone = _phone(text)
+    assert "display:flex" in _decls(phone.get(".selbox .phonesel", [])), "drawn at 900px and narrower"
+    assert f"min-height:{TAP_TARGET}px" in _decls(phone.get(".selbox button", [])), (
+        f"index.html: the Select pane's buttons are {TAP_TARGET}px targets at 900px and narrower")
+    assert "display:none" in _decls(phone.get(".selbox .deskonly", []))
+    assert not re.search(r"\son[a-z]+=", pane), "index.html: no inline handler in the Select pane (CSP)"
+
+
+def test_the_phone_selection_list_sits_above_the_downloads_in_44px_rows():
+    """FAILS if the selection list is not a labelled list inside the selection box and above the
+    Download block, if it is drawn above 900px or while it is empty, or if at 900px and narrower a
+    row or its remove control is under the 44px floor."""
+    text = _text(INDEX)
+    pane = _select_pane(text)
+    box = pane[pane.index('<div class="selbox">'):pane.index("<h2>Download</h2>")]
+    assert '<ul class="phonesel sellist" id="selList" aria-label="Selected stations"></ul>' in box, (
+        "index.html: the selection list sits in the selection box, above the downloads")
+    assert box.index('id="clearSel"') < box.index('id="selList"'), "the list follows the selection controls"
+    phone = _phone(text)
+    assert "flex-direction:column" in _decls(phone.get(".sellist", []))
+    assert "display:none" in _decls(phone.get(".selbox .sellist:empty", [])), "an empty list draws nothing"
+    assert f"min-height:{TAP_TARGET}px" in _decls(phone.get(".selrow", [])), "a row is a 44px target"
+    rm = _decls(phone.get(".selrow .sr-rm", []))
+    assert f"min-width:{TAP_TARGET}px" in rm, f"the remove control is {TAP_TARGET}px wide: {rm!r}"
+    assert f"min-height:{TAP_TARGET}px" in _decls(phone.get(".selbox button", [])), "and 44px tall"
+    base = _rules(_outside_queries(text))
+    assert ".selrow" not in base and ".sellist" not in base, "index.html: the list has no rule above 900px"
+
+
+def test_the_chooser_shows_which_entries_are_selected():
+    """FAILS if, at 900px and narrower, a chooser entry that is in the selection looks like one that
+    is not. In Select an entry toggles its station, so a sighted reader needs to see which way a
+    choice goes; aria-pressed alone tells only a screen reader. The mark lives in the phone query,
+    the only layout where the chooser toggles."""
+    text = _text(INDEX)
+    phone = _phone(text)
+    on = '.tapchooser-item[aria-pressed="true"]'
+    assert "box-shadow:inset4px00var(--accent)" in _decls(phone.get(on, [])), (
+        f"index.html: {on} carries an accent bar at 900px and narrower")
+    tick = _decls(phone.get(on + " .tc-id::after", []))
+    assert 'content:"\\2713"' in tick and "color:var(--accent)" in tick, (
+        f"index.html: a selected entry's id carries an accent tick: {tick!r}")
+    base = _rules(_outside_queries(text))
+    assert not any("aria-pressed" in sel for sel in base), "index.html: the mark has no rule above 900px"
+
+
+def test_the_select_panes_draw_buttons_are_hidden_at_phone_widths_and_kept_at_desktop():
+    """FAILS if the Select pane's Draw rectangle and Draw polygon buttons are drawn at 900px and
+    narrower, where a tap toggles and the view selects, or if their row keeps its gap there; or if
+    above 900px either button is hidden or leaves the pane. The row is hidden by :has() in a rule of
+    its own, so a browser without :has() still hides the two buttons by the plain rule."""
+    text = _text(INDEX)
+    pane = _select_pane(text)
+    assert re.search(r'<div class="btnrow">\s*<button id="drawRect">Draw rectangle</button>\s*'
+                     r'<button id="drawPoly">Draw polygon</button>\s*</div>', pane), (
+        "index.html: the Select pane keeps its Draw rectangle and Draw polygon buttons for the desktop")
+    phone = _phone(text)
+    for sel in ("#drawRect", "#drawPoly", ".selbox .btnrow:has(> #drawRect)"):
+        assert "display:none" in _decls(phone.get(sel, [])), f"index.html: {sel} is hidden at 900px and narrower"
+    blocks = "".join(_blocks(text, f"@media (max-width:{PHONE_BREAKPOINT}px)"))
+    assert re.search(r"(?<![,\w])\.selbox \.btnrow:has\(> #drawRect\)\{display:none\}", blocks), (
+        "index.html: the :has() rule stands alone, so a browser that cannot read it keeps the other")
+    base = _rules(_outside_queries(text))
+    for sel in ("#drawRect", "#drawPoly"):
+        assert "display:none" not in _decls(base.get(sel, [])), f"index.html: {sel} is drawn above 900px"
+    assert not any(":has(> #drawRect)" in sel for sel in base), "index.html: the row is hidden only on phones"
 
 
 def test_the_surveys_controls_cannot_push_the_page_sideways():

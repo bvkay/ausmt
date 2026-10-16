@@ -805,10 +805,17 @@ as wide as its longest option pushed the page sideways (the Organisation select 
 591px-wide option: the document is 375px wide at 375px and 320px at 320px, against 591px without
 the rule; from 761px nothing changes.
 
-**No draw toolbar on a phone.** At 900px and narrower the Leaflet draw toolbar
-(`.leaflet-draw.leaflet-control`) is not drawn: drawing a polygon with one finger is the selection
-model the phone layout replaces with "select what is in view". The Select and download panel keeps
-its Select all filtered control and its own draw buttons, which arm the same handlers.
+**No drawing on a phone.** At 900px and narrower the Leaflet draw toolbar
+(`.leaflet-draw.leaflet-control`) is not drawn, and neither are the Select pane's own Draw rectangle
+and Draw polygon buttons (`#drawRect`, `#drawPoly`): drawing a polygon with one finger is the selection
+model the phone layout replaces with "Select what's in view", a tap that toggles a station and the
+selection list (see the phone selection, under `filters.js`). The buttons' row is hidden by
+`.selbox .btnrow:has(> #drawRect)`, a rule of its own so a browser that cannot read `:has()` drops only
+that rule and still hides the two buttons. This is CSS only: the buttons, `armDraw` and the toolbar
+are untouched above 900px. The pane keeps Select all filtered, and its Clear selection drops " &
+shapes" from its name (`.deskonly`). On the phone layout the pane also shows the in-view row and the
+selection list (`.phonesel`), which are `display:none` above 900px, so the desktop pane draws exactly
+what it drew.
 
 **Safe areas.** Every page the portal ships and every page the engine emits declares
 `viewport-fit=cover`, so a phone draws the page under its rounded corners, notch and home indicator
@@ -4692,6 +4699,67 @@ The PREDICATE s.ediAvail outlived the control exactly as this comment always sai
 read in passesCore() above and by the selection exports' three-way not-included honesty.
 ```
 
+#### The phone selection
+
+At 900px and narrower (`sheetPhone()` in `sheet.js`, the phone sheet and the tablet card alike) a
+station is selected by what the map shows, not by a drawn shape. Above 900px none of this runs and
+the desktop selection is what it was.
+
+**Select what is in view.** `stationsInView(bounds)` returns the catalogue indices of the stations
+that pass the current filters (`visible`) and lie inside `bounds`, in catalogue order. It reads only
+the four edges a Leaflet `LatLngBounds` gives (`getSouth`, `getNorth`, `getWest`, `getEast`), so a test
+passes a stub, and a map that cannot state its edges has nothing in view. It applies the exclusions a
+drawn shape applies (`inShapes`): a station hidden by its data type, its survey or collection in the
+tree, Find or any other filter is not in `visible`, and a station whose position the custodian
+withholds (`hasPosition` false) is never in a view. An embargoed station keeps its place on the map
+and is selected as a drawn shape selects it; the selection exports leave its files out and say why,
+exactly as at desktop. A view panned across the antimeridian reports longitudes past 180, so each
+station is also tried at its longitude plus and minus 360. `selectInView()` clears any drawn shape,
+because `refresh()` re-derives the selection from shapes, and replaces the selection with the
+stations in the map's current view (`map.getBounds()`). The map runs under the sheet on a phone and
+under the card in the tablet band, so the view, its count and the selection include the stations the
+panel covers, not only those left visible beside it.
+
+The Select pane shows the control as "Select what's in view" (`#selInView`, a `type="button"` with
+`aria-describedby` pointing at the count) with the number it would take beside it (`#selInViewN`,
+"N in view"). The count is repainted when the map stops moving (`moveend`) and on every selection or
+filter change (`updateSel` calls `paintPhoneSelection`), and `sheetSync` repaints it when the window
+crosses 900px. With nothing selected the hint (`#selHint`) reads its `data-phone` text, which names the
+phone's two ways to select instead of the draw toolbar; above 900px it keeps the markup's own text.
+Clear selection is the desktop's control, whose " & shapes" is hidden at these widths
+(`.selbox .deskonly`). `interaction_test.js` drives a stubbed view at the phone query: the stations it
+selects, a hidden survey and a withheld position left out, Find narrowing the result, the count
+following `moveend`, and the button and Clear.
+
+**The selection list.** On the phone layout the selection box ends with `#selList`, a labelled
+`<ul>` of the selected stations in catalogue order (the order the exports write them, whatever order
+the taps came in). Each row (`li.selrow`, 44px tall) names the station and its survey and ends with a
+remove button (`button.sr-rm`, 44px square, labelled `Remove <id> from the selection`); a click on it
+goes through `toggleSelected`, so the counts, the peek row, the hint, the downloads and the dot's
+stroke follow, and focus moves to the remove control that took the removed row's place. The rows are
+built with `createElement` and `textContent`. Past `SEL_LIST_MAX` rows (100) the list ends with a
+line saying how many more stations the downloads take, so a view selection of thousands of stations
+does not build thousands of rows. An empty list draws nothing (`.selbox .sellist:empty`), and above
+900px it is neither drawn nor filled. The counts line in the peek row is the desktop's own line
+(`updateCounts`), so it states the selection there as it does in the desktop footer.
+
+Measured in headless Chrome (a fine pointer) on the five-station interaction fixture with the sheet
+at full and a view selection of four stations: at 375 x 812, "Select what's in view" 239 x 44 with
+"4 in view" beside it, Clear selection 317 x 44, each list row 317 x 45 with its remove control
+44 x 44, the list ending above the Download block, the draw buttons not drawn (0 x 0) and the
+document 375px wide; at 800 x 1024, in the tablet card, the same control 282 x 44, rows 360 x 45
+and remove controls 44 x 44.
+
+**The exports.** A view selection, a tapped selection and a drawn one are the same `selected` set, so
+every selection export reads it through `scopeSel()` unchanged: the station CSV, the GeoJSON, the
+citation pack, the pointers and the three file exports, whose file requests each carry the
+`sel=bulk` flag (`SEL_BULK_FLAG` in `exports.js`), so a phone's bulk export counts as one bulk
+export. `exports.js` has no phone branch. `interaction_test.js` runs every export over a view selection
+on the phone layout and over the same stations set by id in a desktop window, and holds that the
+two request the same files, each flagged, and write the same documents and archive entries,
+including the pointers that name the stations whose files are not redistributed (a station whose
+EDI is not redistributable and the embargoed one).
+
 ## portal/src/main.js
 
 #### The counts line rides the sheet's peek row on the phone layout
@@ -5147,8 +5215,12 @@ views (a 1.8px dot with a 0.5px edge).
 
 The dot's click handler on a coarse pointer is `onStationTap`. It projects every visible dot to
 container pixels and asks `tapCandidates` which of them the tap reaches, nearest first and then in
-catalogue order. One dot opens that station, as a tap always did. More than one raises a small
-chooser (`#tapChooser`, a `role="dialog"` listing each station's id and survey as 44px buttons, with
+catalogue order. The reach is measured from the finger: for a circle marker of radius 10px or less
+Leaflet hands the click the dot's own centre as `containerPoint`, so `tapPoint` reads the point from
+the DOM event (`map.mouseEventToContainerPoint(e.originalEvent)`) and falls back to `containerPoint`
+only when the event carries no position. Measured from the hit dot's centre instead, a tap between
+two dots farther apart than the reach would act on the one Leaflet hit without asking. One dot opens
+that station, as a tap always did. More than one raises a small chooser (`#tapChooser`, a `role="dialog"` listing each station's id and survey as 44px buttons, with
 a labelled close control): choosing an entry opens it, and the close control, Escape, a tap on the
 map, a pan or a zoom dismiss it. The chooser is built with `createElement` and `textContent` and
 sits in `#content` beside the map rather than inside Leaflet's container, so its taps never reach the
@@ -5169,7 +5241,39 @@ and drives both cases through the bound handler and the chooser; a second window
 the phone query holds the chooser above the sheet edge at half and at peek. In the desktop app's Chromium pane
 emulating a 375 x 812 touch phone, on the five-station interaction fixture at zoom 3 with the real
 Leaflet: a click between two dots 8.6px apart raised the chooser with both stations as 44px rows and
-opened neither, and a click 6px beside an isolated dot opened that station.
+opened neither, and a click 6px beside an isolated dot opened that station. In headless Chrome
+emulating a 375 x 812 touch phone (`pointer:coarse` true) on the same fixture with its 36-station
+grid, at zoom 4 (reach 9.8px) with two stations 11px apart and one of them selected, a touch tap at
+their midpoint in Select raised the chooser with both and changed nothing; measured from the hit
+dot's centre, the same tap raised no chooser and took the selected one out of the selection.
+
+**A tap in Select on the phone layout toggles.** Every dot has one click handler, `onMarkerClick`.
+While the phone layout is active on the map view (`sheetActive()`) and the panel is in Select
+(`sidebarMode==="select"`), it passes `toggleSelected` (`filters.js`) to `onStationTap` as the action,
+so a tap adds its station to the selection or takes it out and the drawer stays shut; when the tap
+reaches more than one dot the chooser lists them, each entry carrying `aria-pressed` for whether it
+is selected, and the entry chosen is toggled. A selected entry also shows it: at 900px and narrower
+`.tapchooser-item[aria-pressed="true"]` draws a 4px `--accent` bar on its left edge and a tick after
+its id (`.tc-id::after`), so a sighted reader sees which way a choice goes. In that same headless
+run the selected entry computed `rgb(40, 37, 114) 4px 0px 0px 0px inset` and a tick in the same
+colour, and the unselected entry neither. A fine pointer at these widths reaches only the dot it
+clicked (the reach takes no tolerance without a coarse pointer). In Browse, and at every width above
+900px whatever the mode, the handler does what it did: `onStationTap` on a coarse pointer and
+`openStation` otherwise. `toggleSelected` clears any drawn shape first, because `refresh()` re-derives
+the selection from shapes, and adds a station only when it passes the filters and has a position.
+
+A tap or a view selection draws no shape, so on the phone layout a selected dot carries the stroke a
+drawn selection shape carries: the `--accent` token at weight 2 (`markSelection`, `SEL_MARK_W`). A dot
+that leaves the selection takes back the `--dot-edge` stroke at its zoom's weight, and
+`restyleForZoom` re-marks the selected dots after it restyles every dot. `paintPhoneSelection` passes
+the selection on the phone layout and nothing above 900px, so a desktop window never marks a dot.
+`interaction_test.js` drives the bound handler at the phone query and in the tablet band (a tap
+toggles, a second tap untoggles, the stroke follows, the peek row's counts follow, Browse opens the
+drawer, above 900px Select opens the drawer), a coarse window drives the chooser in Select and in
+Browse and hands it Leaflet's own event shape (the hit dot's centre as `containerPoint`, the finger 5px
+from it in `originalEvent`, a second dot 11px away) to hold that the chooser opens and nothing is
+toggled, and the desktop leg holds that a click in Select still opens the drawer.
+`test_phone_chrome.py` pins the chooser's selected mark to the 900px query.
 
 #### THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here
 
@@ -5837,6 +5941,9 @@ desktop (without storing the choice, and closes it again above 900px) and hosts 
 every change of the card query, `matchMedia("(min-width:761px)")` (`sheetCard()`), and places the map's
 zoom control (`sheetPlaceZoom`): top right in the card band, top left everywhere else, calling Leaflet
 only when the position changes and relabelling the rebuilt buttons (`labelToolbar` in `map.js`).
+Last, it calls `paintPhoneSelection()` in `filters.js`, so crossing 900px with a selection marks its
+dots, fills the selection list and counts the view on the way in, and takes the marks away and empties
+the list on the way out (see the phone selection, under `filters.js`).
 
 #### No script
 

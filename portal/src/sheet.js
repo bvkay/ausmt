@@ -90,7 +90,8 @@ function sheetSync(){
     if(_sheetUncollapsed&&pane){pane.classList.add("collapsed");_sheetUncollapsed=false;}
   }
   sheetPlaceZoom();
-  if(typeof placeCounts==="function")placeCounts();}
+  if(typeof placeCounts==="function")placeCounts();
+  if(typeof paintPhoneSelection==="function")paintPhoneSelection();}
 {
   const onChange=()=>{sheetSync();if(typeof map!=="undefined"&&map&&typeof map.invalidateSize==="function")map.invalidateSize();};
   [_sheetPhoneMq,_sheetCardMq].forEach(mq=>{if(!mq)return;
