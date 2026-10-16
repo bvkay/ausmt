@@ -14,43 +14,43 @@ const TOUR_DEMO_STATION="A1";
 const TOUR_STEPS=[
   {sel:"#map",
    text:"Every dot is an MT station. Click one to see its transfer function.",
-   enter:_tourEnterOpening},
+   snap:"peek",enter:_tourEnterOpening},
   {sel:"aside.filters",
    text:"Filter by data type; Advanced search adds find, data availability by level (time series; transfer function).",
-   enter:_tourEnterFilters},
+   snap:"half",enter:_tourEnterFilters},
   {sel:"#find",
    text:"Search stations, surveys or collections. Results update as you type.",
-   enter:_tourEnterFindDemo,exit:_tourExitFindDemo},
+   snap:"full",enter:_tourEnterFindDemo,exit:_tourExitFindDemo},
   {sel:"#browseMode",
    text:"Browse by collection, country, organisation or survey. Tick a level to show or hide it.",
-   enter:_tourEnterTreeDemo,exit:_tourExitTreeDemo},
+   snap:"full",enter:_tourEnterTreeDemo,exit:_tourExitTreeDemo},
   {sel:"#drawer",
    text:"The station drawer: response plots and provenance, in tabs.",
-   enter:_tourEnterStation},
+   snap:"half",enter:_tourEnterStation},
   {sel:"#dp-files",
    text:"Files: what you can fetch for this station, by level - the transfer function served by AusMT, and time series handed off to NCI where they exist.",
-   enter:_tourEnterFiles,exit:_tourExitFiles},
+   snap:"full",enter:_tourEnterFiles,exit:_tourExitFiles},
   {sel:".selbox",
    text:"Select stations: draw an area, or take everything that passes the filters.",
-   enter:_tourEnterSelbox},
+   snap:"half",enter:_tourEnterSelbox},
   {sel:"#map",
    text:"Selecting in action: zoom to {survey}, draw a rectangle, and every station inside is selected - {n} here.",
-   enter:_tourEnterSelectDemo},
+   snap:"peek",enter:_tourEnterSelectDemo},
   {sel:"#dlLevel2",
    text:"Level 2 transfer functions, served by AusMT: EDI, EMTF XML and MTH5 zips for your selection.",
-   enter:_tourEnterSelectDownload},
+   snap:"full",enter:_tourEnterSelectDownload},
   {sel:"#dlTimeSeries",
    text:"Time series at NCI: download lists by level, handed off through an AusMT redirect. Metadata and citations follow below.",
-   enter:_tourEnterSelectDownload},
+   snap:"full",enter:_tourEnterSelectDownload},
   {sel:"#navSurveys",
    text:"Surveys: every survey with its coverage, years, periods, licence and downloads, as cards or a compact list.",
-   enter:_tourEnterMapView},
+   snap:"peek",enter:_tourEnterMapView},
   {sel:"#navCollections",
    text:"Collections: related surveys grouped, such as AusLAMP and the Australia legacy GDS, each with its combined coverage.",
-   enter:_tourEnterMapView},
+   snap:"peek",enter:_tourEnterMapView},
   {sel:"#map",
    text:"That's it: find, screen, select, download, cite. To contribute a survey of your own, follow the link in About.",
-   enter:_tourEnterFinal}
+   snap:"peek",enter:_tourEnterFinal}
 ];
 
 // The SELECT group: the steps that share the select rail mode, the demo rectangle and the demo selection.
@@ -578,6 +578,7 @@ function _tourTakeSnapshot(){
     drawerOpen:!!(dr&&dr.classList.contains("open")),
     drawerSubject:(typeof _drawerSubject!=="undefined"&&_drawerSubject)?_drawerSubject:null,
     drawerTab:(typeof _curDrawerTab!=="undefined")?_curDrawerTab:null,
+    sheetSnap:(typeof sheetSnapState==="function")?sheetSnapState():null,
     hash:location.hash,
     shapes:_tourDrawnLayers(),
     selected:(typeof selected!=="undefined")?[...selected]:[],
@@ -633,6 +634,7 @@ function _tourRestoreSnapshot(){
   if(typeof setView==="function"&&typeof curView!=="undefined"&&curView!==wantView)setView(wantView);
   if(typeof setSidebarMode==="function"&&typeof sidebarMode!=="undefined"&&sidebarMode!==s.mode&&s.mode)setSidebarMode(s.mode);
   _tourRestoreDrawer(s);
+  if(s.sheetSnap&&typeof sheetPhone==="function"&&sheetPhone()&&typeof sheetSnap==="function")sheetSnap(s.sheetSnap);
   if(_tourMapMoved){_tourFitBounds(s.bounds);_tourMapMoved=false;}
   const sb=document.querySelector("aside.filters");
   if(sb&&typeof setSidebarCollapsed==="function"&&sb.classList.contains("collapsed")!==s.collapsed)
@@ -772,11 +774,15 @@ function _tourScrollIntoView(el){
   if(typeof el.scrollIntoView!=="function")return;
   try{el.scrollIntoView({block:"nearest"});}catch(e){}
 }
+function _tourSheetSnap(step){
+  if(step.snap&&typeof sheetActive==="function"&&sheetActive()&&typeof sheetSnap==="function")sheetSnap(step.snap);
+}
 // Arrival at a step: run its enter hook, bring the target into view where it lives in a scroller, THEN
 // lay the spotlight and card out. Split from _tourLayout so a resize never re-fires the enter hook.
 function _tourPosition(){
   const step=TOUR_STEPS[_tourStep];
   if(typeof step.enter==="function")step.enter();
+  _tourSheetSnap(step);
   _tourScrollIntoView(_tourTarget(step));
   _tourLayout();
   _tourAttachSettle();   // then WATCH the target's box until it settles

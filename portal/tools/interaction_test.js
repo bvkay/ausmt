@@ -6441,6 +6441,26 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
       "sheet: narrowing again with the drawer open hosts it in the sheet");
     pw.closeDrawer();
 
+    // THE TOUR ON A PHONE: each step sets the sheet height that shows its target, the drawer steps
+    // with the drawer as host, and closing the tour hands back the height the visitor had.
+    click(handle);                                                  // half -> full, the visitor's height
+    const before = sheet.dataset.snap;
+    const wantSnaps = ["peek", "half", "full", "full", "half", "full", "half", "peek", "full", "full", "peek", "peek", "peek"];
+    pw.__api.startTour();
+    const walked = [];
+    for (let k = 0; k < wantSnaps.length; k++) {
+      ok(pw.__api.tourStep() === k, "phone tour: at step " + k + ", got " + pw.__api.tourStep());
+      walked.push(sheet.dataset.snap + (sheet.dataset.host === "drawer" ? "+drawer" : ""));
+      if (k < wantSnaps.length - 1) click(pdoc.getElementById("tourNext"));
+    }
+    ok(walked.map(x => x.split("+")[0]).join() === wantSnaps.join(),
+      "phone tour: each step sets the sheet height that shows its target, got " + JSON.stringify(walked));
+    ok(walked[4] === "half+drawer" && walked[5] === "full+drawer",
+      "phone tour: the drawer steps spotlight the drawer hosted in the sheet, got " + JSON.stringify(walked));
+    pw.__api.stopTour();
+    ok(sheet.dataset.snap === before && sheet.dataset.host === "filters",
+      "phone tour: closing the tour restores the visitor's sheet height, got " + sheet.dataset.snap + "/" + sheet.dataset.host);
+
     // A rail collapsed on the desktop is open on the phone, and collapsed again on the desktop.
     const cw = await sheetBoot(w => { try { w.localStorage.setItem("ausmt_sidebar_collapsed", "1"); } catch (e) { } });
     const cpane = cw.document.getElementById("filterPane");

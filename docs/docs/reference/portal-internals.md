@@ -5899,6 +5899,19 @@ qColor as a text colour; it renders a .qvdot swatch beside plain readable text i
 
 ## portal/src/tour.js
 
+#### Each step names the sheet height that shows its target
+
+On the phone layout the panel and the drawer are in the bottom sheet, so a step whose target is there
+would spotlight something below the handle at peek. Every deck entry carries `snap`, the sheet height
+that shows its target: half for the filters, the drawer and the selection box; full for Find, the
+tree, the Files tab and the two download offers; peek for the map steps and the two header tabs, so
+the map stays in view. `_tourPosition` sets it (`_tourSheetSnap`, through `sheetSnap` in `sheet.js`)
+after the step's enter hook, which may open the drawer at half, and before the target is scrolled
+into view and measured; the settle watcher then follows the sheet's slide. Above 900px `sheetActive()`
+is false and nothing is set. The pre-tour snapshot carries the sheet's height, restored after the
+visitor's drawer (whose opening sets half). `tests/test_tour_deck.py` pins the heights and the order,
+and the interaction driver walks the deck in a phone window.
+
 #### tour.js - the guided spotlight tour. Classic script, zero dependencies
 
 ```text
