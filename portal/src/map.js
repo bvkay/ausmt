@@ -200,9 +200,16 @@ function onMarkerClick(s,e){
   if(phoneSelecting())onStationTap(s,e,toggleSelected);
   else if(COARSE_POINTER)onStationTap(s,e);
   else openStation(s.i);}
+// Leaflet gives a small circle marker's click the dot's centre as containerPoint, so the finger's
+// point is read from the DOM event.
+function tapPoint(e){
+  const oe=e&&e.originalEvent;
+  if(oe&&typeof oe.clientX==="number"&&typeof map.mouseEventToContainerPoint==="function"){
+    const p=map.mouseEventToContainerPoint(oe);if(p&&typeof p.x==="number"&&typeof p.y==="number")return p;}
+  return e&&e.containerPoint;}
 // A dot tap on a coarse pointer. See docs: portal internals, map.js.
 function onStationTap(s,e,act){
-  const go=act||openStation,tap=e&&e.containerPoint;
+  const go=act||openStation,tap=tapPoint(e);
   if(!tap||typeof tap.x!=="number"||typeof map.latLngToContainerPoint!=="function"){go(s.i);return;}
   const z=curZoom(),reach=tapReach(radiusForZoom(z),weightForZoom(z),COARSE_POINTER?TAP_TOLERANCE:0),pts=[];
   (typeof visible!=="undefined"?visible:[]).forEach(v=>{if(!v.marker||!hasPosition(v))return;

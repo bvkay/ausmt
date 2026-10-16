@@ -6652,6 +6652,7 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
       };
       pm.getSize = () => ({ x: 375, y: 760 });
       pm.getContainer = () => w.document.getElementById("map");
+      pm.mouseEventToContainerPoint = (ev) => ({ x: ev.clientX, y: ev.clientY });
       pm.on = (ev, fn) => { if (typeof ev === "string") ev.split(/\s+/).forEach(e => (evs[e] = evs[e] || []).push(fn)); return pm.__self; };
       ["addLayer", "fitBounds", "setView", "invalidateSize", "addControl", "panBy"].forEach(fn => { pm[fn] = () => pm.__self; });
       const base = w.L;
@@ -6824,6 +6825,20 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ok(cdoc.getElementById("drawer").classList.contains("open") && ca.selIds().length === 0,
       "phone chooser: in Browse the entry chosen opens its drawer");
     ca.closeDrawer();
+    // Leaflet hands a small circle marker's click the dot's own centre as containerPoint, so the
+    // reach is measured from the finger, which the DOM event carries. Two dots 11px apart at zoom 4,
+    // where the reach is 9.8px: a tap 5px from A1 and 6px from A2 reaches both, though A2 lies
+    // beyond the reach of A1's centre.
+    at("A1", 188, 137); at("A2", 199, 137);
+    ca.setSidebarMode("select");
+    ca.stationMarker("A1").handlers.click[0]({ containerPoint: { x: 188, y: 137 },
+      originalEvent: { clientX: 193, clientY: 137 } });
+    items = [...cdoc.querySelectorAll("#tapChooser button.tapchooser-item")];
+    ok(items.length === 2 && ca.selIds().length === 0,
+      "phone chooser: a tap between two dots is measured from the finger, not from the dot Leaflet hit, got " +
+      items.length + " entries and selection " + JSON.stringify(ca.selIds()));
+    cdoc.dispatchEvent(new cw.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    ca.setSidebarMode("browse");
 
     // THE LIST. On the phone layout the Select pane lists the selection in catalogue order, a row per
     // station naming it and its survey with a remove control, above the downloads; removing a row
