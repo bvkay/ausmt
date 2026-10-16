@@ -561,7 +561,8 @@ function ok(cond, msg) { if (!cond) die(msg); }
 // `preBoot` runs on the fresh window BEFORE the modules do, which is the only place a pin can seed
 // state the boot itself READS (localStorage: the sidebar-collapse and intro-dismissed keys are
 // applied during boot, so setting them afterwards would test nothing).
-async function bootFreshWindow(dataMap, url, preBoot) {
+// `src` replaces the module bundle, which is how a leg boots the page without one of its scripts.
+async function bootFreshWindow(dataMap, url, preBoot, src) {
   const d = new JSDOM(html, { url: url || "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
   const w = d.window;
   w.L = stub(); w.JSZip = stub();
@@ -571,7 +572,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     return Promise.resolve(dataMap[url] ? { ok: true, json: () => Promise.resolve(dataMap[url]) } : { ok: false }); };
   if (typeof preBoot === "function") preBoot(w);
   await new Promise(res => (w.document.readyState === "complete" ? res() : w.addEventListener("load", res, { once: true })));
-  vm.runInContext(code, d.getInternalVMContext());
+  vm.runInContext(src || code, d.getInternalVMContext());
   await w.__api.boot();
   await w.__api.hydrationDone();   // two-phase boot: settle tf/sci/manifest before the caller asserts
   return w;
@@ -6298,6 +6299,185 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     ok(close && close.getAttribute("aria-label") === "Close", "phone: the chooser carries a labelled close control");
     close.dispatchEvent(new phoneWin.MouseEvent("click", { bubbles: true }));
     ok(!pdoc.getElementById("tapChooser") && !drawerOn(), "phone: the close control dismisses the chooser");
+  }
+
+  // ---- PHONE: the bottom sheet, the drawer in it, and the counts in its peek row ------------------
+  // A fresh window whose matchMedia answers the phone query (and, when `card` is set, the tablet band),
+  // with every query object kept so a leg can fire a change. The map records panBy, and projects each
+  // station through a table this leg sets. HONESTY: jsdom has no layout, so these are the app's state
+  // and calls; the geometry they produce is measured in a browser and recorded in the docs.
+  {
+    const queries = Object.create(null);
+    const state = { phone: true, card: false };
+    const answer = (q) => /max-width\s*:\s*900px/.test(q) ? state.phone
+      : /min-width\s*:\s*761px/.test(q) ? (state.phone && state.card) : false;
+    const pans = [];
+    const proj = Object.create(null);
+    const sheetBoot = (extra) => bootFreshWindow(DATAMAP, undefined, w => {
+      w.matchMedia = (q) => {
+        if (!queries[q]) {
+          const ls = [];
+          queries[q] = { media: q, get matches() { return answer(q); }, ls,
+            addListener(fn) { ls.push(fn); }, removeListener() {}, addEventListener(t, fn) { ls.push(fn); }, removeEventListener() {} };
+        }
+        return queries[q];
+      };
+      const pm = Object.create(null);
+      pm.latLngToContainerPoint = (ll) => proj[ll[0] + "," + ll[1]] || { x: 0, y: 0 };
+      pm.getSize = () => ({ x: 375, y: 716 });
+      pm.panBy = (off) => { pans.push(off); return pm.__self; };
+      pm.getContainer = () => w.document.getElementById("map");
+      ["on", "addLayer", "fitBounds", "setView", "invalidateSize", "addControl"].forEach(fn => { pm[fn] = () => pm.__self; });
+      const base = w.L;
+      w.L = new Proxy(function () { }, {
+        get: (tg, prop) => {
+          if (prop === "then") return undefined;
+          if (prop === "map") return () => recProxy(pm);
+          return base[prop];
+        },
+        apply: () => stub(), construct: () => stub(),
+      });
+      if (extra) extra(w);
+    });
+    const fireChange = () => Object.values(queries).forEach(q => q.ls.forEach(fn => fn({ matches: q.matches, media: q.media })));
+    const pw = await sheetBoot();
+    const pdoc = pw.document;
+    const sheet = pdoc.getElementById("sheet"), handle = pdoc.getElementById("sheetHandle");
+    const drawerEl = pdoc.getElementById("drawer");
+    const click = (el) => el.dispatchEvent(new pw.MouseEvent("click", { bubbles: true }));
+    ok(typeof pw.sheetActive === "function" && pw.sheetActive() === true,
+      "sheet: src/sheet.js must load and report the phone layout active under (max-width:900px)");
+    ok(sheet.dataset.snap === "half" && sheet.dataset.host === "filters",
+      "sheet: it boots at half with the filters as host, got " + sheet.dataset.snap + "/" + sheet.dataset.host);
+    ok(handle.getAttribute("aria-expanded") === "true" && /half/.test(handle.getAttribute("aria-label")),
+      "sheet: the handle states half and expanded, got " + handle.getAttribute("aria-label"));
+    // The counts render into the peek row on the phone layout.
+    const counts = pdoc.getElementById("footerCounts");
+    ok(counts && counts.parentElement && counts.parentElement.id === "sheetPeek",
+      "sheet: the counts line must sit in the peek row on a phone, got parent " + (counts && counts.parentElement && counts.parentElement.id));
+    ok(/5 shown/.test(counts.textContent), "sheet: the peek row carries the live counts, got " + counts.textContent);
+    // The handle's tap cycles peek, half, full, and its state follows.
+    const seen = [];
+    for (let k = 0; k < 3; k++) {
+      click(handle);
+      seen.push([sheet.dataset.snap, handle.getAttribute("aria-expanded"), handle.getAttribute("aria-label")]);
+    }
+    ok(seen.map(x => x[0]).join() === "full,peek,half",
+      "sheet: a tap cycles half to full to peek to half, got " + JSON.stringify(seen));
+    ok(seen[1][1] === "false" && seen[0][1] === "true" && seen[2][1] === "true",
+      "sheet: aria-expanded is false only at peek, got " + JSON.stringify(seen));
+    ok(/full/.test(seen[0][2]) && /peek/.test(seen[1][2]) && /half/.test(seen[2][2]),
+      "sheet: the handle's label names each height, got " + JSON.stringify(seen));
+    // A drag snaps to the nearest height and is not also read as a tap.
+    const ptr = (type, y) => handle.dispatchEvent(new pw.MouseEvent(type, { bubbles: true, clientY: y }));
+    ok(pw.sheetSnapHeights().half === Math.round(pw.innerHeight * 0.5), "sheet: half is half the screen");
+    ptr("pointerdown", 500); ptr("pointermove", 300); ptr("pointermove", 100); ptr("pointerup", 100); click(handle);
+    ok(sheet.dataset.snap === "full", "sheet: a long drag up from half snaps to full, got " + sheet.dataset.snap);
+    ok(!sheet.style.transform, "sheet: the drag's inline transform is dropped when it snaps");
+    ptr("pointerdown", 100); ptr("pointermove", 500); ptr("pointerup", 520); click(handle);
+    ok(sheet.dataset.snap === "half", "sheet: a drag down to near half snaps to half, got " + sheet.dataset.snap);
+    ptr("pointerdown", 100); ptr("pointermove", 900); ptr("pointerup", 900); click(handle);
+    ok(sheet.dataset.snap === "peek", "sheet: a drag past half snaps to peek, got " + sheet.dataset.snap);
+    // Opening a station hands the sheet to the drawer at half, and recentres the station above it.
+    click(handle); click(handle);                                   // peek -> half -> full
+    ok(sheet.dataset.snap === "full", "sheet: set up at full before the open");
+    const a1 = pw.__api.station("A1");
+    proj[a1.lat + "," + a1.lon] = { x: 100, y: 100 };
+    pans.length = 0;
+    pw.openStation(a1.i);
+    ok(sheet.dataset.host === "drawer" && sheet.dataset.snap === "half",
+      "sheet: opening a station hosts the drawer at half, got " + sheet.dataset.host + "/" + sheet.dataset.snap);
+    ok(drawerEl.parentElement === sheet && drawerEl.classList.contains("open"),
+      "sheet: the drawer renders inside the sheet on a phone, got parent " + (drawerEl.parentElement && drawerEl.parentElement.id));
+    ok(/A1/.test(drawerEl.querySelector(".dhead .sid").textContent) && /Download EDI/.test(drawerEl.querySelector(".dactions").textContent),
+      "sheet: the station header and Download EDI open with it");
+    ok(pans.length === 1 && pans[0][0] === 100 - 375 / 2 && pans[0][1] === 100 - (716 - pw.sheetSnapHeights().half) / 2,
+      "sheet: the map pans the station to the middle of the map above the half sheet, got " + JSON.stringify(pans));
+    // Back restores the filters at the height they had.
+    click(pdoc.getElementById("sheetBack"));
+    ok(sheet.dataset.host === "filters" && sheet.dataset.snap === "full" && !drawerEl.classList.contains("open"),
+      "sheet: Back restores the filters at the previous height, got " + sheet.dataset.host + "/" + sheet.dataset.snap);
+    // A second station opened over the first keeps the filters' height for Back.
+    click(handle);                                                  // full -> peek
+    pw.openStation(a1.i);
+    pw.openStation(pw.__api.station("A2").i);
+    ok(sheet.dataset.host === "drawer" && /A2/.test(drawerEl.querySelector(".dhead .sid").textContent),
+      "sheet: a second station replaces the first in the sheet");
+    // Escape closes the drawer state.
+    pdoc.dispatchEvent(new pw.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    ok(sheet.dataset.host === "filters" && sheet.dataset.snap === "peek" && !drawerEl.classList.contains("open"),
+      "sheet: Escape closes the drawer and restores the filters at peek, got " + sheet.dataset.host + "/" + sheet.dataset.snap);
+    // The survey drawer takes the same host.
+    pw.openSurvey("Alpha Survey");
+    ok(sheet.dataset.host === "drawer" && sheet.dataset.snap === "half" && drawerEl.parentElement === sheet,
+      "sheet: the survey drawer opens in the sheet at half");
+    pw.closeDrawer();
+    ok(sheet.dataset.host === "filters" && sheet.dataset.snap === "peek", "sheet: closing the survey drawer restores peek");
+    // The sheet's footer content ends with the About link.
+    const about = pdoc.querySelector("#sheetFoot .sheetabout");
+    ok(about && about.getAttribute("href") === "about.html" && about.closest("#sheet") === sheet,
+      "sheet: the sheet's footer content holds the About link to about.html");
+    // Off the map view the drawer goes back to the content box, where those views draw it.
+    pw.setView("surveys");
+    pw.openSurvey("Alpha Survey");
+    ok(drawerEl.parentElement && drawerEl.parentElement.id === "content" && sheet.dataset.host === "filters",
+      "sheet: off the map view the drawer opens in the content box, not the hidden sheet");
+    pw.closeDrawer(); pw.setView("map");
+    // The tablet band: the station is centred in the map beside the 420px card.
+    const fa = pw.sheetFreeArea(800, 972, true, 512);
+    ok(fa.left === 436 && fa.right === 800 && fa.top === 0 && fa.bottom === 972,
+      "sheet: beside the card the free map is right of it, got " + JSON.stringify(fa));
+    const fp = pw.sheetFreeArea(375, 716, false, 358);
+    ok(fp.left === 0 && fp.right === 375 && fp.bottom === 358, "sheet: on a phone the free map is above the sheet, got " + JSON.stringify(fp));
+    // Leaving the phone layout with the drawer open puts everything back where the desktop has it.
+    pw.openStation(a1.i);
+    state.phone = false; fireChange();
+    ok(drawerEl.parentElement && drawerEl.parentElement.id === "content" && drawerEl.classList.contains("open"),
+      "sheet: a widened window returns the open drawer to the content box");
+    ok(sheet.dataset.host === "filters" && counts.parentElement.classList.contains("fright"),
+      "sheet: a widened window returns the host and the counts to the desktop layout");
+    state.phone = true; fireChange();
+    ok(drawerEl.parentElement === sheet && sheet.dataset.host === "drawer" && counts.parentElement.id === "sheetPeek",
+      "sheet: narrowing again with the drawer open hosts it in the sheet");
+    pw.closeDrawer();
+
+    // A rail collapsed on the desktop is open on the phone, and collapsed again on the desktop.
+    const cw = await sheetBoot(w => { try { w.localStorage.setItem("ausmt_sidebar_collapsed", "1"); } catch (e) { } });
+    const cpane = cw.document.getElementById("filterPane");
+    ok(!cpane.classList.contains("collapsed"), "sheet: the collapsed rail is open inside the sheet");
+    state.phone = false; fireChange();
+    ok(cpane.classList.contains("collapsed"), "sheet: the reader's collapsed rail returns above 900px");
+    state.phone = true;
+
+    // NO SCRIPT FOR THE SHEET: without src/sheet.js the filters still render inside the sheet at half,
+    // and a station still opens in the drawer where the page declares it.
+    const noSheet = MODULES.filter(m => m !== "sheet").map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n") +
+      code.slice(code.indexOf("\nwindow.__api="));
+    ok(MODULES.indexOf("sheet") >= 0, "sheet: index.html must load src/sheet.js");
+    const nw = await bootFreshWindow(DATAMAP, undefined, w => {
+      w.matchMedia = (q) => ({ matches: answer(q), media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+    }, noSheet);
+    const nsheet = nw.document.getElementById("sheet");
+    ok(nsheet.dataset.snap === "half" && nsheet.querySelectorAll("#tree input[type=checkbox]").length > 0,
+      "sheet: with no sheet script the filters render in the sheet at its half default");
+    nw.openStation(nw.__api.station("A1").i);
+    ok(nw.document.getElementById("drawer").classList.contains("open") &&
+      nw.document.getElementById("drawer").parentElement.id === "content",
+      "sheet: with no sheet script a station still opens in the declared drawer");
+  }
+
+  // ---- DESKTOP: the sheet takes no part above 900px -------------------------------------------------
+  {
+    ok(typeof win.sheetActive === "function" && win.sheetActive() === false,
+      "desktop: with no phone query the sheet is inactive");
+    win.__api.openStation(win.__api.stIndex("A1"));
+    const d = doc.getElementById("drawer"), sh = doc.getElementById("sheet");
+    ok(d.classList.contains("open") && d.parentElement.id === "content" && sh.dataset.host === "filters" &&
+      sh.dataset.snap === "half" && !sh.style.transform,
+      "desktop: the drawer opens in the content box and the sheet is untouched");
+    ok(doc.getElementById("footerCounts").parentElement.classList.contains("fright"),
+      "desktop: the counts stay in the footer's right zone");
+    win.__api.closeDrawer();
   }
 
   process.exit(0);

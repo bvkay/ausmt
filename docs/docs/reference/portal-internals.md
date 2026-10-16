@@ -4623,6 +4623,16 @@ read in passesCore() above and by the selection exports' three-way not-included 
 
 ## portal/src/main.js
 
+#### The counts line rides the sheet's peek row on the phone layout
+
+```text
+The counts line rides the sheet's peek row on the phone layout and the footer's right zone otherwise.
+```
+
+`placeCounts()` moves `#footerCounts` (and the `#countSlot` filters.js paints) into `#sheetPeek` while
+`sheetPhone()` holds, and back into `footer .fright` otherwise. The element moves; it is never
+copied, so the ids the counters are painted by stay unique.
+
 #### Fold the boot-loaded coordinate policy onto each station (generalised | ...
 
 ```text
@@ -5614,6 +5624,54 @@ The "/" branch is a SAME-ORIGIN path and nothing else. A second slash starts an 
 same authority; both collapse to "#" like every other off-allowlist form. Third-party field values
 arrive here raw (a related identifier of type URL), so this branch is an allowlist, not a shorthand.
 ```
+
+## portal/src/sheet.js
+
+The phone layout's bottom sheet. It is loaded before `drawer.js`, as a file under `script-src 'self'`
+(no inline script and no handler in the markup), and every change it makes to the page is gated on one
+query, `matchMedia("(max-width:900px)")` (`sheetPhone()`). Above 900px no function here moves an
+element, sets an attribute or calls the map, so the desktop page is the one it was.
+
+#### The host and the snaps
+
+The sheet is `#sheet` in `index.html` (see the phone layout under `index.html`). Its state is two
+attributes: `data-snap` (`peek`, `half` or `full`, read by the stylesheet) and `data-host` (`filters`
+or `drawer`). `sheetSnap(name)` sets the height and keeps the handle's `aria-expanded` (false only at
+peek) and its label ("Panel at half height. ...") in step. The handle's tap cycles half, full, peek,
+half; a pointer drag on it moves the sheet by an inline `translateY` with the transition off, and on
+release snaps to whichever of the three heights is nearest the visible height (`sheetNearestSnap`).
+A pointer that moves no more than 6px is a tap. The click a drag ends with is swallowed, so a drag is
+never also read as a tap, and the handle stays a button that a keyboard cycles with Enter or Space.
+
+#### The drawer hand-off
+
+`drawer.js` calls `sheetHostDrawer()` as `openStation` and `openSurvey` open a subject (not on a
+hydration re-render), before focus moves into the drawer, and `sheetReleaseDrawer()` from `closeDrawer`.
+On the map view of the phone layout the first moves `#drawer` into the sheet, records the filters'
+height and sets the sheet to half with the drawer as host, so the station's header and Download EDI
+show; a second subject opened over the first keeps the recorded height. The second gives the sheet
+back to the filters at that height. The Back control (`#sheetBack`) closes the drawer through
+`closeDrawer`, and so do the drawer's own close control and Escape (the drawer's existing keydown
+handler), so every way out restores the filters the same way. Off the map view, or above 900px, the
+drawer goes back to where `index.html` declares it, in `.content`.
+
+After a station opens in the sheet, `sheetRecentre` pans the map (`map.panBy`, unanimated under
+reduced motion) so the station sits at the centre of the part of the map the sheet leaves clear:
+above the sheet on a phone, right of the 420px card from 761px (`sheetFreeArea`). A station with no
+position is not panned.
+
+#### Width changes
+
+`sheetSync()` brings the page into line with the current width and runs at boot (`main.js runInit`)
+and on every change of the query: on the phone layout it opens a rail the reader collapsed on a
+desktop (without storing the choice, and closes it again above 900px) and hosts an open drawer; above
+900px it returns the drawer and the host. Both ends call `placeCounts()` in `main.js`.
+
+#### No script
+
+Without this file the sheet stays at its markup default, half with the filters as host, and the
+stylesheet makes the panel scroll inside it; a station still opens in the drawer where the page
+declares it. The interaction driver boots the page without `sheet.js` to hold that.
 
 ## portal/src/state.js
 

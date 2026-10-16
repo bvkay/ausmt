@@ -339,3 +339,16 @@ def test_no_phone_override_leaks_into_the_desktop_rules():
             assert leak not in decls, f"index.html: {sel} carries the phone override {leak!r} at every width"
     assert "#drawer svg" not in base, "index.html: the drawer plot rule belongs to the phone query"
     assert "pointer:coarse" not in _outside_queries(_text(INDEX)), "no coarse rule may sit outside a query"
+
+
+def test_the_sheet_script_is_a_served_file_and_its_controls_carry_no_inline_handler():
+    """FAILS if the sheet's behaviour moves into an inline script or handler, which the page's CSP
+    (script-src 'self') blocks, or if index.html stops loading src/sheet.js before drawer.js, whose
+    openers call it."""
+    text = _text(INDEX)
+    tags = re.findall(r'<script src="src/([a-z-]+)\.js"></script>', text)
+    assert "sheet" in tags and tags.index("sheet") < tags.index("drawer"), tags
+    src = (ROOT / "src" / "sheet.js").read_text(encoding="utf-8")
+    assert "const _sheetPhoneMq=_sheetMq(SHEET_QUERY);" in src and 'SHEET_QUERY="(max-width:900px)"' in src, (
+        "src/sheet.js: the phone branch is gated on one matchMedia query")
+    assert "innerHTML" not in src and "eval(" not in src and "setAttribute(\"on" not in src

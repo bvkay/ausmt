@@ -11,7 +11,10 @@ The driver FAILS (and so does this test) if:
   skipped binding the toggle handler entirely);
 - the #/collection/<id> hash does not open the full-width collection page over the map, or browser-Back
   (hash -> '') does not restore the map view;
-- a survey-name Find query blanks the map (passes() must also match s.survey).
+- a survey-name Find query blanks the map (passes() must also match s.survey);
+- at a phone media query the bottom sheet does not cycle, drag-snap, host the drawer at half, hand the
+  filters back at their previous height on Back and Escape, carry the counts in its peek row, or
+  degrade to its half default without src/sheet.js; or, at desktop width, the sheet touches anything.
 
 Skips when Node or the jsdom dev-dependency is absent (CI runs `npm ci` in portal/ first)."""
 import json

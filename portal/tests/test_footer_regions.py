@@ -745,7 +745,8 @@ def _phone_block(text):
 def test_the_map_pages_phone_footer_leaves_the_viewport_and_its_contents_ride_the_sheet():
     """THE PHONE FORM OF THE MAP PAGE'S FOOTER. FAILS if index.html's footer stays on screen at 900px
     and narrower, if the sheet stops carrying the footer's left link and centre line as the footer
-    writes them, or if any other surface takes the phone form."""
+    writes them, if main.js stops moving the live counts into the sheet's peek row, or if any other
+    surface takes the phone form."""
     text = _index_text()
     assert _PHONE_FOOTER in "".join(_phone_block(text).split()), (
         f"index.html: at 900px and narrower the footer must declare {_PHONE_FOOTER!r}")
@@ -757,6 +758,10 @@ def test_the_map_pages_phone_footer_leaves_the_viewport_and_its_contents_ride_th
         assert flat(regions[region]) in body, (
             f"index.html: the sheet carries the footer's {region} region as the footer writes it: "
             f"{regions[region]!r} not in {body!r}")
+    main = (ROOT / "src" / "main.js").read_text(encoding="utf-8")
+    assert re.search(r'function placeCounts\(\)\{[^}]*getElementById\("footerCounts"\)[^}]*'
+                     r'getElementById\("sheetPeek"\)', main), (
+        "main.js: placeCounts moves the live counts into the sheet's peek row on the phone layout")
     for where in SURFACES:
         if where == "index.html":
             continue

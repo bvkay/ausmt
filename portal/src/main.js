@@ -419,8 +419,13 @@ function buildLegend(){
       if(e.key==="Enter"||e.key===" "||e.key==="Spacebar"){e.preventDefault();toggleLegendType(btn.dataset.type);}});});
   syncLegendTypes();                                               // paint from the checkboxes, never from an assumption
 }
+// The counts line rides the sheet's peek row on the phone layout and the footer's right zone otherwise.
+function placeCounts(){const c=document.getElementById("footerCounts"),peek=document.getElementById("sheetPeek"),
+  home=document.querySelector("footer .fright");if(!c||!peek||!home)return;
+  const to=(typeof sheetPhone==="function"&&sheetPhone())?peek:home;if(c.parentElement!==to)to.appendChild(c);}
 function runInit(){
   buildState();
+  if(typeof sheetSync==="function")sheetSync();      // the phone layout: drawer host, rail and counts
   // The Collections tab only appears when the data actually has collections (surveys sharing a collection.id).
   const _nc=document.getElementById("navCollections");
   if(_nc)_nc.style.display=(typeof COLL!=="undefined"&&COLL&&Object.keys(COLL).length)?"":"none";
