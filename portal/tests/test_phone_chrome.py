@@ -36,6 +36,8 @@ Each assertion states its failure criterion:
   * ABOUT - FAILS if an about.html card can push the page sideways at a phone width.
   * SURVEYS - FAILS if a /surveys control label or select can push the page sideways at a phone width.
   * DRAW TOOLBAR - FAILS if the Leaflet draw toolbar is drawn at 900px and narrower.
+  * PHONE SELECTION - FAILS if, at 900px and narrower, the Select pane stops offering "Select what's
+    in view" with its count beside it as a 44px control, or if that control is drawn above 900px.
   * DESKTOP - FAILS if any of these overrides leaks out of its query into the base rules.
 """
 import re
@@ -375,6 +377,36 @@ def test_the_draw_toolbar_is_hidden_at_phone_widths():
     shown = _rules("".join(_blocks(_text(INDEX), f"@media (max-width:{PHONE_BREAKPOINT}px)")))
     assert "display:none" in _decls(shown.get(".leaflet-draw.leaflet-control", [])), (
         "index.html: the draw toolbar is hidden at 900px and narrower")
+
+
+def _select_pane(text):
+    m = re.search(r'<div id="selectMode"[^>]*>(.*?)</div><!-- /#selectMode -->', text, re.S)
+    assert m, "index.html: the Select pane is <div id=\"selectMode\"> closed by <!-- /#selectMode -->"
+    return m.group(1)
+
+
+def test_the_phone_select_pane_offers_what_is_in_view():
+    """FAILS if the Select pane loses its "Select what's in view" button, the count that describes it
+    or its Clear selection control, if the in-view row is drawn above 900px, or if at 900px and
+    narrower it is not drawn or its buttons fall under the 44px floor."""
+    text = _text(INDEX)
+    pane = _select_pane(text)
+    row = re.search(r'<div class="phonesel inviewrow">(.*?)</div>', pane, re.S)
+    assert row, "index.html: the Select pane carries the in-view row"
+    assert re.search(r'<button type="button" class="primary" id="selInView" aria-describedby="selInViewN">'
+                     r"Select what's in view</button>", row.group(1)), row.group(1)
+    assert '<span class="inviewn" id="selInViewN"></span>' in row.group(1), "the count sits beside the button"
+    assert re.search(r'<button class="wide" id="clearSel">Clear selection<span class="deskonly"> &amp; shapes'
+                     r"</span></button>", pane), "index.html: Clear selection names shapes only where they can be drawn"
+    base = _rules(_outside_queries(text))
+    assert "display:none" in _decls(base.get(".phonesel", [])), "index.html: the in-view row is hidden above 900px"
+    assert ".deskonly" not in " ".join(base), "index.html: nothing hides the desktop's wording above 900px"
+    phone = _phone(text)
+    assert "display:flex" in _decls(phone.get(".selbox .phonesel", [])), "drawn at 900px and narrower"
+    assert f"min-height:{TAP_TARGET}px" in _decls(phone.get(".selbox button", [])), (
+        f"index.html: the Select pane's buttons are {TAP_TARGET}px targets at 900px and narrower")
+    assert "display:none" in _decls(phone.get(".selbox .deskonly", []))
+    assert not re.search(r"\son[a-z]+=", pane), "index.html: no inline handler in the Select pane (CSP)"
 
 
 def test_the_surveys_controls_cannot_push_the_page_sideways():

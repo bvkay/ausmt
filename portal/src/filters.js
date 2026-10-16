@@ -131,7 +131,8 @@ function updateSel(){document.getElementById("selBig").textContent=selected.size
   // which owns the packaging the metas must agree with; re-painted here, where the selection is known to
   // have changed. See docs: portal internals, filters.js.
   if(typeof paintDownloadRows==="function")paintDownloadRows();
-  document.getElementById("selHint").textContent=selected.size?"Downloads below cover exactly these stations, with provenance pointers.":SEL_HINT_EMPTY;}
+  document.getElementById("selHint").textContent=selected.size?"Downloads below cover exactly these stations, with provenance pointers.":SEL_HINT_EMPTY;
+  paintPhoneSelection();}
 
 // Tree disclosure state. Collapse is IN-MEMORY only (no persistence), keyed "c:<country>" /
 // "o:<country||org>" / "k:<collection id>" (the || separator is the tree's existing org-namespacing
@@ -318,6 +319,33 @@ document.getElementById("modeSeg").addEventListener("click",e=>{const b=e.target
 // internals, filters.js.
 document.getElementById("selAll").onclick=()=>{drawn.clearLayers();selected=new Set(visible.map(s=>s.i));updateSel();setSidebarMode("select");};
 document.getElementById("clearSel").onclick=()=>{selected.clear();drawn.clearLayers();updateSel();};
+
+function _viewBox(b){
+  const f=k=>{try{const v=b&&typeof b[k]==="function"?b[k]():NaN;return typeof v==="number"&&isFinite(v)?v:NaN;}catch(e){return NaN;}};
+  const box={s:f("getSouth"),n:f("getNorth"),w:f("getWest"),e:f("getEast")};
+  return [box.s,box.n,box.w,box.e].every(isFinite)?box:null;}
+function _inViewBox(box,s){
+  if(s.lat<box.s||s.lat>box.n)return false;
+  if(box.e-box.w>=360)return true;
+  return [s.lon,s.lon-360,s.lon+360].some(x=>x>=box.w&&x<=box.e);}
+function stationsInView(bounds){const box=_viewBox(bounds);if(!box)return [];
+  return visible.filter(s=>hasPosition(s)&&_inViewBox(box,s)).map(s=>s.i);}
+function _mapView(){return (typeof map!=="undefined"&&map&&typeof map.getBounds==="function")?map.getBounds():null;}
+function selectInView(bounds){
+  drawn.clearLayers();
+  selected=new Set(stationsInView(bounds===undefined?_mapView():bounds));
+  updateSel();}
+function _phoneSel(){return typeof sheetPhone==="function"&&sheetPhone();}
+function paintInViewCount(){const n=document.getElementById("selInViewN");
+  if(n&&_phoneSel())n.textContent=_countN(stationsInView(_mapView()).length)+" in view";}
+function paintPhoneSelection(){
+  const phone=_phoneSel(),h=document.getElementById("selHint");
+  if(h&&!selected.size)h.textContent=(phone&&h.dataset.phone)||SEL_HINT_EMPTY;
+  if(!phone)return;
+  paintInViewCount();}
+const _selInView=document.getElementById("selInView");
+if(_selInView)_selInView.addEventListener("click",()=>selectInView());
+map.on("moveend",()=>{if(_phoneSel())paintInViewCount();});
 
 // Year range filter - two plain number inputs; either change re-filters (refresh() re-reads
 // passesYearRange() each call, so no extra plumbing needed beyond a re-render trigger).

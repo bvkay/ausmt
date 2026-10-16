@@ -569,6 +569,7 @@
   /* See docs: portal internals, index.html, phone and touch. */
   .sheet{display:contents}
   .sheethandle,.sheetpeek,.sheetbar,.sheetfoot{display:none}
+  .phonesel{display:none}
   .tapchooser{position:absolute;z-index:1000;width:240px;max-width:calc(100% - 16px);max-height:45%;overflow-y:auto;
     background:var(--surface);border:1px solid var(--accent);border-radius:8px;box-shadow:var(--shadow);font-size:14px}
   .tapchooser-head{display:flex;align-items:center;justify-content:space-between;padding:0 0 0 12px;color:var(--muted);
@@ -618,6 +619,12 @@
     .sheetfoot a{display:inline-flex;align-items:center;min-height:44px;color:var(--accent);text-decoration:none}
     .sheetfoot .sheetabout{font-size:14px;font-weight:700}
     .sheetack{font-weight:700}
+    .selbox .phonesel{display:flex}
+    .inviewrow{align-items:center;gap:10px;margin-top:10px}
+    .inviewrow #selInView{flex:1 1 auto;min-width:0}
+    .inviewn{flex:none;font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+    .selbox button{min-height:44px}
+    .selbox .deskonly{display:none}
   }
   @media (max-width:760px){.maplegend{bottom:calc(130px + env(safe-area-inset-bottom,0px))}}
   @media (min-width:761px) and (max-width:900px){
@@ -720,7 +727,11 @@
     <h2>Selection</h2>
     <div class="selbox">
       <div class="selnum"><b class="big" id="selBig">0</b><span class="biglab"> stations selected</span></div>
-      <div class="hint" id="selHint">Draw on the map with the buttons below (or the toolbar, top-left), or take everything that passes the filters.</div>
+      <div class="hint" id="selHint" data-phone="Tap a station on the map to add or remove it, or take every station in view.">Draw on the map with the buttons below (or the toolbar, top-left), or take everything that passes the filters.</div>
+      <div class="phonesel inviewrow">
+        <button type="button" class="primary" id="selInView" aria-describedby="selInViewN">Select what's in view</button>
+        <span class="inviewn" id="selInViewN"></span>
+      </div>
       <div class="btnrow">
         <button class="wide" id="selAll">Select all filtered</button>
       </div>
@@ -732,7 +743,7 @@
         <button id="drawPoly">Draw polygon</button>
       </div>
       <div class="btnrow">
-        <button class="wide" id="clearSel">Clear selection &amp; shapes</button>
+        <button class="wide" id="clearSel">Clear selection<span class="deskonly"> &amp; shapes</span></button>
       </div>
     </div>
   </section>

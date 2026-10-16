@@ -4692,6 +4692,36 @@ The PREDICATE s.ediAvail outlived the control exactly as this comment always sai
 read in passesCore() above and by the selection exports' three-way not-included honesty.
 ```
 
+#### The phone selection
+
+At 900px and narrower (`sheetPhone()` in `sheet.js`, the phone sheet and the tablet card alike) a
+station is selected by what the map shows, not by a drawn shape. Above 900px none of this runs and
+the desktop selection is what it was.
+
+**Select what is in view.** `stationsInView(bounds)` returns the catalogue indices of the stations
+that pass the current filters (`visible`) and lie inside `bounds`, in catalogue order. It reads only
+the four edges a Leaflet `LatLngBounds` gives (`getSouth`, `getNorth`, `getWest`, `getEast`), so a test
+passes a stub, and a map that cannot state its edges has nothing in view. It applies the exclusions a
+drawn shape applies (`inShapes`): a station hidden by its data type, its survey or collection in the
+tree, Find or any other filter is not in `visible`, and a station whose position the custodian
+withholds (`hasPosition` false) is never in a view. An embargoed station keeps its place on the map
+and is selected as a drawn shape selects it; the selection exports leave its files out and say why,
+exactly as at desktop. A view panned across the antimeridian reports longitudes past 180, so each
+station is also tried at its longitude plus and minus 360. `selectInView()` clears any drawn shape,
+because `refresh()` re-derives the selection from shapes, and replaces the selection with the
+stations in the map's current view (`map.getBounds()`).
+
+The Select pane shows the control as "Select what's in view" (`#selInView`, a `type="button"` with
+`aria-describedby` pointing at the count) with the number it would take beside it (`#selInViewN`,
+"N in view"). The count is repainted when the map stops moving (`moveend`) and on every selection or
+filter change (`updateSel` calls `paintPhoneSelection`), and `sheetSync` repaints it when the window
+crosses 900px. With nothing selected the hint (`#selHint`) reads its `data-phone` text, which names the
+phone's two ways to select instead of the draw toolbar; above 900px it keeps the markup's own text.
+Clear selection is the desktop's control, whose " & shapes" is hidden at these widths
+(`.selbox .deskonly`). `interaction_test.js` drives a stubbed view at the phone query: the stations it
+selects, a hidden survey and a withheld position left out, Find narrowing the result, the count
+following `moveend`, and the button and Clear.
+
 ## portal/src/main.js
 
 #### The counts line rides the sheet's peek row on the phone layout

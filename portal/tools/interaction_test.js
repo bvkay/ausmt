@@ -548,6 +548,9 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "curDrawerTab:()=>_curDrawerTab,closeDrawer,selectDrawerTab," +
   "stIndex:(id)=>{const s=ST.find(x=>x.id===id);return s?s.i:-1;}," +
   "drawerSubject:()=>_drawerSubject?JSON.parse(JSON.stringify(_drawerSubject)):null," +
+  // The phone selection. LAZY arrows, so a boot on code without them reaches the phone legs and fails there.
+  "stationsInView:(b)=>stationsInView(b),selectInView:(b)=>selectInView(b),toggleSelected:(i)=>toggleSelected(i)," +
+  "selIds:()=>ST.filter(s=>selected.has(s.i)).map(s=>s.id),idAt:(i)=>ST[i]&&ST[i].id," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -6613,6 +6616,128 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
       "sheet: with no sheet script a station still opens in the declared drawer");
   }
 
+  // ---- PHONE: selection by what is in view, tap to toggle, and the list ---------------------------
+  // A fresh window whose matchMedia answers the phone query, the tablet band when `card` is set and a
+  // coarse pointer when `coarse` is set. The map's bounds are a stub this leg sets, its events are
+  // recorded so a leg can fire moveend, and every station dot is a recorded layer. HONESTY: jsdom has
+  // no layout and no canvas, so these are the app's state, calls and DOM; what a finger reaches on a
+  // real screen is measured in a browser and recorded in the docs.
+  {
+    const qs = { phone: true, card: false, coarse: false };
+    const queries = Object.create(null);
+    const answer = (q) => /max-width\s*:\s*900px/.test(q) ? qs.phone
+      : /min-width\s*:\s*761px/.test(q) ? (qs.phone && qs.card)
+        : /\(\s*pointer\s*:\s*coarse\s*\)/.test(q) ? qs.coarse : false;
+    const proj = Object.create(null);
+    const evs = Object.create(null);
+    let far = 0;
+    let view = null;
+    const box = (s, n, w, e) => ({ getSouth: () => s, getNorth: () => n, getWest: () => w, getEast: () => e });
+    const selBoot = (src) => bootFreshWindow(DATAMAP, undefined, w => {
+      w.matchMedia = (q) => {
+        if (!queries[q]) {
+          const ls = [];
+          queries[q] = { media: q, get matches() { return answer(q); }, ls,
+            addListener(fn) { ls.push(fn); }, removeListener() {}, addEventListener(t, fn) { ls.push(fn); }, removeEventListener() {} };
+        }
+        return queries[q];
+      };
+      const pm = Object.create(null);
+      pm.getBounds = () => view;
+      pm.latLngToContainerPoint = (ll) => {
+        const k = ll[0] + "," + ll[1];
+        if (!proj[k]) { far += 1; proj[k] = { x: 1000 + 100 * far, y: 1000 }; }
+        return proj[k];
+      };
+      pm.getSize = () => ({ x: 375, y: 760 });
+      pm.getContainer = () => w.document.getElementById("map");
+      pm.on = (ev, fn) => { if (typeof ev === "string") ev.split(/\s+/).forEach(e => (evs[e] = evs[e] || []).push(fn)); return pm.__self; };
+      ["addLayer", "fitBounds", "setView", "invalidateSize", "addControl", "panBy"].forEach(fn => { pm[fn] = () => pm.__self; });
+      const base = w.L;
+      w.L = new Proxy(function () { }, {
+        get: (tg, prop) => {
+          if (prop === "then") return undefined;
+          if (prop === "map") return () => recProxy(pm);
+          if (prop === "canvas") return (o) => ({ options: o });
+          if (prop === "circleMarker") return (ll, o) => recLayer("circleMarker", ll, o, true);
+          return base[prop];
+        },
+        apply: () => stub(), construct: () => stub(),
+      });
+    }, src);
+    const fireChange = () => Object.values(queries).forEach(q => q.ls.forEach(fn => fn({ matches: q.matches, media: q.media })));
+    const sw = await selBoot();
+    const sa = sw.__api, sdoc = sw.document;
+    const click = (el) => el.dispatchEvent(new sw.MouseEvent("click", { bubbles: true }));
+    const sfire = (el, type) => el.dispatchEvent(new sw.Event(type, { bubbles: true }));
+    const ids = () => sa.selIds();
+
+    // SELECT WHAT IS IN VIEW. The view holds the Alpha, Beta and embargoed Delta stations; station G1 is in New Zealand.
+    const VIEW = box(-32, -27, 134, 139);
+    ok(typeof sw.stationsInView === "function" && typeof sw.selectInView === "function",
+      "phone select: filters.js must define stationsInView and selectInView");
+    const inView = (b) => sa.stationsInView(b).map(i => sa.idAt(i));
+    ok(JSON.stringify(inView(VIEW)) === JSON.stringify(["A1", "A2", "B1", "D1"]),
+      "phone select: the stations in a stubbed view are exactly those inside it that pass the filters, in catalogue order, got " +
+      JSON.stringify(inView(VIEW)));
+    ok(JSON.stringify(inView(box(-42, -40, 173, 175))) === JSON.stringify(["G1"]),
+      "phone select: a view over New Zealand holds station G1 alone, got " + JSON.stringify(inView(box(-42, -40, 173, 175))));
+    ok(JSON.stringify(inView(box(-42, -40, 173 - 360, 175 - 360))) === JSON.stringify(["G1"]),
+      "phone select: a view panned a world to the west still finds station G1 at its wrapped longitude");
+    ok(inView(null).length === 0 && inView({}).length === 0,
+      "phone select: a map with no readable bounds has nothing in view");
+    sa.selectInView(VIEW);
+    ok(JSON.stringify(ids()) === JSON.stringify(["A1", "A2", "B1", "D1"]),
+      "phone select: Select what is in view selects exactly the stations in view, got " + JSON.stringify(ids()));
+    // A station hidden by the tree (its survey unchecked) is inside the view and is not selected.
+    const betaBox = sdoc.querySelector('#tree input[value="Beta Survey"]');
+    betaBox.checked = false; sfire(betaBox, "change");
+    sa.selectInView(VIEW);
+    ok(JSON.stringify(ids()) === JSON.stringify(["A1", "A2", "D1"]),
+      "phone select: a station whose survey is hidden is not selected although it is in view, got " + JSON.stringify(ids()));
+    betaBox.checked = true; sfire(betaBox, "change");
+    // A station whose position the custodian withholds has no place on the map, so no view holds it.
+    const a2 = sa.station("A2"), a2pos = [a2.lat, a2.lon];
+    a2.lat = null; a2.lon = null;
+    sa.selectInView(VIEW);
+    ok(JSON.stringify(ids()) === JSON.stringify(["A1", "B1", "D1"]),
+      "phone select: a station with a withheld position is never selected by a view, got " + JSON.stringify(ids()));
+    a2.lat = a2pos[0]; a2.lon = a2pos[1];
+    // The filters narrow the result: Find typed "alpha" keeps only Alpha Survey's stations.
+    const find = sdoc.getElementById("find");
+    find.value = "alpha"; sfire(find, "input");
+    sa.selectInView(VIEW);
+    ok(JSON.stringify(ids()) === JSON.stringify(["A1", "A2"]),
+      "phone select: the filters narrow what a view selects, got " + JSON.stringify(ids()));
+    find.value = ""; sfire(find, "input");
+    // The control: a button in the Select pane with the count it would take beside it, and Clear.
+    sa.setSidebarMode("select");
+    const btn = sdoc.getElementById("selInView"), cnt = sdoc.getElementById("selInViewN");
+    ok(btn && btn.tagName === "BUTTON" && btn.getAttribute("type") === "button" && btn.closest("#selectMode") &&
+      /Select what.s in view/.test(btn.textContent),
+      "phone select: the Select pane carries a \"Select what's in view\" button");
+    ok(cnt && btn.getAttribute("aria-describedby") === "selInViewN",
+      "phone select: the in-view count sits beside the button and describes it");
+    view = VIEW;
+    (evs.moveend || []).forEach(fn => fn({}));
+    ok(cnt.textContent === "4 in view", "phone select: a moved map repaints the in-view count, got " + JSON.stringify(cnt.textContent));
+    view = box(-42, -40, 173, 175);
+    (evs.moveend || []).forEach(fn => fn({}));
+    ok(cnt.textContent === "1 in view", "phone select: the count follows the view, got " + JSON.stringify(cnt.textContent));
+    click(btn);
+    ok(JSON.stringify(ids()) === JSON.stringify(["G1"]), "phone select: the button selects what the map shows, got " + JSON.stringify(ids()));
+    ok(sdoc.getElementById("selBig").textContent === "1", "phone select: the selection count follows");
+    click(sdoc.getElementById("clearSel"));
+    ok(ids().length === 0, "phone select: Clear selection empties it");
+    const hint = sdoc.getElementById("selHint");
+    ok(hint.dataset.phone && hint.textContent === hint.dataset.phone && !/toolbar/.test(hint.textContent),
+      "phone select: with nothing selected the hint names the phone's ways to select, not the draw toolbar, got " +
+      JSON.stringify(hint.textContent));
+    ok(/^Clear selection/.test(sdoc.getElementById("clearSel").textContent.trim()),
+      "phone select: the Clear selection control stays in the pane");
+    view = VIEW;
+  }
+
   // ---- DESKTOP: the sheet takes no part above 900px -------------------------------------------------
   {
     ok(typeof win.sheetActive === "function" && win.sheetActive() === false,
@@ -6624,6 +6749,8 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
       "desktop: the drawer opens in the content box and the sheet is untouched");
     ok(doc.getElementById("footerCounts").parentElement.classList.contains("fright"),
       "desktop: the counts stay in the footer's right zone");
+    ok(/toolbar/.test(doc.getElementById("selHint").textContent) || A.selCount() > 0,
+      "desktop: the selection hint keeps the desktop wording, got " + JSON.stringify(doc.getElementById("selHint").textContent));
     win.__api.closeDrawer();
   }
 
