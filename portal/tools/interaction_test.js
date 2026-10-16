@@ -6761,7 +6761,8 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ok(/1 selected/.test(peek()), "phone toggle: the peek row's counts follow the selection, got " + JSON.stringify(peek()));
     tap("A1", 100, 100);
     ok(ids().length === 0 && !drawerOn(), "phone toggle: a second tap takes the station out, got " + JSON.stringify(ids()));
-    ok(stroke(sa, "A1").weight === 0, "phone toggle: an unselected dot gives the stroke back, got " + JSON.stringify(stroke(sa, "A1")));
+    const tierW = sa.weightForZoom(4);  // the stubbed map records no getZoom, so curZoom() falls back to the national tier
+    ok(stroke(sa, "A1").weight === tierW, "phone toggle: an unselected dot gives the zoom tier's stroke back (" + tierW + "), got " + JSON.stringify(stroke(sa, "A1")));
     ok(/0 selected/.test(peek()), "phone toggle: the peek row's counts follow the removal, got " + JSON.stringify(peek()));
     // A tap after a view selection adds to it or takes from it.
     sa.selectInView(VIEW);
@@ -6769,7 +6770,7 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ok(JSON.stringify(ids()) === JSON.stringify(["A1", "B1", "D1"]),
       "phone toggle: a tap takes a station out of a view selection, got " + JSON.stringify(ids()));
     click(sdoc.getElementById("clearSel"));
-    ok(stroke(sa, "A1").weight === 0 && stroke(sa, "B1").weight === 0, "phone toggle: Clear gives every stroke back");
+    ok(stroke(sa, "A1").weight === tierW && stroke(sa, "B1").weight === tierW, "phone toggle: Clear gives every stroke back");
     sa.setSidebarMode("browse");
     tap("A1", 100, 100);
     ok(drawerOn() && ids().length === 0, "phone toggle: in Browse a tap opens the drawer and selects nothing");
@@ -6866,7 +6867,7 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
       "phone list: removing a row takes its station out, got " + JSON.stringify(ids()) + " rows " + JSON.stringify(rowIds()));
     ok(sdoc.getElementById("selBig").textContent === "2" && /2 selected/.test(peek()),
       "phone list: removing a row updates the counts, got " + sdoc.getElementById("selBig").textContent + " / " + JSON.stringify(peek()));
-    ok(stroke(sa, "A2").weight === 0 && stroke(sa, "A1").weight === 2, "phone list: removing a row gives its dot the unselected stroke");
+    ok(stroke(sa, "A2").weight === sa.weightForZoom(4) && stroke(sa, "A1").weight === 2, "phone list: removing a row gives its dot the zoom tier's stroke");
     ok(sdoc.activeElement && sdoc.activeElement.classList.contains("sr-rm") &&
       sdoc.activeElement.getAttribute("aria-label") === "Remove G1 from the selection",
       "phone list: focus moves to the remove control that took the removed row's place");
