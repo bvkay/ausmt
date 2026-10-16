@@ -820,6 +820,7 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 # engine/ and contract/ and cannot see portal/ at all, and a test that reaches out of the image is a
 # test the image cannot run.
 _FOOTER_LINK = ("MTCAT JSON", "/data/mtcat.json")
+_FOOTER_ABOUT = '<a class="fabout" href="/about.html">About</a>'
 
 # The parent organisation's address. The footer's acknowledgement and its lock-up both navigate
 # here; nothing on any page fetches from it.
@@ -1046,10 +1047,11 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
         assert "AusMT - Australia's Magnetotelluric Data Portal - an AuScope service." not in page, \
             f"{rel}: the one-line footer must be replaced everywhere in pages/"
 
-        # LEFT. One machine-readable link, the whole catalogue, carrying the leaves-this-page arrow.
+        # LEFT. One machine-readable link, the whole catalogue, carrying the leaves-this-page arrow,
+        # then the About link the phone header hides, drawn only at 900px and narrower.
         left = foot.split('<div class="fzone fleft">', 1)[1].split("</div>", 1)[0]
-        assert left == f'<a href="{href}">{label} &#8599;</a>', \
-            f"{rel}: left region is not the MTCAT link: {left!r}"
+        assert left == f'<a href="{href}">{label} &#8599;</a>{_FOOTER_ABOUT}', \
+            f"{rel}: left region is not the MTCAT link then the About link: {left!r}"
         # /data/* is the served route onto the build's own out dir, so the advertised path is
         # checked against the tree this same build wrote: a footer link is a promise about a file.
         assert href.startswith("/data/") and (built / href[len("/data/"):]).is_file(), \
@@ -1075,8 +1077,8 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
 
         # RIGHT. The status (held by its own pin), then the lock-up, no control and nothing else
         # fetched.
-        assert foot.count(FOOTER_LOCKUP) == 1 and foot.count("<a ") == 3, \
-            f"{rel}: the right region closes on the lock-up, the footer's third and last anchor: {foot!r}"
+        assert foot.count(FOOTER_LOCKUP) == 1 and foot.count("<a ") == 4, \
+            f"{rel}: the right region closes on the lock-up, the footer's fourth and last anchor: {foot!r}"
         assert re.findall(r'src="([^"]+)"', foot) == ALLOWED_FOOTER_SRCS and foot.count("src=") == 1, \
             f"{rel}: the footer fetches the lock-up and nothing else: {foot!r}"
         assert foot.count("<img") == 1 and "orglogo" not in foot, \

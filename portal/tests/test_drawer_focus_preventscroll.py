@@ -32,3 +32,17 @@ def test_focus_drawer_passes_preventscroll():
     assert not re.search(r"\.focus\(\s*\)", body), (
         "_focusDrawer() still contains a bare .focus() (no preventScroll) - would reintroduce the bounce"
     )
+
+
+def test_the_sheet_takes_the_drawer_before_focus_moves_into_it():
+    """On the phone layout openStation and openSurvey hand the drawer to the bottom sheet, which moves
+    the element. FAILS if either opener moves focus before the hand-off: focus would land on an element
+    that is then re-parented, and a moved element loses focus. The focus call itself is the one pinned
+    above, so the sheet host keeps preventScroll."""
+    src = (ROOT / "src" / "drawer.js").read_text(encoding="utf-8")
+    for opener in ("function openStation(", "function openSurvey("):
+        start = src.index(opener)
+        body = src[start:src.index("\nfunction ", start + 1)]
+        assert "sheetHostDrawer()" in body, f"{opener} must hand the drawer to the sheet on a phone"
+        assert body.index("sheetHostDrawer()") < body.index("_focusDrawer()"), (
+            f"{opener} must hand the drawer to the sheet before moving focus into it")

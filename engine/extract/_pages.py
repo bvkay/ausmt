@@ -691,7 +691,7 @@ _CSS = """
   .about:hover{border-color:var(--accent)}
   .counts{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
   .counts b{color:var(--text)}
-  @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
+  @media (max-width:900px){:root header{flex-wrap:nowrap;gap:8px;height:calc(52px + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 8px 0 16px}.hleft{flex:0 0 auto}.hcenter{flex:1 1 auto;justify-content:flex-end;flex-wrap:nowrap}.hright,.hcenter .about,:root header nav button#navMap.active{display:none}:root header nav{flex-wrap:nowrap;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}:root header nav a,:root header nav button{flex:0 0 auto;min-width:44px;min-height:44px;padding:0 8px;font-size:12px}}
   /* One rule set with portal/index.html's footer, held by portal/tests/test_footer_regions.py, so
      nothing here is tuned for this tier alone. The equal zero-basis side zones and the queries on
      the footer's own width are load-bearing. It is sticky rather than fixed, so it keeps its place
@@ -704,9 +704,12 @@ _CSS = """
   .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
   .orglockup{display:inline-block;line-height:0;margin:-5.625px 0}
   .orglockup img{height:30px;width:auto;max-width:100%;object-fit:contain}
+  .fabout{display:none}
+  @media (max-width:900px){.fabout{display:inline;margin-left:18px}}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
+  @media (pointer:coarse){body{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}footer{padding-bottom:max(7px,env(safe-area-inset-bottom,0px))}}
 """
 
 
@@ -734,6 +737,8 @@ _INDEX_CSS = """
   .idxctl .idxq{flex:1 1 16rem}
   .idxctl input,.idxctl select{font:inherit;font-size:.9rem;color:var(--text);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:.35rem .55rem;min-width:0}
   .idxctl input:focus-visible,.idxctl select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  @media (pointer:coarse){.idxctl input,.idxctl select{font-size:16px}}
+  @media (max-width:760px){.idxctl label{min-width:0;max-width:100%}.idxctl select{max-width:100%}}
   .idxctl .idxshown{flex:1 0 100%;margin:.2rem 0 .4rem;font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
   .idxctl .idxshown a{margin-left:.6rem}
   .idxlist{display:flex;flex-direction:column;gap:.7rem;margin:0 0 1rem}
@@ -854,9 +859,13 @@ def _site_footer(status="") -> str:
     IT IS WRITTEN AFTER </main>, as the page's own bottom edge rather than the reading column's: a
     footer inside main is not a contentinfo landmark, and set in the 840px measure it could not hold
     the bold acknowledgement on one line at any viewport. The rules that keep it on screen are in
-    _CSS beside the ones that lay its regions out."""
+    _CSS beside the ones that lay its regions out.
+
+    The left zone ends with an About link to the header's own address, drawn only at 900px and
+    narrower, where the phone header hides the header's About; the rule pair is the static pages'."""
     return ("\n<footer>\n"
-            f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">MTCAT JSON {_ARROW_OUT}</a></div>\n'
+            f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">MTCAT JSON {_ARROW_OUT}</a>'
+            '<a class="fabout" href="/about.html">About</a></div>\n'
             '<div class="fzone fcenter">AusMT is enabled by '
             '<a href="https://www.auscope.org.au" target="_blank" '
             'rel="noopener noreferrer">AuScope</a> &#183; '
@@ -912,7 +921,7 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="UTF-8">\n'
-        '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">\n'
         f"{robots}"
         f"<title>{_e(title)}</title>\n"
         f"{desc_meta}"

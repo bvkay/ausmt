@@ -777,10 +777,12 @@ function openStation(i,opts){
   _curTf=t;                                        // stash for the expand-modal handler
   _curStation=s;                                   // stash the station for the response modal's identity header
   drawer.setAttribute("aria-label","Station "+s.id+" details");   // the dialog label names its subject
+  const inSheet=!rehydrate&&typeof sheetHostDrawer==="function"&&sheetHostDrawer();   // the phone layout's sheet hosts it
   drawer.classList.add("open");drawer.scrollTop=keepScroll;showDrawerScrim();   // D: dim backdrop on non-map views
   selectDrawerTab(keepTab);                        // Response is the default tab (a rehydrate keeps the reader's tab)
   _restoreOpenDetails(keepOpen);                   // and the expanders they had open (empty on a real open)
   if(!rehydrate)_focusDrawer();                    // move focus into the dialog (never on a hydration re-render)
+  if(inSheet&&hasPosition(s))sheetRecentre([s.lat,s.lon]);   // the station sits in the map the sheet leaves clear
   if(isOpenAccess(m)) loadStationFrameLine(s);     // inject the frame line if this station declares one
 }
 // The hash prefixes that describe SOMETHING OPEN IN THE DRAWER, and which a close must therefore hand back
@@ -797,6 +799,7 @@ function rehydrateOpenDrawer(){
 function closeDrawer(){const wasOpen=drawer.classList.contains&&drawer.classList.contains("open");
   _drawerSubject=null;                                 // nothing to rehydrate once it is shut
   drawer.classList.remove("open");hideDrawerScrim();   // D: drop the dim backdrop
+  if(typeof sheetReleaseDrawer==="function")sheetReleaseDrawer();   // the filters take the sheet back
   // The SURVEY hash is cleaned up on exactly the same terms the station hash always was. See docs: portal
   // internals, drawer.js.
   if(HASH_ROUTES_CLEARED_ON_CLOSE.some(p=>location.hash.startsWith(p)))history.replaceState(null,"",location.pathname+location.search);
@@ -1390,6 +1393,7 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
    surveyDataLevelsHtml(m)+
    releaseNotesHtml(m);   // no "Related surveys" section; release notes are last
   drawer.setAttribute("aria-label",sv+", survey details");
+  if(!rehydrate&&typeof sheetHostDrawer==="function")sheetHostDrawer();   // the phone layout's sheet hosts it
   drawer.classList.add("open");drawer.scrollTop=keepScroll;showDrawerScrim();   // D: dim backdrop on non-map views
   _restoreOpenDetails(keepOpen);                      // and the expanders they had open (empty on a real open)
   if(!rehydrate)_focusDrawer();}                      // Move focus into the dialog (never on a hydration re-render)

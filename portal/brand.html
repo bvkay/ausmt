@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Brand and assets - AusMT</title>
 <meta name="description" content="AusMT logos, the standalone mark and the presentation artwork, with the terms for using them.">
 <!-- Out of the search index and out of the sitemap: this page is an asset shelf reached from About, and a
@@ -56,7 +56,7 @@
   nav a.active{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
   .about{color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
   .about:hover{border-color:var(--accent)}
-  @media (max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
+  @media (max-width:900px){:root header{flex-wrap:nowrap;gap:8px;height:calc(52px + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 8px 0 16px}.hleft{flex:0 0 auto}.hcenter{flex:1 1 auto;justify-content:flex-end;flex-wrap:nowrap}.hright,.hcenter .about,:root header nav button#navMap.active{display:none}:root header nav{flex-wrap:nowrap;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}:root header nav a,:root header nav button{flex:0 0 auto;min-width:44px;min-height:44px;padding:0 8px;font-size:12px}}
 
   main{max-width:900px;width:min(100%,900px);margin:0 auto;padding:30px 20px 80px;flex:1 0 auto}
   h1{font-size:1.8rem;margin:.2rem 0 .4rem;color:var(--heading)}
@@ -105,9 +105,12 @@
   .fright{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:14px}
   .orglockup{display:inline-block;line-height:0;margin:-5.625px 0}
   .orglockup img{height:30px;width:auto;max-width:100%;object-fit:contain}
+  .fabout{display:none}
+  @media (max-width:900px){.fabout{display:inline;margin-left:18px}}
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
+  @media (pointer:coarse){body{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}footer{padding-bottom:max(7px,env(safe-area-inset-bottom,0px))}}
 </style>
 </head>
 <body>
@@ -232,7 +235,7 @@
 <footer>
   <!-- LEFT the MTCAT link, CENTRE the acknowledgement, RIGHT the lock-up. See docs:
        portal internals, brand.html. -->
-  <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">MTCAT JSON ↗</a></div>
+  <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">MTCAT JSON ↗</a><a class="fabout" href="about.html">About</a></div>
   <div class="fzone fcenter">AusMT is enabled by <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">AuScope</a> · Data licences vary by survey</div>
   <div class="fzone fright"><a class="orglockup" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-colour.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
 </footer>

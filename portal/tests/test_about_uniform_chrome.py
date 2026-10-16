@@ -432,34 +432,31 @@ def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_i
 # to y=0 puts the heading underneath it. scroll-margin-top is the clearance, and it was ONE number,
 # 74px, measured at 1280px and applied at every width.
 #
-# One number is only right in one band. The header WRAPS as the viewport narrows: under 760px the
-# three zones each take a full-width row (the mark and the name, the tab group, the tagline) and the
-# tab group stacks into more rows as the viewport narrows further. It is measured on this document in
-# Chrome at a device scale factor of 1, with the 36px AuScope mark and the name in the
-# identity zone and the one-line tagline in the right zone, by sweeping the viewport one pixel at a
-# time from 320px to 1600px and reading the header's box. Its height runs 216px below 384, 170px to
-# 450, 134px to 760 and 57px above that. At 375px a 74px clearance would leave a heading 142px under
-# the header, which is off the screen.
+# One number is only right in one band. At 900px and narrower the header is the phone row, 52px
+# tall, and above that it is the desktop row the tabs' 40px floor sets, 57px. It is measured on this
+# document in headless Chrome at a device scale factor of 1, with the 36px AuScope mark and the name
+# in the identity zone, by reading the header's box at 320, 340, 360, 375, 390, 414, 768, 900, 901 and
+# 1280px: 52px at every width to 900px and 57px from 901px. Below 761px the old stacked header ran
+# 134px to 216px, which is what the retired four-band ladder followed.
 #
 # THE LADDER IS THE MAXIMUM PER BAND, NOT THE EXACT HEIGHT. Overshooting drops the heading a few
 # pixels lower than it needs to be, which a reader will not notice; undershooting hides it, which is
-# the defect. So each band carries the tallest header in its own range. Every measured band above is
-# a band of its own in the ladder, so here the maximum is also the exact height, and the same sweep
-# read the header against the ladder at every width and found no gap.
+# the defect. So each band carries the tallest header in its own range. Each measured band is a band
+# of its own in the ladder, so here the maximum is also the exact height.
 #
 # THE FAILURE MODE OF DRIFT IS STATED because it cannot be pinned from source alone: these are
 # measurements of THIS header's content at THIS font stack, and a change to the header's wording or
-# its nav will move the wrap points. Anything that changes the header's height must re-measure the
-# ladder. What this file CAN hold, and does, is that the offset is a variable rather than a constant,
-# that the ladder descends, and that it resolves to at least the measured header height at both edges
-# of every measured band and at the two reference widths, 375px and 1280px.
+# its nav will move them. Anything that changes the header's height must re-measure the ladder. What
+# this file CAN hold, and does, is that the offset is a variable rather than a constant, that the
+# ladder's breakpoints ascend, and that it resolves to at least the measured header height at both
+# edges of every measured band and at the two reference widths, 375px and 1280px.
 ANCHOR_VAR = "--about-anchor-offset"
 
 # The measured header height at each pinned width, from the same sweep the ladder was built from: both
 # edges of every band, then the two reference widths.
 MEASURED_HEADER = {
-    320: 216, 383: 216, 384: 170, 450: 170, 451: 134, 760: 134, 761: 57, 1600: 57,
-    375: 216, 1280: 57,
+    320: 52, 900: 52, 901: 57, 1600: 57,
+    375: 52, 1280: 57,
 }
 
 
@@ -514,8 +511,9 @@ def _resolve(ladder, width):
 
 def test_the_in_page_anchor_offset_is_a_variable_and_not_one_number():
     """FAILS if the retired static 74px comes back, or if the sections stop reading the ladder.
-    One number cannot follow a header that is 216px tall at 375px and 57px tall at 1440px, and the
-    direction it is wrong in at the narrow end is the one that hides the heading."""
+    One number cannot follow a header that is 52px tall at 375px and 57px tall at 1440px: the phone
+    row's number hides 5px of every heading on the desktop, and the header's height is a term the next
+    change to it may move further apart."""
     text = ABOUT.read_text(encoding="utf-8")
     assert "scroll-margin-top:74px" not in text, (
         "the single-number anchor offset is retired; it was right only above about 1096px")
@@ -523,27 +521,24 @@ def test_the_in_page_anchor_offset_is_a_variable_and_not_one_number():
         "every section's anchor offset must read the ladder rather than a constant")
 
 
-def test_the_anchor_offset_ladder_descends_and_is_declared_in_px():
-    """The ladder's shape. FAILS if a band is out of order, if the base is not the tallest (the
-    narrowest viewport has the tallest header), if a band repeats a breakpoint, or if a value stops
-    being an absolute length: a percentage or an em here would be measured against something that is
-    not the header."""
+def test_the_anchor_offset_ladder_ascends_by_breakpoint_and_is_declared_in_px():
+    """The ladder's shape. FAILS if a band is out of order, if a band repeats a breakpoint, if the
+    ladder collapses to one number, or if a value stops being an absolute length: a percentage or an em
+    here would be measured against something that is not the header. The values themselves do not
+    have to descend: the phone row is shorter than the desktop row."""
     ladder = _anchor_ladder(ABOUT.read_text(encoding="utf-8"))
-    assert len(ladder) >= 3, f"the ladder must carry a base and at least two bands, got {ladder}"
+    assert len(ladder) >= 2, f"the ladder must carry a base and at least one band, got {ladder}"
     widths = [bp for bp, _px in ladder]
     assert widths == sorted(widths) and len(set(widths)) == len(widths), (
         f"the ladder's breakpoints must ascend and not repeat: {widths}")
-    values = [px for _bp, px in ladder]
-    assert values == sorted(values, reverse=True), (
-        f"the offset must shrink as the viewport widens, because the header does: {ladder}")
-    assert values[0] == max(values), (
-        f"the base band carries the tallest header, at the narrowest viewport: {ladder}")
+    assert len({px for _bp, px in ladder}) == len(ladder), (
+        f"each band must carry its own header height, or it is not a band: {ladder}")
 
 
 def test_the_ladder_resolves_to_the_measured_header_height_at_the_pinned_widths():
     """The ladder against the ruler. FAILS if the value a browser would use at any pinned width is
-    smaller than the header measured there: at 375px that is a heading scrolled under 216px of
-    header, and the reader sees the section below the one they asked for. The pinned widths are both
+    smaller than the header measured there: the heading is scrolled under the header, and the reader
+    sees the section below the one they asked for. The pinned widths are both
     edges of every measured band, so a band that starts late or reads short fails at its own edge.
 
     Held as ">=" and not "==" on purpose, for the reason the ladder is a per-band maximum: a band

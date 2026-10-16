@@ -23,8 +23,8 @@ its 24.5px font size and the mark is the taller item. The block would wrap only 
 
     wraps  <=>  mark-width + gap + name-width  >  zone-width
 
-and at 36 + 12 + about 79px it never does: the zone is 139px at 761px of viewport, and below 760px
-the zones stack full width. The right zone is the tagline on one line, white-space:nowrap with its
+and at 36 + 12 + about 79px it never does above 900px of viewport, and at 900px and under every
+surface swaps the zones for the phone row (chrome_contract.PHONE_HEADER). The right zone is the tagline on one line, white-space:nowrap with its
 overflow contained, so it is one line box at every width and never adds a row.
 
 The tab group's zone grows, in whole tab rows:
@@ -40,13 +40,14 @@ row. Measured at 375px, one declaration apart: 260px with the wrap, 214px withou
 the tab group's right edge lands at 366px against a 357px content edge.
 
 Beside one tab row neither side zone is the tallest, because the mark is shorter than the tabs'
-floor, so from 761px up the header is the tabs' floor plus its padding and border:
+floor, so from 901px up the header is the tabs' floor plus its padding and border:
 
     header  = 2 x 8px + 1px + max(36px, 24.5px, line-box(tagline), 40px)  =  57px
 
-Measured in Chrome at a device scale factor of 1, on every chrome surface: 57px from
-761px up, 134px from 451px to 760px, 170px from 384px to 450px and 216px below 384px, where the
-stacked zones add the mark's row, the tab rows and the tagline's line.
+Measured in headless Chrome at a device scale factor of 1 on about.html, brand.html and
+index.html: 57px from 901px up. At 900px and under the phone row is a declared 52px box, measured
+52px at 320, 340, 360, 375, 390, 414, 768 and 900px; its tabs are 44px floors in a row that may not
+wrap, so nothing in it can make it taller.
 
 Every term in these expressions is a DECLARED constant except the intrinsic text widths, which are a
 property of the font stack and are already pinned pairwise next door. This file pins the declared
@@ -75,7 +76,7 @@ half, that every identity zone is the mark and the name and nothing else.
 import re
 from pathlib import Path
 
-from chrome_contract import MARK_SIZE
+from chrome_contract import MARK_SIZE, PHONE_HEADER, PHONE_HEADER_HEIGHT, TAP_TARGET
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
@@ -92,9 +93,8 @@ def _rule(text, pattern, where, what, must_contain=None):
     selector would silently override the pinned value at equal specificity.
 
     must_contain narrows a selector that is legitimately declared more than once to the BASE rule.
-    .hzone is the case that needs it: the narrow-width stacking override restates the selector
-    inside the 760px block to give the zones a full-width basis, which is the wrap behaviour the
-    parity file pins on purpose. The base rule is the one that declares display."""
+    .hzone is the case that needs it: a surface may restate the selector inside a query, and the
+    base rule is the one that declares display."""
     bodies = re.findall(pattern, text)
     if must_contain is not None:
         bodies = [b for b in bodies if must_contain in b]
@@ -211,8 +211,8 @@ def test_every_chrome_surface_shares_one_vertical_fingerprint():
 
 
 def test_the_zones_can_still_wrap_and_the_tagline_cannot_spill_on_every_surface():
-    """The zones' wrap is load-bearing and must stay possible: at 375px the tab group and About must be
-    free to stack, and a header that refuses to wrap drags a phone-width page sideways. The tagline
+    """The zones' wrap is load-bearing and must stay possible: just above the phone row the tab group
+    and About must be free to stack, and a header that refuses to wrap drags the page sideways. The tagline
     is the one item held to one line, so it must contain its own overflow instead.
 
     FAILS IF a surface reaches for flex-wrap:nowrap on the zones, or if the tagline's one line loses
@@ -240,7 +240,7 @@ def _px(where, what, raw):
 
 
 def test_the_tabs_floor_sets_the_desktop_header_on_every_surface():
-    """From 761px up the header is one row, and its height is the tabs' floor plus its own padding and
+    """From 901px up the header is one row, and its height is the tabs' floor plus its own padding and
     border, 57px, because no other zone is taller than the tabs. FAILS IF the mark's declared box
     reaches the tabs' 40px floor (it would set the header's height at every width), if the name's
     line box, font size times its unitless line height, outgrows the mark, if the tabs' floor or the
@@ -264,3 +264,18 @@ def test_the_tabs_floor_sets_the_desktop_header_on_every_surface():
         assert print_["header border-bottom width"] == f"{HEADER_BORDER}px", (
             f"{where}: the header's border is a term of the 57px height")
         assert 2 * HEADER_PADDING_BLOCK + HEADER_BORDER + max(tab, mark_h, name * line) == DESKTOP_HEADER
+
+
+def test_the_phone_header_is_one_52px_row_on_every_surface():
+    """At 900px and under the header is one declared 52px row (plus the top safe-area inset), and the
+    row can only stay one row if nothing in it is taller and nothing in it wraps. FAILS IF the block
+    stops declaring the 52px height, if the tabs' floor reaches the row's height, if the mark does,
+    or if the header or the nav may wrap at that width."""
+    assert f"height:calc({PHONE_HEADER_HEIGHT}px + env(safe-area-inset-top,0px))" in PHONE_HEADER
+    assert MARK_SIZE < TAP_TARGET < PHONE_HEADER_HEIGHT, (MARK_SIZE, TAP_TARGET, PHONE_HEADER_HEIGHT)
+    assert f"min-height:{TAP_TARGET}px" in PHONE_HEADER
+    for rule in (":root header{", ":root header nav{"):
+        body = PHONE_HEADER.split(rule, 1)[1].split("}", 1)[0]
+        assert "flex-wrap:nowrap" in body, f"{rule} must not wrap in the phone row: {body!r}"
+    for where, text, _is_pages in _surfaces():
+        assert text.count(PHONE_HEADER) == 1, f"{where}: the phone row is declared once on every surface"

@@ -16,6 +16,10 @@ Four properties are load bearing.
   - carries PLACEHOLDERS in source and is filled at enter from the corpus that is actually loaded.
   A literal survey name or count in the deck would be a claim the fixture corpus, the empty corpus
   and every future corpus can each falsify.
+* THE SHEET. On the phone layout the panel and the drawer live in a bottom sheet, so every step names
+  the sheet height that shows its target: a step whose target is in the sheet takes half or full, and a
+  step about the map or the header takes peek, which leaves the map in view. The step sets that height
+  after its enter hook (which may open the drawer) and before the spotlight is measured.
 * GLYPHS. The copy takes the plain hyphen and the interpunct only; the en dash sweep
   (test_no_en_dash.py) covers the file, and the em dash is checked here so the deck cannot
   reintroduce one through a copied string.
@@ -63,6 +67,13 @@ DECK = [
      "That's it: find, screen, select, download, cite. To contribute a survey of your own, follow "
      "the link in About."),
 ]
+
+# The sheet height each step sets on the phone layout, in deck order.
+SNAPS = ["peek", "half", "full", "full", "half", "full", "half", "peek", "full", "full", "peek", "peek", "peek"]
+# The targets that live in the sheet on the phone layout; the rest are the map and the header's tabs.
+IN_SHEET = ("aside.filters", "#find", "#browseMode", "#drawer", "#dp-files", ".selbox", "#dlLevel2",
+            "#dlTimeSeries")
+SNAP_RE = re.compile(r'\{sel:"([^"]*)",\s*text:"(?:[^"\\]|\\.)*",\s*snap:"([a-z]+)"')
 
 # A step is {sel, text, ...}. `sel` is static for every step: the element a step spotlights is fixed,
 # so it is the same whichever direction the walk arrives from, and it can be pinned here.
@@ -154,3 +165,32 @@ def test_deck_copy_takes_plain_hyphens_only():
     for sel, text in _parsed_deck():
         assert EM_DASH not in text, "em dash in the copy for %s: %r" % (sel, text)
         assert EN_DASH not in text, "en dash in the copy for %s: %r" % (sel, text)
+
+
+def test_every_step_names_the_sheet_height_that_shows_its_target():
+    """FAILS if a step stops naming its sheet height, if a target in the sheet would be left at peek
+    (hidden below the handle), or if a map or header step would cover the map with the sheet."""
+    steps = SNAP_RE.findall(_deck_source()[1])
+    assert len(steps) == len(DECK), "every step carries snap right after its copy, parsed %r" % steps
+    assert [snap for _, snap in steps] == SNAPS, [snap for _, snap in steps]
+    for sel, snap in steps:
+        if sel in IN_SHEET:
+            assert snap in ("half", "full"), "%s is in the sheet and must not be left at peek" % sel
+        else:
+            assert snap == "peek", "%s is on the map or the header and takes peek, got %s" % (sel, snap)
+
+
+def test_the_step_sets_its_height_after_its_enter_hook_and_before_measuring():
+    """FAILS if the height is set before the enter hook (which opens the drawer and would reset it to
+    half) or after the spotlight is measured, and if the snapshot the tour hands back on close stops
+    carrying the sheet's height."""
+    src = _deck_source()[0]
+    body = src[src.index("function _tourPosition(){"):src.index("function _tourLayout(){")]
+    order = [body.index(k) for k in ("step.enter()", "_tourSheetSnap(step)", "_tourScrollIntoView(", "_tourLayout()")]
+    assert order == sorted(order), body
+    sheet = src[src.index("function _tourSheetSnap("):]
+    assert "sheetActive()" in sheet.split("\n}", 1)[0], "the height is set on the phone layout only"
+    assert "sheetSnap:" in src[src.index("function _tourTakeSnapshot("):src.index("function _tourRestoreDrawer(")]
+    restore = src[src.index("function _tourRestoreSnapshot("):]
+    assert restore.index("_tourRestoreDrawer(s)") < restore.index("s.sheetSnap"), (
+        "the sheet height is restored after the drawer, whose opening sets half")

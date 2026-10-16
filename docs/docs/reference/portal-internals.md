@@ -46,6 +46,26 @@ each grows with its own content and the centred tabs land at a different x per v
 tests/test_header_geometry_parity.py.
 ```
 
+At 900px and narrower every surface that wears the chrome (this page, about.html, add-survey.html,
+brand.html, releases.html and the pages `engine/extract/_pages.py` emits) replaces the three zones
+with one phone row: one rule block, `PHONE_HEADER` in `portal/tests/chrome_contract.py`, carried
+verbatim by all six and placed after the base rules it overrides. The row is 52px tall plus the top
+safe-area inset, with the AuScope mark and AusMT's name at left and the tabs at right as 44px
+targets; the tagline zone and the About control are hidden. The map page's Map tab is a button,
+and the block hides that button only while it carries `.active`, which `setView` in `main.js` gives it
+on the map view and takes from it on the Surveys and Collections views (and `openCollectionPage` on a
+collection's page). Off the map the tab is the phone's way back to it: at 375 x 812 on `#/surveys` and
+`#/collections` it measured 44 x 44 at 165 to 209 across, hit-tested to itself, and a tap returned to
+the map view, where it is hidden again. Before, those views had no Map control on a phone. The static
+pages keep Map, Surveys and Collections. Its header, nav and tab selectors carry a `:root` prefix so that they tie
+on specificity with the pages sheet's `header.site` rules and source order decides. At 360px and
+narrower the three static-page tabs do not fit beside the name, so the nav scrolls sideways inside
+itself rather than pushing the page wider. Measured in headless Chrome: 52px tall at every width
+from 320px to 900px, 57px from 901px; at 375px the three tabs end at 367px against the 8px right
+padding. `tests/test_header_geometry_parity.py` and `tests/test_header_vertical_geometry.py` pin the
+block on every surface; the zone rules they compare are the base rules, read with the media blocks
+set aside.
+
 #### The identity zone is the AuScope mark and AusMT's name
 
 ```text
@@ -74,11 +94,11 @@ engine's sheets.
 ```text
 The right zone is the tagline, "Magnetotelluric Data Discovery & Access", at 14px in --muted, on
 one line. The zone is zero-basis, so a nowrap line wider than the zone would spill out of its left
-edge and paint over the centre zone's right end, 92px of it at 761px of viewport: all of the About
-control and the end of the Collections tab. The tagline also takes min-width:0, overflow:hidden and
-text-overflow:ellipsis, so where the zone is narrower than the line it ends in an ellipsis inside
-the zone. Measured in Chrome with the fallback stack, that band runs from 761px to 976px of
-viewport. Stated character-identically on every surface; pinned by
+edge and paint over the centre zone's right end, all of the About control and the end of the
+Collections tab. The tagline also takes min-width:0, overflow:hidden and text-overflow:ellipsis, so
+where the zone is narrower than the line it ends in an ellipsis inside the zone. Measured in Chrome
+with the fallback stack, that band ran up to 976px of viewport; at 900px and narrower the phone row
+hides the tagline, so the band now starts at 901px. Stated character-identically on every surface; pinned by
 tests/test_header_geometry_parity.py and tests/test_header_vertical_geometry.py.
 ```
 
@@ -119,6 +139,15 @@ stays with the map, because only the layer that is drawing knows which provider 
 240px cap keeps the opened text clear of the legend at 560px of map. Shared character for character
 with add-survey.html; pinned by tests/test_map_attribution.py.
 ```
+
+Under a coarse pointer the glyph stays a 20 x 20 drawing but hit-tests as 44 x 44: the line after the
+control's rule set gives the glyph `position:relative` and an empty `::after` at `inset:-11px -11px
+-15px -15px`. The inset is taken from the glyph's padding box, inside its 1px border, so the box is 44px
+each way, and it stops at the map's top and right edges, 10px from the glyph, where the map's own clip
+would otherwise cut it short. Measured in the Claude desktop browser pane at 375 x 812 (a coarse
+pointer): the glyph draws at 345 to 365 across and 62 to 82 down, and `elementFromPoint` returns it from
+331 to 374 across and 52 to 95 down, against 345 to 363 and 62 to 80 before. add-survey.html carries the
+same line (`tests/test_map_attribution.py`); `tests/test_phone_chrome.py` pins the arithmetic.
 
 #### flex-shrink:0 is load-bearing: #filterPane is a column flex, so a tall ...
 
@@ -561,8 +590,8 @@ The hand-off snackbar sits ABOVE #toast so the two can coexist (a hand-off can f
      within its dwell). It carries at most one action button; it never carries a progress bar. See docs:
      portal internals, index.html.
 
-At narrow widths the three zones stack full-width and left-align, so the centred nav and the
-       right-aligned counts do not read as stranded fragments once they wrap.
+At 900px and narrower the three zones give way to the one phone row (PHONE_HEADER in
+       portal/tests/chrome_contract.py): the mark and the name at left, the tabs at right.
 
 ```
 
@@ -660,6 +689,135 @@ The SVG is inline, so without this its line box leaves a 3px descender gap and t
 
 ```
 
+#### phone and touch
+
+Every rule in this part of the sheet sits inside a media query, so a desktop window with a mouse
+renders exactly what it rendered before. `tests/test_phone_chrome.py` pins each rule and pins that
+none of them leaks into a base rule.
+
+**Coarse pointer.** `@media (pointer:coarse)` gives every control a finger is expected to hit a
+floor of 44px in both directions: the data-type rows (`.typegrid label`), the collection rows
+(`.collgroup .coll`), every segmented control (`.seg button`, which covers Browse and Select and the
+drawer's tabs), the Leaflet zoom and draw controls (`.leaflet-touch .leaflet-bar a`), the legend's
+toggle and rows, the drawer's close control, the plot expand control and the footer links. The map's
+attribution glyph takes its 44px as a hit area beside the control's own rules (see the map's
+attribution, above). On a
+375 x 812 phone these measured 13 x 13 (the checkboxes), 27px (Browse and Select), 30 x 30 (zoom and
+draw), 154 x 20 (legend rows), 34 x 28 (drawer close), 84 x 27 (drawer tabs) and 21 x 18 (plot expand)
+before the floor (`AusMT_2026/mobile-audit/measurements.json`, `tap_targets_wxh`).
+
+* A footer link is inline, where `min-height` does nothing, so under a coarse pointer it becomes an
+  inline flex box.
+* The draw toolbar's icons are cells of one 30px sprite strip. A 44px button would show the
+  neighbouring cells, so the button pads 7px and draws its sprite in the content box only; the
+  armed tool's Cancel and Finish row moves out to clear the wider toolbar.
+* The text inputs and selects (`#find`, `#availSel`, `#surveySearch`, `#sortSel`, `#yearFrom`,
+  `#yearTo`) are 16px. iOS Safari zooms the page when a smaller input takes focus; they were 12.5px
+  to 13px. The /surveys controls in `engine/extract/_pages.py` take the same 16px.
+
+**The phone layout: a map under a bottom sheet.** At 900px and narrower the map page is one screen
+tall (`body{height:100dvh}`) and the map fills it under the 52px header. The panel sits in
+`<section class="sheet" id="sheet">`, a `position:fixed` box at the bottom of the screen that is as tall
+as its full height and is moved down by `transform:translateY()` until only the current snap height
+shows. Three snap heights are selected by `data-snap`: `peek` (120px plus the bottom safe-area inset:
+the handle, the counts and the Browse and Select control), `half` (`50dvh`, the default) and `full`
+(`100dvh` less the 52px header and the top inset). A spacer (`.sheet::after`) fills the part of the
+sheet below the screen's edge, so the panel, which takes the rest of the column, is exactly as tall
+as the part that shows and scrolls inside it; Browse and Select (`#modeSeg`) is sticky at its top.
+Without a script the sheet stays at half and scrolls, which is the whole no-JS behaviour. The sheet
+holds, in order, the handle (`#sheetHandle`, a 44px button), the peek row (`#sheetPeek`, which takes
+the counts on the phone layout), the Back bar (`#sheetBack`, shown only while the drawer is the
+sheet's host) and the panel. Above 900px the wrapper is `display:contents` and its own parts are
+`display:none`, so the panel stays a flex child of `main` and the desktop layout is the same box for
+box: at 1280 x 800 a headless Chrome screenshot of the page is pixel identical with and without
+the sheet.
+
+Measured in the Claude desktop browser pane (Chromium emulating a 375 x 812 touch phone) on the
+interaction fixture: header 0 to 52, map 52 to 812, the sheet at half from 406 with its handle 406 to
+450 and the panel 457 to 812, the document 375px wide. The closed drawer is clipped by
+`.content{overflow:hidden}`; without that it widened the layout viewport to 758px and the phone
+zoomed the whole page out.
+
+**The tablet card.** From 761px to 900px the sheet is a card 420px wide, 16px in from the left and the
+bottom, with a 14px radius, so the map shows beside it; its full height is 32px less. The card does not
+slide: its bottom stays 16px above the screen's edge and it takes the snap height as its own
+(`height:var(--sheet-snap)`, `transform:none`, the transition on height), so it carries no spacer
+(`.sheet::after{display:none}`) and clips its content to the radius. A card moved down by
+`translateY` like the phone sheet ran off the screen: at 768 x 1024 its bottom edge measured 1828 at
+peek and 1436 at half. Measured in the same pane at 768 x 1024 and at 800 x 1024, the card spans 16
+to 436 across with its bottom edge at 1008 and a 14px radius at every snap: peek 888 to 1008, half 496
+to 1008, full 68 to 1008.
+
+At full the card covered Leaflet's zoom control in the map's top-left corner: at 768 x 1024 the zoom
+buttons measured 12 to 42 across and 64 to 124 down, and `elementFromPoint` at their centres returned the
+card's handle. In the card band `sheet.js` therefore moves the zoom control to the top-right corner
+(`sheetPlaceZoom`, through Leaflet's own `setPosition`), where Leaflet stacks it under the attribution
+glyph, and moves it back on leaving the band; the draw toolbar, the corner's other control, is not drawn
+at these widths. Measured at 768 x 1024 the glyph sits at 738 to 758 across and 62 to 82 down and the
+zoom buttons at 726 to 756 across and 94 to 154 down (800 x 1024: 758 to 788), and `elementFromPoint` at
+each button's centre returns that button at peek, half and full. The credit opened pushes the zoom
+control down rather than covering it (credit 62 to 102, zoom from 112). On a phone and above 900px the
+control stays top left. The legend moves to
+the bottom right at 900px and narrower, and on a phone it sits above the peek height. The map's
+attribution control keeps its top-right corner: the sheet is anchored to the bottom edge and rests
+at peek or half below it, and at full it covers the whole map, the credit with the dots
+(`tests/test_map_attribution.py`).
+
+**The drawer in the sheet.** On the phone layout the sheet hosts the drawer in place of the
+filters: `.sheet[data-host="drawer"]` hides the peek row and the panel and shows the Back bar and
+`#drawer`, which inside the sheet is `position:static` with no slide and no width of its own. Its plots
+are `max-width:100%; height:auto`, so the 372px design width scales to the sheet. The welcome and
+fetch dialogs are fixed above the sheet.
+
+**The footer's contents.** On the phone layout the map page's footer leaves the screen while the
+map is the active view (`body:has(#navMap.active) footer{display:none}`) and its contents ride the
+sheet: the panel ends with `#sheetFoot`, holding an About link, the MTCAT link and the AuScope line
+exactly as the footer writes them, each link a 44px target. The header hides About at these widths,
+so on the map view this link is the phone's route to About. The sheet is not drawn on the Surveys and
+Collections views (`.sheet:has(> #filterPane.hidden)`), so there the footer stays, and its own About
+link (`<a class="fabout">`, below) is the route to About; `footer a.fabout{display:inline-flex}` keeps
+the coarse-pointer 44px floor that `.fabout`'s inline display would drop. At 375 x 812 on `#/surveys`
+and `#/collections` the footer measured 682 to 812, its About link 44 x 44 at 126 across and 690 down,
+hit-testing to itself, and the document stayed 375px wide; before, neither the footer nor the sheet
+was drawn there and no About link could be reached. `tests/test_footer_regions.py` pins the phone
+form; every other surface keeps the constant footer.
+
+**About in the static footers.** The phone header hides About on every surface, so each footer
+whose page carries About in its header (`add-survey.html`, `brand.html`, `releases.html`, every
+page `engine/extract/_pages.py` emits and, for its Surveys and Collections views, `index.html`) ends its left zone with `<a class="fabout">` to the header
+link's own address. `.fabout{display:none}` hides it above 900px, and inside `@media
+(max-width:900px)` it is drawn inline, 18px after the MTCAT link (the footer's own column gap). The
+About page marks its header link active and is the page the link would open, so its footer carries
+none; neither does the not-found page, whose header has no About. `FOOTER_ABOUT_RULES` in
+`portal/tests/chrome_contract.py` holds the rule pair, and `tests/test_footer_regions.py` and
+`engine/tests/test_index_pages.py` hold the markup. Measured in the same pane at 375 x 812, with the
+pages in a 375px frame: on `releases.html`, `brand.html`, `add-survey.html` and a page built from the
+engine's own header, footer and stylesheet, the link showed beside MTCAT JSON and hit-tested to
+itself, and the document stayed 375px wide; at 901px and 1024px it was not drawn, and the two-row
+footer stayed 57px tall at 800px, 900px, 901px and 1024px.
+
+**The /surveys controls on a phone.** On the engine's /surveys page each control is a label
+holding its select, laid out in a wrapping flex row; a flex item's floor is its content, so a select
+as wide as its longest option pushed the page sideways (the Organisation select reached 474px on a
+375px screen, `surveys_page_375` in the measurements file). At 760px and narrower each label takes
+`min-width:0` and `max-width:100%` and each select `max-width:100%` (`_INDEX_CSS` in
+`engine/extract/_pages.py`). Measured in headless Chrome on a page built from that sheet with a
+591px-wide option: the document is 375px wide at 375px and 320px at 320px, against 591px without
+the rule; from 761px nothing changes.
+
+**No draw toolbar on a phone.** At 900px and narrower the Leaflet draw toolbar
+(`.leaflet-draw.leaflet-control`) is not drawn: drawing a polygon with one finger is the selection
+model the phone layout replaces with "select what is in view". The Select and download panel keeps
+its Select all filtered control and its own draw buttons, which arm the same handlers.
+
+**Safe areas.** Every page the portal ships and every page the engine emits declares
+`viewport-fit=cover`, so a phone draws the page under its rounded corners, notch and home indicator
+and reports their size through `env(safe-area-inset-*)`. Every surface with a footer carries one rule
+for it, the same text everywhere (`SAFE_AREA` in `portal/tests/chrome_contract.py`): under a coarse
+pointer the body pads its sides by the side insets and the footer pads its bottom to the larger of
+its own 7px and the bottom inset. Where a screen has no inset `env()` resolves to 0px, so nothing
+moves.
+
 ## portal/about.html
 
 #### Search snippet and link preview
@@ -693,13 +851,13 @@ instead of stacking. Character-identical on every surface wearing the chrome.
 ```text
 THE IN-PAGE ANCHOR OFFSET FOLLOWS THE HEADER. The header is sticky, so an anchor that scrolls its
 section to y=0 puts the heading underneath it and scroll-margin-top is the clearance. One number
-will not do: the header WRAPS as the viewport narrows (with every zone stacked under 760px the mark,
-the tab rows and the tagline each take a row of their own) and is 216px tall at 375px against 57px
-at 1280px, so each band below carries the TALLEST header in its own range (overshooting drops a
-heading a few pixels low, undershooting hides it). These are measurements of this header's content
-at this font stack: anything that changes its wording, its nav or its zones moves the wrap points
-and the ladder must be re-measured, and no source-read pin can see the header get taller.
-tests/test_about_uniform_chrome.py holds the shape and the values at 375px and 1280px.
+will not do: at 900px and narrower the header is the phone row, measured 52px tall from 320px to
+900px in headless Chrome, and from 901px it is the desktop row, 57px, so each band carries the
+TALLEST header in its own range (overshooting drops a heading a few pixels low, undershooting hides
+it). These are measurements of this header's content at this font stack: anything that changes its
+wording, its nav or its zones moves them and the ladder must be re-measured, and no source-read pin
+can see the header get taller. tests/test_about_uniform_chrome.py holds the shape and the values at
+375px and 1280px.
 ```
 
 #### The AuScope-NCRIS lock-up in the body, the file the footer carries ...
@@ -786,6 +944,18 @@ brand kit's colour PNG, linking AuScope in a new
 tab with rel="noopener noreferrer", at the bottom right of the page.
 ```
 
+#### The cards on a phone
+
+The "What you can do here" cards (`#howto`) sit in `.two`, a grid of three equal columns. The columns
+were set inline on the element, where no media query could reach them, and a grid item's floor is its
+content, so on a 375px phone the API access card ran from 274 to 391 and widened the layout viewport
+to 391px. The columns are now the `.two` rule's, at 560px and narrower `.two` is one column, and
+`.card` takes `min-width:0` and `overflow-wrap:break-word`, so no card can be wider than its column
+whatever word it holds. Measured in the Claude desktop browser pane: `document.scrollingElement.scrollWidth`
+equals `innerWidth` at 375 x 812 (375, the three cards 335px wide one under another), at 320 x 640
+(320) and at 600 x 900 (600, three cards 175px wide); at 1024 x 768 the three cards sit at 122, 388 and
+654 across, 248 x 275 each, as on `origin/main`. `tests/test_phone_chrome.py` pins the rules.
+
 ## portal/add-survey.html
 
 #### Uniform chrome: the three-zone header, index.html's geometry
@@ -842,6 +1012,9 @@ and the 240px cap keeps the opened text clear of the legend at 560px of map. Sha
 character with index.html, because these three maps wear the same control in the same corner;
 pinned by tests/test_map_attribution.py.
 ```
+
+The coarse-pointer line after the rule set is index.html's too: a 44 x 44 hit area on the 20 x 20
+glyph (see the same heading under `portal/index.html`).
 
 #### The AuScope mark, then AusMT's name set at the AuScope logo's proportions
 
@@ -4521,6 +4694,16 @@ read in passesCore() above and by the selection exports' three-way not-included 
 
 ## portal/src/main.js
 
+#### The counts line rides the sheet's peek row on the phone layout
+
+```text
+The counts line rides the sheet's peek row on the phone layout and the footer's right zone otherwise.
+```
+
+`placeCounts()` moves `#footerCounts` (and the `#countSlot` filters.js paints) into `#sheetPeek` while
+`sheetPhone()` holds, and back into `footer .fright` otherwise. The element moves; it is never
+copied, so the ids the counters are painted by stay unique.
+
 #### Fold the boot-loaded coordinate policy onto each station (generalised | ...
 
 ```text
@@ -4907,6 +5090,42 @@ lat -43.44..-22.48) falls inside it, so it shows all dots AND frames the whole c
 here as AU_HOME_BOUNDS and shared by the initial fit and buildMarkers()'s HOME_BOUNDS so the two frames
 cannot drift apart.
 ```
+
+#### A coarse pointer reaches a dot within TAP_TOLERANCE px of its edge
+
+A station dot is 1.8px in radius at the national view, and in a simulation of 2,000 thumb taps on a
+375 x 390 map at zoom 3, 95 percent had more than one station within 10px
+(`AusMT_2026/mobile-audit/measurements.json`, `markers`). So on a coarse pointer
+(`matchMedia("(pointer:coarse)")`, read once at load into `COARSE_POINTER`) the map is built on
+`L.canvas({tolerance:8})`: Leaflet's canvas hit test then counts a tap as on a dot when it lands
+within the dot's radius, plus half its stroke, plus 8px (`tapReach`), which is 9.8px at the national
+view.
+
+The dot's click handler on a coarse pointer is `onStationTap`. It projects every visible dot to
+container pixels and asks `tapCandidates` which of them the tap reaches, nearest first and then in
+catalogue order. One dot opens that station, as a tap always did. More than one raises a small
+chooser (`#tapChooser`, a `role="dialog"` listing each station's id and survey as 44px buttons, with
+a labelled close control): choosing an entry opens it, and the close control, Escape, a tap on the
+map, a pan or a zoom dismiss it. The chooser is built with `createElement` and `textContent` and
+sits in `#content` beside the map rather than inside Leaflet's container, so its taps never reach the
+map. The bottom sheet stacks over `#content`, so on the phone layout the chooser keeps to the map the
+sheet leaves clear (`sheetClearArea` in `sheet.js`, read from the sheet's own box): `tapChooserBox`
+places it below the tap when it fits there, above the tap when it fits there, and otherwise against
+the outer edge of the side with more room, 8px in from the clear map's edges, with an inline
+`max-height` of the clear height less 16px; beside the tablet card the clear map starts right of the
+card. Off the phone layout the chooser keeps the placement it always had. In the same pane at
+375 x 812, with the sheet at half (its edge at 406), a tap 2px above the sheet edge raised the
+chooser from 258 to 392 with its close control and both rows hit-testing to themselves; at peek
+(edge 692) the same tap placed it from 544 to 678. At 765 x 1024 with the card at half, a tap at
+x 600 placed it from 480 to 720 across, right of the card's 436. On a fine pointer the map takes no renderer option, so Leaflet builds its own, and a dot click
+opens its station directly, exactly as before. `tools/map_dots_test.js` pins the reach and the
+candidates on plain numbers (a tap 6px from an isolated dot reaches it alone; a tap between two dots
+10px apart reaches both) and the chooser's placement inside a clear area; `tools/interaction_test.js` boots a window that answers the coarse query
+and drives both cases through the bound handler and the chooser; a second window that also answers
+the phone query holds the chooser above the sheet edge at half and at peek. In the desktop app's Chromium pane
+emulating a 375 x 812 touch phone, on the five-station interaction fixture at zoom 3 with the real
+Leaflet: a click between two dots 8.6px apart raised the chooser with both stations as 44px rows and
+opened neither, and a click 6px beside an isolated dot opened that station.
 
 #### THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here
 
@@ -5487,6 +5706,65 @@ same authority; both collapse to "#" like every other off-allowlist form. Third-
 arrive here raw (a related identifier of type URL), so this branch is an allowlist, not a shorthand.
 ```
 
+## portal/src/sheet.js
+
+The phone layout's bottom sheet. It is loaded before `drawer.js`, as a file under `script-src 'self'`
+(no inline script and no handler in the markup), and every change it makes to the page is gated on one
+query, `matchMedia("(max-width:900px)")` (`sheetPhone()`). Above 900px no function here moves an
+element, sets an attribute or calls the map, so the desktop page is the one it was; the one call it
+makes there is to return a zoom control it moved in the card band to the top-left corner.
+
+#### The host and the snaps
+
+The sheet is `#sheet` in `index.html` (see the phone layout under `index.html`). Its state is two
+attributes: `data-snap` (`peek`, `half` or `full`, read by the stylesheet) and `data-host` (`filters`
+or `drawer`). `sheetSnap(name)` sets the height and keeps the handle's `aria-expanded` (false only at
+peek) and its label ("Panel at half height. ...") in step. The handle's tap cycles half, full, peek,
+half; a pointer drag on it moves the sheet by an inline `translateY` with the transition off (on the
+tablet card, `sheetCard()`, it sets the card's inline height instead, since the card's bottom stays put),
+and on release drops the inline value and snaps to whichever of the three heights is nearest the visible
+height (`sheetNearestSnap`). `sheetSnapHeights()` reads the full height from the phone sheet's own box,
+which is always its full height; the card's box is only as tall as its current snap, so for the card the
+full height is the screen less the header's bottom edge and the two 16px gaps. At 800 x 1024 a drag of
+200px up from half measured the card's top at 296 and its bottom still at 1008.
+A pointer that moves no more than 6px is a tap. The click a drag ends with is swallowed, so a drag is
+never also read as a tap, and the handle stays a button that a keyboard cycles with Enter or Space.
+
+#### The drawer hand-off
+
+`drawer.js` calls `sheetHostDrawer()` as `openStation` and `openSurvey` open a subject (not on a
+hydration re-render), before focus moves into the drawer, and `sheetReleaseDrawer()` from `closeDrawer`.
+On the map view of the phone layout the first moves `#drawer` into the sheet, records the filters'
+height and sets the sheet to half with the drawer as host, so the station's header and Download EDI
+show; a second subject opened over the first keeps the recorded height. The second gives the sheet
+back to the filters at that height. The Back control (`#sheetBack`) closes the drawer through
+`closeDrawer`, and so do the drawer's own close control and Escape (the drawer's existing keydown
+handler), so every way out restores the filters the same way. Off the map view, or above 900px, the
+drawer goes back to where `index.html` declares it, in `.content`.
+
+After a station opens in the sheet, `sheetRecentre` pans the map (`map.panBy`, unanimated under
+reduced motion) so the station sits at the centre of the part of the map the sheet leaves clear:
+above the sheet on a phone, right of the 420px card from 761px (`sheetFreeArea`). A station with no
+position is not panned. `sheetClearArea` gives the same area in the content box's pixels for the
+tap chooser in `map.js`, taking the visible height from the sheet's own box once the page has laid
+it out and from the current snap height before then.
+
+#### Width changes
+
+`sheetSync()` brings the page into line with the current width and runs at boot (`main.js runInit`)
+and on every change of the query: on the phone layout it opens a rail the reader collapsed on a
+desktop (without storing the choice, and closes it again above 900px) and hosts an open drawer; above
+900px it returns the drawer and the host. Both ends call `placeCounts()` in `main.js`. It also runs on
+every change of the card query, `matchMedia("(min-width:761px)")` (`sheetCard()`), and places the map's
+zoom control (`sheetPlaceZoom`): top right in the card band, top left everywhere else, calling Leaflet
+only when the position changes and relabelling the rebuilt buttons (`labelToolbar` in `map.js`).
+
+#### No script
+
+Without this file the sheet stays at its markup default, half with the filters as host, and the
+stylesheet makes the panel scroll inside it; a station still opens in the drawer where the page
+declares it. The interaction driver boots the page without `sheet.js` to hold that.
+
 ## portal/src/state.js
 
 #### ---- two-phase boot: background hydration gates ...
@@ -5712,6 +5990,19 @@ qColor as a text colour; it renders a .qvdot swatch beside plain readable text i
 ```
 
 ## portal/src/tour.js
+
+#### Each step names the sheet height that shows its target
+
+On the phone layout the panel and the drawer are in the bottom sheet, so a step whose target is there
+would spotlight something below the handle at peek. Every deck entry carries `snap`, the sheet height
+that shows its target: half for the filters, the drawer and the selection box; full for Find, the
+tree, the Files tab and the two download offers; peek for the map steps and the two header tabs, so
+the map stays in view. `_tourPosition` sets it (`_tourSheetSnap`, through `sheetSnap` in `sheet.js`)
+after the step's enter hook, which may open the drawer at half, and before the target is scrolled
+into view and measured; the settle watcher then follows the sheet's slide. Above 900px `sheetActive()`
+is false and nothing is set. The pre-tour snapshot carries the sheet's height, restored after the
+visitor's drawer (whose opening sets half). `tests/test_tour_deck.py` pins the heights and the order,
+and the interaction driver walks the deck in a phone window.
 
 #### tour.js - the guided spotlight tour. Classic script, zero dependencies
 

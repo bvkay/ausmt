@@ -561,7 +561,8 @@ function ok(cond, msg) { if (!cond) die(msg); }
 // `preBoot` runs on the fresh window BEFORE the modules do, which is the only place a pin can seed
 // state the boot itself READS (localStorage: the sidebar-collapse and intro-dismissed keys are
 // applied during boot, so setting them afterwards would test nothing).
-async function bootFreshWindow(dataMap, url, preBoot) {
+// `src` replaces the module bundle, which is how a leg boots the page without one of its scripts.
+async function bootFreshWindow(dataMap, url, preBoot, src) {
   const d = new JSDOM(html, { url: url || "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
   const w = d.window;
   w.L = stub(); w.JSZip = stub();
@@ -571,7 +572,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     return Promise.resolve(dataMap[url] ? { ok: true, json: () => Promise.resolve(dataMap[url]) } : { ok: false }); };
   if (typeof preBoot === "function") preBoot(w);
   await new Promise(res => (w.document.readyState === "complete" ? res() : w.addEventListener("load", res, { once: true })));
-  vm.runInContext(code, d.getInternalVMContext());
+  vm.runInContext(src || code, d.getInternalVMContext());
   await w.__api.boot();
   await w.__api.hydrationDone();   // two-phase boot: settle tf/sci/manifest before the caller asserts
   return w;
@@ -1444,6 +1445,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(doc.getElementById("drawer").innerHTML.indexOf(_f5dot.id) >= 0,
     "the drawer must show the station that was clicked (" + _f5dot.id + ")");
   A.closeDrawer();
+  // A FINE POINTER IS UNTOUCHED by the coarse-pointer tap rule. jsdom has no matchMedia, which is how a
+  // desktop answers the coarse query here: the map keeps Leaflet's own renderer (no renderer option at
+  // all) and the click above opened its station with no chooser.
+  ok(JSON.stringify(Object.keys(mapMade[0].opts)) === JSON.stringify(["preferCanvas", "attributionControl"]),
+    "desktop: the map is built with exactly preferCanvas and attributionControl, got " + JSON.stringify(mapMade[0].opts));
+  ok(!doc.getElementById("tapChooser"), "desktop: a station click never raises the tap chooser");
 
   A.buildAuslampSet(); A.refresh();       // restore the boot-built membership for the rest of the run
 
@@ -6212,6 +6219,397 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     const _gsv = doc.querySelector('meta[name="google-site-verification"]');
     ok(_gsv && /^[A-Za-z0-9_-]{20,}$/.test(_gsv.getAttribute("content") || ""),
       "map-chrome: index.html must carry the google-site-verification meta with a token-shaped content");
+  }
+
+  // ---- PHONE: the coarse-pointer tap tolerance and the multi-station chooser ----------------------
+  // A fresh window whose matchMedia answers (pointer:coarse), with the three Leaflet factories the tap
+  // rule reaches recorded: the map's options, the canvas renderer's options and every station dot.
+  // latLngToContainerPoint is a table this leg sets, so each case places the dots in container pixels
+  // and taps beside them. HONESTY: this records the app's CALLS and its DOM; whether Leaflet's canvas
+  // fires a click at a given pixel is Leaflet's hit test, pinned on its own terms in map_dots_test.js.
+  {
+    const made = { opts: null, canvas: [] };
+    const proj = Object.create(null);
+    let far = 0;
+    const phoneWin = await bootFreshWindow(DATAMAP, undefined, w => {
+      w.matchMedia = (q) => ({ matches: /\(\s*pointer\s*:\s*coarse\s*\)/.test(q), media: q,
+        addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+      const pm = Object.create(null);
+      pm.latLngToContainerPoint = (ll) => {
+        const k = ll[0] + "," + ll[1];
+        if (!proj[k]) { far += 1; proj[k] = { x: 1000 + 100 * far, y: 1000 }; }
+        return proj[k];
+      };
+      pm.getContainer = () => w.document.getElementById("map");
+      // Leaflet returns the map from each of these, which is what L.map(...).fitBounds(...) relies on.
+      ["on", "addLayer", "fitBounds", "setView", "invalidateSize", "addControl"].forEach(fn => { pm[fn] = () => pm.__self; });
+      const base = w.L;
+      w.L = new Proxy(function () { }, {
+        get: (tg, prop) => {
+          if (prop === "then") return undefined;
+          if (prop === "map") return (id, o) => { made.opts = o || {}; return recProxy(pm); };
+          if (prop === "canvas") return (o) => { made.canvas.push(o); return { options: o }; };
+          if (prop === "circleMarker") return (ll, o) => recLayer("circleMarker", ll, o, true);
+          return base[prop];
+        },
+        apply: () => stub(), construct: () => stub(),
+      });
+    });
+    const pa = phoneWin.__api, pdoc = phoneWin.document;
+    ok(made.canvas.length === 1 && made.canvas[0].tolerance === 8,
+      "phone: a coarse pointer builds one canvas renderer with an 8px tolerance, got " + JSON.stringify(made.canvas));
+    ok(made.opts.renderer && made.opts.renderer.options.tolerance === 8 && made.opts.preferCanvas === true &&
+      made.opts.attributionControl === false,
+      "phone: the map takes that renderer beside its own two options, got " + JSON.stringify(made.opts));
+    const st = (id) => pa.station(id);
+    const at = (id, x, y) => { const s = st(id); proj[s.lat + "," + s.lon] = { x, y }; };
+    const tap = (id, x, y) => { const mk = pa.stationMarker(id); ok(mk && (mk.handlers.click || []).length === 1,
+      "phone: " + id + " carries one tap handler"); mk.handlers.click[0]({ containerPoint: { x, y } }); };
+    const drawerOn = () => pdoc.getElementById("drawer").classList.contains("open");
+    // A tap 6px from an isolated dot opens that station, as a tap on the dot does.
+    at("A1", 100, 100);
+    tap("A1", 106, 100);
+    ok(drawerOn() && pdoc.getElementById("drawer").innerHTML.indexOf("A1") >= 0,
+      "phone: a tap 6px from an isolated dot must open that station");
+    ok(!pdoc.getElementById("tapChooser"), "phone: a tap that reaches one dot raises no chooser");
+    pa.closeDrawer();
+    // A tap between two dots 10px apart reaches both: the chooser lists them, and nothing opens yet.
+    at("A2", 110, 100);
+    tap("A1", 105, 100);
+    const ch = pdoc.getElementById("tapChooser");
+    ok(ch && ch.getAttribute("role") === "dialog", "phone: a tap between two dots must raise the chooser");
+    ok(!drawerOn(), "phone: an ambiguous tap must not open either station before the reader chooses");
+    const items = [...ch.querySelectorAll("button.tapchooser-item")];
+    ok(items.length === 2, "phone: the chooser lists the two stations the tap reached, got " + items.length);
+    ok(/A1/.test(items[0].textContent) && /A2/.test(items[1].textContent) &&
+      items.every(b => /Alpha Survey/.test(b.textContent)),
+      "phone: each entry names its station and its survey, equal distances in catalogue order, got " +
+      JSON.stringify(items.map(b => b.textContent)));
+    items[1].dispatchEvent(new phoneWin.MouseEvent("click", { bubbles: true }));
+    ok(!pdoc.getElementById("tapChooser"), "phone: choosing an entry closes the chooser");
+    ok(drawerOn() && pdoc.getElementById("drawer").innerHTML.indexOf("A2") >= 0,
+      "phone: choosing an entry opens that station");
+    pa.closeDrawer();
+    // Escape and the chooser's own close control both dismiss it without opening anything.
+    tap("A1", 105, 100);
+    pdoc.dispatchEvent(new phoneWin.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    ok(!pdoc.getElementById("tapChooser") && !drawerOn(), "phone: Escape dismisses the chooser and opens nothing");
+    tap("A1", 105, 100);
+    const close = pdoc.querySelector("#tapChooser .tapchooser-close");
+    ok(close && close.getAttribute("aria-label") === "Close", "phone: the chooser carries a labelled close control");
+    close.dispatchEvent(new phoneWin.MouseEvent("click", { bubbles: true }));
+    ok(!pdoc.getElementById("tapChooser") && !drawerOn(), "phone: the close control dismisses the chooser");
+  }
+
+  // ---- PHONE: the chooser keeps to the map the sheet leaves clear ---------------------------------
+  // A window that answers both the coarse pointer and the phone query, so the sheet is live under the
+  // chooser. jsdom has no layout, so the content box and the sheet are given the 375 x 812 phone
+  // geometry measured in a browser: the map 52 to 812 under the header, the sheet at half from 406.
+  // The chooser stacks under the sheet, so every row it draws must lie above the sheet edge.
+  {
+    const proj = Object.create(null);
+    let far = 0;
+    const cw = await bootFreshWindow(DATAMAP, undefined, w => {
+      Object.defineProperty(w, "innerHeight", { value: 812, configurable: true });
+      w.matchMedia = (q) => ({ matches: /\(\s*pointer\s*:\s*coarse\s*\)/.test(q) || /max-width\s*:\s*900px/.test(q), media: q,
+        addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+      const pm = Object.create(null);
+      pm.latLngToContainerPoint = (ll) => {
+        const k = ll[0] + "," + ll[1];
+        if (!proj[k]) { far += 1; proj[k] = { x: 1000 + 100 * far, y: 1000 }; }
+        return proj[k];
+      };
+      pm.getContainer = () => w.document.getElementById("map");
+      ["on", "addLayer", "fitBounds", "setView", "invalidateSize", "addControl", "panBy"].forEach(fn => { pm[fn] = () => pm.__self; });
+      pm.getSize = () => ({ x: 375, y: 760 });
+      const base = w.L;
+      w.L = new Proxy(function () { }, {
+        get: (tg, prop) => {
+          if (prop === "then") return undefined;
+          if (prop === "map") return () => recProxy(pm);
+          if (prop === "canvas") return (o) => ({ options: o });
+          if (prop === "circleMarker") return (ll, o) => recLayer("circleMarker", ll, o, true);
+          return base[prop];
+        },
+        apply: () => stub(), construct: () => stub(),
+      });
+    });
+    const ca = cw.__api, cdoc = cw.document;
+    const host = cdoc.getElementById("content"), csheet = cdoc.getElementById("sheet");
+    Object.defineProperty(host, "clientWidth", { value: 375, configurable: true });
+    Object.defineProperty(host, "clientHeight", { value: 760, configurable: true });
+    host.getBoundingClientRect = () => ({ top: 52, left: 0, right: 375, bottom: 812, width: 375, height: 760 });
+    const sheetAt = (top) => { csheet.getBoundingClientRect = () => ({ top, left: 0, right: 375, bottom: top + 760, width: 375, height: 760 }); };
+    const at = (id, x, y) => { const s = ca.station(id); proj[s.lat + "," + s.lon] = { x, y }; };
+    const tap = (id, x, y) => ca.stationMarker(id).handlers.click[0]({ containerPoint: { x, y } });
+    const px = (v) => (v === "" ? NaN : parseFloat(v));
+    const clear = (where, edge) => {
+      const ch = cdoc.getElementById("tapChooser");
+      ok(ch, "chooser over the sheet: a tap between two dots " + where + " must raise the chooser");
+      const top = px(ch.style.top), maxH = px(ch.style.maxHeight);
+      ok(ch.style.bottom === "" && isFinite(top) && isFinite(maxH),
+        "chooser over the sheet: the box is placed by its top and capped by an inline max-height " + where +
+        ", got top " + JSON.stringify(ch.style.top) + " bottom " + JSON.stringify(ch.style.bottom) + " max-height " + JSON.stringify(ch.style.maxHeight));
+      ok(top >= 8 && top + maxH <= edge - 8,
+        "chooser over the sheet: every row lies in the clear map above the sheet edge at " + edge + "px " + where +
+        ", got top " + top + " and max-height " + maxH);
+      ok(maxH >= 2 * 44, "chooser over the sheet: the box keeps room for its head and a row " + where + ", got " + maxH);
+      ch.querySelector(".tapchooser-close").dispatchEvent(new cw.MouseEvent("click", { bubbles: true }));
+    };
+    ok(csheet.dataset.snap === "half", "chooser over the sheet: the sheet starts at half");
+    // At half with no measurable sheet box, the clear map ends at the half snap: 760 - 406 = 354.
+    at("A1", 100, 352); at("A2", 108, 352);
+    tap("A1", 104, 352);
+    clear("2px above the sheet at half (snap heights)", 354);
+    // The same tap with the sheet box measured at half.
+    sheetAt(406);
+    tap("A1", 104, 352);
+    clear("2px above the sheet at half (measured box)", 354);
+    // A tap near the top of the clear map still keeps the box above the sheet.
+    at("A1", 100, 40); at("A2", 108, 40);
+    tap("A1", 104, 40);
+    clear("near the top of the map at half", 354);
+    // At peek the sheet edge is 692 on screen, 640 in the content box.
+    cw.sheetSnap("peek");
+    sheetAt(692);
+    at("A1", 100, 638); at("A2", 108, 638);
+    tap("A1", 104, 638);
+    clear("2px above the sheet at peek", 640);
+  }
+
+  // ---- PHONE: the bottom sheet, the drawer in it, and the counts in its peek row ------------------
+  // A fresh window whose matchMedia answers the phone query (and, when `card` is set, the tablet band),
+  // with every query object kept so a leg can fire a change. The map records panBy, and projects each
+  // station through a table this leg sets. HONESTY: jsdom has no layout, so these are the app's state
+  // and calls; the geometry they produce is measured in a browser and recorded in the docs.
+  {
+    const queries = Object.create(null);
+    const state = { phone: true, card: false };
+    const answer = (q) => /max-width\s*:\s*900px/.test(q) ? state.phone
+      : /min-width\s*:\s*761px/.test(q) ? (state.phone && state.card) : false;
+    const pans = [];
+    const zoomMoves = [];
+    const proj = Object.create(null);
+    const sheetBoot = (extra) => bootFreshWindow(DATAMAP, undefined, w => {
+      w.matchMedia = (q) => {
+        if (!queries[q]) {
+          const ls = [];
+          queries[q] = { media: q, get matches() { return answer(q); }, ls,
+            addListener(fn) { ls.push(fn); }, removeListener() {}, addEventListener(t, fn) { ls.push(fn); }, removeEventListener() {} };
+        }
+        return queries[q];
+      };
+      const pm = Object.create(null);
+      pm.latLngToContainerPoint = (ll) => proj[ll[0] + "," + ll[1]] || { x: 0, y: 0 };
+      pm.getSize = () => ({ x: 375, y: 716 });
+      pm.panBy = (off) => { pans.push(off); return pm.__self; };
+      pm.getContainer = () => w.document.getElementById("map");
+      pm.zoomControl = { pos: "topleft", getPosition() { return this.pos; },
+        setPosition(p) { zoomMoves.push(p); this.pos = p; return this; } };
+      ["on", "addLayer", "fitBounds", "setView", "invalidateSize", "addControl"].forEach(fn => { pm[fn] = () => pm.__self; });
+      const base = w.L;
+      w.L = new Proxy(function () { }, {
+        get: (tg, prop) => {
+          if (prop === "then") return undefined;
+          if (prop === "map") return () => recProxy(pm);
+          return base[prop];
+        },
+        apply: () => stub(), construct: () => stub(),
+      });
+      if (extra) extra(w);
+    });
+    const fireChange = () => Object.values(queries).forEach(q => q.ls.forEach(fn => fn({ matches: q.matches, media: q.media })));
+    const pw = await sheetBoot();
+    const pdoc = pw.document;
+    const sheet = pdoc.getElementById("sheet"), handle = pdoc.getElementById("sheetHandle");
+    const drawerEl = pdoc.getElementById("drawer");
+    const click = (el) => el.dispatchEvent(new pw.MouseEvent("click", { bubbles: true }));
+    ok(typeof pw.sheetActive === "function" && pw.sheetActive() === true,
+      "sheet: src/sheet.js must load and report the phone layout active under (max-width:900px)");
+    ok(sheet.dataset.snap === "half" && sheet.dataset.host === "filters",
+      "sheet: it boots at half with the filters as host, got " + sheet.dataset.snap + "/" + sheet.dataset.host);
+    ok(handle.getAttribute("aria-expanded") === "true" && /half/.test(handle.getAttribute("aria-label")),
+      "sheet: the handle states half and expanded, got " + handle.getAttribute("aria-label"));
+    // The counts render into the peek row on the phone layout.
+    const counts = pdoc.getElementById("footerCounts");
+    ok(counts && counts.parentElement && counts.parentElement.id === "sheetPeek",
+      "sheet: the counts line must sit in the peek row on a phone, got parent " + (counts && counts.parentElement && counts.parentElement.id));
+    ok(/5 shown/.test(counts.textContent), "sheet: the peek row carries the live counts, got " + counts.textContent);
+    // The handle's tap cycles peek, half, full, and its state follows.
+    const seen = [];
+    for (let k = 0; k < 3; k++) {
+      click(handle);
+      seen.push([sheet.dataset.snap, handle.getAttribute("aria-expanded"), handle.getAttribute("aria-label")]);
+    }
+    ok(seen.map(x => x[0]).join() === "full,peek,half",
+      "sheet: a tap cycles half to full to peek to half, got " + JSON.stringify(seen));
+    ok(seen[1][1] === "false" && seen[0][1] === "true" && seen[2][1] === "true",
+      "sheet: aria-expanded is false only at peek, got " + JSON.stringify(seen));
+    ok(/full/.test(seen[0][2]) && /peek/.test(seen[1][2]) && /half/.test(seen[2][2]),
+      "sheet: the handle's label names each height, got " + JSON.stringify(seen));
+    // A drag snaps to the nearest height and is not also read as a tap.
+    const ptr = (type, y) => handle.dispatchEvent(new pw.MouseEvent(type, { bubbles: true, clientY: y }));
+    ok(pw.sheetSnapHeights().half === Math.round(pw.innerHeight * 0.5), "sheet: half is half the screen");
+    ptr("pointerdown", 500); ptr("pointermove", 300); ptr("pointermove", 100); ptr("pointerup", 100); click(handle);
+    ok(sheet.dataset.snap === "full", "sheet: a long drag up from half snaps to full, got " + sheet.dataset.snap);
+    ok(!sheet.style.transform, "sheet: the drag's inline transform is dropped when it snaps");
+    ptr("pointerdown", 100); ptr("pointermove", 500); ptr("pointerup", 520); click(handle);
+    ok(sheet.dataset.snap === "half", "sheet: a drag down to near half snaps to half, got " + sheet.dataset.snap);
+    ptr("pointerdown", 100); ptr("pointermove", 900); ptr("pointerup", 900); click(handle);
+    ok(sheet.dataset.snap === "peek", "sheet: a drag past half snaps to peek, got " + sheet.dataset.snap);
+    // Opening a station hands the sheet to the drawer at half, and recentres the station above it.
+    click(handle); click(handle);                                   // peek -> half -> full
+    ok(sheet.dataset.snap === "full", "sheet: set up at full before the open");
+    const a1 = pw.__api.station("A1");
+    proj[a1.lat + "," + a1.lon] = { x: 100, y: 100 };
+    pans.length = 0;
+    pw.openStation(a1.i);
+    ok(sheet.dataset.host === "drawer" && sheet.dataset.snap === "half",
+      "sheet: opening a station hosts the drawer at half, got " + sheet.dataset.host + "/" + sheet.dataset.snap);
+    ok(drawerEl.parentElement === sheet && drawerEl.classList.contains("open"),
+      "sheet: the drawer renders inside the sheet on a phone, got parent " + (drawerEl.parentElement && drawerEl.parentElement.id));
+    ok(/A1/.test(drawerEl.querySelector(".dhead .sid").textContent) && /Download EDI/.test(drawerEl.querySelector(".dactions").textContent),
+      "sheet: the station header and Download EDI open with it");
+    ok(pans.length === 1 && pans[0][0] === 100 - 375 / 2 && pans[0][1] === 100 - (716 - pw.sheetSnapHeights().half) / 2,
+      "sheet: the map pans the station to the middle of the map above the half sheet, got " + JSON.stringify(pans));
+    // Back restores the filters at the height they had.
+    click(pdoc.getElementById("sheetBack"));
+    ok(sheet.dataset.host === "filters" && sheet.dataset.snap === "full" && !drawerEl.classList.contains("open"),
+      "sheet: Back restores the filters at the previous height, got " + sheet.dataset.host + "/" + sheet.dataset.snap);
+    // A second station opened over the first keeps the filters' height for Back.
+    click(handle);                                                  // full -> peek
+    pw.openStation(a1.i);
+    pw.openStation(pw.__api.station("A2").i);
+    ok(sheet.dataset.host === "drawer" && /A2/.test(drawerEl.querySelector(".dhead .sid").textContent),
+      "sheet: a second station replaces the first in the sheet");
+    // Escape closes the drawer state.
+    pdoc.dispatchEvent(new pw.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    ok(sheet.dataset.host === "filters" && sheet.dataset.snap === "peek" && !drawerEl.classList.contains("open"),
+      "sheet: Escape closes the drawer and restores the filters at peek, got " + sheet.dataset.host + "/" + sheet.dataset.snap);
+    // The survey drawer takes the same host.
+    pw.openSurvey("Alpha Survey");
+    ok(sheet.dataset.host === "drawer" && sheet.dataset.snap === "half" && drawerEl.parentElement === sheet,
+      "sheet: the survey drawer opens in the sheet at half");
+    pw.closeDrawer();
+    ok(sheet.dataset.host === "filters" && sheet.dataset.snap === "peek", "sheet: closing the survey drawer restores peek");
+    // The sheet's footer content ends with the About link.
+    const about = pdoc.querySelector("#sheetFoot .sheetabout");
+    ok(about && about.getAttribute("href") === "about.html" && about.closest("#sheet") === sheet,
+      "sheet: the sheet's footer content holds the About link to about.html");
+    // Off the map view the drawer goes back to the content box, where those views draw it.
+    pw.setView("surveys");
+    pw.openSurvey("Alpha Survey");
+    ok(drawerEl.parentElement && drawerEl.parentElement.id === "content" && sheet.dataset.host === "filters",
+      "sheet: off the map view the drawer opens in the content box, not the hidden sheet");
+    pw.closeDrawer(); pw.setView("map");
+    // The tablet band: the station is centred in the map beside the 420px card.
+    const fa = pw.sheetFreeArea(800, 972, true, 512);
+    ok(fa.left === 436 && fa.right === 800 && fa.top === 0 && fa.bottom === 972,
+      "sheet: beside the card the free map is right of it, got " + JSON.stringify(fa));
+    const fp = pw.sheetFreeArea(375, 716, false, 358);
+    ok(fp.left === 0 && fp.right === 375 && fp.bottom === 358, "sheet: on a phone the free map is above the sheet, got " + JSON.stringify(fp));
+    // The tablet card takes its height per snap, its bottom fixed 16px above the screen edge, so its
+    // full height is the screen less the header and the two 16px gaps whatever height the box shows
+    // now, and a drag sets the card's height where the phone sheet sets its offset.
+    state.card = true;
+    const boxNow = sheet.getBoundingClientRect;
+    sheet.getBoundingClientRect = () => ({ top: pw.innerHeight - 16 - 120, left: 16, right: 436, bottom: pw.innerHeight - 16, width: 420, height: 120 });
+    ok(pw.sheetCard() && pw.sheetSnapHeights().full === pw.innerHeight - 52 - 32,
+      "card: full is the screen less the header and two 16px gaps, not the box's current height, got " + pw.sheetSnapHeights().full);
+    const snapBefore = sheet.dataset.snap;
+    pw.sheetSnap("half");
+    ptr("pointerdown", 500); ptr("pointermove", 400);
+    ok(sheet.style.height === (Math.round(pw.innerHeight * 0.5) + 100) + "px" && !sheet.style.transform,
+      "card: a drag sets the card's height and no offset, got height=" + JSON.stringify(sheet.style.height) +
+      " transform=" + JSON.stringify(sheet.style.transform));
+    ptr("pointermove", 100); ptr("pointerup", 100); click(handle);
+    ok(sheet.dataset.snap === "full" && !sheet.style.height && !sheet.style.transform,
+      "card: the drop snaps to full and hands the height back to the stylesheet, got " + sheet.dataset.snap +
+      " height=" + JSON.stringify(sheet.style.height));
+    ptr("pointerdown", 100); ptr("pointermove", 400); ptr("pointercancel", 400);
+    ok(!sheet.style.height && !sheet.classList.contains("dragging"), "card: a cancelled drag leaves no inline height");
+    pw.sheetSnap(snapBefore);
+    sheet.getBoundingClientRect = boxNow;
+    // The card covers the map's top-left corner at full, so in the card band the zoom control stacks
+    // under the credit in the top-right corner, and goes back on leaving the band.
+    ok(zoomMoves.length === 0, "card: on a phone the zoom control stays top left, got moves " + JSON.stringify(zoomMoves));
+    fireChange();
+    ok(zoomMoves.join() === "topright", "card: entering the card band moves the zoom control top right, got " + JSON.stringify(zoomMoves));
+    fireChange();
+    ok(zoomMoves.join() === "topright", "card: a second change in the band moves nothing, got " + JSON.stringify(zoomMoves));
+    state.card = false; fireChange();
+    ok(zoomMoves.join() === "topright,topleft", "card: leaving the card band puts the zoom control back top left, got " + JSON.stringify(zoomMoves));
+    state.phone = false; fireChange(); state.phone = true; fireChange();
+    ok(zoomMoves.length === 2, "card: above 900px and on a phone the zoom control is not moved, got " + JSON.stringify(zoomMoves));
+    // Leaving the phone layout with the drawer open puts everything back where the desktop has it.
+    pw.openStation(a1.i);
+    state.phone = false; fireChange();
+    ok(drawerEl.parentElement && drawerEl.parentElement.id === "content" && drawerEl.classList.contains("open"),
+      "sheet: a widened window returns the open drawer to the content box");
+    ok(sheet.dataset.host === "filters" && counts.parentElement.classList.contains("fright"),
+      "sheet: a widened window returns the host and the counts to the desktop layout");
+    state.phone = true; fireChange();
+    ok(drawerEl.parentElement === sheet && sheet.dataset.host === "drawer" && counts.parentElement.id === "sheetPeek",
+      "sheet: narrowing again with the drawer open hosts it in the sheet");
+    pw.closeDrawer();
+
+    // THE TOUR ON A PHONE: each step sets the sheet height that shows its target, the drawer steps
+    // with the drawer as host, and closing the tour hands back the height the visitor had.
+    click(handle);                                                  // half -> full, the visitor's height
+    const before = sheet.dataset.snap;
+    const wantSnaps = ["peek", "half", "full", "full", "half", "full", "half", "peek", "full", "full", "peek", "peek", "peek"];
+    pw.__api.startTour();
+    const walked = [];
+    for (let k = 0; k < wantSnaps.length; k++) {
+      ok(pw.__api.tourStep() === k, "phone tour: at step " + k + ", got " + pw.__api.tourStep());
+      walked.push(sheet.dataset.snap + (sheet.dataset.host === "drawer" ? "+drawer" : ""));
+      if (k < wantSnaps.length - 1) click(pdoc.getElementById("tourNext"));
+    }
+    ok(walked.map(x => x.split("+")[0]).join() === wantSnaps.join(),
+      "phone tour: each step sets the sheet height that shows its target, got " + JSON.stringify(walked));
+    ok(walked[4] === "half+drawer" && walked[5] === "full+drawer",
+      "phone tour: the drawer steps spotlight the drawer hosted in the sheet, got " + JSON.stringify(walked));
+    pw.__api.stopTour();
+    ok(sheet.dataset.snap === before && sheet.dataset.host === "filters",
+      "phone tour: closing the tour restores the visitor's sheet height, got " + sheet.dataset.snap + "/" + sheet.dataset.host);
+
+    // A rail collapsed on the desktop is open on the phone, and collapsed again on the desktop.
+    const cw = await sheetBoot(w => { try { w.localStorage.setItem("ausmt_sidebar_collapsed", "1"); } catch (e) { } });
+    const cpane = cw.document.getElementById("filterPane");
+    ok(!cpane.classList.contains("collapsed"), "sheet: the collapsed rail is open inside the sheet");
+    state.phone = false; fireChange();
+    ok(cpane.classList.contains("collapsed"), "sheet: the reader's collapsed rail returns above 900px");
+    state.phone = true;
+
+    // NO SCRIPT FOR THE SHEET: without src/sheet.js the filters still render inside the sheet at half,
+    // and a station still opens in the drawer where the page declares it.
+    const noSheet = MODULES.filter(m => m !== "sheet").map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n") +
+      code.slice(code.indexOf("\nwindow.__api="));
+    ok(MODULES.indexOf("sheet") >= 0, "sheet: index.html must load src/sheet.js");
+    const nw = await bootFreshWindow(DATAMAP, undefined, w => {
+      w.matchMedia = (q) => ({ matches: answer(q), media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+    }, noSheet);
+    const nsheet = nw.document.getElementById("sheet");
+    ok(nsheet.dataset.snap === "half" && nsheet.querySelectorAll("#tree input[type=checkbox]").length > 0,
+      "sheet: with no sheet script the filters render in the sheet at its half default");
+    nw.openStation(nw.__api.station("A1").i);
+    ok(nw.document.getElementById("drawer").classList.contains("open") &&
+      nw.document.getElementById("drawer").parentElement.id === "content",
+      "sheet: with no sheet script a station still opens in the declared drawer");
+  }
+
+  // ---- DESKTOP: the sheet takes no part above 900px -------------------------------------------------
+  {
+    ok(typeof win.sheetActive === "function" && win.sheetActive() === false,
+      "desktop: with no phone query the sheet is inactive");
+    win.__api.openStation(win.__api.stIndex("A1"));
+    const d = doc.getElementById("drawer"), sh = doc.getElementById("sheet");
+    ok(d.classList.contains("open") && d.parentElement.id === "content" && sh.dataset.host === "filters" &&
+      sh.dataset.snap === "half" && !sh.style.transform,
+      "desktop: the drawer opens in the content box and the sheet is untouched");
+    ok(doc.getElementById("footerCounts").parentElement.classList.contains("fright"),
+      "desktop: the counts stay in the footer's right zone");
+    win.__api.closeDrawer();
   }
 
   process.exit(0);

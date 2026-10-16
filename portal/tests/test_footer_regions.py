@@ -46,6 +46,13 @@ Each assertion states its failure criterion:
   * GEOMETRY - FAILS if any surface stops being a wrapping flex row or a query container, if a side
     zone stops taking the equal zero basis, if the centre stops being content-sized or centred, if
     either state below one row goes, or if a 375px viewport collides instead of stacking.
+  * THE ABOUT LINK AT PHONE WIDTHS - FAILS if a surface whose header carries About stops ending its
+    footer's left zone with an About link to the same address, drawn only at 900px and narrower where
+    the phone header hides the header's, or if a surface without one grows it.
+  * THE MAP PAGE'S PHONE FORM - FAILS if, at 900px and narrower, index.html's footer stays on
+    screen while the map is the active view, or its contents stop riding the bottom sheet as the footer
+    writes them. Every other surface, the map page's Surveys and Collections views, and the map page
+    above 900px keep the constant footer.
   * ONE FOOTER RULE SET, ON ALL SEVEN SURFACES - FAILS if any surface's footer rule set drifts from
     portal/index.html's by a character, or reaches for a literal colour instead of a token.
   * THE RETIRED CONTENT STAYS RETIRED - FAILS if Releases, About this build, the disclosure popover,
@@ -73,9 +80,10 @@ from pathlib import Path
 
 import pytest
 
-from chrome_contract import (FOOTER_CENTRE, FOOTER_CENTRE_MARKUP, FOOTER_LINE, LOCKUP, LOCKUP_FOOTERS,
-                             LOCKUP_HEIGHT, LOCKUP_LIGHT, LOCKUP_RULES, entities, flat)
-from engine_chrome import function_source, site_footer
+from chrome_contract import (FOOTER_ABOUT_RULES, FOOTER_CENTRE, FOOTER_CENTRE_MARKUP, FOOTER_LINE, LOCKUP,
+                             LOCKUP_FOOTERS, LOCKUP_HEIGHT, LOCKUP_LIGHT, LOCKUP_RULES, entities, flat,
+                             footer_about)
+from engine_chrome import function_source, site_footer, site_header
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 INDEX = ROOT / "index.html"
@@ -332,6 +340,38 @@ _LEFT_LINK = r'<a class="apilink" href="([^"]+)" title="[^"]*">(.*)</a>'
 _ENGINE_LEFT_LINK = r'<a (?:class="apilink" )?href="([^"]+)"(?: title="[^"]*")?>(.*)</a>'
 
 
+_HEADER_ABOUT = re.compile(r'<a class="about" href="([^"]+)">About</a>')
+
+
+def _header_about(where):
+    """The header About link's address on a surface, or None where its header carries none."""
+    if where == ENGINE:
+        head = site_header()
+    else:
+        text = _text(where)
+        head = text.split("<header", 1)[1].split("</header>", 1)[0] if "<header" in text else ""
+    hit = _HEADER_ABOUT.search(head)
+    return hit.group(1) if hit else None
+
+
+def _footer_about_href(where):
+    """The address the footer's About link must carry, or None where the footer carries none."""
+    return _header_about(where)
+
+
+def _left_without_about(where, left):
+    """The left zone with its About link taken off the end, which must be there exactly when the
+    surface's footer owes one."""
+    href = _footer_about_href(where)
+    if href is None:
+        assert "fabout" not in left, f"{where}: this footer carries no About link: {left!r}"
+        return left
+    tail = footer_about(href)
+    assert left.endswith(tail), (
+        f"{where}: the left zone ends with the About link {tail!r}, the header's address, got {left!r}")
+    return left[:-len(tail)].rstrip()
+
+
 @pytest.mark.parametrize("where", SURFACES)
 def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(where):
     """REGIONS and STRINGS, on all seven surfaces. FAILS if a region is missing, out of order or holds
@@ -343,7 +383,8 @@ def test_every_surface_carries_the_same_three_regions_with_the_contract_strings(
     record (MTCAT JSON)"), the centre (it carried the copyright clause, and then the address as the
     link's text) and the right region (it held the appearance control, and then nothing)."""
     regions = _regions(where, _foot(where))
-    link = re.fullmatch(_ENGINE_LEFT_LINK if where == ENGINE else _LEFT_LINK, regions["left"], re.S)
+    left = _left_without_about(where, regions["left"])
+    link = re.fullmatch(_ENGINE_LEFT_LINK if where == ENGINE else _LEFT_LINK, left, re.S)
     assert link, f"{where}: the left zone holds the MTCAT link and nothing else: {regions['left']!r}"
     label = " ".join(entities(link.group(2)).split())
     assert label == f"{LEFT_LABEL} {ARROW}", (
@@ -389,7 +430,7 @@ def test_the_surfaces_agree_on_where_the_footer_points():
         f"index.html's MTCAT link must stay at data/mtcat.json, got {idx_left}")
     assert "/" + idx_left[0] == MTCAT, (
         f"the SPA's relative MTCAT link must resolve to the engine's {MTCAT}, got {idx_left[0]}")
-    eng_left = _regions("engine/extract/_pages.py", _engine_footer())["left"]
+    eng_left = _left_without_about(ENGINE, _regions(ENGINE, _engine_footer())["left"])
     assert re.findall(r'href="([^"]+)"', eng_left) == [MTCAT], (
         f"the engine footer's MTCAT link must target {MTCAT}")
 
@@ -563,7 +604,14 @@ def test_every_footer_is_a_wrapping_flex_row_whose_side_zones_take_equal_zero_ba
 #
 # THE RETURN TO FLOW IS A MEASUREMENT: at 560px and below at least one surface is a three-row footer,
 # which on a phone would sit over most of the screen, so below it the footer is an ordinary block at
-# the end of the document.
+# the end of the document. The rules here read the base rules outside every query.
+#
+# THE MAP PAGE'S PHONE FORM: at 900px and narrower the map
+# fills the screen under a bottom sheet, so index.html's footer leaves the viewport and its contents
+# ride the sheet instead. The MTCAT link and the centre line end the sheet's content, written as the
+# footer writes them, beside an About link; the live counts move into the sheet's peek row. Every
+# other surface keeps the constant footer at every width. Pinned below and in
+# tests/test_phone_chrome.py.
 _FLOW_BELOW = 560
 _STICKY = ("position:sticky", "bottom:0")
 
@@ -710,6 +758,90 @@ def test_every_surface_returns_the_footer_to_flow_below_the_measured_width():
         assert at > re.search(_FOOTER_RULE, text).start(), (
             f"{where}: the return-to-flow rule must FOLLOW the footer's own rule, or the sticky "
             f"declaration wins at equal specificity and the narrow-width footer stays pinned")
+
+
+_PHONE_QUERY = "@media (max-width:900px){"
+_PHONE_FOOTER = "body:has(#navMap.active) footer{display:none}"
+
+
+def _phone_block(text):
+    """The bodies of every phone-width query in `text`, brace-matched."""
+    out, i = [], 0
+    while True:
+        at = text.find(_PHONE_QUERY, i)
+        if at < 0:
+            return "".join(out)
+        j = start = at + len(_PHONE_QUERY)
+        depth = 1
+        while depth:
+            depth += {"{": 1, "}": -1}.get(text[j], 0)
+            j += 1
+        out.append(text[start:j - 1])
+        i = j
+
+
+def test_the_map_pages_phone_footer_leaves_the_viewport_and_its_contents_ride_the_sheet():
+    """THE PHONE FORM OF THE MAP PAGE'S FOOTER. FAILS if index.html's footer stays on screen at 900px
+    and narrower while the map is the active view, or leaves it on the Surveys and Collections views,
+    whose only route to About it is (the sheet is not drawn there), if the sheet stops carrying the footer's left link and centre line as the footer
+    writes them, if main.js stops moving the live counts into the sheet's peek row, or if any other
+    surface takes the phone form."""
+    text = _index_text()
+    assert "".join(_PHONE_FOOTER.split()) in "".join(_phone_block(text).split()), (
+        f"index.html: at 900px and narrower the footer must declare {_PHONE_FOOTER!r}")
+    regions = _regions("index.html", _foot("index.html"))
+    sheet = re.search(r'<div class="sheetfoot" id="sheetFoot">(.*?)</div><!-- /#sheetFoot -->', text, re.S)
+    assert sheet, "index.html: the sheet ends with the footer's contents in #sheetFoot"
+    body = flat(sheet.group(1))
+    regions["left"] = _left_without_about("index.html", regions["left"])
+    for region in ("left", "centre"):
+        assert flat(regions[region]) in body, (
+            f"index.html: the sheet carries the footer's {region} region as the footer writes it: "
+            f"{regions[region]!r} not in {body!r}")
+    main = (ROOT / "src" / "main.js").read_text(encoding="utf-8")
+    assert re.search(r'function placeCounts\(\)\{[^}]*getElementById\("footerCounts"\)[^}]*'
+                     r'getElementById\("sheetPeek"\)', main), (
+        "main.js: placeCounts moves the live counts into the sheet's peek row on the phone layout")
+    for where in SURFACES:
+        if where == "index.html":
+            continue
+        assert "".join(_PHONE_FOOTER.split()) not in "".join(_phone_block(_text(where)).split()), (
+            f"{where}: the constant footer holds on every surface but the map page")
+
+
+def test_the_footers_owing_about_are_the_static_surfaces_whose_header_carries_it():
+    """FAILS if the set of footers carrying About drifts from the surfaces whose header carries it,
+    five today: the map page, the three portal pages with the header link and every page the engine
+    emits. The About page marks its own header link active and is where the link would go, so
+    it owes none. Non-vacuous: a header that drops About, or a page that gains it, moves this set."""
+    owing = sorted(w for w in SURFACES if _footer_about_href(w))
+    assert owing == sorted(("add-survey.html", "brand.html", "index.html", "releases.html", ENGINE)), owing
+
+
+@pytest.mark.parametrize("where", SURFACES)
+def test_a_footer_carries_about_at_phone_widths_where_the_header_hides_it(where):
+    """THE ABOUT LINK AT PHONE WIDTHS. The phone header hides About at 900px and narrower, so the
+    footer on every surface whose header carries it ends its left zone with an About link to the same
+    address: hidden by a base rule, drawn by a rule inside the phone query, and holding no target. The
+    map page's footer leaves the screen at those widths while the map is the active view, and its sheet
+    carries About there; on the Surveys and Collections views its footer shows and this link is the route.
+
+    FAILS if a footer owing the link drops it, retargets it or opens it in a new tab, if either rule
+    drifts, goes missing, is declared twice or sits on a surface without the link, or if the base
+    rule moves inside a query."""
+    text, href = _text(where), _footer_about_href(where)
+    foot = _foot(where)
+    if href is None:
+        assert "fabout" not in foot and "fabout" not in text, (
+            f"{where}: a surface whose footer carries no About link declares no .fabout rule")
+        return
+    tail = footer_about(href)
+    assert foot.count('class="fabout"') == 1 and tail in foot, (
+        f"{where}: the footer carries exactly one About link, {tail!r}")
+    for rule in FOOTER_ABOUT_RULES:
+        assert text.count(rule) == 1, f"{where}: expected exactly one {rule!r}, found {text.count(rule)}"
+    assert FOOTER_ABOUT_RULES[0] in _outside_queries(text), (
+        f"{where}: the base rule hides the link outside every query")
 
 
 @pytest.mark.parametrize("where", SURFACES)
