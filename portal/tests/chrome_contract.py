@@ -105,9 +105,9 @@ PHONE_HEADER = ("@media (max-width:900px){"
                 ".hleft{flex:0 0 auto}"
                 ".hcenter{flex:1 1 auto;justify-content:flex-end;flex-wrap:nowrap}"
                 ".hright,.hcenter .about,:root header nav button#navMap{display:none}"
-                ":root header nav{flex-wrap:nowrap;gap:4px;min-width:0}"
+                ":root header nav{flex-wrap:nowrap;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}"
                 ":root header nav a,:root header nav button{flex:0 0 auto;min-width:44px;min-height:44px;"
-                "padding:0 10px;font-size:13px}}")
+                "padding:0 8px;font-size:12px}}")
 
 # THE SAFE AREAS, one rule on every surface that carries the footer. With viewport-fit=cover a page
 # draws under a phone's rounded corners, notch and home indicator, so on a touch screen the page keeps

@@ -39,7 +39,7 @@ height; and "Aus" is heavy against a light "MT", as "Au" is heavy against "Scope
 logo. The two read as a pair, an AuScope service and its name. The tagline, "Magnetotelluric Data
 Discovery & Access", sits on one line at the right of the header; where a narrow window leaves it
 less room than that line, it ends in an ellipsis rather than running under the controls. The header
-is 57px tall on any window wider than 760px, the height its tabs set.
+is 57px tall on any window wider than 900px, the height its tabs set.
 
 The name is set in Calibre, AuScope's typeface. AusMT is an AuScope sub-domain, and AuScope's licence
 for Calibre covers it, so the name's type leads with Calibre (Owner decision 2026-10-13). The font
@@ -67,6 +67,30 @@ the link-preview cards, which keep their navy ground; no page draws them.
 
 The header carries four controls: Map, Surveys, Collections and About. Contributing a survey is
 reached from About, where a contributor reads what a submission involves before starting one.
+
+## Phones and small tablets
+
+On a window 900px wide or narrower, the header is one row, 52px tall: the AuScope mark and AusMT's
+name at the left, and the section tabs at the right, each at least 44px square so a thumb can hit it
+(Owner decision 2026-10-14). The tagline is hidden. On the map page the tabs are Surveys and
+Collections, with no Map tab, because the page is the map; the Surveys, Collections, About and other
+static pages show Map, Surveys and Collections in the same row. About leaves the header at these
+widths and becomes a link at the end of the map page's panel. The row is the same on every page, as
+the desktop header is.
+
+900px is the line between the two layouts (Owner decision 2026-10-16). Above it the side-by-side map
+and panel stay exactly as they are on a desktop. Below it the map comes first: on a phone the page
+scrolls, the map takes the top of the screen and the panel, its exports and the footer follow it,
+and a station's details fill the screen. The approved design goes further, with the map filling
+the screen and the panel in a sheet that slides up over it, a floating card on a small tablet; that
+follows in later changes, and the footer's contents move into the sheet then (Owner decision
+2026-10-14). On phones, selecting stations will mean "select what is in view" rather than drawing a
+shape with one finger, so the drawing tools are already hidden at these widths.
+
+On a touch screen every control a finger is expected to hit is at least 44px in each direction,
+and text inputs are 16px, the size below which iOS Safari zooms the page when one is tapped. Pages
+are drawn edge to edge and keep their content clear of a phone's notch, rounded corners and home
+indicator. None of this changes what a desktop window with a mouse shows.
 
 The footer states who enables AusMT and that data licences vary by survey: "AusMT is enabled by
 AuScope · Data licences vary by survey". AuScope's name is the line's link and opens AuScope's

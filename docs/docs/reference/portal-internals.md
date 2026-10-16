@@ -46,6 +46,22 @@ each grows with its own content and the centred tabs land at a different x per v
 tests/test_header_geometry_parity.py.
 ```
 
+At 900px and narrower every surface that wears the chrome (this page, about.html, add-survey.html,
+brand.html, releases.html and the pages `engine/extract/_pages.py` emits) replaces the three zones
+with one phone row: one rule block, `PHONE_HEADER` in `portal/tests/chrome_contract.py`, carried
+verbatim by all six and placed after the base rules it overrides. The row is 52px tall plus the top
+safe-area inset, with the AuScope mark and AusMT's name at left and the tabs at right as 44px
+targets; the tagline zone and the About control are hidden. The map page's Map tab is a button,
+and the block hides that button only, because this page is the map; the static pages keep Map,
+Surveys and Collections. Its header, nav and tab selectors carry a `:root` prefix so that they tie
+on specificity with the pages sheet's `header.site` rules and source order decides. At 360px and
+narrower the three static-page tabs do not fit beside the name, so the nav scrolls sideways inside
+itself rather than pushing the page wider. Measured in headless Chrome: 52px tall at every width
+from 320px to 900px, 57px from 901px; at 375px the three tabs end at 367px against the 8px right
+padding. `tests/test_header_geometry_parity.py` and `tests/test_header_vertical_geometry.py` pin the
+block on every surface; the zone rules they compare are the base rules, read with the media blocks
+set aside.
+
 #### The identity zone is the AuScope mark and AusMT's name
 
 ```text
@@ -684,6 +700,10 @@ before the floor (`AusMT_2026/mobile-audit/measurements.json`, `tap_targets_wxh`
   `#yearTo`) are 16px. iOS Safari zooms the page when a smaller input takes focus; they were 12.5px
   to 13px. The /surveys controls in `engine/extract/_pages.py` take the same 16px.
 
+**About on a phone.** The phone row hides the header's About control, so the map page's panel
+ends with an About link (`.panelabout`, before the rail's collapse control), hidden above 900px where
+the header still carries About and shown at 900px and narrower as a 44px target.
+
 **Safe areas.** Every page the portal ships and every page the engine emits declares
 `viewport-fit=cover`, so a phone draws the page under its rounded corners, notch and home indicator
 and reports their size through `env(safe-area-inset-*)`. Every surface with a footer carries one rule
@@ -725,13 +745,13 @@ instead of stacking. Character-identical on every surface wearing the chrome.
 ```text
 THE IN-PAGE ANCHOR OFFSET FOLLOWS THE HEADER. The header is sticky, so an anchor that scrolls its
 section to y=0 puts the heading underneath it and scroll-margin-top is the clearance. One number
-will not do: the header WRAPS as the viewport narrows (with every zone stacked under 760px the mark,
-the tab rows and the tagline each take a row of their own) and is 216px tall at 375px against 57px
-at 1280px, so each band below carries the TALLEST header in its own range (overshooting drops a
-heading a few pixels low, undershooting hides it). These are measurements of this header's content
-at this font stack: anything that changes its wording, its nav or its zones moves the wrap points
-and the ladder must be re-measured, and no source-read pin can see the header get taller.
-tests/test_about_uniform_chrome.py holds the shape and the values at 375px and 1280px.
+will not do: at 900px and narrower the header is the phone row, measured 52px tall from 320px to
+900px in headless Chrome, and from 901px it is the desktop row, 57px, so each band carries the
+TALLEST header in its own range (overshooting drops a heading a few pixels low, undershooting hides
+it). These are measurements of this header's content at this font stack: anything that changes its
+wording, its nav or its zones moves them and the ladder must be re-measured, and no source-read pin
+can see the header get taller. tests/test_about_uniform_chrome.py holds the shape and the values at
+375px and 1280px.
 ```
 
 #### The AuScope-NCRIS lock-up in the body, the file the footer carries ...

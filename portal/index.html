@@ -98,6 +98,7 @@
   .apilink:hover{color:var(--accent)}
   .counts{font-family:var(--mono);font-size:13px;color:var(--muted)}
   .counts b{color:var(--text)}
+  @media (max-width:900px){:root header{flex-wrap:nowrap;gap:8px;height:calc(52px + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 8px 0 16px}.hleft{flex:0 0 auto}.hcenter{flex:1 1 auto;justify-content:flex-end;flex-wrap:nowrap}.hright,.hcenter .about,:root header nav button#navMap{display:none}:root header nav{flex-wrap:nowrap;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}:root header nav a,:root header nav button{flex:0 0 auto;min-width:44px;min-height:44px;padding:0 8px;font-size:12px}}
   main{flex:1;display:flex;min-height:0;position:relative}
   aside.filters{width:330px;min-width:0;background:var(--surface);border-right:1px solid var(--line);overflow-y:auto;overflow-x:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:none}
   .resizer{width:6px;flex:none;cursor:col-resize;background:var(--line);transition:background .12s}
@@ -393,8 +394,7 @@
   .snackbar .snack-note{display:block;color:var(--muted);font-size:12px;margin-top:3px}
   .snackbar .snack-act{flex:none;background:var(--accent);color:var(--accent-ink);border:0;border-radius:4px;
     padding:6px 10px;font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer}
-  @media (max-width:760px){main{flex-direction:column}aside.filters{width:100%!important;order:2;max-height:42vh}.resizer{display:none}.content{order:1;min-height:48vh}#drawer{width:100%}
-    .hzone{flex:1 1 100%;justify-content:flex-start}}
+  @media (max-width:760px){main{flex-direction:column}aside.filters{width:100%!important;order:2;max-height:42vh}.resizer{display:none}.content{order:1;min-height:48vh}#drawer{width:100%}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
 .emptyoverlay{position:absolute;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;
@@ -565,6 +565,10 @@
   .collmapbtn{color:var(--accent)}
 
   /* See docs: portal internals, index.html, phone and touch. */
+  .panelabout{display:none}
+  @media (max-width:900px){
+    .panelabout{display:inline-flex;align-items:center;align-self:flex-start;min-height:44px;color:var(--accent);font-size:14px;font-weight:700;text-decoration:none}
+  }
   @media (pointer:coarse){
     .typegrid label,.collgroup .coll,.seg button,.leaflet-touch .leaflet-bar a,.maplegend-toggle,.maplegend .legtype,
     .dhead .close,.plotexp,footer a{min-height:44px;min-width:44px}
@@ -698,6 +702,7 @@
     </div>
   </section>
   </div><!-- /#selectMode -->
+  <a class="panelabout" href="about.html">About</a>
   <!-- The rail collapse control toggles the 36px icon rail, its state persisted in localStorage. As the
        last rail child with margin-top:auto it stays anchored to the bottom, visible while the tree scrolls.
        See docs: portal internals, index.html. -->

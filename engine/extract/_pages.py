@@ -691,7 +691,7 @@ _CSS = """
   .about:hover{border-color:var(--accent)}
   .counts{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
   .counts b{color:var(--text)}
-  @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
+  @media (max-width:900px){:root header{flex-wrap:nowrap;gap:8px;height:calc(52px + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 8px 0 16px}.hleft{flex:0 0 auto}.hcenter{flex:1 1 auto;justify-content:flex-end;flex-wrap:nowrap}.hright,.hcenter .about,:root header nav button#navMap{display:none}:root header nav{flex-wrap:nowrap;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}:root header nav a,:root header nav button{flex:0 0 auto;min-width:44px;min-height:44px;padding:0 8px;font-size:12px}}
   /* One rule set with portal/index.html's footer, held by portal/tests/test_footer_regions.py, so
      nothing here is tuned for this tier alone. The equal zero-basis side zones and the queries on
      the footer's own width are load-bearing. It is sticky rather than fixed, so it keeps its place

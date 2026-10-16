@@ -23,10 +23,12 @@ test_collection_colours.py: _pages.py cannot simply be imported (it sibling-impo
 and _stationcheck, which need the engine's own path set up), and re-typing its CSS here would only
 pin a third copy of it.
 
-The narrow-width wrap is part of the bargain: at 760px and under, both headers stack their zones
-full-width, which is what keeps three 112px tabs from dragging a 375px page sideways. Zero-basis
-sides must not cost that, so the stacking override is pinned on both surfaces too, AFTER the zone
-rules - the two selectors tie on specificity, and source order is what makes the wrap win.
+The phone header is part of the bargain: at 900px and under, every surface turns the three zones
+into ONE 52px row, the mark and the name at left and the tabs at right as 44px targets, with the
+tagline and About hidden. It is one rule block, chrome_contract.PHONE_HEADER, carried verbatim by
+every surface AFTER the base rules it overrides, because its selectors tie with them on specificity
+and source order is what makes the phone row win. The zone rules pinned above are therefore the BASE
+rules, read with the media blocks set aside.
 """
 import hashlib
 import re
@@ -35,8 +37,8 @@ from pathlib import Path
 
 from chrome_contract import (BRANDH1_RULE, BRANDMARK_RULE, INDEX_IDENTITY, LIGHT, LOCKUP, LOCKUP_LIGHT,
                              LOCKUP_PIXELS, MAP_LOCKUP, MARK, MARK_LIGHT, NAME, PAGE_IDENTITY,
-                             RIGHT_ZONE, TAGLINE_RULE, WHITE_FILES, WORDMARK_RULES, flat, header_inner,
-                             header_markup, token_block, tokens)
+                             PHONE_HEADER, RIGHT_ZONE, TAGLINE_RULE, WHITE_FILES, WORDMARK_RULES, flat,
+                             header_inner, header_markup, token_block, tokens)
 from engine_chrome import site_header
 
 ROOT = Path(__file__).resolve().parent.parent          # portal/
@@ -49,10 +51,29 @@ ZONES = ("hleft", "hcenter", "hright")
 SURFACES = (("portal/index.html", INDEX), ("engine/extract/_pages.py", PAGES_PY))
 
 
+def _outside_media(text):
+    """`text` with every @media block removed, brace-matched: the phone header restates the zone
+    selectors inside its own query, and a base-rule pin must read the base rules."""
+    out, i = [], 0
+    while True:
+        at = text.find("@media", i)
+        if at < 0:
+            out.append(text[i:])
+            return "".join(out)
+        out.append(text[i:at])
+        j, depth = text.index("{", at) + 1, 1
+        while depth:
+            depth += {"{": 1, "}": -1}.get(text[j], 0)
+            j += 1
+        i = j
+
+
 def _zone_rules(text, where):
-    """The three zone rule bodies, each required to be declared exactly once (a second declaration
-    of a zone would silently override the pinned geometry at equal specificity)."""
+    """The three BASE zone rule bodies, each required to be declared exactly once outside a query (a
+    second unconditional declaration would silently override the pinned geometry at equal
+    specificity)."""
     out = {}
+    text = _outside_media(text)
     for zone in ZONES:
         bodies = re.findall(r"\." + zone + r"\{([^}]*)\}", text)
         assert len(bodies) == 1, (
@@ -617,22 +638,36 @@ def test_the_withdrawn_asset_is_still_the_real_committed_file_its_other_consumer
     assert data[25] == 6, f"{ORG_SRC} must keep its alpha channel (PNG colour type 6)"
 
 
-def test_the_narrow_width_stacking_still_wins_under_760px():
-    """The wrap behaviour the zero-basis rule must not cost. FAILS IF either surface loses the
-    760px full-width stacking override, or if it stops coming AFTER the zone rules (the selectors
-    tie on specificity, so source order alone decides which wins under 760px)."""
-    for where, path in SURFACES:
-        text = path.read_text(encoding="utf-8")
-        base = text.index(".hleft{")
-        # Anchored past the zone rules: an earlier, unrelated 760px block (the pages' hero-map
-        # stack) must not satisfy this pin on the zones' behalf.
-        media = re.search(r"@media\s*\(max-width:760px\)", text[base:])
-        assert media, f"{where}: the 760px stacking block must follow the zone rules"
-        stack = text.find(".hzone{flex:1 1 100%;justify-content:flex-start}",
-                          base + media.start())
-        assert stack > 0, (
-            f"{where}: the full-width stacking override must live inside the 760px block that "
-            f"follows the zone rules; without it three 112px tabs drag a 375px page sideways")
+def test_every_chrome_surface_carries_the_one_phone_header_after_its_base_rules():
+    """The phone row, character for character on every surface that wears the chrome. FAILS IF a
+    surface drops the block, edits it, declares it twice, places it before the base zone or tab
+    rules it overrides (the selectors tie on specificity, so source order alone decides), or keeps
+    the retired 760px full-width stacking, which would wrap the zones back onto three rows."""
+    surfaces = _chrome_surfaces()
+    assert len(surfaces) == 6, f"six surfaces wear the chrome, found {[w for w, _t in surfaces]}"
+    for where, text in surfaces:
+        assert text.count(PHONE_HEADER) == 1, f"{where}: expected exactly one phone header block"
+        at = text.index(PHONE_HEADER)
+        tab = r"(?m)^\s*header\.site nav a\{" if where.endswith(".py") else r"(?m)^\s*nav a\{"
+        for base in (r"(?m)^\s*\.hleft\{", r"(?m)^\s*\.hcenter\{", r"(?m)^\s*\.hright\{", tab):
+            m = re.search(base, text)
+            assert m and m.start() < at, f"{where}: the phone header must follow the base rule {base!r}"
+        assert ".hzone{flex:1 1 100%" not in text, (
+            f"{where}: the 760px full-width stacking is retired; the phone header is one row")
+
+
+def test_the_phone_header_hides_about_the_tagline_and_only_the_map_pages_own_map_tab():
+    """What the phone row carries. FAILS IF the block stops hiding the tagline zone or the About
+    control, if it hides the Map tab in any form but the map page's button (the static pages keep
+    Map, Surveys and Collections), or if a tab's floor drops below 44px either way."""
+    hidden = re.search(r"([^{}]*)\{display:none\}", PHONE_HEADER).group(1).split(",")
+    assert hidden == [".hright", ".hcenter .about", ":root header nav button#navMap"], hidden
+    tab = re.search(r":root header nav a,:root header nav button\{([^}]*)\}", PHONE_HEADER).group(1)
+    assert "min-width:44px" in tab and "min-height:44px" in tab, tab
+    assert ":root header{flex-wrap:nowrap;" in PHONE_HEADER and "header nav{flex-wrap:nowrap;" in PHONE_HEADER
+    for active in ("navMap", "navSurveys", "navCollections"):
+        assert '<a id="navMap"' in site_header(active), (
+            "engine/extract/_pages.py: the generated pages carry Map as a link, which the phone row keeps")
 
 
 # --------------------------------------------------------------------------- the header's HEIGHT
