@@ -4741,6 +4741,16 @@ does not build thousands of rows. An empty list draws nothing (`.selbox .sellist
 900px it is neither drawn nor filled. The counts line in the peek row is the desktop's own line
 (`updateCounts`), so it states the selection there as it does in the desktop footer.
 
+**The exports.** A view selection, a tapped selection and a drawn one are the same `selected` set, so
+every selection export reads it through `scopeSel()` unchanged: the station CSV, the GeoJSON, the
+citation pack, the pointers and the three file exports, whose file requests each carry the
+`sel=bulk` flag (`SEL_BULK_FLAG` in `exports.js`), so a phone's bulk export counts as one bulk
+export. `exports.js` has no phone branch. `interaction_test.js` runs every export over a view selection
+on the phone layout and over the same stations set by id in a desktop window, and holds that the
+two request the same files, each flagged, and write the same documents and archive entries,
+including the pointers that name the stations whose files are not redistributed (a station whose
+EDI is not redistributable and the embargoed one).
+
 ## portal/src/main.js
 
 #### The counts line rides the sheet's peek row on the phone layout

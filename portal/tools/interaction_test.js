@@ -6863,6 +6863,56 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     click(sdoc.getElementById("clearSel"));
     ok(list.children.length === 0, "phone list: Clear empties the list");
     sa.setSidebarMode("browse");
+
+    // THE EXPORTS. A view selection is a selection like any other: a desktop window given the same
+    // stations by id must request the same files, each carrying the bulk flag, and write the same
+    // documents and archive entries. Station B1 is not redistributable and the embargoed Delta
+    // station is withheld, so both are left out of the files and named in the archive's pointers.
+    const MANI = { files: [
+      { ausmt_id: "au.alpha.A1", format: "edi", url: "edi/alpha/A1.edi", size: 1000 },
+      { ausmt_id: "au.alpha.A1", format: "emtfxml", url: "xml/alpha/A1.xml", size: 2000 },
+      { ausmt_id: "au.alpha.A1", format: "mth5", url: "h5/alpha/A1.h5", size: 3000 },
+      { ausmt_id: "au.alpha.A2", format: "edi", url: "edi/alpha/A2.edi", size: 1000 },
+      { ausmt_id: "au.alpha.A2", format: "emtfxml", url: "xml/alpha/A2.xml", size: 2000 },
+    ] };
+    const EXPORTS = ["dlZip", "dlZipXml", "dlZipH5", "dlCsv", "dlGeo", "dlSh", "dlCite"];
+    const exportRun = async (w) => {
+      await w.loadManifest();
+      w.__api.setManifest(MANI);
+      const texts = [];
+      w.Blob = function (parts) { texts.push((parts || []).join("")); return {}; };
+      w.URL.createObjectURL = () => "blob:interaction-test"; w.URL.revokeObjectURL = () => {};
+      w.JSZip = win.JSZip;
+      const from = w.__fetched.length, z0 = zipEntries.length;
+      for (const id of EXPORTS) await w.document.getElementById(id).onclick();
+      const unstamp = (s) => String(s).replace(/\d{8}T\d{6}Z/g, "STAMP").replace(/\d{4}-\d\d-\d\dT[\d:.]+(Z|[+-]\d\d:\d\d)/g, "STAMP");
+      return { urls: w.__fetched.slice(from).filter(u => /\.(edi|xml|h5)(\?|$)/.test(u)), texts: texts.map(unstamp),
+        zip: zipEntries.slice(z0).map(e => e.name), notIn: unstamp((zipEntries.slice(z0).find(e => /NOT_INCLUDED/.test(e.name)) || {}).body || "") };
+    };
+    sa.selectInView(VIEW);
+    ok(JSON.stringify(ids()) === JSON.stringify(["A1", "A2", "B1", "D1"]), "phone export: set up on the view selection");
+    const phoneRun = await exportRun(sw);
+    qs.phone = false;
+    const dw = await selBoot();
+    ok(!dw.sheetPhone(), "phone export: the comparison window is a desktop window");
+    dw.__api.setSelected(["A1", "A2", "B1", "D1"]);
+    const deskRun = await exportRun(dw);
+    qs.phone = true;
+    const flag = sa.selBulkFlag();
+    ok(phoneRun.urls.length === 5 && phoneRun.urls.every(u => u.split("?")[1] === flag),
+      "phone export: the three file exports fetch each served file of the view selection once, every one carrying " +
+      flag + ", got " + JSON.stringify(phoneRun.urls));
+    ok(JSON.stringify(phoneRun.urls) === JSON.stringify(deskRun.urls),
+      "phone export: a view selection requests exactly the files the desktop requests for the same stations, got " +
+      JSON.stringify(phoneRun.urls) + " against " + JSON.stringify(deskRun.urls));
+    ok(phoneRun.texts.length === 3 && JSON.stringify(phoneRun.texts) === JSON.stringify(deskRun.texts),
+      "phone export: the station CSV, the GeoJSON and the pointers are the desktop's documents, got " +
+      phoneRun.texts.length + " documents, equal " + (JSON.stringify(phoneRun.texts) === JSON.stringify(deskRun.texts)));
+    ok(phoneRun.zip.length > 0 && JSON.stringify(phoneRun.zip) === JSON.stringify(deskRun.zip),
+      "phone export: the archives hold the desktop's entries, got " + JSON.stringify(phoneRun.zip) + " against " + JSON.stringify(deskRun.zip));
+    ok(/B1/.test(phoneRun.notIn) && /D1/.test(phoneRun.notIn) && phoneRun.notIn === deskRun.notIn,
+      "phone export: the stations whose files are withheld are named in the archive, as at desktop, got " + JSON.stringify(phoneRun.notIn));
+    click(sdoc.getElementById("clearSel"));
   }
 
   // ---- DESKTOP: the sheet takes no part above 900px -------------------------------------------------
