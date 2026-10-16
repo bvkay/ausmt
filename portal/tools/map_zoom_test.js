@@ -1,4 +1,4 @@
-// Map zoom driver: the zoom floor, the pan box and the unwrapped basemap, run against the shipped
+// Map zoom driver: the zoom floor, the pan box and the basemap at the floor, run against the shipped
 // portal/src/map.js on the REAL vendored Leaflet in jsdom.
 //
 // WHY REAL LEAFLET. The floor and the box are Leaflet behaviour: a minZoom option is only a claim until
@@ -38,7 +38,7 @@ const SERVED = { s: -43.444933, n: -12.377, w: 113.665, e: 166.183 };
 
 // Boot map.js in a fresh window whose #map pane is w x h. `provider` picks the basemap branch; the
 // pmtiles branch is given a protomapsL whose layers are real Leaflet GridLayers built from the options
-// map.js passes, so noWrap and bounds act as they do under the vendored renderer.
+// map.js passes, so their tile range acts as it does under the vendored renderer.
 function boot(w, h, provider, stations) {
   const dom = new JSDOM('<!doctype html><html><body><div id="map"></div></body></html>',
     { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
@@ -150,17 +150,31 @@ for (const [name, [w, h]] of Object.entries(PANES)) {
     (b2.map.options.maxBounds && b2.map.options.maxBounds.toBBoxString()));
 }
 
-// ---- one world, never repeated --------------------------------------------------------------------
+// ---- one world, never repeated, never cut short ---------------------------------------------------
+
+// At the floor the world is wider than every measured pane, so its copies can never sit side by side.
+// The view may still cross the antimeridian (zoom 3 on a desktop pane reaches past 180 E), and every
+// tile it covers there must be drawn, not left as a blank band.
+for (const [name, [w, h]] of Object.entries(PANES)) {
+  const b = boot(w, h, "carto");
+  ok(256 * Math.pow(2, b.get("MAP_MIN_ZOOM")) > w,
+    name + ": at the floor the world is wider than the pane, got " + 256 * Math.pow(2, b.get("MAP_MIN_ZOOM")) + " <= " + w);
+}
 for (const provider of ["pmtiles", "carto"]) {
-  const b = boot(824, 686, provider);
-  const layers = tileLayers(b);
-  ok(layers.length === (provider === "pmtiles" ? 2 : 1), provider + ": the basemap layer count, got " + layers.length);
-  layers.forEach((l, k) => {
-    ok(l.options.noWrap === true, provider + " layer " + k + ": noWrap is set, got " + l.options.noWrap);
-    // At z3 the world is tiles 0 to 7 across: the copies either side are never requested.
-    ok(tileValid(b, l, 3, 4, 3) && !tileValid(b, l, -1, 4, 3) && !tileValid(b, l, 8, 4, 3),
-      provider + " layer " + k + ": z3 requests tile x 3 and never the wrapped copies at x -1 or 8");
-  });
+  for (const [name, [w, h]] of Object.entries(PANES)) {
+    const b = boot(w, h, provider);
+    const layers = tileLayers(b);
+    ok(layers.length === (provider === "pmtiles" ? 2 : 1), provider + ": the basemap layer count, got " + layers.length);
+    b.map.setZoom(3, { animate: false });
+    const pb = b.map.getPixelBounds();
+    const x0 = Math.floor(pb.min.x / 256), x1 = Math.floor((pb.max.x - 1) / 256);
+    const y0 = Math.max(0, Math.floor(pb.min.y / 256)), y1 = Math.min(7, Math.floor((pb.max.y - 1) / 256));
+    // The z3 world layer is the one that draws here (the pmtiles region layer starts at z7).
+    const l = layers[0], missing = [];
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) if (!tileValid(b, l, x, y, 3)) missing.push([x, y]);
+    ok(missing.length === 0, provider + " " + name + ": every tile in the floor view is drawn (x " + x0 + " to " + x1 +
+      "), missing " + JSON.stringify(missing));
+  }
 }
 
 if (failed) { console.error(failed + " map-zoom assertion(s) failed"); process.exit(1); }

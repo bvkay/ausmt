@@ -1458,8 +1458,9 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ", viscosity " + mapMade[0].opts.maxBoundsViscosity);
   {
     const _tiles = layersAdded.filter(l => l.kind === "tileLayer");
-    ok(_tiles.length === 1 && _tiles[0].options.noWrap === true,
-      "desktop: the basemap tile layer is built with noWrap, so the world is never repeated, got " +
+    // The floor alone keeps the world from repeating; noWrap would leave the floor view blank past 180 E.
+    ok(_tiles.length === 1 && !_tiles[0].options.noWrap && !_tiles[0].options.bounds,
+      "desktop: the basemap tile layer wraps, so the floor view past 180 E is drawn, got noWrap " +
       JSON.stringify(_tiles.map(l => l.options.noWrap)));
   }
   ok(!doc.getElementById("tapChooser"), "desktop: a station click never raises the tap chooser");

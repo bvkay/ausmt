@@ -5121,16 +5121,18 @@ and when it is narrower (zoom 3 on a desktop pane) Leaflet centres the box, whic
 A build that serves a station outside the box drops it (`buildMarkers` calls `map.setMaxBounds(null)`
 when `boxHolds` fails), because a box that strands a station is worse than none.
 
-**One world.** Every basemap layer, the two pmtiles layers and the CARTO fallback alike, is built with
-`BASEMAP_ONE_WORLD` (`noWrap: true` and world bounds), so Leaflet never requests the tile copies
-either side of the antimeridian.
+**One world.** The floor is what stops the world repeating. At zoom 3 the world is 2048px wide, wider
+than every measured pane (824, 655 and 375px), so two copies can never sit side by side. The basemap
+layers are left to wrap: at the floor a desktop pane is wider than the pan box, Leaflet centres the box,
+and the view reaches past 180 E (tile x 8 at zoom 3 on both desktop panes). A wrapping layer draws the
+Pacific there; `noWrap` would leave that strip of real ocean as a blank grey band.
 
 `tools/map_zoom_test.js` drives all three on the vendored Leaflet in jsdom, with `#map` given the three
 measured pane sizes: the home frame fits at 4, 4 and 3, eight zoom-outs and a request for zoom 0 both
 stop at 3, a view requested over Africa and a pan far west are held inside the box, the home view
 with the box matches a map without one to the pixel on every pane at the fitted zoom and at the floor,
-a build with a station at 20 N drops the box, and at zoom 3 each basemap layer accepts tile x 3 and
-rejects the wrapped copies at x -1 and 8. `tools/interaction_test.js` pins the exact option set the
+a build with a station at 20 N drops the box, the world at the floor is wider than each pane, and at
+zoom 3 every tile the view covers on each pane, past 180 E included, is one the basemap layer draws. `tools/interaction_test.js` pins the exact option set the
 map is built with on a fine pointer and on a coarse one.
 
 #### A coarse pointer reaches a dot within TAP_TOLERANCE px of its edge

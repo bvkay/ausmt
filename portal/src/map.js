@@ -16,8 +16,6 @@ function boxHolds(pts,box){return pts.every(p=>p[0]>=box[0][0]&&p[0]<=box[1][0]&
 // THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here. See docs: portal internals, map.js.
 const map=L.map("map",{preferCanvas:true,attributionControl:false,minZoom:MAP_MIN_ZOOM,maxBounds:L.latLngBounds(MAP_MAX_BOX),maxBoundsViscosity:1,
   ...(COARSE_POINTER?{renderer:L.canvas({tolerance:TAP_TOLERANCE})}:{})}).fitBounds(AU_HOME_BOUNDS);
-// One world: wrapped tile copies are never requested.
-const BASEMAP_ONE_WORLD={noWrap:true,bounds:[[-90,-180],[90,180]]};
 // The basemap is config-driven. See docs: portal internals, map.js.
 const _OSM_CREDIT='\u00a9 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 const _PM_CREDIT=_OSM_CREDIT+', \u00a9 <a href="https://protomaps.com" target="_blank" rel="noopener noreferrer">Protomaps</a>';
@@ -30,11 +28,11 @@ function themeToken(name){
 // The two pmtiles layers state the SAME credit and Leaflet prints it once: they are one basemap split at
 // the z7 crossover, in the protomaps light flavour the house style sits on.
 if(_bmCfg.provider==="pmtiles"&&window.protomapsL){
-  protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor:"light",lang:"en",maxZoom:7,maxDataZoom:6,attribution:_PM_CREDIT,...BASEMAP_ONE_WORLD}).addTo(map);
-  protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor:"light",lang:"en",minZoom:7,maxZoom:18,maxDataZoom:15,attribution:_PM_CREDIT,...BASEMAP_ONE_WORLD}).addTo(map);
+  protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor:"light",lang:"en",maxZoom:7,maxDataZoom:6,attribution:_PM_CREDIT}).addTo(map);
+  protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor:"light",lang:"en",minZoom:7,maxZoom:18,maxDataZoom:15,attribution:_PM_CREDIT}).addTo(map);
 }else{
   var _bmKey=_bmCfg.carto_api_key?("?api_key="+encodeURIComponent(_bmCfg.carto_api_key)):"";
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"+_bmKey,{maxZoom:18,attribution:_CARTO_CREDIT,...BASEMAP_ONE_WORLD}).addTo(map);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"+_bmKey,{maxZoom:18,attribution:_CARTO_CREDIT}).addTo(map);
 }
 // Mounted after the basemap so the control collects the layer already on the map, which is the order
 // Leaflet's own default control is created in. See docs: portal internals, map.js.
