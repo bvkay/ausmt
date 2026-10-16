@@ -52,15 +52,14 @@ def test_populated_portal_value_binding(tmp_path):
     surveys = {"Demo Survey": {"slug": "demo", "org": "X", "country": "Australia", "lic": "CC-BY-4.0"}}
     write_curves(data, [cat_row], [tf_row], surveys)
     (data / "surveys.json").write_text(json.dumps(surveys))
-    # build.json - a KNOWN, distinctive build_id/generated so the footer's VALUE binding
-    # (BUILDID -> buildIdText()) can be asserted against the source, not just "didn't crash".
+    # build.json - the build identity boot() reads beside the catalogue.
     (data / "build.json").write_text(json.dumps(
         {"build_id": "eng1234-src5678-2026-07-05T01:02:03+00:00",
          "engine_commit": "eng1234", "source_commit": "src5678",
          "generated": "2026-07-05T01:02:03+00:00"}))
 
     # encoding pinned: node emits UTF-8; text=True alone decodes with the Windows locale (cp1252),
-    # which mangles the footer's U+00B7 separator into 'Â·' and fails the BUILDID_TEXT value-bind.
+    # which mangles any non-ASCII character in the emitted values.
     r = subprocess.run(["node", str(SMOKE), str(data)], capture_output=True, text=True,
                        encoding="utf-8", cwd=str(ROOT))
     out = r.stdout + r.stderr
@@ -104,15 +103,7 @@ def test_populated_portal_value_binding(tmp_path):
     for gone in (4.2, "BIRRP", "2-D", "ST1.edi", "error"):
         assert gone not in ex, ("dropped CSV field %r still present: %r" % (gone, ex))
 
-    # (c) the footer's build-id text is a pure function of BUILDID (loaded from build.json) - 
-    # value-binds main.js's buildIdText() against the KNOWN fixture build_id/generated above, so a
-    # wrong slice/format (or a dropped build.json fetch) fails here, not just "no crash".
-    mb = re.search(r"^BUILDID_TEXT (\".*\")\s*$", out, re.M)
-    assert mb, "smoke.js did not emit BUILDID_TEXT:\n" + out
-    build_txt = json.loads(mb.group(1))
-    assert build_txt == " · data build eng1234-src5 · 2026-07-05", build_txt
-
-    # (d) the SERIALISED CSV line. The EXPORT0 array asserts values before csvCell runs, so only this
+    # (c) the SERIALISED CSV line. The EXPORT0 array asserts values before csvCell runs, so only this
     # catches a quoting defect in the text a spreadsheet receives. A negative number is data, not a
     # formula: the injection guard must not quote it (pre-fix, every southern latitude serialised as
     # '-30.5 and the whole lat column arrived as text in Excel/pandas/QGIS).
@@ -131,7 +122,7 @@ def test_populated_portal_value_binding(tmp_path):
     assert hostile == "'=cmd|calc", hostile
     assert negtext == "'-text", negtext
 
-    # (e) citation pack text surfaces. CITATIONS.txt is plain text: an author's apostrophe and
+    # (d) citation pack text surfaces. CITATIONS.txt is plain text: an author's apostrophe and
     # ampersand must arrive verbatim, never as HTML entities. The .bib author field is LaTeX: the
     # ampersand must be escaped or the file fails to compile.
     mt = re.search(r"^CITETXT (\".*\")\s*$", out, re.M)

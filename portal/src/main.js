@@ -427,26 +427,6 @@ function runInit(){
   if(portalIsEmpty()){buildTree();buildLegend();setView("map");updateCounts();showEmptyState();maybeShowIntro();renderRecentlyAdded();return;}
   buildMarkers();buildFootprints();buildTree();buildLegend();setView("map");refresh();routeFromHash();maybeShowIntro();renderRecentlyAdded();
 }
-// "data build <short id> · <date>" footer text, or "" when build.json didn't resolve (older builds predate
-// it - BUILDID is null - so the placeholder must stay empty, not show stale/undefined text). See docs:
-// portal internals, main.js.
-function buildIdText(){
-  if(!BUILDID||!BUILDID.build_id)return"";
-  const raw=String(BUILDID.build_id);
-  const date=(BUILDID.generated||"").slice(0,10);
-  if(/\b(None|unknown)\b/.test(raw))return date?" · data build "+date:"";
-  const short=raw.slice(0,12);
-  return " · data build "+short+(date?" · "+date:"");
-}
-// Uses textContent (not innerHTML+esc()) - never parses markup at all, the strictest available
-// guard - even though build_id/generated are engine-generated, not user input. The full raw id (even
-// when display-defended above) rides in the title attr so it's still inspectable, not lost.
-function renderBuildId(){
-  const el=document.getElementById("buildId");
-  if(!el)return;
-  el.textContent=buildIdText();
-  if(BUILDID&&BUILDID.build_id)el.title="build "+String(BUILDID.build_id);
-}
 // ---- two-phase boot ------------------------------------------------------------------------------
 // HYDRATION_DONE settles once every phase-2 product has landed AND its late-render work has run. See docs:
 // portal internals, main.js.
@@ -504,7 +484,6 @@ async function boot(){
   // arrived.
   if(typeof paintDownloadRows==="function")paintDownloadRows();
   if(typeof paintAvailSelect==="function")paintAvailSelect();
-  renderBuildId();
   runInit();
   wireHydration();
 }

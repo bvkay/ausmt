@@ -90,6 +90,15 @@ def test_the_chooser_offers_the_three_time_series_levels_and_level_2_by_their_br
     assert _avail_options() == [("", "Any")] + TS_LABELS + [LEVEL2]
 
 
+def test_the_chooser_carries_no_field_note():
+    """FAILS IF a note returns under the Data available chooser: the option labels carry the levels,
+    and the filter's semantics live in the documentation, not under the control."""
+    html = INDEX.read_text(encoding="utf-8")
+    start = html.index('<select id="availSel"')
+    after = html[html.index("</select>", start):html.index("</details>", start)]
+    assert "fieldnote" not in after and "keeps the stations" not in html, after
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_state_js_names_each_offered_level_as_the_chooser_does():
     """FAILS IF the Download rows or the drawer action rows (both read TS_LEVELS) name a level

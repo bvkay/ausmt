@@ -37,15 +37,11 @@ code += "\nglobalThis.__api={boot,openStation,openSurvey,setView,refresh,routeFr
   "csvCellFn:v=>csvCell(v)," +
   "citeTxtProbe:()=>citeLine({au:AU_PROBE,yr:\"2019\",ti:\"T\",pb:\"P\"},\"10.1/x\")," +
   "bibProbe:()=>bibtex(\"k\",{au:AU_PROBE,ti:\"A & B\",yr:\"2019\",pb:\"P\"},\"10.1/x\")," +
-  // buildIdText() is a pure function of BUILDID (set by boot() from build.json) - exposing it
-  // lets a test assert the footer VALUE binding without a real DOM (getElementById stubs below return
-  // a fresh throwaway object per call, so nothing written to el.textContent would be observable).
   // Two-phase boot: boot() returns as soon as the FIRST-PAINT products (catalogue/surveys + the small
   // optionals) are in; sci.json / ts_access.json hydrate behind it. hydrationDone settles once both have
   // landed AND their late-render work has run. A survey's curves and the download manifest load when a
   // station drawer opens.
-  "hydrationDone:()=>HYDRATION_DONE," +
-  "buildIdText:()=>buildIdText()};";
+  "hydrationDone:()=>HYDRATION_DONE};";
 
 const stub = () => new Proxy(function () {}, {
   get: (t, p) => { if (p === "then") return undefined; if (p === Symbol.iterator) return function* () {}; return stub(); },
@@ -102,9 +98,6 @@ ctx.globalThis = ctx; ctx.self = ctx; vm.createContext(ctx); vm.runInContext(cod
   try {
     await A.boot();
     await A.hydrationDone();     // two-phase boot: let tf/sci/manifest land before asserting on them
-    // Printed regardless of empty/populated (build.json is independent of station count) so a
-    // wrapper test can assert the footer's build-id VALUE binding either way.
-    console.log("BUILDID_TEXT " + JSON.stringify(A.buildIdText()));
     if (A.nST() === 0) {
       if (!A.portalIsEmpty()) throw new Error("portalIsEmpty() false on empty data");
       A.showEmptyState(); A.setView("surveys"); A.setView("map");

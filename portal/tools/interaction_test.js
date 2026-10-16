@@ -5973,11 +5973,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     const act = snackEl.querySelector(".snack-act");
     ok(act && act.textContent === "Reload", "build check: the snackbar must offer a Reload action");
     ok(bw.location.href === "http://localhost/", "build check: a newer build must never reload on its own");
-    // The short build id the footer counts line carries.
-    const slot = doc.getElementById("buildId");
-    ok(slot && slot.closest("#footerCounts"), "build id: index.html must carry #buildId inside the counts line");
-    ok(slot && slot.textContent === " · data build eng-src-2020 · 2020-01-15",
-      "build id: renderBuildId must write the short build id into #buildId, got " + JSON.stringify(slot && slot.textContent));
+    // The build check stays; the footer counts line names no data build.
+    ok(!doc.getElementById("buildId"), "build id: index.html must carry no #buildId slot");
+    const counts = doc.getElementById("footerCounts");
+    ok(counts && !/data build/.test(counts.textContent),
+      "build id: the footer counts line must not show the data build, got " + JSON.stringify(counts && counts.textContent));
   }
 
   // ---- Link-preview metadata (Open Graph + Twitter card) ------------------------------------------
