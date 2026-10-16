@@ -805,10 +805,17 @@ as wide as its longest option pushed the page sideways (the Organisation select 
 591px-wide option: the document is 375px wide at 375px and 320px at 320px, against 591px without
 the rule; from 761px nothing changes.
 
-**No draw toolbar on a phone.** At 900px and narrower the Leaflet draw toolbar
-(`.leaflet-draw.leaflet-control`) is not drawn: drawing a polygon with one finger is the selection
-model the phone layout replaces with "select what is in view". The Select and download panel keeps
-its Select all filtered control and its own draw buttons, which arm the same handlers.
+**No drawing on a phone.** At 900px and narrower the Leaflet draw toolbar
+(`.leaflet-draw.leaflet-control`) is not drawn, and neither are the Select pane's own Draw rectangle
+and Draw polygon buttons (`#drawRect`, `#drawPoly`): drawing a polygon with one finger is the selection
+model the phone layout replaces with "Select what's in view", a tap that toggles a station and the
+selection list (see the phone selection, under `filters.js`). The buttons' row is hidden by
+`.selbox .btnrow:has(> #drawRect)`, a rule of its own so a browser that cannot read `:has()` drops only
+that rule and still hides the two buttons. This is CSS only: the buttons, `armDraw` and the toolbar
+are untouched above 900px. The pane keeps Select all filtered, and its Clear selection drops " &
+shapes" from its name (`.deskonly`). On the phone layout the pane also shows the in-view row and the
+selection list (`.phonesel`), which are `display:none` above 900px, so the desktop pane draws exactly
+what it drew.
 
 **Safe areas.** Every page the portal ships and every page the engine emits declares
 `viewport-fit=cover`, so a phone draws the page under its rounded corners, notch and home indicator

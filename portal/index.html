@@ -625,6 +625,8 @@
     .inviewn{flex:none;font-family:var(--mono);font-size:12.5px;color:var(--muted)}
     .selbox button{min-height:44px}
     .selbox .deskonly{display:none}
+    #drawRect,#drawPoly{display:none}
+    .selbox .btnrow:has(> #drawRect){display:none}
     .sellist{flex-direction:column;list-style:none;margin:10px 0 0;padding:0;border-top:1px solid var(--line)}
     .selbox .sellist:empty{display:none}
     .selrow{display:flex;align-items:center;gap:8px;min-height:44px;border-bottom:1px solid var(--line)}

@@ -35,7 +35,8 @@ Each assertion states its failure criterion:
   * REDUCED MOTION - FAILS if the sheet's slide escapes the reduced-motion rule.
   * ABOUT - FAILS if an about.html card can push the page sideways at a phone width.
   * SURVEYS - FAILS if a /surveys control label or select can push the page sideways at a phone width.
-  * DRAW TOOLBAR - FAILS if the Leaflet draw toolbar is drawn at 900px and narrower.
+  * DRAW TOOLBAR - FAILS if the Leaflet draw toolbar, or the Select pane's own Draw rectangle and
+    Draw polygon buttons, are drawn at 900px and narrower, or if those buttons leave the desktop.
   * PHONE SELECTION - FAILS if, at 900px and narrower, the Select pane stops offering "Select what's
     in view" with its count beside it as a 44px control, or if that control is drawn above 900px;
     or if the selection list leaves the Select pane's selection box, falls below the downloads, is
@@ -430,6 +431,28 @@ def test_the_phone_selection_list_sits_above_the_downloads_in_44px_rows():
     assert f"min-height:{TAP_TARGET}px" in _decls(phone.get(".selbox button", [])), "and 44px tall"
     base = _rules(_outside_queries(text))
     assert ".selrow" not in base and ".sellist" not in base, "index.html: the list has no rule above 900px"
+
+
+def test_the_select_panes_draw_buttons_are_hidden_at_phone_widths_and_kept_at_desktop():
+    """FAILS if the Select pane's Draw rectangle and Draw polygon buttons are drawn at 900px and
+    narrower, where a tap toggles and the view selects, or if their row keeps its gap there; or if
+    above 900px either button is hidden or leaves the pane. The row is hidden by :has() in a rule of
+    its own, so a browser without :has() still hides the two buttons by the plain rule."""
+    text = _text(INDEX)
+    pane = _select_pane(text)
+    assert re.search(r'<div class="btnrow">\s*<button id="drawRect">Draw rectangle</button>\s*'
+                     r'<button id="drawPoly">Draw polygon</button>\s*</div>', pane), (
+        "index.html: the Select pane keeps its Draw rectangle and Draw polygon buttons for the desktop")
+    phone = _phone(text)
+    for sel in ("#drawRect", "#drawPoly", ".selbox .btnrow:has(> #drawRect)"):
+        assert "display:none" in _decls(phone.get(sel, [])), f"index.html: {sel} is hidden at 900px and narrower"
+    blocks = "".join(_blocks(text, f"@media (max-width:{PHONE_BREAKPOINT}px)"))
+    assert re.search(r"(?<![,\w])\.selbox \.btnrow:has\(> #drawRect\)\{display:none\}", blocks), (
+        "index.html: the :has() rule stands alone, so a browser that cannot read it keeps the other")
+    base = _rules(_outside_queries(text))
+    for sel in ("#drawRect", "#drawPoly"):
+        assert "display:none" not in _decls(base.get(sel, [])), f"index.html: {sel} is drawn above 900px"
+    assert not any(":has(> #drawRect)" in sel for sel in base), "index.html: the row is hidden only on phones"
 
 
 def test_the_surveys_controls_cannot_push_the_page_sideways():
