@@ -4722,6 +4722,18 @@ Clear selection is the desktop's control, whose " & shapes" is hidden at these w
 selects, a hidden survey and a withheld position left out, Find narrowing the result, the count
 following `moveend`, and the button and Clear.
 
+**The selection list.** On the phone layout the selection box ends with `#selList`, a labelled
+`<ul>` of the selected stations in catalogue order (the order the exports write them, whatever order
+the taps came in). Each row (`li.selrow`, 44px tall) names the station and its survey and ends with a
+remove button (`button.sr-rm`, 44px square, labelled `Remove <id> from the selection`); a click on it
+goes through `toggleSelected`, so the counts, the peek row, the hint, the downloads and the dot's
+stroke follow, and focus moves to the remove control that took the removed row's place. The rows are
+built with `createElement` and `textContent`. Past `SEL_LIST_MAX` rows (100) the list ends with a
+line saying how many more stations the downloads take, so a view selection of thousands of stations
+does not build thousands of rows. An empty list draws nothing (`.selbox .sellist:empty`), and above
+900px it is neither drawn nor filled. The counts line in the peek row is the desktop's own line
+(`updateCounts`), so it states the selection there as it does in the desktop footer.
+
 ## portal/src/main.js
 
 #### The counts line rides the sheet's peek row on the phone layout

@@ -37,7 +37,9 @@ Each assertion states its failure criterion:
   * SURVEYS - FAILS if a /surveys control label or select can push the page sideways at a phone width.
   * DRAW TOOLBAR - FAILS if the Leaflet draw toolbar is drawn at 900px and narrower.
   * PHONE SELECTION - FAILS if, at 900px and narrower, the Select pane stops offering "Select what's
-    in view" with its count beside it as a 44px control, or if that control is drawn above 900px.
+    in view" with its count beside it as a 44px control, or if that control is drawn above 900px;
+    or if the selection list leaves the Select pane's selection box, falls below the downloads, is
+    drawn above 900px or when empty, or its rows and remove controls fall under 44px.
   * DESKTOP - FAILS if any of these overrides leaks out of its query into the base rules.
 """
 import re
@@ -407,6 +409,27 @@ def test_the_phone_select_pane_offers_what_is_in_view():
         f"index.html: the Select pane's buttons are {TAP_TARGET}px targets at 900px and narrower")
     assert "display:none" in _decls(phone.get(".selbox .deskonly", []))
     assert not re.search(r"\son[a-z]+=", pane), "index.html: no inline handler in the Select pane (CSP)"
+
+
+def test_the_phone_selection_list_sits_above_the_downloads_in_44px_rows():
+    """FAILS if the selection list is not a labelled list inside the selection box and above the
+    Download block, if it is drawn above 900px or while it is empty, or if at 900px and narrower a
+    row or its remove control is under the 44px floor."""
+    text = _text(INDEX)
+    pane = _select_pane(text)
+    box = pane[pane.index('<div class="selbox">'):pane.index("<h2>Download</h2>")]
+    assert '<ul class="phonesel sellist" id="selList" aria-label="Selected stations"></ul>' in box, (
+        "index.html: the selection list sits in the selection box, above the downloads")
+    assert box.index('id="clearSel"') < box.index('id="selList"'), "the list follows the selection controls"
+    phone = _phone(text)
+    assert "flex-direction:column" in _decls(phone.get(".sellist", []))
+    assert "display:none" in _decls(phone.get(".selbox .sellist:empty", [])), "an empty list draws nothing"
+    assert f"min-height:{TAP_TARGET}px" in _decls(phone.get(".selrow", [])), "a row is a 44px target"
+    rm = _decls(phone.get(".selrow .sr-rm", []))
+    assert f"min-width:{TAP_TARGET}px" in rm, f"the remove control is {TAP_TARGET}px wide: {rm!r}"
+    assert f"min-height:{TAP_TARGET}px" in _decls(phone.get(".selbox button", [])), "and 44px tall"
+    base = _rules(_outside_queries(text))
+    assert ".selrow" not in base and ".sellist" not in base, "index.html: the list has no rule above 900px"
 
 
 def test_the_surveys_controls_cannot_push_the_page_sideways():

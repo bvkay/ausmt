@@ -551,6 +551,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // The phone selection. LAZY arrows, so a boot on code without them reaches the phone legs and fails there.
   "stationsInView:(b)=>stationsInView(b),selectInView:(b)=>selectInView(b),toggleSelected:(i)=>toggleSelected(i)," +
   "selIds:()=>ST.filter(s=>selected.has(s.i)).map(s=>s.id),idAt:(i)=>ST[i]&&ST[i].id," +
+  "renderSelList:(m)=>renderSelList(m)," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -6823,6 +6824,45 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ok(cdoc.getElementById("drawer").classList.contains("open") && ca.selIds().length === 0,
       "phone chooser: in Browse the entry chosen opens its drawer");
     ca.closeDrawer();
+
+    // THE LIST. On the phone layout the Select pane lists the selection in catalogue order, a row per
+    // station naming it and its survey with a remove control, above the downloads; removing a row
+    // takes the station out of the selection, the counts and the map.
+    sa.setSidebarMode("select");
+    const list = sdoc.getElementById("selList");
+    ok(list && list.tagName === "UL" && list.closest("#selectMode") && list.getAttribute("aria-label"),
+      "phone list: the Select pane carries a labelled selection list");
+    ok(list.compareDocumentPosition(sdoc.getElementById("dlLevel2")) & sw.Node.DOCUMENT_POSITION_FOLLOWING,
+      "phone list: the list sits above the downloads");
+    const rows = () => [...list.querySelectorAll("li.selrow")];
+    const rowIds = () => rows().map(li => li.querySelector(".sr-id").textContent);
+    ok(rows().length === 0, "phone list: nothing selected lists nothing");
+    at("A1", 100, 100); at("A2", 300, 300); at("G1", 500, 500);
+    tap("G1", 500, 500); tap("A2", 300, 300); tap("A1", 100, 100);
+    ok(JSON.stringify(rowIds()) === JSON.stringify(["A1", "A2", "G1"]),
+      "phone list: the rows follow the catalogue's order, whatever order the taps came in, got " + JSON.stringify(rowIds()));
+    ok(JSON.stringify(rows().map(li => li.querySelector(".sr-sv").textContent)) === JSON.stringify(["Alpha Survey", "Alpha Survey", "Gamma Survey"]),
+      "phone list: each row names its station's survey");
+    const rm = rows()[1].querySelector("button.sr-rm");
+    ok(rm && rm.getAttribute("type") === "button" && rm.getAttribute("aria-label") === "Remove A2 from the selection",
+      "phone list: each row carries a labelled remove button, got " + (rm && rm.getAttribute("aria-label")));
+    click(rm);
+    ok(JSON.stringify(ids()) === JSON.stringify(["A1", "G1"]) && JSON.stringify(rowIds()) === JSON.stringify(["A1", "G1"]),
+      "phone list: removing a row takes its station out, got " + JSON.stringify(ids()) + " rows " + JSON.stringify(rowIds()));
+    ok(sdoc.getElementById("selBig").textContent === "2" && /2 selected/.test(peek()),
+      "phone list: removing a row updates the counts, got " + sdoc.getElementById("selBig").textContent + " / " + JSON.stringify(peek()));
+    ok(stroke(sa, "A2").weight === 0 && stroke(sa, "A1").weight === 2, "phone list: removing a row gives its dot the unselected stroke");
+    ok(sdoc.activeElement && sdoc.activeElement.classList.contains("sr-rm") &&
+      sdoc.activeElement.getAttribute("aria-label") === "Remove G1 from the selection",
+      "phone list: focus moves to the remove control that took the removed row's place");
+    // A long selection lists its first rows and says how many more the downloads take.
+    sa.selectInView(VIEW);
+    sa.renderSelList(2);
+    ok(rows().length === 2 && /2 more/.test(list.textContent) && /all 4/.test(list.textContent),
+      "phone list: past its row limit the list says how many more the downloads take, got " + JSON.stringify(list.textContent));
+    click(sdoc.getElementById("clearSel"));
+    ok(list.children.length === 0, "phone list: Clear empties the list");
+    sa.setSidebarMode("browse");
   }
 
   // ---- DESKTOP: the sheet takes no part above 900px -------------------------------------------------
@@ -6839,6 +6879,9 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ok(/toolbar/.test(doc.getElementById("selHint").textContent) || A.selCount() > 0,
       "desktop: the selection hint keeps the desktop wording, got " + JSON.stringify(doc.getElementById("selHint").textContent));
     win.__api.closeDrawer();
+    A.setSelected(["A1"]);
+    ok(doc.getElementById("selList").children.length === 0, "desktop: the phone's selection list is not filled above 900px");
+    A.setSelected([]);
     // In Select a station click opens its drawer and toggles nothing, as it always has here.
     A.setSidebarMode("select");
     const selBefore = A.selCount();
