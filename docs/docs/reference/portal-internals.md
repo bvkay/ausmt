@@ -5140,8 +5140,8 @@ A station dot is 1.8px in radius at the national view, and in a simulation of 2,
 (`AusMT_2026/mobile-audit/measurements.json`, `markers`). So on a coarse pointer
 (`matchMedia("(pointer:coarse)")`, read once at load into `COARSE_POINTER`) the map is built on
 `L.canvas({tolerance:8})`: Leaflet's canvas hit test then counts a tap as on a dot when it lands
-within the dot's radius, plus half its stroke, plus 8px (`tapReach`), which is 9.8px at the national
-view.
+within the dot's radius, plus half its stroke, plus 8px (`tapReach`), which is 10.05px at the national
+views (a 1.8px dot with a 0.5px edge).
 
 The dot's click handler on a coarse pointer is `onStationTap`. It projects every visible dot to
 container pixels and asks `tapCandidates` which of them the tap reaches, nearest first and then in
@@ -5368,6 +5368,41 @@ at far-out zooms, where an invisible dot reads as "no coverage here" - a false c
 The ceiling stops close zooms growing discs that overlap into one blob and hide the site spacing, which
 at site zoom IS the information. Between them the ramp is 0.5px per zoom level.
 ```
+
+#### The dot edge at the national views
+
+At zoom 3 and 4 every dot keeps a 0.5px edge (`DOT_W_Z4`) in the `--dot-edge` colour, over the
+unchanged per-type fill. Without an edge, overlapping dots of the same type paint one continuous fill,
+and the dense surveys and grids read as coloured shapes rather than sites: at zoom 4, 93 percent of
+the 15,265 served stations have a neighbour closer than a dot's 3.6px diameter. The edge each later dot
+draws over the earlier ones is what keeps them apart.
+
+0.5px is the thinnest of the weights tried (0.5, 0.6 and 0.8), and with 0.6 it separates about twice
+as many sites as no edge does. Measured in
+headless Chrome against the full corpus build on a 120 x 90 CSS pixel window at zoom 4 between the
+Gawler and Curnamona grids (4,705 stations), counting the separate fill regions of each type colour in a
+4x capture:
+
+| Edge weight | Regions at device pixel ratio 1 | Regions at device pixel ratio 2 |
+| --- | --- | --- |
+| none | 282 | 293 |
+| 0.5 | 569 | 612 |
+| 0.6 | 542 | 627 |
+| 0.8 | 473 | 492 |
+| 1.0 | 467 | 486 |
+
+Past 0.6 the edge starts to eat the fill, and dense lines darken into the edge colour. `DOT_R_Z4` stays
+1.8px: the AusLAMP grid pitch (nearest neighbour across the collection's 1,354 stations) is a median
+5.48px at zoom 4 (10th percentile 4.47px), so a 1.8px dot with its edge (4.1px across) leaves a median
+gap of 1.38px, which a 2.0px dot would shrink to under 1px and close at the 10th percentile. At zoom 3
+the pitch is 2.74px and the grid dots overlap; the edge is what still marks each one.
+
+The cost is one stroke per dot on the zoom restyle. Timing `restyleForZoom()` plus the canvas renderer's
+synchronous redraw of all 15,265 dots at zoom 4, on a 1280 x 800 pane at device pixel ratio 2, median
+of 5 runs, three page loads each: with no edge 14.0, 15.4 and 15.1 ms; with the 0.5px edge 17.6, 18.9
+and 21.9 ms. The tap reach (`tapReach`) counts half the edge, so a coarse pointer reaches a national
+view dot from 10.05px. `tools/map_dots_test.js` pins the weight at zoom 3 and 4, the unchanged radius
+and that reach.
 
 #### PURE, and a function of ZOOM ALONE
 

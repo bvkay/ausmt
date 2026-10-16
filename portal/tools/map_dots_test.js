@@ -94,9 +94,14 @@ ok(A.radiusForZoom(99) === A.DOT_R_CEIL, "the ceiling must actually bind at clos
 // ---- the low-zoom table: the national and regional views read as sites, not as a mass -------------
 ok(A.radiusForZoom(4) === 1.8 && A.radiusForZoom(5) === 2.4 && A.radiusForZoom(6) === 3.0,
   "low-zoom radii must be 1.8 / 2.4 / 3.0 at z4 / z5 / z6, got " + [4, 5, 6].map(z => A.radiusForZoom(z)).join("/"));
-ok(A.weightForZoom(4) === 0 && A.weightForZoom(5) === 0.75 && A.weightForZoom(6) === 1.25 && A.weightForZoom(7) === 1.5,
-  "stroke weights must be 0 / 0.75 / 1.25 / 1.5 at z4 / z5 / z6 / z7, got " + [4, 5, 6, 7].map(z => A.weightForZoom(z)).join("/"));
-ok(A.weightForZoom(3) === 0 && A.weightForZoom(12) === 1.5, "the stroke table must clamp at both ends");
+ok(A.weightForZoom(4) === 0.5 && A.weightForZoom(5) === 0.75 && A.weightForZoom(6) === 1.25 && A.weightForZoom(7) === 1.5,
+  "stroke weights must be 0.5 / 0.75 / 1.25 / 1.5 at z4 / z5 / z6 / z7, got " + [4, 5, 6, 7].map(z => A.weightForZoom(z)).join("/"));
+// The national views keep an edge: without one, overlapping dots of a dense survey merge into one fill and
+// separate sites cannot be told apart. 0.5px is the thinnest weight tried (0.5, 0.6, 0.8) that separates
+// them, and the zoom floor (3) is where the table bottoms out.
+ok(A.weightForZoom(3) === 0.5 && A.weightForZoom(4) === 0.5,
+  "the dots at z3 and z4 carry a 0.5px edge, got " + [3, 4].map(z => A.weightForZoom(z)).join("/"));
+ok(A.weightForZoom(3) === 0.5 && A.weightForZoom(12) === 1.5, "the stroke table must clamp at both ends");
 // THE CHANGE ITSELF: no data type may render larger or smaller than any other, at any zoom. The retired
 // `type` argument's CALL FORM must be inert - a stray second argument is ignored, never honoured, so a
 // caller that was not updated cannot quietly resurrect the per-type split.
@@ -142,10 +147,12 @@ ok(A.dimStyleFor("Spread", null).fillOpacity === A.dimStyleFor("Compact", "Compa
 // ---- a tap on a coarse pointer ------------------------------------------------------------------
 // A finger reaches a dot within TAP_TOLERANCE px of its edge, the reach Leaflet's canvas hit test gives
 // a circle marker on a renderer built with that tolerance: radius, plus half the stroke, plus the
-// tolerance. At the national view a dot is 1.8px with no stroke, so the reach is 9.8px.
+// tolerance. At the national view a dot is 1.8px with a 0.5px edge, so the reach is 10.05px.
 ok(A.TAP_TOLERANCE === 8, "the coarse-pointer tap tolerance is 8px, got " + A.TAP_TOLERANCE);
 const reach4 = A.tapReach(A.radiusForZoom(4), A.weightForZoom(4), A.TAP_TOLERANCE);
-ok(Math.abs(reach4 - 9.8) < 1e-9, "at z4 a tap reaches a dot from 9.8px, got " + reach4);
+ok(Math.abs(reach4 - 10.05) < 1e-9, "at z4 a tap reaches a dot from 10.05px, the edge counted, got " + reach4);
+ok(Math.abs(A.tapReach(A.radiusForZoom(3), A.weightForZoom(3), A.TAP_TOLERANCE) - 10.05) < 1e-9,
+  "at the z3 floor the reach counts the same edge");
 ok(A.tapReach(3, 1.5, 8) === 11.75, "the stroke adds half its weight to the reach");
 // A tap 6px from an isolated dot is a hit on that dot alone: it opens, as a tap on the dot did.
 const lone = A.tapCandidates({ x: 106, y: 100 }, [{ i: 4, x: 100, y: 100 }, { i: 7, x: 160, y: 100 }], reach4);
@@ -156,7 +163,7 @@ ok(JSON.stringify(pair) === "[2,9]", "a tap between two dots must reach both, ne
 const nearer = A.tapCandidates({ x: 103, y: 100 }, [{ i: 9, x: 100, y: 100 }, { i: 2, x: 110, y: 100 }], reach4);
 ok(JSON.stringify(nearer) === "[9,2]", "the nearer dot is listed first, got " + JSON.stringify(nearer));
 ok(A.tapCandidates({ x: 112, y: 100 }, [{ i: 1, x: 100, y: 100 }], reach4).length === 0,
-  "a tap 12px from a dot is beyond the 9.8px reach and reaches nothing");
+  "a tap 12px from a dot is beyond the 10.05px reach and reaches nothing");
 
 // ---- where the chooser goes -----------------------------------------------------------------------
 // The box is placed inside the map the sheet leaves clear (host pixels), 8px in from its edges and

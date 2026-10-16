@@ -134,9 +134,9 @@ function tooltipText(s){return `${esc(s.id)} · ${esc(s.survey)}`;}
 // Zoom-scaled marker geometry. See docs: portal internals, map.js.
 const DOT_R_FLOOR=1.8, DOT_R_CEIL=6.5, DOT_R_SLOPE=0.5, DOT_R_Z0=4;
 const DOT_R_BASE=2.0;          // the slope's origin at z4; the table below overrides the low zooms
-// At the national view the AusLAMP grid pitch is about 6.5px, so a dot stays at 1.8px with no stroke.
+// AusLAMP grid pitch is 5.5px at z4 and 2.7px at z3: a 1.8px dot keeps a 0.5px edge so overlaps stay apart.
 const DOT_R_Z4=1.8, DOT_R_Z5=2.4;
-const DOT_W_Z4=0, DOT_W_Z5=0.75, DOT_W_Z6=1.25, DOT_W_HIGH=1.5;
+const DOT_W_Z4=0.5, DOT_W_Z5=0.75, DOT_W_Z6=1.25, DOT_W_HIGH=1.5;
 // PURE, and a function of ZOOM ALONE: a data-type argument is never read, so no call site can
 // resurrect a per-type split. See docs: portal internals, map.js.
 function radiusForZoom(z){

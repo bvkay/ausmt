@@ -239,7 +239,7 @@ def test_the_low_zoom_tables_are_named():
     """The national and regional dot geometry is a table of named constants, not literals inside the
     two curves, so the values the browser check was made against can be read and pinned by name."""
     src = _map_src()
-    for name, value in (("DOT_R_Z4", "1.8"), ("DOT_R_Z5", "2.4"), ("DOT_W_Z4", "0"), ("DOT_W_Z5", "0.75"),
+    for name, value in (("DOT_R_Z4", "1.8"), ("DOT_R_Z5", "2.4"), ("DOT_W_Z4", "0.5"), ("DOT_W_Z5", "0.75"),
                         ("DOT_W_Z6", "1.25"), ("DOT_W_HIGH", "1.5")):
         assert re.search(rf"\b{name}\s*=\s*{re.escape(value)}\b", src), f"map.js must state {name}={value}"
     assert "function weightForZoom(z){return z<=4?DOT_W_Z4:z<=5?DOT_W_Z5:z<=6?DOT_W_Z6:DOT_W_HIGH;}" in src, \
