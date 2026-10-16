@@ -562,6 +562,18 @@
   .csl-dot{width:9px;height:9px;border-radius:50%;flex:none}
   .collpagenav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
   .collmapbtn{color:var(--accent)}
+
+  /* See docs: portal internals, index.html, phone and touch. */
+  @media (pointer:coarse){
+    .typegrid label,.collgroup .coll,.seg button,.leaflet-touch .leaflet-bar a,.maplegend-toggle,.maplegend .legtype,
+    .dhead .close,.plotexp,footer a{min-height:44px;min-width:44px}
+    .leaflet-touch .leaflet-bar a{line-height:44px}
+    .leaflet-touch .leaflet-draw-toolbar a{padding:7px;background-origin:content-box;background-clip:content-box}
+    .leaflet-touch .leaflet-draw-actions{left:46px}
+    .leaflet-touch .leaflet-draw-actions a{min-height:44px;line-height:44px}
+    footer a{display:inline-flex;align-items:center}
+    #find,#availSel,#surveySearch,#sortSel,#yearFrom,#yearTo{font-size:16px}
+  }
 </style>
 </head>
 <body>

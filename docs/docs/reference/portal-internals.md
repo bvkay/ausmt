@@ -660,6 +660,30 @@ The SVG is inline, so without this its line box leaves a 3px descender gap and t
 
 ```
 
+#### phone and touch
+
+Every rule in this part of the sheet sits inside a media query, so a desktop window with a mouse
+renders exactly what it rendered before. `tests/test_phone_chrome.py` pins each rule and pins that
+none of them leaks into a base rule.
+
+**Coarse pointer.** `@media (pointer:coarse)` gives every control a finger is expected to hit a
+floor of 44px in both directions: the data-type rows (`.typegrid label`), the collection rows
+(`.collgroup .coll`), every segmented control (`.seg button`, which covers Browse and Select and the
+drawer's tabs), the Leaflet zoom and draw controls (`.leaflet-touch .leaflet-bar a`), the legend's
+toggle and rows, the drawer's close control, the plot expand control and the footer links. On a
+375 x 812 phone these measured 13 x 13 (the checkboxes), 27px (Browse and Select), 30 x 30 (zoom and
+draw), 154 x 20 (legend rows), 34 x 28 (drawer close), 84 x 27 (drawer tabs) and 21 x 18 (plot expand)
+before the floor (`AusMT_2026/mobile-audit/measurements.json`, `tap_targets_wxh`).
+
+* A footer link is inline, where `min-height` does nothing, so under a coarse pointer it becomes an
+  inline flex box.
+* The draw toolbar's icons are cells of one 30px sprite strip. A 44px button would show the
+  neighbouring cells, so the button pads 7px and draws its sprite in the content box only; the
+  armed tool's Cancel and Finish row moves out to clear the wider toolbar.
+* The text inputs and selects (`#find`, `#availSel`, `#surveySearch`, `#sortSel`, `#yearFrom`,
+  `#yearTo`) are 16px. iOS Safari zooms the page when a smaller input takes focus; they were 12.5px
+  to 13px. The /surveys controls in `engine/extract/_pages.py` take the same 16px.
+
 ## portal/about.html
 
 #### Search snippet and link preview

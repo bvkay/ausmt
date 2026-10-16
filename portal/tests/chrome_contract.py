@@ -91,6 +91,32 @@ LOCKUP_FOOTERS = ("404.html", "about.html", "add-survey.html", "brand.html", "re
 # The map's corner on index.html: the same file, unlinked, 44px tall and inset by its own height.
 MAP_LOCKUP = f'<img class="maplock" src="{LOCKUP_LIGHT}" alt="AuScope and NCRIS" width="1919" height="325">'
 
+# THE PHONE HEADER, one rule block on every surface that wears the chrome. At 900px and narrower the
+# header is one 52px row: the mark and the name at left, the tabs at right as 44px targets, the tagline
+# and About hidden, and the map page's own Map tab hidden because that page is the map. The :root
+# prefix gives the header, nav and tab selectors the specificity of the pages sheet's header.site
+# rules, so source order alone decides and this block must follow the base rules it overrides.
+PHONE_BREAKPOINT = 900
+PHONE_HEADER_HEIGHT = 52
+TAP_TARGET = 44
+PHONE_HEADER = ("@media (max-width:900px){"
+                ":root header{flex-wrap:nowrap;gap:8px;height:calc(52px + env(safe-area-inset-top,0px));"
+                "padding:env(safe-area-inset-top,0px) 8px 0 16px}"
+                ".hleft{flex:0 0 auto}"
+                ".hcenter{flex:1 1 auto;justify-content:flex-end;flex-wrap:nowrap}"
+                ".hright,.hcenter .about,:root header nav button#navMap{display:none}"
+                ":root header nav{flex-wrap:nowrap;gap:4px;min-width:0}"
+                ":root header nav a,:root header nav button{flex:0 0 auto;min-width:44px;min-height:44px;"
+                "padding:0 10px;font-size:13px}}")
+
+# THE SAFE AREAS, one rule on every surface that carries the footer. With viewport-fit=cover a page
+# draws under a phone's rounded corners, notch and home indicator, so on a touch screen the page keeps
+# its content clear of the side insets and the footer clears the bottom one. env() resolves to 0px
+# where a screen has no inset, so the footer keeps its 7px.
+SAFE_AREA = ("@media (pointer:coarse){"
+             "body{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}"
+             "footer{padding-bottom:max(7px,env(safe-area-inset-bottom,0px))}}")
+
 # The centre line as a reader sees it, and as markup: the organisation's name is its one link, to the
 # parent organisation's address, opening in a new tab that is handed no opener and no referrer.
 FOOTER_CENTRE = "AusMT is enabled by AuScope · Data licences vary by survey"
