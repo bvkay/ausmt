@@ -14,6 +14,7 @@ Each assertion states its failure criterion:
   * TAP TARGETS - FAILS if the coarse-pointer block on the map page stops giving every named control
     a 44px floor in both directions, or if an inline control (a footer link) loses the display that
     lets a floor apply to it.
+  * THE CREDIT - FAILS if the map's attribution glyph is not a 44px target under a coarse pointer.
   * INPUTS - FAILS if a text input or select on the map page or the /surveys controls is under 16px
     on a coarse pointer, the size below which iOS Safari zooms the page on focus.
   * THE SHEET - FAILS if, at 900px and narrower, the map stops filling the screen under the header,
@@ -159,6 +160,40 @@ def test_the_coarse_pointer_block_gives_every_named_control_a_44px_floor():
     assert "display:inline-flex" in _decls(rules["footer a"]), (
         "index.html: a footer link is inline, where min-height does nothing; it must become an "
         "inline flex box under a coarse pointer")
+
+
+def _px(value):
+    m = re.fullmatch(r"(-?\d+(?:\.\d+)?)px", value.strip())
+    assert m, f"expected a px length, got {value!r}"
+    return float(m.group(1))
+
+
+def test_the_attribution_toggle_is_a_44px_target_on_a_coarse_pointer():
+    """FAILS if the map's attribution glyph stays a 20 x 20 target under a coarse pointer (measured at
+    375 x 812), or if its hit area is drawn by anything but an inset ::after on the glyph itself, or
+    reaches past the 10px the control sits from the map's top and right edges, where the map's own
+    clip would cut it below 44px."""
+    text = _text(INDEX)
+    base = _rules(_outside_queries(text))
+    glyph = _decls(base.get(".mapattrib-toggle", []))
+    w = _px(re.search(r"(?:^|;)width:([^;]+)", glyph).group(1))
+    h = _px(re.search(r"(?:^|;)height:([^;]+)", glyph).group(1))
+    coarse = _rules("".join(_blocks(text, "@media (pointer:coarse)")))
+    assert "position:relative" in _decls(coarse.get(".mapattrib-toggle", [])), (
+        "index.html: under a coarse pointer the glyph is the containing block of its hit area")
+    hit = _decls(coarse.get(".mapattrib-toggle::after", []))
+    for decl in ('content:""', "position:absolute"):
+        assert decl in hit, f"index.html: the glyph's hit area must declare {decl}: {hit!r}"
+    inset = re.search(r"(?:^|;)inset:([^;]+)", ";".join(coarse.get(".mapattrib-toggle::after", [])))
+    assert inset, f"index.html: the glyph's hit area is placed by inset: {hit!r}"
+    # An absolute box is inset from its containing block's PADDING box, inside the glyph's border.
+    b = _px(re.search(r"(?:^|;)border:(\S+?px)", glyph).group(1))
+    top, right, bottom, left = (-_px(v) for v in inset.group(1).split())
+    across, down = w - 2 * b + left + right, h - 2 * b + top + bottom
+    assert across >= TAP_TARGET and down >= TAP_TARGET, (
+        f"index.html: the glyph's hit area must be {TAP_TARGET}px each way, got {across} x {down}")
+    assert top - b <= 10 and right - b <= 10, (
+        f"index.html: the hit area must stay inside the map, 10px above and right of the glyph: {inset.group(1)!r}")
 
 
 def test_coarse_pointer_inputs_are_16px_on_the_map_page_and_the_surveys_page():

@@ -140,6 +140,15 @@ stays with the map, because only the layer that is drawing knows which provider 
 with add-survey.html; pinned by tests/test_map_attribution.py.
 ```
 
+Under a coarse pointer the glyph stays a 20 x 20 drawing but hit-tests as 44 x 44: the line after the
+control's rule set gives the glyph `position:relative` and an empty `::after` at `inset:-11px -11px
+-15px -15px`. The inset is taken from the glyph's padding box, inside its 1px border, so the box is 44px
+each way, and it stops at the map's top and right edges, 10px from the glyph, where the map's own clip
+would otherwise cut it short. Measured in the Claude desktop browser pane at 375 x 812 (a coarse
+pointer): the glyph draws at 345 to 365 across and 62 to 82 down, and `elementFromPoint` returns it from
+331 to 374 across and 52 to 95 down, against 345 to 363 and 62 to 80 before. add-survey.html carries the
+same line (`tests/test_map_attribution.py`); `tests/test_phone_chrome.py` pins the arithmetic.
+
 #### flex-shrink:0 is load-bearing: #filterPane is a column flex, so a tall ...
 
 ```text
@@ -690,7 +699,9 @@ none of them leaks into a base rule.
 floor of 44px in both directions: the data-type rows (`.typegrid label`), the collection rows
 (`.collgroup .coll`), every segmented control (`.seg button`, which covers Browse and Select and the
 drawer's tabs), the Leaflet zoom and draw controls (`.leaflet-touch .leaflet-bar a`), the legend's
-toggle and rows, the drawer's close control, the plot expand control and the footer links. On a
+toggle and rows, the drawer's close control, the plot expand control and the footer links. The map's
+attribution glyph takes its 44px as a hit area beside the control's own rules (see the map's
+attribution, above). On a
 375 x 812 phone these measured 13 x 13 (the checkboxes), 27px (Browse and Select), 30 x 30 (zoom and
 draw), 154 x 20 (legend rows), 34 x 28 (drawer close), 84 x 27 (drawer tabs) and 21 x 18 (plot expand)
 before the floor (`AusMT_2026/mobile-audit/measurements.json`, `tap_targets_wxh`).
@@ -989,6 +1000,9 @@ and the 240px cap keeps the opened text clear of the legend at 560px of map. Sha
 character with index.html, because these three maps wear the same control in the same corner;
 pinned by tests/test_map_attribution.py.
 ```
+
+The coarse-pointer line after the rule set is index.html's too: a 44 x 44 hit area on the 20 x 20
+glyph (see the same heading under `portal/index.html`).
 
 #### The AuScope mark, then AusMT's name set at the AuScope logo's proportions
 

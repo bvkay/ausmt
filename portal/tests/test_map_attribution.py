@@ -282,6 +282,22 @@ def test_both_map_documents_declare_the_one_control_rule_set():
         "the legend in the opposite corner")
 
 
+# The glyph's touch target: a 20 x 20 control is under the 44px a finger needs, so under a coarse
+# pointer an inset ::after widens what it hit-tests without moving or growing what it draws. The inset
+# keeps the box inside the map, whose corner the control sits 10px from.
+_COARSE_HIT = ('@media (pointer:coarse){.mapattrib-toggle{position:relative}'
+               '.mapattrib-toggle::after{content:"";position:absolute;inset:-11px -11px -15px -15px}}')
+
+
+def test_both_map_documents_give_the_glyph_one_44px_touch_target():
+    """FAILS if either document that draws maps stops carrying the coarse-pointer hit area for the
+    glyph, carries it twice, or carries a variant of it, so a finger on add-survey's maps would get a
+    different target from the SPA's. The 44px arithmetic is pinned in tests/test_phone_chrome.py."""
+    for name in _MAP_PAGES:
+        assert _text(ROOT / name).count(_COARSE_HIT) == 1, (
+            f"{name}: expected exactly one {_COARSE_HIT!r}")
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_add_survey_maps_are_driven():
     """THE DRIVEN HALF for add-survey: all three maps built in a real DOM, each control found,
