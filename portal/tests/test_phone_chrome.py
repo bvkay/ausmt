@@ -433,6 +433,23 @@ def test_the_phone_selection_list_sits_above_the_downloads_in_44px_rows():
     assert ".selrow" not in base and ".sellist" not in base, "index.html: the list has no rule above 900px"
 
 
+def test_the_chooser_shows_which_entries_are_selected():
+    """FAILS if, at 900px and narrower, a chooser entry that is in the selection looks like one that
+    is not. In Select an entry toggles its station, so a sighted reader needs to see which way a
+    choice goes; aria-pressed alone tells only a screen reader. The mark lives in the phone query,
+    the only layout where the chooser toggles."""
+    text = _text(INDEX)
+    phone = _phone(text)
+    on = '.tapchooser-item[aria-pressed="true"]'
+    assert "box-shadow:inset4px00var(--accent)" in _decls(phone.get(on, [])), (
+        f"index.html: {on} carries an accent bar at 900px and narrower")
+    tick = _decls(phone.get(on + " .tc-id::after", []))
+    assert 'content:"\\2713"' in tick and "color:var(--accent)" in tick, (
+        f"index.html: a selected entry's id carries an accent tick: {tick!r}")
+    base = _rules(_outside_queries(text))
+    assert not any("aria-pressed" in sel for sel in base), "index.html: the mark has no rule above 900px"
+
+
 def test_the_select_panes_draw_buttons_are_hidden_at_phone_widths_and_kept_at_desktop():
     """FAILS if the Select pane's Draw rectangle and Draw polygon buttons are drawn at 900px and
     narrower, where a tap toggles and the view selects, or if their row keeps its gap there; or if
