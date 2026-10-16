@@ -944,6 +944,18 @@ brand kit's colour PNG, linking AuScope in a new
 tab with rel="noopener noreferrer", at the bottom right of the page.
 ```
 
+#### The cards on a phone
+
+The "What you can do here" cards (`#howto`) sit in `.two`, a grid of three equal columns. The columns
+were set inline on the element, where no media query could reach them, and a grid item's floor is its
+content, so on a 375px phone the API access card ran from 274 to 391 and widened the layout viewport
+to 391px. The columns are now the `.two` rule's, at 560px and narrower `.two` is one column, and
+`.card` takes `min-width:0` and `overflow-wrap:break-word`, so no card can be wider than its column
+whatever word it holds. Measured in the Claude desktop browser pane: `document.scrollingElement.scrollWidth`
+equals `innerWidth` at 375 x 812 (375, the three cards 335px wide one under another), at 320 x 640
+(320) and at 600 x 900 (600, three cards 175px wide); at 1024 x 768 the three cards sit at 122, 388 and
+654 across, 248 x 275 each, as on `origin/main`. `tests/test_phone_chrome.py` pins the rules.
+
 ## portal/add-survey.html
 
 #### Uniform chrome: the three-zone header, index.html's geometry

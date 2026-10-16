@@ -33,6 +33,7 @@ Each assertion states its failure criterion:
     as the footer writes them.
   * PLOTS - FAILS if a drawer plot can be wider than the drawer at a phone width.
   * REDUCED MOTION - FAILS if the sheet's slide escapes the reduced-motion rule.
+  * ABOUT - FAILS if an about.html card can push the page sideways at a phone width.
   * SURVEYS - FAILS if a /surveys control label or select can push the page sideways at a phone width.
   * DRAW TOOLBAR - FAILS if the Leaflet draw toolbar is drawn at 900px and narrower.
   * DESKTOP - FAILS if any of these overrides leaks out of its query into the base rules.
@@ -384,6 +385,27 @@ def test_the_surveys_controls_cannot_push_the_page_sideways():
         "engine/extract/_pages.py: a /surveys control label must be free to shrink")
     assert "max-width:100%" in _decls(rules.get(".idxctl select", [])), (
         "engine/extract/_pages.py: a /surveys select must not outgrow its label")
+
+
+def test_the_about_cards_cannot_push_a_phone_page_sideways():
+    """FAILS if about.html's cards can widen a phone's page again. The 'What you can do here' grid set
+    three columns inline, so at 375px each card's floor was its longest word and the API access card
+    ran to 391px, widening the layout viewport to 391px. A card is now free to shrink below its
+    content and breaks a word that would overflow it, and at 560px and narrower the grid is one
+    column, which the stylesheet can only win while the markup sets no columns of its own."""
+    text = _text(ROOT / "about.html")
+    base = _rules(_outside_queries(text))
+    card = _decls(base.get(".card", []))
+    for decl in ("min-width:0", "overflow-wrap:break-word"):
+        assert decl in card, f"about.html: .card must declare {decl}: {card!r}"
+    grid = re.search(r'<section id="howto">.*?<div class="two"([^>]*)>', text, re.S)
+    assert grid and "style=" not in grid.group(1), (
+        "about.html: the #howto grid sets no inline columns, so the narrow rule can stack it")
+    assert "grid-template-columns:repeat(3,1fr)" in _decls(base.get(".two", [])), (
+        "about.html: the three columns the grid had inline are the stylesheet's .two rule")
+    narrow = _rules("".join(_blocks(text, "@media (max-width:560px)")))
+    assert "grid-template-columns:1fr" in _decls(narrow.get(".two", [])), (
+        "about.html: at 560px and narrower the cards stack in one column")
 
 
 def test_no_phone_override_leaks_into_the_desktop_rules():
