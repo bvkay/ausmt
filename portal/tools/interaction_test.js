@@ -1063,7 +1063,7 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     A.radiusForZoom(4, "LPMT") + " / " + A.radiusForZoom(4, "BBMT"));
   ok(A.radiusForZoom(4) === A.radiusForZoom(4, "BBMT"),
     "the retired `type` argument must be INERT: passing one may not change the radius");
-  ok(A.weightForZoom(4) === 0 && A.weightForZoom(0) === 0, "weightForZoom(z<=4) must be 0: no stroke at the national view");
+  ok(A.weightForZoom(4) === 0.5 && A.weightForZoom(0) === 0.5, "weightForZoom(z<=4) must be 0.5: an edge at the national view");
   ok(A.weightForZoom(5) === 0.75 && A.weightForZoom(6) === 1.25, "weightForZoom must step through 0.75 at z5 and 1.25 at z6");
   ok(A.weightForZoom(7) === 1.5 && A.weightForZoom(9) === 1.5, "weightForZoom(z>=7) must be 1.5");
   for (let z = 0; z < 12; z++) {
@@ -1448,8 +1448,21 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
   // A FINE POINTER IS UNTOUCHED by the coarse-pointer tap rule. jsdom has no matchMedia, which is how a
   // desktop answers the coarse query here: the map keeps Leaflet's own renderer (no renderer option at
   // all) and the click above opened its station with no chooser.
-  ok(JSON.stringify(Object.keys(mapMade[0].opts)) === JSON.stringify(["preferCanvas", "attributionControl"]),
-    "desktop: the map is built with exactly preferCanvas and attributionControl, got " + JSON.stringify(mapMade[0].opts));
+  ok(JSON.stringify(Object.keys(mapMade[0].opts)) ===
+    JSON.stringify(["preferCanvas", "attributionControl", "minZoom", "maxBounds", "maxBoundsViscosity"]),
+    "desktop: the map is built with exactly preferCanvas, attributionControl, minZoom, maxBounds and " +
+    "maxBoundsViscosity, got " + JSON.stringify(Object.keys(mapMade[0].opts)));
+  // The zoom floor and the solid pan box; what they do is driven on real Leaflet in map_zoom_test.js.
+  ok(mapMade[0].opts.minZoom === 3 && mapMade[0].opts.maxBoundsViscosity === 1 && !!mapMade[0].opts.maxBounds,
+    "desktop: the map floors at zoom 3 inside a solid pan box, got minZoom " + mapMade[0].opts.minZoom +
+    ", viscosity " + mapMade[0].opts.maxBoundsViscosity);
+  {
+    const _tiles = layersAdded.filter(l => l.kind === "tileLayer");
+    // The floor alone keeps the world from repeating; noWrap would leave the floor view blank past 180 E.
+    ok(_tiles.length === 1 && !_tiles[0].options.noWrap && !_tiles[0].options.bounds,
+      "desktop: the basemap tile layer wraps, so the floor view past 180 E is drawn, got noWrap " +
+      JSON.stringify(_tiles.map(l => l.options.noWrap)));
+  }
   ok(!doc.getElementById("tapChooser"), "desktop: a station click never raises the tap chooser");
 
   A.buildAuslampSet(); A.refresh();       // restore the boot-built membership for the rest of the run
@@ -6259,8 +6272,10 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ok(made.canvas.length === 1 && made.canvas[0].tolerance === 8,
       "phone: a coarse pointer builds one canvas renderer with an 8px tolerance, got " + JSON.stringify(made.canvas));
     ok(made.opts.renderer && made.opts.renderer.options.tolerance === 8 && made.opts.preferCanvas === true &&
-      made.opts.attributionControl === false,
-      "phone: the map takes that renderer beside its own two options, got " + JSON.stringify(made.opts));
+      made.opts.attributionControl === false && made.opts.minZoom === 3 && made.opts.maxBoundsViscosity === 1 &&
+      !!made.opts.maxBounds,
+      "phone: the map takes that renderer beside its own options, the zoom floor and the pan box included, got " +
+      JSON.stringify(Object.keys(made.opts)));
     const st = (id) => pa.station(id);
     const at = (id, x, y) => { const s = st(id); proj[s.lat + "," + s.lon] = { x, y }; };
     const tap = (id, x, y) => { const mk = pa.stationMarker(id); ok(mk && (mk.handlers.click || []).length === 1,

@@ -7,8 +7,15 @@ const TAP_TOLERANCE=8;
 function _coarsePointer(){
   try{return !!(typeof window!=="undefined"&&window.matchMedia&&window.matchMedia("(pointer:coarse)").matches);}catch(e){return false;}}
 const COARSE_POINTER=_coarsePointer();
+// Zoom floor: the zoom AU_HOME_BOUNDS fits a phone pane at. See docs: portal internals, map.js.
+const MAP_MIN_ZOOM=3;
+// Pan box: holds the served extent, centred on AU_HOME_BOUNDS so the home view never moves. See docs: portal internals, map.js.
+const MAP_MAX_BOX=[[-60,88.25],[15.42,178.25]];
+// PURE: every [lat,lon] inside [[s,w],[n,e]].
+function boxHolds(pts,box){return pts.every(p=>p[0]>=box[0][0]&&p[0]<=box[1][0]&&p[1]>=box[0][1]&&p[1]<=box[1][1]);}
 // THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here. See docs: portal internals, map.js.
-const map=L.map("map",{preferCanvas:true,attributionControl:false,...(COARSE_POINTER?{renderer:L.canvas({tolerance:TAP_TOLERANCE})}:{})}).fitBounds(AU_HOME_BOUNDS);
+const map=L.map("map",{preferCanvas:true,attributionControl:false,minZoom:MAP_MIN_ZOOM,maxBounds:L.latLngBounds(MAP_MAX_BOX),maxBoundsViscosity:1,
+  ...(COARSE_POINTER?{renderer:L.canvas({tolerance:TAP_TOLERANCE})}:{})}).fitBounds(AU_HOME_BOUNDS);
 // The basemap is config-driven. See docs: portal internals, map.js.
 const _OSM_CREDIT='\u00a9 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 const _PM_CREDIT=_OSM_CREDIT+', \u00a9 <a href="https://protomaps.com" target="_blank" rel="noopener noreferrer">Protomaps</a>';
@@ -125,9 +132,9 @@ function tooltipText(s){return `${esc(s.id)} · ${esc(s.survey)}`;}
 // Zoom-scaled marker geometry. See docs: portal internals, map.js.
 const DOT_R_FLOOR=1.8, DOT_R_CEIL=6.5, DOT_R_SLOPE=0.5, DOT_R_Z0=4;
 const DOT_R_BASE=2.0;          // the slope's origin at z4; the table below overrides the low zooms
-// At the national view the AusLAMP grid pitch is about 6.5px, so a dot stays at 1.8px with no stroke.
+// AusLAMP grid pitch is 5.5px at z4 and 2.7px at z3: a 1.8px dot keeps a 0.5px edge so overlaps stay apart.
 const DOT_R_Z4=1.8, DOT_R_Z5=2.4;
-const DOT_W_Z4=0, DOT_W_Z5=0.75, DOT_W_Z6=1.25, DOT_W_HIGH=1.5;
+const DOT_W_Z4=0.5, DOT_W_Z5=0.75, DOT_W_Z6=1.25, DOT_W_HIGH=1.5;
 // PURE, and a function of ZOOM ALONE: a data-type argument is never read, so no call site can
 // resurrect a per-type split. See docs: portal internals, map.js.
 function radiusForZoom(z){
@@ -136,9 +143,7 @@ function radiusForZoom(z){
   if(zz<=5)return DOT_R_Z5;
   return Math.min(DOT_R_CEIL,Math.max(DOT_R_FLOOR,DOT_R_BASE+DOT_R_SLOPE*(zz-DOT_R_Z0)));}
 function weightForZoom(z){return z<=4?DOT_W_Z4:z<=5?DOT_W_Z5:z<=6?DOT_W_Z6:DOT_W_HIGH;}
-// current map zoom as a finite number - the headless smoke/interaction stubs' map.getZoom() returns a
-// Proxy (not a number), and even Number(proxy) throws ("cannot convert object to primitive"), so read it
-// defensively and default to 4 (national) when it isn't already a finite number.
+// Current zoom as a finite number, else 4: a headless stub answers getZoom() with a Proxy.
 function curZoom(){const z=map.getZoom();return typeof z==="number"&&Number.isFinite(z)?z:4;}
 // One radius for every marker; a zoom never re-routes, because which stations show is a filter answer.
 function restyleForZoom(){const z=curZoom(),w=weightForZoom(z),r=radiusForZoom(z);
@@ -146,9 +151,7 @@ function restyleForZoom(){const z=curZoom(),w=weightForZoom(z),r=radiusForZoom(z
 // The home frame buildMarkers fits to, remembered module-level so the setView("map") 60ms corrector can
 // re-fit to it (null until data is in). See docs: portal internals, map.js.
 let HOME_BOUNDS=null,_fitWasDegenerate=false;
-// PURE: a Leaflet map size is degenerate when it is missing or zero on either axis, which is what makes
-// fitBounds compute against a 0x0 box and land at zoom 0. Leaflet-free so the jsdom driver pins it on
-// synthetic sizes (the headless map's getSize() is a Proxy, so it reads degenerate).
+// PURE: a map size missing or zero on either axis, against which fitBounds lands at the zoom floor.
 function _mapSizeDegenerate(size){return !(size&&typeof size.x==="number"&&typeof size.y==="number"&&size.x>0&&size.y>0);}
 // PURE: the corrector fires ONLY when the user has not taken control (never fight a deliberate view) AND the
 // primary fit was degenerate (so a healthy fit - and any later programmatic fit, such as a
@@ -166,6 +169,8 @@ function buildMarkers(){const z=curZoom(),w=weightForZoom(z),edge=themeToken("--
   else s.marker.on("click",()=>openStation(s.i));});
   // Home frame: the FIXED Australia box, NOT the station extent. See docs: portal internals, map.js.
   const pts=ST.filter(hasPosition).map(s=>[s.lat,s.lon]);
+  // A station outside the box drops the box rather than strand the station.
+  if(!boxHolds(pts,MAP_MAX_BOX))map.setMaxBounds(null);
   if(pts.length){
     // Reclaim the true container size BEFORE fitting. See docs: portal internals, map.js.
     map.invalidateSize({animate:false,pan:false});
@@ -276,8 +281,7 @@ if(_mapCont&&_mapCont.addEventListener){
   _mapCont.addEventListener("wheel",_mapMarkInteracted,{passive:true});
   _mapCont.addEventListener("touchstart",_mapMarkInteracted,{passive:true});
 }
-// Restyle every marker on each zoom step so radius/weight track the tier. preferCanvas is on
-// (map creation) so a full restyle of ~1200 circleMarkers per step is acceptable; registered once here.
+// Restyle every marker on each zoom step so radius and weight track the tier.
 map.on("zoomend",restyleForZoom);
 
 function hull(points){const pts=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);if(pts.length<3)return pts;

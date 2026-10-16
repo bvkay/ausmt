@@ -5085,11 +5085,55 @@ that didn't reliably frame the continent on typical viewport sizes). Bounds: [[s
 chosen to cover the AU mainland + Tasmania with a small margin.
 buildMarkers() must NOT re-fit to the tight station-marker extent once data loads: no station sits
 north of ~-22.5 lat, so that fit drops the view SOUTH (centre ~-33.6) and clips northern Australia.
-The home view is ALWAYS this fixed box (below): every station (lon 115.85..148.17,
-lat -43.44..-22.48) falls inside it, so it shows all dots AND frames the whole continent. Defined ONCE
+The home view is ALWAYS this fixed box (below), which frames the whole continent. The full corpus build
+serves 15,265 stations over lat -43.44..-12.38, lon 113.67..166.18; all but the four Tasman Project
+seafloor stations (out to 166.18 E) fall inside it. Defined ONCE
 here as AU_HOME_BOUNDS and shared by the initial fit and buildMarkers()'s HOME_BOUNDS so the two frames
 cannot drift apart.
 ```
+
+#### The zoom floor, the pan box and one world
+
+Without a floor, zooming out runs on to zoom 0, where the basemap repeats side by side across the map
+and the archive shrinks to a thumbnail. Three settings stop that.
+
+**The zoom floor.** The map is built with `minZoom: MAP_MIN_ZOOM` (3). That is the smallest zoom at
+which `AU_HOME_BOUNDS` fits the map pane on the three viewports the portal is checked on, measured in
+headless Chrome against the full corpus build with `map.getBoundsZoom(AU_HOME_BOUNDS)`:
+
+| Viewport | Map pane | Fitted zoom |
+| --- | --- | --- |
+| 1280 x 800 desktop | 824 x 686 | 4 |
+| 1024 x 768 desktop | 655 x 654 | 4 |
+| 375 x 812 phone | 375 x 760 | 3 |
+
+So a phone still opens on the whole continent, and no viewport can zoom out past it. Without the
+floor, eight presses of zoom out take every one of the three panes to zoom 0.
+
+**The pan box.** `maxBounds` is `MAP_MAX_BOX`, south 60, west 88.25, north 15.42, east 178.25, with
+`maxBoundsViscosity: 1`, so a drag stops solid at its edge rather than leaving the data behind. The box
+holds the served extent (lat -43.44 to -12.38, lon 113.67 to 166.18) with at least 10 degrees to spare
+on every side: 12.07 east of the Tasman Project seafloor line, 25.42 west of the westernmost station.
+It is centred on `AU_HOME_BOUNDS`, its longitudes at 133.25 plus and minus 45 and its latitudes
+symmetric about the home frame's centre in Mercator. That symmetry is what keeps the fitted home view
+where a map without a box puts it: when the box is wider than the pane Leaflet leaves the view alone,
+and when it is narrower (zoom 3 on a desktop pane) Leaflet centres the box, which is the home centre.
+A build that serves a station outside the box drops it (`buildMarkers` calls `map.setMaxBounds(null)`
+when `boxHolds` fails), because a box that strands a station is worse than none.
+
+**One world.** The floor is what stops the world repeating. At zoom 3 the world is 2048px wide, wider
+than every measured pane (824, 655 and 375px), so two copies can never sit side by side. The basemap
+layers are left to wrap: at the floor a desktop pane is wider than the pan box, Leaflet centres the box,
+and the view reaches past 180 E (tile x 8 at zoom 3 on both desktop panes). A wrapping layer draws the
+Pacific there; `noWrap` would leave that strip of real ocean as a blank grey band.
+
+`tools/map_zoom_test.js` drives all three on the vendored Leaflet in jsdom, with `#map` given the three
+measured pane sizes: the home frame fits at 4, 4 and 3, eight zoom-outs and a request for zoom 0 both
+stop at 3, a view requested over Africa and a pan far west are held inside the box, the home view
+with the box matches a map without one to the pixel on every pane at the fitted zoom and at the floor,
+a build with a station at 20 N drops the box, the world at the floor is wider than each pane, and at
+zoom 3 every tile the view covers on each pane, past 180 E included, is one the basemap layer draws. `tools/interaction_test.js` pins the exact option set the
+map is built with on a fine pointer and on a coarse one.
 
 #### A coarse pointer reaches a dot within TAP_TOLERANCE px of its edge
 
@@ -5098,8 +5142,8 @@ A station dot is 1.8px in radius at the national view, and in a simulation of 2,
 (`AusMT_2026/mobile-audit/measurements.json`, `markers`). So on a coarse pointer
 (`matchMedia("(pointer:coarse)")`, read once at load into `COARSE_POINTER`) the map is built on
 `L.canvas({tolerance:8})`: Leaflet's canvas hit test then counts a tap as on a dot when it lands
-within the dot's radius, plus half its stroke, plus 8px (`tapReach`), which is 9.8px at the national
-view.
+within the dot's radius, plus half its stroke, plus 8px (`tapReach`), which is 10.05px at the national
+views (a 1.8px dot with a 0.5px edge).
 
 The dot's click handler on a coarse pointer is `onStationTap`. It projects every visible dot to
 container pixels and asks `tapCandidates` which of them the tap reaches, nearest first and then in
@@ -5143,7 +5187,7 @@ actually drawing knows which provider to name.
 ```text
 The basemap is config-driven. provider "pmtiles" serves OUR OWN files through the vendored
 protomaps-leaflet renderer, ending the portal's last runtime third party: the world file
-carries low zooms globally (zoomed out still shows the whole globe) and the region file
+carries the low zooms, from the zoom 3 floor up, and the region file
 carries full detail for Australia and its surrounds; the z7 crossover is where the region
 bbox has data the world file lacks. "carto" is the hosted fallback while the files roll out
 (or if the renderer failed to load); CARTO watermarks un-keyed raster requests, so the
@@ -5326,6 +5370,41 @@ at far-out zooms, where an invisible dot reads as "no coverage here" - a false c
 The ceiling stops close zooms growing discs that overlap into one blob and hide the site spacing, which
 at site zoom IS the information. Between them the ramp is 0.5px per zoom level.
 ```
+
+#### The dot edge at the national views
+
+At zoom 3 and 4 every dot keeps a 0.5px edge (`DOT_W_Z4`) in the `--dot-edge` colour, over the
+unchanged per-type fill. Without an edge, overlapping dots of the same type paint one continuous fill,
+and the dense surveys and grids read as coloured shapes rather than sites: at zoom 4, 93 percent of
+the 15,265 served stations have a neighbour closer than a dot's 3.6px diameter. The edge each later dot
+draws over the earlier ones is what keeps them apart.
+
+0.5px is the thinnest of the weights tried (0.5, 0.6 and 0.8), and with 0.6 it separates about twice
+as many sites as no edge does. Measured in
+headless Chrome against the full corpus build on a 120 x 90 CSS pixel window at zoom 4 between the
+Gawler and Curnamona grids (4,705 stations), counting the separate fill regions of each type colour in a
+4x capture:
+
+| Edge weight | Regions at device pixel ratio 1 | Regions at device pixel ratio 2 |
+| --- | --- | --- |
+| none | 282 | 293 |
+| 0.5 | 569 | 612 |
+| 0.6 | 542 | 627 |
+| 0.8 | 473 | 492 |
+| 1.0 | 467 | 486 |
+
+Past 0.6 the edge starts to eat the fill, and dense lines darken into the edge colour. `DOT_R_Z4` stays
+1.8px: the AusLAMP grid pitch (nearest neighbour across the collection's 1,354 stations) is a median
+5.48px at zoom 4 (10th percentile 4.47px), so a 1.8px dot with its edge (4.1px across) leaves a median
+gap of 1.38px, which a 2.0px dot would shrink to under 1px and close at the 10th percentile. At zoom 3
+the pitch is 2.74px and the grid dots overlap; the edge is what still marks each one.
+
+The cost is one stroke per dot on the zoom restyle. Timing `restyleForZoom()` plus the canvas renderer's
+synchronous redraw of all 15,265 dots at zoom 4, on a 1280 x 800 pane at device pixel ratio 2, median
+of 5 runs, three page loads each: with no edge 14.0, 15.4 and 15.1 ms; with the 0.5px edge 17.6, 18.9
+and 21.9 ms. The tap reach (`tapReach`) counts half the edge, so a coarse pointer reaches a national
+view dot from 10.05px. `tools/map_dots_test.js` pins the weight at zoom 3 and 4, the unchanged radius
+and that reach.
 
 #### PURE, and a function of ZOOM ALONE
 
