@@ -23,7 +23,8 @@ Each assertion states its failure criterion:
   * THE DRAWER IN THE SHEET - FAILS if the sheet stops hiding the filters while it hosts the drawer,
     or the drawer keeps its desktop slide and width inside the sheet.
   * THE TABLET CARD - FAILS if, from 761px to 900px, the sheet stops being a 420px card at the
-    bottom left with the map showing beside it.
+    bottom left with the map showing beside it, or stops taking its height per snap with its bottom
+    edge fixed on screen.
   * THE FOOTER'S CONTENTS - FAILS if the map page's footer stays on screen at 900px and narrower, or
     if the sheet stops ending with the About link, the MTCAT link and the AuScope line, the last two
     as the footer writes them.
@@ -279,13 +280,28 @@ def test_the_sheet_hosts_the_drawer_in_place_of_the_filters():
         f"index.html: a drawer plot must scale to the drawer: {svg!r}")
 
 
+def _card(text):
+    return _rules("".join(_blocks(text, f"@media (min-width:{CARD_FROM}px) and (max-width:{PHONE_BREAKPOINT}px)")))
+
+
 def test_from_761_to_900px_the_sheet_is_a_card_at_the_bottom_left():
     """FAILS if the tablet band loses its card: 420px wide, 16px in from the left and the bottom."""
-    text = _text(INDEX)
-    rules = _rules("".join(_blocks(text, f"@media (min-width:{CARD_FROM}px) and (max-width:{PHONE_BREAKPOINT}px)")))
-    card = _decls(rules.get(".sheet", []))
+    card = _decls(_card(_text(INDEX)).get(".sheet", []))
     for decl in ("left:16px", "right:auto", "bottom:16px", f"width:{CARD_WIDTH}", "border-radius:14px"):
         assert decl.replace(" ", "") in card, f"index.html: from {CARD_FROM}px the sheet must declare {decl}: {card!r}"
+
+
+def test_the_card_takes_its_height_per_snap_and_keeps_its_bottom_on_screen():
+    """FAILS if the tablet card goes back to being as tall as its full height and moved down by
+    translateY, which ran its bottom edge 804px (peek) and 412px (half) past a 1024px screen at 768px
+    wide, or if it keeps the phone sheet's off-screen spacer, which would fill a card that is only as
+    tall as what shows."""
+    rules = _card(_text(INDEX))
+    card = _decls(rules.get(".sheet", []))
+    for decl in ("height:var(--sheet-snap)", "transform:none", "transition:height"):
+        assert decl in card, f"index.html: from {CARD_FROM}px the card must declare {decl}: {card!r}"
+    assert "display:none" in _decls(rules.get(".sheet::after", [])), (
+        f"index.html: from {CARD_FROM}px the card carries no spacer below the screen's edge")
 
 
 def test_above_900px_the_sheet_takes_no_part_in_the_layout():

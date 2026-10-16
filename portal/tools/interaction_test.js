@@ -6505,6 +6505,29 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
       "sheet: beside the card the free map is right of it, got " + JSON.stringify(fa));
     const fp = pw.sheetFreeArea(375, 716, false, 358);
     ok(fp.left === 0 && fp.right === 375 && fp.bottom === 358, "sheet: on a phone the free map is above the sheet, got " + JSON.stringify(fp));
+    // The tablet card takes its height per snap, its bottom fixed 16px above the screen edge, so its
+    // full height is the screen less the header and the two 16px gaps whatever height the box shows
+    // now, and a drag sets the card's height where the phone sheet sets its offset.
+    state.card = true;
+    const boxNow = sheet.getBoundingClientRect;
+    sheet.getBoundingClientRect = () => ({ top: pw.innerHeight - 16 - 120, left: 16, right: 436, bottom: pw.innerHeight - 16, width: 420, height: 120 });
+    ok(pw.sheetCard() && pw.sheetSnapHeights().full === pw.innerHeight - 52 - 32,
+      "card: full is the screen less the header and two 16px gaps, not the box's current height, got " + pw.sheetSnapHeights().full);
+    const snapBefore = sheet.dataset.snap;
+    pw.sheetSnap("half");
+    ptr("pointerdown", 500); ptr("pointermove", 400);
+    ok(sheet.style.height === (Math.round(pw.innerHeight * 0.5) + 100) + "px" && !sheet.style.transform,
+      "card: a drag sets the card's height and no offset, got height=" + JSON.stringify(sheet.style.height) +
+      " transform=" + JSON.stringify(sheet.style.transform));
+    ptr("pointermove", 100); ptr("pointerup", 100); click(handle);
+    ok(sheet.dataset.snap === "full" && !sheet.style.height && !sheet.style.transform,
+      "card: the drop snaps to full and hands the height back to the stylesheet, got " + sheet.dataset.snap +
+      " height=" + JSON.stringify(sheet.style.height));
+    ptr("pointerdown", 100); ptr("pointermove", 400); ptr("pointercancel", 400);
+    ok(!sheet.style.height && !sheet.classList.contains("dragging"), "card: a cancelled drag leaves no inline height");
+    pw.sheetSnap(snapBefore);
+    sheet.getBoundingClientRect = boxNow;
+    state.card = false;
     // Leaving the phone layout with the drawer open puts everything back where the desktop has it.
     pw.openStation(a1.i);
     state.phone = false; fireChange();

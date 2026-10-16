@@ -724,8 +724,14 @@ interaction fixture: header 0 to 52, map 52 to 812, the sheet at half from 406 w
 zoomed the whole page out.
 
 **The tablet card.** From 761px to 900px the sheet is a card 420px wide, 16px in from the left and the
-bottom, with a 14px radius, so the map shows beside it; its full height is 32px less. At 800 x 1024 in
-the same pane the card measured 16 to 436 across, its visible half 496 to 1008. The legend moves to
+bottom, with a 14px radius, so the map shows beside it; its full height is 32px less. The card does not
+slide: its bottom stays 16px above the screen's edge and it takes the snap height as its own
+(`height:var(--sheet-snap)`, `transform:none`, the transition on height), so it carries no spacer
+(`.sheet::after{display:none}`) and clips its content to the radius. A card moved down by
+`translateY` like the phone sheet ran off the screen: at 768 x 1024 its bottom edge measured 1828 at
+peek and 1436 at half. Measured in the same pane at 768 x 1024 and at 800 x 1024, the card spans 16
+to 436 across with its bottom edge at 1008 and a 14px radius at every snap: peek 888 to 1008, half 496
+to 1008, full 68 to 1008. The legend moves to
 the bottom right at 900px and narrower, and on a phone it sits above the peek height. The map's
 attribution control keeps its top-right corner: the sheet is anchored to the bottom edge and rests
 at peek or half below it, and at full it covers the whole map, the credit with the dots
@@ -5665,8 +5671,13 @@ The sheet is `#sheet` in `index.html` (see the phone layout under `index.html`).
 attributes: `data-snap` (`peek`, `half` or `full`, read by the stylesheet) and `data-host` (`filters`
 or `drawer`). `sheetSnap(name)` sets the height and keeps the handle's `aria-expanded` (false only at
 peek) and its label ("Panel at half height. ...") in step. The handle's tap cycles half, full, peek,
-half; a pointer drag on it moves the sheet by an inline `translateY` with the transition off, and on
-release snaps to whichever of the three heights is nearest the visible height (`sheetNearestSnap`).
+half; a pointer drag on it moves the sheet by an inline `translateY` with the transition off (on the
+tablet card, `sheetCard()`, it sets the card's inline height instead, since the card's bottom stays put),
+and on release drops the inline value and snaps to whichever of the three heights is nearest the visible
+height (`sheetNearestSnap`). `sheetSnapHeights()` reads the full height from the phone sheet's own box,
+which is always its full height; the card's box is only as tall as its current snap, so for the card the
+full height is the screen less the header's bottom edge and the two 16px gaps. At 800 x 1024 a drag of
+200px up from half measured the card's top at 296 and its bottom still at 1008.
 A pointer that moves no more than 6px is a tap. The click a drag ends with is swallowed, so a drag is
 never also read as a tap, and the handle stays a button that a keyboard cycles with Enter or Space.
 

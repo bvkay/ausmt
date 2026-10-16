@@ -19,9 +19,10 @@ function sheetActive(){return sheetPhone()&&(typeof curView==="undefined"||curVi
 function sheetCard(){const m=_sheetMq(SHEET_CARD_QUERY);return !!(m&&m.matches);}
 function sheetSnapState(){return (_sheetEl&&_sheetEl.dataset.snap)||"half";}
 function sheetSnapHeights(){
-  const vh=window.innerHeight||0;
-  const box=_sheetEl&&_sheetEl.getBoundingClientRect?_sheetEl.getBoundingClientRect().height:0;
-  const full=box>0?box:vh-SHEET_HEADER_PX-(sheetCard()?2*SHEET_CARD_GAP_PX:0);
+  const vh=window.innerHeight||0,card=sheetCard();
+  const box=(!card&&_sheetEl&&_sheetEl.getBoundingClientRect)?_sheetEl.getBoundingClientRect().height:0;
+  const head=document.querySelector("header"),hb=head&&head.getBoundingClientRect?head.getBoundingClientRect().bottom:0;
+  const full=box>0?box:vh-(hb>0?hb:SHEET_HEADER_PX)-(card?2*SHEET_CARD_GAP_PX:0);
   return {peek:SHEET_PEEK_PX,half:Math.round(vh*0.5),full:Math.max(SHEET_PEEK_PX,full)};}
 function sheetNearestSnap(px,h){
   let best="half",d=Infinity;
@@ -99,15 +100,18 @@ if(_sheetEl&&_sheetHandle){
     if(Math.abs(e.clientY-d.y0)>SHEET_TAP_SLOP_PX)d.moved=true;
     if(!d.moved)return;
     _sheetEl.classList.add("dragging");
-    _sheetEl.style.transform="translateY("+(sheetSnapHeights().full-_sheetDragVisible(d,e.clientY))+"px)";});
+    const vis=_sheetDragVisible(d,e.clientY);
+    if(sheetCard())_sheetEl.style.height=vis+"px";
+    else _sheetEl.style.transform="translateY("+(sheetSnapHeights().full-vis)+"px)";});
+  const drop=()=>{_sheetDrag=null;_sheetEl.classList.remove("dragging");_sheetEl.style.transform="";_sheetEl.style.height="";};
   const end=e=>{
     const d=_sheetDrag;if(!d)return;
-    _sheetDrag=null;_sheetEl.classList.remove("dragging");_sheetEl.style.transform="";
+    drop();
     if(!d.moved&&Math.abs(e.clientY-d.y0)<=SHEET_TAP_SLOP_PX)return;
     _sheetSwallowClick=true;setTimeout(()=>{_sheetSwallowClick=false;},0);
     sheetSnap(sheetNearestSnap(_sheetDragVisible(d,e.clientY),sheetSnapHeights()));};
   _sheetHandle.addEventListener("pointerup",end);
-  _sheetHandle.addEventListener("pointercancel",()=>{_sheetDrag=null;_sheetEl.classList.remove("dragging");_sheetEl.style.transform="";});
+  _sheetHandle.addEventListener("pointercancel",drop);
   _sheetHandle.addEventListener("click",()=>{if(_sheetSwallowClick){_sheetSwallowClick=false;return;}sheetCycle();});
 }
 if(_sheetBack)_sheetBack.addEventListener("click",()=>{if(typeof closeDrawer==="function")closeDrawer();else sheetReleaseDrawer();});

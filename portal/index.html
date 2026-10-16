@@ -617,7 +617,9 @@
   }
   @media (max-width:760px){.maplegend{bottom:calc(130px + env(safe-area-inset-bottom,0px))}}
   @media (min-width:761px) and (max-width:900px){
-    .sheet{--sheet-full:calc(100dvh - 52px - 32px - env(safe-area-inset-top,0px));left:16px;right:auto;bottom:16px;width:420px;border:1px solid var(--line);border-radius:14px}
+    .sheet{--sheet-full:calc(100dvh - 52px - 32px - env(safe-area-inset-top,0px));left:16px;right:auto;bottom:16px;width:420px;
+      height:var(--sheet-snap);transform:none;transition:height .18s ease;overflow:hidden;border:1px solid var(--line);border-radius:14px}
+    .sheet::after{display:none}
   }
   @supports not (height:1dvh){
     @media (max-width:900px){body{height:100vh}.sheet{--sheet-full:calc(100vh - 52px - env(safe-area-inset-top,0px));--sheet-snap:50vh}}
