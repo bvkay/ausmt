@@ -700,6 +700,24 @@ before the floor (`AusMT_2026/mobile-audit/measurements.json`, `tap_targets_wxh`
   `#yearTo`) are 16px. iOS Safari zooms the page when a smaller input takes focus; they were 12.5px
   to 13px. The /surveys controls in `engine/extract/_pages.py` take the same 16px.
 
+**Reachability at 760px and narrower.** A stacked layout that locks the body's scroll, holds the
+panel to a fraction of the screen and leaves the footer over it hides Advanced search, the
+Collections filter and all four export buttons on a 375 x 812 phone
+(`AusMT_2026/mobile-audit/measurements.json`, `phone_375x812`). So the page itself scrolls: `html` and `body` give up their 100% height and the
+body its `overflow:hidden`, the map (`.content`) is `min(55svh, 480px)` tall with a `55vh` fallback
+for browsers without `svh`, the panel has no `max-height`, and the footer is static at the end of
+the page. Measured in headless Chrome at 375 x 812 with Select and download open: header 0 to 52,
+map 52 to 499, panel 499 to 1538, footer 1538 to 1637, and the export buttons at 1350 to 1422,
+where a hit test after scrolling returns the Station CSV button itself; the document is 375px wide.
+At 744 x 1133 the map stops at its 480px cap.
+
+**The drawer on a phone.** At 760px and narrower the drawer is `position:fixed; inset:0`, so a
+station's details take the whole screen instead of the map's box, padded clear of the top and bottom
+safe-area insets, with the drag handle hidden. Its plots are `max-width:100%; height:auto`, so the
+372px design width scales down to the drawer; the viewBox keeps the drawing's proportions. Because
+the closed drawer is fixed rather than absolute, it does not widen the document: 375px, where an
+absolute closed drawer made it 758px (`horizontal` in the measurements file).
+
 **About on a phone.** The phone row hides the header's About control, so the map page's panel
 ends with an About link (`.panelabout`, before the rail's collapse control), hidden above 900px where
 the header still carries About and shown at 900px and narrower as a 44px target.

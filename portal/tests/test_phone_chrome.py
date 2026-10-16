@@ -16,8 +16,13 @@ Each assertion states its failure criterion:
     lets a floor apply to it.
   * INPUTS - FAILS if a text input or select on the map page or the /surveys controls is under 16px
     on a coarse pointer, the size below which iOS Safari zooms the page on focus.
+  * REACHABILITY - FAILS if, at 760px and narrower, the body locks its own scroll, the panel is held
+    to a fraction of the screen, the map takes anything but its capped height, the footer stays
+    pinned over the panel, or the drawer keeps the map's box instead of the screen.
+  * PLOTS - FAILS if a drawer plot can be wider than the drawer at a phone width.
   * ABOUT - FAILS if the map page's panel stops ending with an About link while the header hides
     About at a phone width.
+  * DESKTOP - FAILS if any of these overrides leaks out of its query into the base rules.
 """
 import re
 from pathlib import Path
@@ -35,6 +40,7 @@ PAGES = ("404.html", "about.html", "add-survey.html", "brand.html", "index.html"
 COARSE_TARGETS = (".typegrid label", ".collgroup .coll", ".seg button", ".leaflet-touch .leaflet-bar a",
                   ".maplegend-toggle", ".maplegend .legtype", ".dhead .close", ".plotexp", "footer a")
 COARSE_INPUTS = ("#find", "#availSel", "#surveySearch", "#yearFrom", "#yearTo", "#sortSel")
+INTERIM_BELOW = 760
 
 
 def _text(path):
@@ -149,6 +155,42 @@ def test_coarse_pointer_inputs_are_16px_on_the_map_page_and_the_surveys_page():
             f"engine/extract/_pages.py: {sel} must be 16px under a coarse pointer")
 
 
+def _interim(text):
+    return _rules("".join(_blocks(text, f"@media (max-width:{INTERIM_BELOW}px)")))
+
+
+def test_below_760px_the_page_scrolls_and_every_panel_control_is_reachable():
+    """FAILS if the body keeps overflow:hidden or its 100% height at a phone width, if the panel keeps a
+    max-height, if the map is not min(55svh, 480px) tall, or if the footer stays sticky over the panel:
+    each of these is one of the four lines that hid Advanced search, Collections and the exports."""
+    rules = _interim(_text(INDEX))
+    body = _decls(rules.get("body", []))
+    assert "overflow:visible" in body and "overflow:hidden" not in body, (
+        f"index.html: below {INTERIM_BELOW}px the body must scroll: {body!r}")
+    assert "height:auto" in _decls(rules.get("html", [])) and "height:auto" in body, (
+        "index.html: below 760px html and body give up their 100% height so the document can grow")
+    panel = _decls(rules.get("aside.filters", []))
+    assert "max-height:none" in panel and "42vh" not in panel, (
+        f"index.html: below {INTERIM_BELOW}px the panel has no max-height: {panel!r}")
+    content = _decls(rules.get(".content", []))
+    assert "height:min(55svh,480px)" in content and "48vh" not in content, (
+        f"index.html: below {INTERIM_BELOW}px the map is min(55svh, 480px) tall: {content!r}")
+    assert "position:static" in _decls(rules.get("footer", [])), (
+        "index.html: below 760px the footer sits at the end of the page")
+
+
+def test_below_760px_the_drawer_takes_the_screen_and_its_plots_fit():
+    """FAILS if the drawer keeps the map's box below 760px, if it stops clearing the safe areas, or if a
+    plot keeps its 372px design width inside a narrower drawer."""
+    rules = _interim(_text(INDEX))
+    drawer = _decls(rules.get("#drawer", []))
+    for decl in ("position:fixed", "inset:0", "env(safe-area-inset-top", "env(safe-area-inset-bottom"):
+        assert decl in drawer, f"index.html: below 760px the drawer must declare {decl}: {drawer!r}"
+    svg = _decls(rules.get("#drawer svg", []))
+    assert "max-width:100%" in svg and "height:auto" in svg, (
+        f"index.html: a drawer plot must scale to the drawer: {svg!r}")
+
+
 def test_the_panel_ends_with_an_about_link_shown_only_where_the_header_hides_about():
     """FAILS if the panel's About link goes, is not the panel's last content before the collapse
     control, or shows at desktop widths where the header still carries About."""
@@ -163,3 +205,15 @@ def test_the_panel_ends_with_an_about_link_shown_only_where_the_header_hides_abo
     assert "display:inline-flex" in _decls(shown.get(".panelabout", [])), (
         "index.html: at 900px and narrower the panel's About link is shown")
     assert f"min-height:{TAP_TARGET}px" in _decls(shown.get(".panelabout", []))
+
+
+def test_no_phone_override_leaks_into_the_desktop_rules():
+    """FAILS if any override above is written into a base rule, which would change the desktop
+    layout this work must leave as it is."""
+    base = _rules(_outside_queries(_text(INDEX)))
+    for sel in ("body", "aside.filters", ".content", "#drawer"):
+        decls = _decls(base.get(sel, []))
+        for leak in ("overflow:visible", "max-height:none", "55svh", "position:fixed", "env(safe-area"):
+            assert leak not in decls, f"index.html: {sel} carries the phone override {leak!r} at every width"
+    assert "#drawer svg" not in base, "index.html: the drawer plot rule belongs to the phone query"
+    assert "pointer:coarse" not in _outside_queries(_text(INDEX)), "no coarse rule may sit outside a query"

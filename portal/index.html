@@ -394,7 +394,11 @@
   .snackbar .snack-note{display:block;color:var(--muted);font-size:12px;margin-top:3px}
   .snackbar .snack-act{flex:none;background:var(--accent);color:var(--accent-ink);border:0;border-radius:4px;
     padding:6px 10px;font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer}
-  @media (max-width:760px){main{flex-direction:column}aside.filters{width:100%!important;order:2;max-height:42vh}.resizer{display:none}.content{order:1;min-height:48vh}#drawer{width:100%}}
+  @media (max-width:760px){html,body{height:auto}body{overflow:visible;min-height:100vh}main{flex-direction:column;flex:none}
+    aside.filters{width:100%!important;order:2;max-height:none}.resizer{display:none}
+    .content{order:1;flex:none;height:min(55vh,480px);height:min(55svh,480px)}footer{position:static}
+    #drawer{position:fixed;inset:0;width:auto!important;max-width:none;padding:calc(16px + env(safe-area-inset-top,0px)) 18px calc(16px + env(safe-area-inset-bottom,0px))}
+    #drawer svg{max-width:100%;height:auto}#drawerResizer{display:none!important}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
 .emptyoverlay{position:absolute;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;
@@ -578,6 +582,8 @@
     .leaflet-touch .leaflet-draw-actions a{min-height:44px;line-height:44px}
     footer a{display:inline-flex;align-items:center}
     #find,#availSel,#surveySearch,#sortSel,#yearFrom,#yearTo{font-size:16px}
+    #toast{bottom:calc(18px + env(safe-area-inset-bottom,0px))}
+    .snackbar{bottom:calc(74px + env(safe-area-inset-bottom,0px))}
   }
 </style>
 </head>
