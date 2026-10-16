@@ -4741,6 +4741,13 @@ does not build thousands of rows. An empty list draws nothing (`.selbox .sellist
 900px it is neither drawn nor filled. The counts line in the peek row is the desktop's own line
 (`updateCounts`), so it states the selection there as it does in the desktop footer.
 
+Measured in headless Chrome (a fine pointer) on the five-station interaction fixture with the sheet
+at full and a view selection of four stations: at 375 x 812, "Select what's in view" 239 x 44 with
+"4 in view" beside it, Clear selection 317 x 44, each list row 317 x 45 with its remove control
+44 x 44, the list ending above the Download block, the draw buttons not drawn (0 x 0) and the
+document 375px wide; at 800 x 1024, in the tablet card, the same control 282 x 44, rows 360 x 45
+and remove controls 44 x 44.
+
 **The exports.** A view selection, a tapped selection and a drawn one are the same `selected` set, so
 every selection export reads it through `scopeSel()` unchanged: the station CSV, the GeoJSON, the
 citation pack, the pointers and the three file exports, whose file requests each carry the
