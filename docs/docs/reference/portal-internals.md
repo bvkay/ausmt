@@ -727,6 +727,11 @@ as wide as its longest option pushed the page sideways (the Organisation select 
 591px-wide option: the document is 375px wide at 375px and 320px at 320px, against 591px without
 the rule; from 761px nothing changes.
 
+**No draw toolbar on a phone.** At 900px and narrower the Leaflet draw toolbar
+(`.leaflet-draw.leaflet-control`) is not drawn: drawing a polygon with one finger is the selection
+model the phone layout replaces with "select what is in view". The Select and download panel keeps
+its Select all filtered control and its own draw buttons, which arm the same handlers.
+
 **About on a phone.** The phone row hides the header's About control, so the map page's panel
 ends with an About link (`.panelabout`, before the rail's collapse control), hidden above 900px where
 the header still carries About and shown at 900px and narrower as a 44px target.

@@ -23,6 +23,7 @@ Each assertion states its failure criterion:
   * ABOUT - FAILS if the map page's panel stops ending with an About link while the header hides
     About at a phone width.
   * SURVEYS - FAILS if a /surveys control label or select can push the page sideways at a phone width.
+  * DRAW TOOLBAR - FAILS if the Leaflet draw toolbar is drawn at 900px and narrower.
   * DESKTOP - FAILS if any of these overrides leaks out of its query into the base rules.
 """
 import re
@@ -206,6 +207,13 @@ def test_the_panel_ends_with_an_about_link_shown_only_where_the_header_hides_abo
     assert "display:inline-flex" in _decls(shown.get(".panelabout", [])), (
         "index.html: at 900px and narrower the panel's About link is shown")
     assert f"min-height:{TAP_TARGET}px" in _decls(shown.get(".panelabout", []))
+
+
+def test_the_draw_toolbar_is_hidden_at_phone_widths():
+    """FAILS if the Leaflet draw toolbar is not hidden at 900px and narrower."""
+    shown = _rules("".join(_blocks(_text(INDEX), f"@media (max-width:{PHONE_BREAKPOINT}px)")))
+    assert "display:none" in _decls(shown.get(".leaflet-draw.leaflet-control", [])), (
+        "index.html: the draw toolbar is hidden at 900px and narrower")
 
 
 def test_the_surveys_controls_cannot_push_the_page_sideways():
