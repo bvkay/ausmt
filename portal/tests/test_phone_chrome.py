@@ -25,7 +25,9 @@ Each assertion states its failure criterion:
   * THE TABLET CARD - FAILS if, from 761px to 900px, the sheet stops being a 420px card at the
     bottom left with the map showing beside it, or stops taking its height per snap with its bottom
     edge fixed on screen.
-  * THE FOOTER'S CONTENTS - FAILS if the map page's footer stays on screen at 900px and narrower, or
+  * THE FOOTER'S CONTENTS - FAILS if the map page's footer stays on screen at 900px and narrower while
+    the map is the active view (and off it on the Surveys and Collections views, where it carries the
+    phone's About link and the sheet is not drawn), or
     if the sheet stops ending with the About link, the MTCAT link and the AuScope line, the last two
     as the footer writes them.
   * PLOTS - FAILS if a drawer plot can be wider than the drawer at a phone width.
@@ -228,8 +230,12 @@ def test_the_sheet_ends_with_the_footers_contents_and_about():
         decls = _decls(phone.get(sel, []))
         assert f"min-height:{TAP_TARGET}px" in decls and "display:inline-flex" in decls, (
             f"index.html: {sel} is a {TAP_TARGET}px target: {decls!r}")
-    assert "display:none" in _decls(phone.get("footer", [])), (
-        "index.html: at 900px and narrower the map page's footer leaves the viewport")
+    assert "display:none" in _decls(phone.get("body:has(#navMap.active) footer", [])), (
+        "index.html: at 900px and narrower the map page's footer leaves the viewport on the map view")
+    assert "display:none" not in _decls(phone.get("footer", [])), (
+        "index.html: off the map view the footer stays, the phone's route to About there")
+    assert "display:inline-flex" in _decls(phone.get("footer a.fabout", [])), (
+        "index.html: the footer's About link keeps the coarse-pointer 44px floor that .fabout's inline display drops")
 
 
 def test_below_900px_the_map_fills_the_screen_and_the_sheet_slides_over_it():

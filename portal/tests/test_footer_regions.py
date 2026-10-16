@@ -46,12 +46,13 @@ Each assertion states its failure criterion:
   * GEOMETRY - FAILS if any surface stops being a wrapping flex row or a query container, if a side
     zone stops taking the equal zero basis, if the centre stops being content-sized or centred, if
     either state below one row goes, or if a 375px viewport collides instead of stacking.
-  * THE ABOUT LINK AT PHONE WIDTHS - FAILS if a surface whose header carries About (the map page
-    aside) stops ending its footer's left zone with an About link to the same address, drawn only at
-    900px and narrower where the phone header hides the header's, or if a surface without one grows it.
+  * THE ABOUT LINK AT PHONE WIDTHS - FAILS if a surface whose header carries About stops ending its
+    footer's left zone with an About link to the same address, drawn only at 900px and narrower where
+    the phone header hides the header's, or if a surface without one grows it.
   * THE MAP PAGE'S PHONE FORM - FAILS if, at 900px and narrower, index.html's footer stays on
-    screen, or its contents stop riding the bottom sheet as the footer writes them. Every other
-    surface, and the map page above 900px, keeps the constant footer.
+    screen while the map is the active view, or its contents stop riding the bottom sheet as the footer
+    writes them. Every other surface, the map page's Surveys and Collections views, and the map page
+    above 900px keep the constant footer.
   * ONE FOOTER RULE SET, ON ALL SEVEN SURFACES - FAILS if any surface's footer rule set drifts from
     portal/index.html's by a character, or reaches for a literal colour instead of a token.
   * THE RETIRED CONTENT STAYS RETIRED - FAILS if Releases, About this build, the disclosure popover,
@@ -355,7 +356,7 @@ def _header_about(where):
 
 def _footer_about_href(where):
     """The address the footer's About link must carry, or None where the footer carries none."""
-    return None if where == "index.html" else _header_about(where)
+    return _header_about(where)
 
 
 def _left_without_about(where, left):
@@ -760,7 +761,7 @@ def test_every_surface_returns_the_footer_to_flow_below_the_measured_width():
 
 
 _PHONE_QUERY = "@media (max-width:900px){"
-_PHONE_FOOTER = "footer{display:none}"
+_PHONE_FOOTER = "body:has(#navMap.active) footer{display:none}"
 
 
 def _phone_block(text):
@@ -781,16 +782,18 @@ def _phone_block(text):
 
 def test_the_map_pages_phone_footer_leaves_the_viewport_and_its_contents_ride_the_sheet():
     """THE PHONE FORM OF THE MAP PAGE'S FOOTER. FAILS if index.html's footer stays on screen at 900px
-    and narrower, if the sheet stops carrying the footer's left link and centre line as the footer
+    and narrower while the map is the active view, or leaves it on the Surveys and Collections views,
+    whose only route to About it is (the sheet is not drawn there), if the sheet stops carrying the footer's left link and centre line as the footer
     writes them, if main.js stops moving the live counts into the sheet's peek row, or if any other
     surface takes the phone form."""
     text = _index_text()
-    assert _PHONE_FOOTER in "".join(_phone_block(text).split()), (
+    assert "".join(_PHONE_FOOTER.split()) in "".join(_phone_block(text).split()), (
         f"index.html: at 900px and narrower the footer must declare {_PHONE_FOOTER!r}")
     regions = _regions("index.html", _foot("index.html"))
     sheet = re.search(r'<div class="sheetfoot" id="sheetFoot">(.*?)</div><!-- /#sheetFoot -->', text, re.S)
     assert sheet, "index.html: the sheet ends with the footer's contents in #sheetFoot"
     body = flat(sheet.group(1))
+    regions["left"] = _left_without_about("index.html", regions["left"])
     for region in ("left", "centre"):
         assert flat(regions[region]) in body, (
             f"index.html: the sheet carries the footer's {region} region as the footer writes it: "
@@ -802,17 +805,17 @@ def test_the_map_pages_phone_footer_leaves_the_viewport_and_its_contents_ride_th
     for where in SURFACES:
         if where == "index.html":
             continue
-        assert _PHONE_FOOTER not in "".join(_phone_block(_text(where)).split()), (
+        assert "".join(_PHONE_FOOTER.split()) not in "".join(_phone_block(_text(where)).split()), (
             f"{where}: the constant footer holds on every surface but the map page")
 
 
 def test_the_footers_owing_about_are_the_static_surfaces_whose_header_carries_it():
     """FAILS if the set of footers carrying About drifts from the surfaces whose header carries it,
-    the map page aside: four today, the three portal pages with the header link and every page the
-    engine emits. The About page marks its own header link active and is where the link would go, so
+    five today: the map page, the three portal pages with the header link and every page the engine
+    emits. The About page marks its own header link active and is where the link would go, so
     it owes none. Non-vacuous: a header that drops About, or a page that gains it, moves this set."""
     owing = sorted(w for w in SURFACES if _footer_about_href(w))
-    assert owing == sorted(("add-survey.html", "brand.html", "releases.html", ENGINE)), owing
+    assert owing == sorted(("add-survey.html", "brand.html", "index.html", "releases.html", ENGINE)), owing
 
 
 @pytest.mark.parametrize("where", SURFACES)
@@ -820,7 +823,8 @@ def test_a_footer_carries_about_at_phone_widths_where_the_header_hides_it(where)
     """THE ABOUT LINK AT PHONE WIDTHS. The phone header hides About at 900px and narrower, so the
     footer on every surface whose header carries it ends its left zone with an About link to the same
     address: hidden by a base rule, drawn by a rule inside the phone query, and holding no target. The
-    map page's footer leaves the screen at those widths and its sheet carries About instead.
+    map page's footer leaves the screen at those widths while the map is the active view, and its sheet
+    carries About there; on the Surveys and Collections views its footer shows and this link is the route.
 
     FAILS if a footer owing the link drops it, retargets it or opens it in a new tab, if either rule
     drifts, goes missing, is declared twice or sits on a surface without the link, or if the base

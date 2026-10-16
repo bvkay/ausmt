@@ -658,10 +658,12 @@ def test_every_chrome_surface_carries_the_one_phone_header_after_its_base_rules(
 
 def test_the_phone_header_hides_about_the_tagline_and_only_the_map_pages_own_map_tab():
     """What the phone row carries. FAILS IF the block stops hiding the tagline zone or the About
-    control, if it hides the Map tab in any form but the map page's button (the static pages keep
-    Map, Surveys and Collections), or if a tab's floor drops below 44px either way."""
+    control, if it hides the Map tab in any form but the map page's button while that button is the
+    active view (the static pages keep Map, Surveys and Collections, and so do the SPA's Surveys and
+    Collections views, where the tab is the only way back to the map), or if a tab's floor drops below
+    44px either way."""
     hidden = re.search(r"([^{}]*)\{display:none\}", PHONE_HEADER).group(1).split(",")
-    assert hidden == [".hright", ".hcenter .about", ":root header nav button#navMap"], hidden
+    assert hidden == [".hright", ".hcenter .about", ":root header nav button#navMap.active"], hidden
     tab = re.search(r":root header nav a,:root header nav button\{([^}]*)\}", PHONE_HEADER).group(1)
     assert "min-width:44px" in tab and "min-height:44px" in tab, tab
     assert ":root header{flex-wrap:nowrap;" in PHONE_HEADER and "header nav{flex-wrap:nowrap;" in PHONE_HEADER

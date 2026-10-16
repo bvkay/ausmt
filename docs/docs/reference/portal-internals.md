@@ -52,8 +52,12 @@ with one phone row: one rule block, `PHONE_HEADER` in `portal/tests/chrome_contr
 verbatim by all six and placed after the base rules it overrides. The row is 52px tall plus the top
 safe-area inset, with the AuScope mark and AusMT's name at left and the tabs at right as 44px
 targets; the tagline zone and the About control are hidden. The map page's Map tab is a button,
-and the block hides that button only, because this page is the map; the static pages keep Map,
-Surveys and Collections. Its header, nav and tab selectors carry a `:root` prefix so that they tie
+and the block hides that button only while it carries `.active`, which `setView` in `main.js` gives it
+on the map view and takes from it on the Surveys and Collections views (and `openCollectionPage` on a
+collection's page). Off the map the tab is the phone's way back to it: at 375 x 812 on `#/surveys` and
+`#/collections` it measured 44 x 44 at 165 to 209 across, hit-tested to itself, and a tap returned to
+the map view, where it is hidden again. Before, those views had no Map control on a phone. The static
+pages keep Map, Surveys and Collections. Its header, nav and tab selectors carry a `:root` prefix so that they tie
 on specificity with the pages sheet's `header.site` rules and source order decides. At 360px and
 narrower the three static-page tabs do not fit beside the name, so the nav scrolls sideways inside
 itself rather than pushing the page wider. Measured in headless Chrome: 52px tall at every width
@@ -754,15 +758,22 @@ filters: `.sheet[data-host="drawer"]` hides the peek row and the panel and shows
 are `max-width:100%; height:auto`, so the 372px design width scales to the sheet. The welcome and
 fetch dialogs are fixed above the sheet.
 
-**The footer's contents.** On the phone layout the map page's footer leaves the screen
-(`footer{display:none}`) and its contents ride the sheet: the panel ends with `#sheetFoot`, holding an
-About link, the MTCAT link and the AuScope line exactly as the footer writes them, each link a 44px
-target. The header hides About at these widths, so this link is the phone's route to About.
-`tests/test_footer_regions.py` pins the phone form; every other surface keeps the constant footer.
+**The footer's contents.** On the phone layout the map page's footer leaves the screen while the
+map is the active view (`body:has(#navMap.active) footer{display:none}`) and its contents ride the
+sheet: the panel ends with `#sheetFoot`, holding an About link, the MTCAT link and the AuScope line
+exactly as the footer writes them, each link a 44px target. The header hides About at these widths,
+so on the map view this link is the phone's route to About. The sheet is not drawn on the Surveys and
+Collections views (`.sheet:has(> #filterPane.hidden)`), so there the footer stays, and its own About
+link (`<a class="fabout">`, below) is the route to About; `footer a.fabout{display:inline-flex}` keeps
+the coarse-pointer 44px floor that `.fabout`'s inline display would drop. At 375 x 812 on `#/surveys`
+and `#/collections` the footer measured 682 to 812, its About link 44 x 44 at 126 across and 690 down,
+hit-testing to itself, and the document stayed 375px wide; before, neither the footer nor the sheet
+was drawn there and no About link could be reached. `tests/test_footer_regions.py` pins the phone
+form; every other surface keeps the constant footer.
 
 **About in the static footers.** The phone header hides About on every surface, so each footer
-whose page carries About in its header (`add-survey.html`, `brand.html`, `releases.html` and every
-page `engine/extract/_pages.py` emits) ends its left zone with `<a class="fabout">` to the header
+whose page carries About in its header (`add-survey.html`, `brand.html`, `releases.html`, every
+page `engine/extract/_pages.py` emits and, for its Surveys and Collections views, `index.html`) ends its left zone with `<a class="fabout">` to the header
 link's own address. `.fabout{display:none}` hides it above 900px, and inside `@media
 (max-width:900px)` it is drawn inline, 18px after the MTCAT link (the footer's own column gap). The
 About page marks its header link active and is the page the link would open, so its footer carries

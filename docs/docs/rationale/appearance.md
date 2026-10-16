@@ -72,11 +72,13 @@ reached from About, where a contributor reads what a submission involves before 
 
 On a window 900px wide or narrower, the header is one row, 52px tall: the AuScope mark and AusMT's
 name at the left, and the section tabs at the right, each at least 44px square so a thumb can hit it
-(Owner decision 2026-10-14). The tagline is hidden. On the map page the tabs are Surveys and
-Collections, with no Map tab, because the page is the map; the Surveys, Collections, About and other
-static pages show Map, Surveys and Collections in the same row. About leaves the header at these
-widths and becomes a link at the end of the map page's sheet, and on the other pages a link beside
-the catalogue link at the left of the footer. The row is the same on every page, as
+(Owner decision 2026-10-14). The tagline is hidden. While the map page shows the map the tabs are
+Surveys and Collections, with no Map tab, because the screen is the map; when it shows its own lists
+of surveys or collections the Map tab comes back, as the way back to the map. The Surveys,
+Collections, About and other static pages show Map, Surveys and Collections in the same row. About
+leaves the header at these widths and becomes a link at the end of the map page's sheet, and on the
+other pages, and on the map page's lists, a link beside the catalogue link at the left of the
+footer. The row is the same on every page, as
 the desktop header is.
 
 900px is the line between the two layouts (Owner decision 2026-10-16). Above it the side-by-side map

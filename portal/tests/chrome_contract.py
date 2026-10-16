@@ -93,7 +93,9 @@ MAP_LOCKUP = f'<img class="maplock" src="{LOCKUP_LIGHT}" alt="AuScope and NCRIS"
 
 # THE PHONE HEADER, one rule block on every surface that wears the chrome. At 900px and narrower the
 # header is one 52px row: the mark and the name at left, the tabs at right as 44px targets, the tagline
-# and About hidden, and the map page's own Map tab hidden because that page is the map. The :root
+# and About hidden, and the map page's own Map tab hidden while it is the active view, because the map is
+# then what the screen shows; the SPA's Surveys and Collections views clear .active from it and the tab
+# returns, which is the phone's way back to the map. The :root
 # prefix gives the header, nav and tab selectors the specificity of the pages sheet's header.site
 # rules, so source order alone decides and this block must follow the base rules it overrides.
 PHONE_BREAKPOINT = 900
@@ -104,15 +106,16 @@ PHONE_HEADER = ("@media (max-width:900px){"
                 "padding:env(safe-area-inset-top,0px) 8px 0 16px}"
                 ".hleft{flex:0 0 auto}"
                 ".hcenter{flex:1 1 auto;justify-content:flex-end;flex-wrap:nowrap}"
-                ".hright,.hcenter .about,:root header nav button#navMap{display:none}"
+                ".hright,.hcenter .about,:root header nav button#navMap.active{display:none}"
                 ":root header nav{flex-wrap:nowrap;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}"
                 ":root header nav a,:root header nav button{flex:0 0 auto;min-width:44px;min-height:44px;"
                 "padding:0 8px;font-size:12px}}")
 
 # THE FOOTER'S ABOUT LINK. PHONE_HEADER hides the header's About at 900px and narrower, so every footer
 # on a surface whose header carries About ends its left zone with an About link to the same address,
-# drawn only at those widths. The map page is the exception: its footer leaves the screen there and
-# the sheet carries its About link.
+# drawn only at those widths. On the map page the footer leaves the screen there while the map is the
+# active view, and the sheet carries the About link; on its Surveys and Collections views the footer, and
+# with it this link, is the phone's route to About.
 FOOTER_ABOUT_RULES = (".fabout{display:none}",
                       "@media (max-width:900px){.fabout{display:inline;margin-left:18px}}")
 
