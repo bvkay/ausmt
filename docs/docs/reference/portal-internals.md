@@ -731,7 +731,18 @@ slide: its bottom stays 16px above the screen's edge and it takes the snap heigh
 `translateY` like the phone sheet ran off the screen: at 768 x 1024 its bottom edge measured 1828 at
 peek and 1436 at half. Measured in the same pane at 768 x 1024 and at 800 x 1024, the card spans 16
 to 436 across with its bottom edge at 1008 and a 14px radius at every snap: peek 888 to 1008, half 496
-to 1008, full 68 to 1008. The legend moves to
+to 1008, full 68 to 1008.
+
+At full the card covered Leaflet's zoom control in the map's top-left corner: at 768 x 1024 the zoom
+buttons measured 12 to 42 across and 64 to 124 down, and `elementFromPoint` at their centres returned the
+card's handle. In the card band `sheet.js` therefore moves the zoom control to the top-right corner
+(`sheetPlaceZoom`, through Leaflet's own `setPosition`), where Leaflet stacks it under the attribution
+glyph, and moves it back on leaving the band; the draw toolbar, the corner's other control, is not drawn
+at these widths. Measured at 768 x 1024 the glyph sits at 738 to 758 across and 62 to 82 down and the
+zoom buttons at 726 to 756 across and 94 to 154 down (800 x 1024: 758 to 788), and `elementFromPoint` at
+each button's centre returns that button at peek, half and full. The credit opened pushes the zoom
+control down rather than covering it (credit 62 to 102, zoom from 112). On a phone and above 900px the
+control stays top left. The legend moves to
 the bottom right at 900px and narrower, and on a phone it sits above the peek height. The map's
 attribution control keeps its top-right corner: the sheet is anchored to the bottom edge and rests
 at peek or half below it, and at full it covers the whole map, the credit with the dots
@@ -5663,7 +5674,8 @@ arrive here raw (a related identifier of type URL), so this branch is an allowli
 The phone layout's bottom sheet. It is loaded before `drawer.js`, as a file under `script-src 'self'`
 (no inline script and no handler in the markup), and every change it makes to the page is gated on one
 query, `matchMedia("(max-width:900px)")` (`sheetPhone()`). Above 900px no function here moves an
-element, sets an attribute or calls the map, so the desktop page is the one it was.
+element, sets an attribute or calls the map, so the desktop page is the one it was; the one call it
+makes there is to return a zoom control it moved in the card band to the top-left corner.
 
 #### The host and the snaps
 
@@ -5705,7 +5717,10 @@ it out and from the current snap height before then.
 `sheetSync()` brings the page into line with the current width and runs at boot (`main.js runInit`)
 and on every change of the query: on the phone layout it opens a rail the reader collapsed on a
 desktop (without storing the choice, and closes it again above 900px) and hosts an open drawer; above
-900px it returns the drawer and the host. Both ends call `placeCounts()` in `main.js`.
+900px it returns the drawer and the host. Both ends call `placeCounts()` in `main.js`. It also runs on
+every change of the card query, `matchMedia("(min-width:761px)")` (`sheetCard()`), and places the map's
+zoom control (`sheetPlaceZoom`): top right in the card band, top left everywhere else, calling Leaflet
+only when the position changes and relabelling the rebuilt buttons (`labelToolbar` in `map.js`).
 
 #### No script
 

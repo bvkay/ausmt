@@ -15,7 +15,8 @@ The driver FAILS (and so does this test) if:
 - at a phone media query the bottom sheet does not cycle, drag-snap, host the drawer at half, hand the
   filters back at their previous height on Back and Escape, carry the counts in its peek row, or
   degrade to its half default without src/sheet.js; or, on the tablet card, a drag moves the card by an
-  offset rather than its height, or the full height is read from the card's current box; or, at desktop
+  offset rather than its height, or the full height is read from the card's current box, or the zoom
+  control stays under the card in the top-left corner of the card band, or moves anywhere else; or, at desktop
   width, the sheet touches anything;
 - on a coarse pointer at a phone media query, the multi-station chooser reaches under the sheet.
 

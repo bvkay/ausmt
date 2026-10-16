@@ -6388,6 +6388,7 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     const answer = (q) => /max-width\s*:\s*900px/.test(q) ? state.phone
       : /min-width\s*:\s*761px/.test(q) ? (state.phone && state.card) : false;
     const pans = [];
+    const zoomMoves = [];
     const proj = Object.create(null);
     const sheetBoot = (extra) => bootFreshWindow(DATAMAP, undefined, w => {
       w.matchMedia = (q) => {
@@ -6403,6 +6404,8 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
       pm.getSize = () => ({ x: 375, y: 716 });
       pm.panBy = (off) => { pans.push(off); return pm.__self; };
       pm.getContainer = () => w.document.getElementById("map");
+      pm.zoomControl = { pos: "topleft", getPosition() { return this.pos; },
+        setPosition(p) { zoomMoves.push(p); this.pos = p; return this; } };
       ["on", "addLayer", "fitBounds", "setView", "invalidateSize", "addControl"].forEach(fn => { pm[fn] = () => pm.__self; });
       const base = w.L;
       w.L = new Proxy(function () { }, {
@@ -6527,7 +6530,17 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ok(!sheet.style.height && !sheet.classList.contains("dragging"), "card: a cancelled drag leaves no inline height");
     pw.sheetSnap(snapBefore);
     sheet.getBoundingClientRect = boxNow;
-    state.card = false;
+    // The card covers the map's top-left corner at full, so in the card band the zoom control stacks
+    // under the credit in the top-right corner, and goes back on leaving the band.
+    ok(zoomMoves.length === 0, "card: on a phone the zoom control stays top left, got moves " + JSON.stringify(zoomMoves));
+    fireChange();
+    ok(zoomMoves.join() === "topright", "card: entering the card band moves the zoom control top right, got " + JSON.stringify(zoomMoves));
+    fireChange();
+    ok(zoomMoves.join() === "topright", "card: a second change in the band moves nothing, got " + JSON.stringify(zoomMoves));
+    state.card = false; fireChange();
+    ok(zoomMoves.join() === "topright,topleft", "card: leaving the card band puts the zoom control back top left, got " + JSON.stringify(zoomMoves));
+    state.phone = false; fireChange(); state.phone = true; fireChange();
+    ok(zoomMoves.length === 2, "card: above 900px and on a phone the zoom control is not moved, got " + JSON.stringify(zoomMoves));
     // Leaving the phone layout with the drawer open puts everything back where the desktop has it.
     pw.openStation(a1.i);
     state.phone = false; fireChange();
