@@ -5085,11 +5085,53 @@ that didn't reliably frame the continent on typical viewport sizes). Bounds: [[s
 chosen to cover the AU mainland + Tasmania with a small margin.
 buildMarkers() must NOT re-fit to the tight station-marker extent once data loads: no station sits
 north of ~-22.5 lat, so that fit drops the view SOUTH (centre ~-33.6) and clips northern Australia.
-The home view is ALWAYS this fixed box (below): every station (lon 115.85..148.17,
-lat -43.44..-22.48) falls inside it, so it shows all dots AND frames the whole continent. Defined ONCE
+The home view is ALWAYS this fixed box (below), which frames the whole continent. The full corpus build
+serves 15,265 stations over lat -43.44..-12.38, lon 113.67..166.18; all but the four Tasman Project
+seafloor stations (out to 166.18 E) fall inside it. Defined ONCE
 here as AU_HOME_BOUNDS and shared by the initial fit and buildMarkers()'s HOME_BOUNDS so the two frames
 cannot drift apart.
 ```
+
+#### The zoom floor, the pan box and one world
+
+Without a floor, zooming out runs on to zoom 0, where the basemap repeats side by side across the map
+and the archive shrinks to a thumbnail. Three settings stop that.
+
+**The zoom floor.** The map is built with `minZoom: MAP_MIN_ZOOM` (3). That is the smallest zoom at
+which `AU_HOME_BOUNDS` fits the map pane on the three viewports the portal is checked on, measured in
+headless Chrome against the full corpus build with `map.getBoundsZoom(AU_HOME_BOUNDS)`:
+
+| Viewport | Map pane | Fitted zoom |
+| --- | --- | --- |
+| 1280 x 800 desktop | 824 x 686 | 4 |
+| 1024 x 768 desktop | 655 x 654 | 4 |
+| 375 x 812 phone | 375 x 760 | 3 |
+
+So a phone still opens on the whole continent, and no viewport can zoom out past it. Without the
+floor, eight presses of zoom out take every one of the three panes to zoom 0.
+
+**The pan box.** `maxBounds` is `MAP_MAX_BOX`, south 60, west 88.25, north 15.42, east 178.25, with
+`maxBoundsViscosity: 1`, so a drag stops solid at its edge rather than leaving the data behind. The box
+holds the served extent (lat -43.44 to -12.38, lon 113.67 to 166.18) with at least 10 degrees to spare
+on every side: 12.07 east of the Tasman Project seafloor line, 25.42 west of the westernmost station.
+It is centred on `AU_HOME_BOUNDS`, its longitudes at 133.25 plus and minus 45 and its latitudes
+symmetric about the home frame's centre in Mercator. That symmetry is what keeps the fitted home view
+where a map without a box puts it: when the box is wider than the pane Leaflet leaves the view alone,
+and when it is narrower (zoom 3 on a desktop pane) Leaflet centres the box, which is the home centre.
+A build that serves a station outside the box drops it (`buildMarkers` calls `map.setMaxBounds(null)`
+when `boxHolds` fails), because a box that strands a station is worse than none.
+
+**One world.** Every basemap layer, the two pmtiles layers and the CARTO fallback alike, is built with
+`BASEMAP_ONE_WORLD` (`noWrap: true` and world bounds), so Leaflet never requests the tile copies
+either side of the antimeridian.
+
+`tools/map_zoom_test.js` drives all three on the vendored Leaflet in jsdom, with `#map` given the three
+measured pane sizes: the home frame fits at 4, 4 and 3, eight zoom-outs and a request for zoom 0 both
+stop at 3, a view requested over Africa and a pan far west are held inside the box, the home view
+with the box matches a map without one to the pixel on every pane at the fitted zoom and at the floor,
+a build with a station at 20 N drops the box, and at zoom 3 each basemap layer accepts tile x 3 and
+rejects the wrapped copies at x -1 and 8. `tools/interaction_test.js` pins the exact option set the
+map is built with on a fine pointer and on a coarse one.
 
 #### A coarse pointer reaches a dot within TAP_TOLERANCE px of its edge
 
@@ -5143,7 +5185,7 @@ actually drawing knows which provider to name.
 ```text
 The basemap is config-driven. provider "pmtiles" serves OUR OWN files through the vendored
 protomaps-leaflet renderer, ending the portal's last runtime third party: the world file
-carries low zooms globally (zoomed out still shows the whole globe) and the region file
+carries the low zooms, from the zoom 3 floor up, and the region file
 carries full detail for Australia and its surrounds; the z7 crossover is where the region
 bbox has data the world file lacks. "carto" is the hosted fallback while the files roll out
 (or if the renderer failed to load); CARTO watermarks un-keyed raster requests, so the
