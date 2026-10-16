@@ -5917,6 +5917,9 @@ desktop (without storing the choice, and closes it again above 900px) and hosts 
 every change of the card query, `matchMedia("(min-width:761px)")` (`sheetCard()`), and places the map's
 zoom control (`sheetPlaceZoom`): top right in the card band, top left everywhere else, calling Leaflet
 only when the position changes and relabelling the rebuilt buttons (`labelToolbar` in `map.js`).
+Last, it calls `paintPhoneSelection()` in `filters.js`, so crossing 900px with a selection marks its
+dots, fills the selection list and counts the view on the way in, and takes the marks away and empties
+the list on the way out (see the phone selection, under `filters.js`).
 
 #### No script
 
