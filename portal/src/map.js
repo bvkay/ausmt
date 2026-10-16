@@ -200,8 +200,6 @@ function onMarkerClick(s,e){
   if(phoneSelecting())onStationTap(s,e,toggleSelected);
   else if(COARSE_POINTER)onStationTap(s,e);
   else openStation(s.i);}
-// Leaflet gives a small circle marker's click the dot's centre as containerPoint, so the finger's
-// point is read from the DOM event.
 function tapPoint(e){
   const oe=e&&e.originalEvent;
   if(oe&&typeof oe.clientX==="number"&&typeof map.mouseEventToContainerPoint==="function"){

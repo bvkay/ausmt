@@ -6827,8 +6827,8 @@ async function bootFreshWindow(dataMap, url, preBoot, src) {
     ca.closeDrawer();
     // Leaflet hands a small circle marker's click the dot's own centre as containerPoint, so the
     // reach is measured from the finger, which the DOM event carries. Two dots 11px apart at zoom 4,
-    // where the reach is 9.8px: a tap 5px from A1 and 6px from A2 reaches both, though A2 lies
-    // beyond the reach of A1's centre.
+    // where the reach is 9.8px: a tap 5px from one and 6px from the other reaches both, though the
+    // second lies beyond the reach of the first one's centre.
     at("A1", 188, 137); at("A2", 199, 137);
     ca.setSidebarMode("select");
     ca.stationMarker("A1").handlers.click[0]({ containerPoint: { x: 188, y: 137 },

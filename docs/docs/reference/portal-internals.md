@@ -5243,9 +5243,9 @@ emulating a 375 x 812 touch phone, on the five-station interaction fixture at zo
 Leaflet: a click between two dots 8.6px apart raised the chooser with both stations as 44px rows and
 opened neither, and a click 6px beside an isolated dot opened that station. In headless Chrome
 emulating a 375 x 812 touch phone (`pointer:coarse` true) on the same fixture with its 36-station
-grid, at zoom 4 (reach 9.8px) with D1 and X22 11px apart, a touch tap at their midpoint in Select
-raised the chooser with both and changed nothing; measured from the hit dot's centre, the same tap
-raised no chooser and took X22 out of the selection.
+grid, at zoom 4 (reach 9.8px) with two stations 11px apart and one of them selected, a touch tap at
+their midpoint in Select raised the chooser with both and changed nothing; measured from the hit
+dot's centre, the same tap raised no chooser and took the selected one out of the selection.
 
 **A tap in Select on the phone layout toggles.** Every dot has one click handler, `onMarkerClick`.
 While the phone layout is active on the map view (`sheetActive()`) and the panel is in Select
@@ -5255,8 +5255,8 @@ reaches more than one dot the chooser lists them, each entry carrying `aria-pres
 is selected, and the entry chosen is toggled. A selected entry also shows it: at 900px and narrower
 `.tapchooser-item[aria-pressed="true"]` draws a 4px `--accent` bar on its left edge and a tick after
 its id (`.tc-id::after`), so a sighted reader sees which way a choice goes. In that same headless
-run the selected X22 entry computed `rgb(40, 37, 114) 4px 0px 0px 0px inset` and a tick in the same
-colour, and the unselected D1 entry neither. A fine pointer at these widths reaches only the dot it
+run the selected entry computed `rgb(40, 37, 114) 4px 0px 0px 0px inset` and a tick in the same
+colour, and the unselected entry neither. A fine pointer at these widths reaches only the dot it
 clicked (the reach takes no tolerance without a coarse pointer). In Browse, and at every width above
 900px whatever the mode, the handler does what it did: `onStationTap` on a coarse pointer and
 `openStation` otherwise. `toggleSelected` clears any drawn shape first, because `refresh()` re-derives
