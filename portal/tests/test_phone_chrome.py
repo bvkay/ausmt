@@ -22,6 +22,7 @@ Each assertion states its failure criterion:
   * PLOTS - FAILS if a drawer plot can be wider than the drawer at a phone width.
   * ABOUT - FAILS if the map page's panel stops ending with an About link while the header hides
     About at a phone width.
+  * SURVEYS - FAILS if a /surveys control label or select can push the page sideways at a phone width.
   * DESKTOP - FAILS if any of these overrides leaks out of its query into the base rules.
 """
 import re
@@ -205,6 +206,16 @@ def test_the_panel_ends_with_an_about_link_shown_only_where_the_header_hides_abo
     assert "display:inline-flex" in _decls(shown.get(".panelabout", [])), (
         "index.html: at 900px and narrower the panel's About link is shown")
     assert f"min-height:{TAP_TARGET}px" in _decls(shown.get(".panelabout", []))
+
+
+def test_the_surveys_controls_cannot_push_the_page_sideways():
+    """FAILS if a /surveys control label keeps its content-sized floor, or a select its intrinsic width,
+    at a phone width: the Organisation select reached 474px on a 375px screen."""
+    rules = _rules("".join(_blocks(_text(PAGES_PY), f"@media (max-width:{INTERIM_BELOW}px)")))
+    assert "min-width:0" in _decls(rules.get(".idxctl label", [])), (
+        "engine/extract/_pages.py: a /surveys control label must be free to shrink")
+    assert "max-width:100%" in _decls(rules.get(".idxctl select", [])), (
+        "engine/extract/_pages.py: a /surveys select must not outgrow its label")
 
 
 def test_no_phone_override_leaks_into_the_desktop_rules():

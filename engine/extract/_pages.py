@@ -736,6 +736,7 @@ _INDEX_CSS = """
   .idxctl input,.idxctl select{font:inherit;font-size:.9rem;color:var(--text);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:.35rem .55rem;min-width:0}
   .idxctl input:focus-visible,.idxctl select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   @media (pointer:coarse){.idxctl input,.idxctl select{font-size:16px}}
+  @media (max-width:760px){.idxctl label{min-width:0;max-width:100%}.idxctl select{max-width:100%}}
   .idxctl .idxshown{flex:1 0 100%;margin:.2rem 0 .4rem;font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
   .idxctl .idxshown a{margin-left:.6rem}
   .idxlist{display:flex;flex-direction:column;gap:.7rem;margin:0 0 1rem}

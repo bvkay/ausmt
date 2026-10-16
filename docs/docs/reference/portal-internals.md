@@ -718,6 +718,15 @@ safe-area insets, with the drag handle hidden. Its plots are `max-width:100%; he
 the closed drawer is fixed rather than absolute, it does not widen the document: 375px, where an
 absolute closed drawer made it 758px (`horizontal` in the measurements file).
 
+**The /surveys controls on a phone.** On the engine's /surveys page each control is a label
+holding its select, laid out in a wrapping flex row; a flex item's floor is its content, so a select
+as wide as its longest option pushed the page sideways (the Organisation select reached 474px on a
+375px screen, `surveys_page_375` in the measurements file). At 760px and narrower each label takes
+`min-width:0` and `max-width:100%` and each select `max-width:100%` (`_INDEX_CSS` in
+`engine/extract/_pages.py`). Measured in headless Chrome on a page built from that sheet with a
+591px-wide option: the document is 375px wide at 375px and 320px at 320px, against 591px without
+the rule; from 761px nothing changes.
+
 **About on a phone.** The phone row hides the header's About control, so the map page's panel
 ends with an About link (`.panelabout`, before the rail's collapse control), hidden above 900px where
 the header still carries About and shown at 900px and narrower as a 44px target.
