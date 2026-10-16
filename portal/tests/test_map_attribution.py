@@ -27,6 +27,11 @@ portal/add-survey.html draws three, and all four wear the same control from the 
 the same rules declared character for character on both documents. A collapsed control on one
 surface and a Leaflet-flagged line on the other would be two answers to one rule.
 
+ON A PHONE THE CREDIT STAYS WHERE IT IS. At 900px and narrower the panel is a bottom sheet over a
+full-screen map. The sheet is anchored to the bottom edge and rests at peek or half, so the top of the
+map, where the control sits, is never under it; at full it covers the whole map, the credit with the
+dots. No phone rule moves or hides the control.
+
 WHAT THIS MODULE CANNOT SEE, stated rather than implied: it reads source. Whether the glyph is
 actually one glyph wide, whether the expanded text clears the legend, and whether a click really
 opens it are DOM and browser facts. The DOM half is driven headlessly: tools/interaction_test.js
@@ -292,3 +297,31 @@ def test_add_survey_maps_are_driven():
         pytest.skip("jsdom dev-dependency not installed (run `npm ci` in portal/)")
     assert r.returncode == 0, out
     assert "ALL PASSED" in out, out
+
+
+def test_the_phone_sheet_leaves_the_credit_on_screen():
+    """FAILS if a phone-width rule hides or moves the attribution control or Leaflet's top corners, or
+    if the sheet stops being anchored to the bottom edge with a default height of half the screen,
+    which is what keeps the control's top-right corner clear at peek and half."""
+    index = _text(ROOT / "index.html")
+    blocks = []
+    for prelude in ("@media (max-width:900px){", "@media (min-width:761px) and (max-width:900px){",
+                    "@media (max-width:760px){"):
+        i = 0
+        while (at := index.find(prelude, i)) >= 0:
+            j = start = at + len(prelude)
+            depth = 1
+            while depth:
+                depth += {"{": 1, "}": -1}.get(index[j], 0)
+                j += 1
+            blocks.append(index[start:j - 1])
+            i = j
+    phone = "".join(blocks)
+    for sel in (".mapattrib", ".leaflet-control-attribution", ".leaflet-top", ".leaflet-right"):
+        assert sel not in phone, f"index.html: no phone rule may restyle {sel}, which carries the credit"
+    sheet = re.search(r"(?m)^\s*\.sheet\{--sheet-full[^}]*\}", phone)
+    assert sheet, "index.html: the phone sheet rule"
+    body = sheet.group(0).replace(" ", "")
+    assert "position:fixed" in body and "bottom:0" in body and "--sheet-snap:50dvh" in body, body
+    assert "position:\"topright\"" in _text(MODULE).replace(" ", "") or "'topright'" in _text(MODULE), (
+        "the control is mounted top right")

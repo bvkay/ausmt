@@ -726,7 +726,10 @@ zoomed the whole page out.
 **The tablet card.** From 761px to 900px the sheet is a card 420px wide, 16px in from the left and the
 bottom, with a 14px radius, so the map shows beside it; its full height is 32px less. At 800 x 1024 in
 the same pane the card measured 16 to 436 across, its visible half 496 to 1008. The legend moves to
-the bottom right at 900px and narrower, and on a phone it sits above the peek height.
+the bottom right at 900px and narrower, and on a phone it sits above the peek height. The map's
+attribution control keeps its top-right corner: the sheet is anchored to the bottom edge and rests
+at peek or half below it, and at full it covers the whole map, the credit with the dots
+(`tests/test_map_attribution.py`).
 
 **The drawer in the sheet.** On the phone layout the sheet hosts the drawer in place of the
 filters: `.sheet[data-host="drawer"]` hides the peek row and the panel and shows the Back bar and
