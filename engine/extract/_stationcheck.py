@@ -125,10 +125,20 @@ def violations(doc) -> list:
     runs = doc.get("runs") or []
     resources = doc.get("resources") or []
     return (_run_violations(runs)
-            + _resource_violations(resources, {r.get("id") for r in runs if isinstance(r, dict)})
+            + _resource_violations(resources, {_id_key(r.get("id")) for r in runs if isinstance(r, dict)})
             + _doi_violations(doc)
             + _edi_path_violations(doc, resources)
             + _new_block_violations(doc))
+
+
+def _is_id(value) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _id_key(value):
+    """An id as a set member. A malformed id (a list, an object) is unhashable, and this layer must
+    name the document that carries it rather than raise out of a walk over a whole served tree."""
+    return value if _is_id(value) else ("malformed", repr(value))
 
 
 def _instant(value):
@@ -230,9 +240,11 @@ def _run_violations(runs) -> list:
             out.append(f"runs[] carries a {type(run).__name__}, not a run object")
             continue
         rid = run.get("id")
-        if rid in seen:
+        if not _is_id(rid):
+            out.append(f"run id {rid!r} is not a non-empty string")
+        if _id_key(rid) in seen:
             out.append(f"run id {rid!r} appears twice; run ids are unique within a station record")
-        seen.add(rid)
+        seen.add(_id_key(rid))
         period = run.get("time_period") or {}
         start, end = _instant(period.get("start")), _instant(period.get("end"))
         for key, value, parsed in (("start", period.get("start"), start), ("end", period.get("end"), end)):
@@ -269,12 +281,14 @@ def _resource_violations(resources, run_ids) -> list:
             out.append(f"resources[] carries a {type(resource).__name__}, not a resource object")
             continue
         rid = resource.get("id")
-        if rid in seen:
+        if not _is_id(rid):
+            out.append(f"resource id {rid!r} is not a non-empty string")
+        if _id_key(rid) in seen:
             out.append(f"resource id {rid!r} appears twice; resource ids are stable within the document")
-        seen.add(rid)
+        seen.add(_id_key(rid))
         for key in ("represents_runs", "derived_from_runs"):
             out += [f"resource {rid}: {key} names run {ref!r}, which this record does not publish"
-                    for ref in (resource.get(key) or []) if ref not in run_ids]
+                    for ref in (resource.get(key) or []) if _id_key(ref) not in run_ids]
         out += [f"resource {rid}: service_urls advertises {str(entry.get('kind') or '')!r}. A "
                 f"resource states a direct route or nothing: a service endpoint is operational "
                 f"state, and the one this record could name (OPeNDAP) answers 500 for the archive's "
@@ -314,14 +328,14 @@ def _archive_membership_violations(resources) -> list:
     """An archive row may only ride a record that also publishes the rendition the bundle was built
     from. Fail-closed on an unrecognised archive id: a bundle nothing in this map names has no stated
     membership rule, so it cannot be claimed."""
-    served = {r.get("id") for r in resources
+    served = {_id_key(r.get("id")) for r in resources
               if isinstance(r, dict) and r.get("kind") == "transfer_function"}
     out = []
     for resource in resources:
         if not isinstance(resource, dict) or resource.get("kind") != "archive":
             continue
         rid = resource.get("id")
-        member = ARCHIVE_MEMBER_FORMAT.get(rid)
+        member = ARCHIVE_MEMBER_FORMAT.get(_id_key(rid))
         if member is None:
             out.append(f"resource {rid!r} is an archive with no stated membership rule, so this "
                        f"record cannot claim to be in it")
