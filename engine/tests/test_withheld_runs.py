@@ -193,6 +193,36 @@ def test_the_emitted_record_validates_on_the_withheld_branch():
     assert [e.message for e in _validator().iter_errors(doc)] == []
 
 
+def test_the_projection_keeps_only_plain_strings_and_the_three_magnetic_axes():
+    """A closed key set alone would let an object ride inside an allowed member."""
+    run = bp.withheld_run({
+        "id": "S01_001",
+        "time_period": {"start": "2024-03-09T23:14:51+00:00", "end": {"lat": -33.4},
+                        "time_basis": ["utc"]},
+        "data_logger": {"manufacturer": {"lat": -33.4}, "model": "LEMI-423", "serial_number": 40,
+                        "identifiers": [{"scheme": "DOI", "identifier": {"lat": -33.4}},
+                                        {"scheme": "DOI", "identifier": LOGGER_DOI}, "x"]},
+        "channels": [{"component": "hx at -33.4", "sensor": _coil("261", BX_DOI)},
+                     {"component": "bx", "sensor": _coil("261", BX_DOI)},
+                     {"component": "hy", "sensor": {"model": ["LEMI-120"]}},
+                     {"component": "hz", "sensor": _coil("263", BY_DOI)}, "hx"],
+    })
+    assert run == {
+        "id": "S01_001",
+        "time_period": {"start": "2024-03-09T23:14:51+00:00"},
+        "data_logger": {"model": "LEMI-423",
+                        "identifiers": [{"scheme": "DOI", "identifier": LOGGER_DOI}]},
+        "channels": [{"component": "hz", "sensor": _coil("263", BY_DOI)}],
+    }
+    assert stcheck.violations(_stub(runs=[run])) == []
+
+
+def test_a_window_whose_start_is_not_a_string_is_not_projected():
+    run = bp.withheld_run({"id": "S01_001", "time_period": {"start": 20240309, "end": "x"},
+                           "data_logger": _logger()})
+    assert run == {"id": "S01_001", "data_logger": _logger()}
+
+
 def test_the_emitter_projects_through_the_checked_key_sets():
     """One statement of the closed world, read at both ends."""
     run = bp.withheld_run(copy.deepcopy(FULL_RUN))
@@ -240,6 +270,25 @@ REJECTED = [
      lambda d: _run(d)["data_logger"]["identifiers"][0].update({"landing": "x"})),
     ("an extra member in the window", lambda d: _run(d)["time_period"].update({"source": "header"})),
     ("a null end", lambda d: _run(d)["time_period"].update({"end": None})),
+    ("an object riding inside the logger's maker",
+     lambda d: _run(d)["data_logger"].update({"manufacturer": {"latitude": -33.4}})),
+    ("a list riding inside the logger's model",
+     lambda d: _run(d)["data_logger"].update({"model": [{"sample_rate_hz": 1000.0}]})),
+    ("an object riding inside a sensor's serial",
+     lambda d: _run(d)["channels"][0]["sensor"].update({"serial_number": {"dipole_length_m": 50.0}})),
+    ("an object riding inside an identifier",
+     lambda d: _run(d)["data_logger"]["identifiers"][0].update({"identifier": {"lat": -33.4}})),
+    ("an identifier row stating no scheme",
+     lambda d: _run(d)["data_logger"]["identifiers"][0].pop("scheme")),
+    ("an object riding inside the time basis",
+     lambda d: _run(d)["time_period"].update({"time_basis": {"lat": -33.4}})),
+    ("a time basis outside the stated ones",
+     lambda d: _run(d)["time_period"].update({"time_basis": "local, offset unknown"})),
+    ("a window stating no start", lambda d: _run(d)["time_period"].pop("start")),
+    ("a start that is not a string", lambda d: _run(d)["time_period"].update({"start": 20240309})),
+    ("free text after a component name",
+     lambda d: _run(d)["channels"][0].update({"component": "hx at -33.4, 136.4"})),
+    ("a component outside hx, hy and hz", lambda d: _run(d)["channels"][0].update({"component": "bx"})),
     ("a window that is not an object", lambda d: _run(d).update({"time_period": "2024-03-09"})),
     ("channels that are not a list", lambda d: _run(d).update({"channels": {"hx": {}}})),
     ("a run that is not an object", lambda d: d.update({"runs": ["S01_001"]})),
@@ -289,6 +338,9 @@ def test_the_schema_and_the_semantic_layer_state_one_closed_world():
     assert (set(instrument["properties"]["identifiers"]["items"]["properties"])
             == stcheck.WITHHELD_IDENTIFIER_KEYS)
     assert set(channel["properties"]) == stcheck.WITHHELD_CHANNEL_KEYS
+    assert tuple(channel["properties"]["component"]["enum"]) == stcheck.WITHHELD_CHANNEL_COMPONENTS
+    assert (tuple(SCHEMA["definitions"]["time_period"]["properties"]["time_basis"]["enum"])
+            == stcheck.TIME_BASES == runsheet.TIME_BASES)
     for node in (run, run["properties"]["time_period"], instrument, channel,
                  instrument["properties"]["identifiers"]["items"]):
         assert node["additionalProperties"] is False

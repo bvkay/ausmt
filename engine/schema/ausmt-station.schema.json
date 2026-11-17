@@ -520,8 +520,11 @@
       ],
       "properties": {
        "component": {
-        "type": "string",
-        "pattern": "^[hbHB]"
+        "enum": [
+         "hx",
+         "hy",
+         "hz"
+        ]
        },
        "sensor": {
         "$ref": "#/definitions/withheld_instrument"

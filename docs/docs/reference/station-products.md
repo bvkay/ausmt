@@ -730,7 +730,7 @@ with no id there publishes no run. Every level is closed:
 | run | `id`, and at least one of `time_period`, `data_logger`, `channels` |
 | `time_period` | `start`, `end`, `time_basis` |
 | `data_logger` | `manufacturer`, `model`, `serial_number`, `identifiers` (rows of `scheme`, `identifier`) |
-| `channels[]` | `component` and `sensor`, magnetic components only; `sensor` has the `data_logger` shape |
+| `channels[]` | `component` (`hx`, `hy` or `hz` only) and `sensor`; `sensor` has the `data_logger` shape |
 
 There is no `location`, no `data`, no `diagnostics`, no `processing`, no `resources` and no
 `provenance`, and a withheld run carries no `sample_rate_hz`, no dipole length, no azimuth, no

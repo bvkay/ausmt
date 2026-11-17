@@ -3313,15 +3313,24 @@ def station_runs(run_facts, run_ids, station_id, comps):
 
 
 def _only(node, keys) -> dict:
-    return {k: v for k, v in (node or {}).items() if k in keys}
+    return {k: v for k, v in node.items() if k in keys} if isinstance(node, dict) else {}
+
+
+def _plain(node, keys) -> dict:
+    """The members of `node` named in `keys` that are non-empty strings. Every leaf of a withheld
+    run is one, so nothing can ride inside an allowed member."""
+    return {k: v for k, v in _only(node, keys).items() if isinstance(v, str) and v.strip()}
 
 
 def _withheld_instrument(node) -> dict:
     """An instrument reduced to its identity: maker, model, serial and persistent identifiers."""
-    out = _only(node, stcheck.WITHHELD_INSTRUMENT_KEYS)
-    if "identifiers" in out:
-        out["identifiers"] = [_only(row, stcheck.WITHHELD_IDENTIFIER_KEYS)
-                              for row in out["identifiers"]]
+    out = _plain(node, stcheck.WITHHELD_INSTRUMENT_KEYS)
+    listed = _only(node, ("identifiers",)).get("identifiers")
+    rows = [_plain(row, stcheck.WITHHELD_IDENTIFIER_KEYS)
+            for row in (listed if isinstance(listed, list) else [])]
+    rows = [row for row in rows if len(row) == len(stcheck.WITHHELD_IDENTIFIER_KEYS)]
+    if rows:
+        out["identifiers"] = rows
     return out
 
 
@@ -3330,15 +3339,16 @@ def withheld_run(run):
     occupation window, the logger, and the sensor of each magnetic channel. The rate, the dipoles
     and the azimuths are dropped. None when none of that is stated: a bare run id says nothing."""
     out = {"id": run["id"]}
-    period = _only(run.get("time_period"), stcheck.WITHHELD_PERIOD_KEYS)
-    if period.get("start"):
+    period = _plain(run.get("time_period"), stcheck.WITHHELD_PERIOD_KEYS)
+    if "start" in period:
         out["time_period"] = period
     logger = _withheld_instrument(run.get("data_logger"))
     if logger:
         out["data_logger"] = logger
+    listed = run.get("channels")
     channels = [{"component": ch["component"], "sensor": _withheld_instrument(ch.get("sensor"))}
-                for ch in run.get("channels") or []
-                if str(ch.get("component") or "")[:1].lower() in stcheck.WITHHELD_CHANNEL_FAMILIES]
+                for ch in (listed if isinstance(listed, list) else [])
+                if isinstance(ch, dict) and ch.get("component") in stcheck.WITHHELD_CHANNEL_COMPONENTS]
     channels = [ch for ch in channels if ch["sensor"]]
     if channels:
         out["channels"] = channels
@@ -7149,8 +7159,9 @@ def _main_build(argv=None):
     # The station schema (the third public contract): the SAME two routes, by the same rule -
     # data/schemas/ausmt-station/<version>/ausmt-station.schema.json is the version-specific route
     # the schema's own $id names, data/ausmt-station.schema.json the latest-convenience copy beside
-    # the data. Unlike the two schemas above, 0.1 is a draft, so the bytes at its route can widen. Byte-copies of the in-tree artifact; the version segment derives from
-    # STATION_SCHEMA_VERSION (the generated mirror), never a literal.
+    # the data. Unlike the two schemas above, 0.1 is a draft, so the bytes at its route can widen.
+    # Byte-copies of the in-tree artifact; the version segment derives from STATION_SCHEMA_VERSION
+    # (the generated mirror), never a literal.
     _st_schema = HERE.parent / "schema" / "ausmt-station.schema.json"
     try:
         _st_schema_bytes = _st_schema.read_bytes()

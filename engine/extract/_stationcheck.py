@@ -21,6 +21,8 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import quote, unquote
 
+from _runsheet import TIME_BASES   # stdlib leaf; the one statement of how a sheet time reached UTC
+
 # The withheld stub's WHOLE key set (schema oneOf[0]): the nine frozen keys, the three promotion
 # markers, and `runs` on an embargoed record. Closed world, so any other key in a withheld record
 # is a leak, never an extension.
@@ -39,8 +41,8 @@ WITHHELD_PERIOD_KEYS = frozenset({"start", "end", "time_basis"})
 WITHHELD_INSTRUMENT_KEYS = frozenset({"manufacturer", "model", "serial_number", "identifiers"})
 WITHHELD_IDENTIFIER_KEYS = frozenset({"scheme", "identifier"})
 WITHHELD_CHANNEL_KEYS = frozenset({"component", "sensor"})
-# A withheld channel exists only to name its sensor, and only a magnetic channel has one.
-WITHHELD_CHANNEL_FAMILIES = ("h", "b")
+# A withheld channel exists only to name its sensor, and the run sheet names one on these axes alone.
+WITHHELD_CHANNEL_COMPONENTS = ("hx", "hy", "hz")
 # Bare canonical form, the only form AusMT publishes: a resolver prefix makes a DOI a URL.
 _BARE_DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 # The electrode-circuit members. They attach to the electric measurement circuit and to nothing else.
@@ -176,13 +178,38 @@ def _closed(node, allowed, where) -> list:
             for k in sorted(set(node) - allowed)]
 
 
+def _plain(value) -> bool:
+    """A non-empty string. Every leaf of a withheld run is one: a closed key set alone would let an
+    object ride inside an allowed member."""
+    return isinstance(value, str) and bool(value.strip())
+
+
 def _withheld_instrument_violations(node, where) -> list:
     out = _closed(node, WITHHELD_INSTRUMENT_KEYS, where)
-    rows = node.get("identifiers", []) if isinstance(node, dict) else []
+    if not isinstance(node, dict):
+        return out
+    out += [f"{where} {k} is not a non-empty string"
+            for k in sorted(WITHHELD_INSTRUMENT_KEYS - {"identifiers"}) if k in node and not _plain(node[k])]
+    rows = node.get("identifiers", [])
     if not isinstance(rows, list):
         return out + [f"{where} identifiers is a {type(rows).__name__}, not a list"]
     for row in rows:
         out += _closed(row, WITHHELD_IDENTIFIER_KEYS, f"{where} identifier")
+        if isinstance(row, dict) and not all(_plain(row.get(k)) for k in WITHHELD_IDENTIFIER_KEYS):
+            out.append(f"{where} identifier does not state a scheme and an identifier as strings")
+    return out
+
+
+def _withheld_period_violations(period, where) -> list:
+    out = _closed(period, WITHHELD_PERIOD_KEYS, where)
+    if not isinstance(period, dict):
+        return out
+    if not _plain(period.get("start")):
+        out.append(f"{where} states no start")
+    if "end" in period and not _plain(period["end"]):
+        out.append(f"{where} end is not a non-empty string")
+    if "time_basis" in period and period["time_basis"] not in TIME_BASES:
+        out.append(f"{where} time_basis is not one of {', '.join(TIME_BASES)}")
     return out
 
 
@@ -206,7 +233,7 @@ def _withheld_run_violations(doc) -> list:
         if not any(k in run for k in ("time_period", "data_logger", "channels")):
             out.append(f"{where} states neither a window nor an instrument")
         if "time_period" in run:
-            out += _closed(run["time_period"], WITHHELD_PERIOD_KEYS, f"{where} time_period")
+            out += _withheld_period_violations(run["time_period"], f"{where} time_period")
         if "data_logger" in run:
             out += _withheld_instrument_violations(run["data_logger"], f"{where} data_logger")
         channels = run.get("channels", [])
@@ -217,13 +244,13 @@ def _withheld_run_violations(doc) -> list:
             out += _closed(channel, WITHHELD_CHANNEL_KEYS, f"{where} channel")
             if not isinstance(channel, dict):
                 continue
-            component = str(channel.get("component") or "")
-            if component[:1].lower() not in WITHHELD_CHANNEL_FAMILIES or "sensor" not in channel:
-                out.append(f"{where} channel {component!r} is not a magnetic channel naming its "
-                           f"sensor")
+            component = channel.get("component")
+            if component not in WITHHELD_CHANNEL_COMPONENTS or "sensor" not in channel:
+                out.append(f"{where} channel {component!r} is not one of "
+                           f"{', '.join(WITHHELD_CHANNEL_COMPONENTS)} naming its sensor")
             if "sensor" in channel:
                 out += _withheld_instrument_violations(channel["sensor"],
-                                                       f"{where} channel {component} sensor")
+                                                       f"{where} channel {component!r} sensor")
     # A run whose containers are the wrong type is already named above; the general rules read
     # only the ones they can walk.
     walkable = [run for run in runs if not isinstance(run, dict)
