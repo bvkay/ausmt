@@ -175,7 +175,7 @@ def _rejected(base, mutate, why):
 
 
 # What an embargoed stub may state about a run: its window and the logger. Valid on that stub, so
-# T13b fails only for the access level that carries it.
+# the metadata_only rejection below fails only for the access level that carries it.
 _OCCUPIED_RUN = {"id": "Vul24-13-r01",
                  "time_period": {"start": "2024-10-01T02:00:00+00:00", "time_basis": "utc"},
                  "data_logger": {"manufacturer": "LEMI", "model": "LEMI-424", "serial_number": "101"}}

@@ -9,8 +9,9 @@ What this module pins, all of it read off documents a REAL build wrote:
   * THE KEY SETS, on both branches (workflow contract section 2). The full record carries the fourteen
     frozen keys, exactly three promotion markers, the new canonical model where the source supports it
     and the one conditional coordinate key; the withheld stub carries the nine frozen keys plus exactly
-    three markers, and runs[] only on an embargoed record whose run sheet names the station. These are the pins that make byte-stability enforceable: before the
-    promotion nothing forbade a fifteenth key on either branch.
+    three markers, and runs[] only on an embargoed record whose run sheet names the station. These
+    are the pins that make byte-stability enforceable: before the promotion nothing forbade a
+    fifteenth key on either branch.
   * the markers themselves: `schema` names the contract, `version` is the generated constant, and
     `survey_id` is the SLUG, which is what mtcat and survey-metadata.json key on.
   * the dimensionality fold: `diagnostics` and the sidecar state ONE call, from one computation,

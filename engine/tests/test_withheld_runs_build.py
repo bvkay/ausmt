@@ -145,7 +145,7 @@ def builds(tmp_path_factory):
     return get
 
 
-# ---- a: what an embargoed build publishes -------------------------------------------------------
+# ---- what an embargoed build publishes ----------------------------------------------------------
 
 def test_an_embargoed_build_publishes_the_run_sheets_window_and_instruments(builds):
     doc = _doc(builds("embargoed"), "EXAMPLE01")
@@ -171,7 +171,7 @@ def test_runs_is_the_only_member_an_embargoed_record_gains(builds):
                              "note"]
 
 
-# ---- b: the source rule -------------------------------------------------------------------------
+# ---- the source rule ----------------------------------------------------------------------------
 
 def test_a_station_with_no_sheet_row_publishes_no_run_when_embargoed(builds):
     """EXAMPLE02's own file states a logger and four components, and the open build publishes a run
@@ -200,7 +200,7 @@ def test_no_fact_read_out_of_a_withheld_file_reaches_any_built_file(builds):
     assert hits == []
 
 
-# ---- c: the rate, the dipoles and the azimuths --------------------------------------------------
+# ---- the rate, the dipoles and the azimuths -----------------------------------------------------
 
 def test_the_sheets_rate_dipoles_and_azimuths_appear_nowhere_in_the_embargoed_record(builds):
     opened = _path(builds("open"), "EXAMPLE01").read_text(encoding="utf-8")
@@ -213,7 +213,7 @@ def test_the_sheets_rate_dipoles_and_azimuths_appear_nowhere_in_the_embargoed_re
         assert key not in embargoed, key
 
 
-# ---- d: metadata_only ---------------------------------------------------------------------------
+# ---- metadata_only ------------------------------------------------------------------------------
 
 METADATA_ONLY_EXAMPLE01 = {
     "schema": "ausmt-station", "version": "0.1", "ausmt_id": "au.example-survey.EXAMPLE01",
@@ -237,7 +237,7 @@ def test_a_metadata_only_build_writes_the_bare_stub(builds):
         assert list(_doc(builds("metadata_only"), station)) == list(METADATA_ONLY_EXAMPLE01)
 
 
-# ---- e: the build report ------------------------------------------------------------------------
+# ---- the build report ---------------------------------------------------------------------------
 
 # Every curation note the run sheet and the run-id store can raise for a station, so that a note the
 # withheld assembly added or dropped would show.
@@ -274,7 +274,7 @@ def test_the_curation_notes_of_an_embargoed_build_are_unchanged(tmp_path):
     assert "runs" in _doc(out, "EXAMPLE01"), "sensitivity: the embargoed record carries a run"
 
 
-# ---- f: the deploy gate -------------------------------------------------------------------------
+# ---- the deploy gate ----------------------------------------------------------------------------
 
 def _verify(data_dir: Path):
     return subprocess.run([sys.executable, str(VERIFY), "--data-dir", str(data_dir)],

@@ -333,7 +333,9 @@ def test_the_committed_products_tree_carries_the_canonical_blocks():
     assert masked["runs"], "a generalised position withholds bytes, never the acquisition record"
     assert "resources" not in masked, (
         "a generalised station serves no bytes, so it describes no rendition and claims no archive")
-    assert "runs" not in doc("withheld-survey", "SPHELD"), "the withheld stub is closed-world"
+    assert "runs" not in doc("withheld-survey", "SPHELD"), (
+        "an embargoed stub publishes a run only from the survey's run-metadata.csv, never from the "
+        "withheld file")
 
 
 def test_the_stations_geojson_is_documented_the_way_the_emitter_writes_it():
