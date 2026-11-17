@@ -80,7 +80,10 @@ support scientific judgement are defined in
 
 Indigenous data governance requirements, cultural heritage considerations, community agreements, access
 restrictions and embargo requirements are recorded in `survey.yaml`'s `care.*` fields and reviewed by a
-curator. No automated check blocks publication on CARE grounds. See
+curator. No automated check blocks publication on CARE grounds. An embargo withholds the transfer
+functions, not the occupation record: an embargoed station's public record still states when it was
+occupied and which logger and magnetic sensors it used, from `run-metadata.csv`
+([what an embargo publishes](../reference/survey-yaml.md#82-accesslevel)). See
 [Scientific philosophy](../introduction/scientific-philosophy.md#care).
 
 ## Updating a published survey

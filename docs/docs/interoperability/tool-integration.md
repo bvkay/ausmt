@@ -185,8 +185,10 @@ more than one survey (`SA225_2.edi` under both `auslamp-musgraves-apy-2016` and 
 the other silently.
 
 A withheld station is still in the catalogue. Its `mtcat.json` record and its `station.json` exist;
-the `station.json` carries `"withheld": true`, no derived science, no `runs` and no `resources`, and
-there is no manifest row.
+the `station.json` carries `"withheld": true`, no derived science and no `resources`, and there is no
+manifest row. An embargoed station's `runs` states only when it was occupied and by which logger and
+magnetic sensors; a `metadata_only` station has no `runs`. See
+[the withheld record](../reference/station-products.md#118-the-withheld-record).
 
 **Coordinates may be generalised or absent.** A generalised position is rounded to 0.1°, roughly 11 km.
 A withheld one is `null`; guard for it before any numeric comparison, because JavaScript compares null

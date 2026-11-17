@@ -34,7 +34,10 @@ access:
 is the default when the field is absent. `metadata_only` leaves the survey fully discoverable
 (catalogue, map, science diagnostics, MTCAT record) but serves no product bytes: no EDI, EMTF XML or
 bundle downloads, `edi_available` `0`, and downloads routed to the source archive. `embargoed` is the
-same until the embargo lifts. Metadata remain discoverable throughout an embargo.
+same until the embargo lifts. Metadata remain discoverable throughout an embargo, and an embargoed
+station's record also states when it was occupied and which data logger and magnetic sensors occupied
+it, with their PIDs, from `run-metadata.csv`. The sample rate, dipole lengths, azimuths and electric
+channels stay withheld, and a `metadata_only` survey publishes no run.
 
 The access level is the state of record. A lapsed `embargo_until` does not auto-publish: the build
 keeps the survey withheld past its date and raises a stale-embargo warning, and a curator releases it by
@@ -50,8 +53,10 @@ bytes withheld too. See [Why coordinates have an access policy](../rationale/coo
 The canonical EMTF XML store (`--canonical-dir`) is a preservation artifact with no served download
 bytes or manifest rows. The per-station `products/` files are written inside the served build directory
 and ride the same access gate: a station in a non-served survey gets a withheld `station.json` with no
-derived science, no exact position and no dimensionality file. What a data consumer sees on the other
-side of the gate is in
+derived science, no exact position and no dimensionality file. An embargoed station's record and its
+static page still state when it was occupied and by which logger and magnetic sensors, from the
+survey's `run-metadata.csv` alone; a `metadata_only` station's record states no run. What a data
+consumer sees on the other side of the gate is in
 [How AusMT serves data](../interoperability/api-overview.md#access-levels-and-embargo-by-omission).
 
 ## Withdrawal and supersession
