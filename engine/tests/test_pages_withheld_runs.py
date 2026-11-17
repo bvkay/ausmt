@@ -34,8 +34,8 @@ BASE = "https://ausmt.auscope.org.au"
 NOINDEX = '<meta name="robots" content="noindex">'
 
 LOGGER_DOI, BX_DOI, BY_DOI = "10.82388/c7ea5dpq", "10.82388/ahbao8tk", "10.82388/1nhybg3w"
-# The sheet states the rate, both dipoles and both azimuths, so a page that leaked any of them
-# would have a value to print.
+# The sheet states the rate, both dipoles and both azimuths, so each withheld value exists to be
+# printed and its absence from the page is a real check.
 RUN_SHEET = (
     "station_id,start,end,sample_rate_hz,dipole_length_ex_m,dipole_length_ey_m,"
     "azimuth_ex_deg,azimuth_ey_deg,logger_manufacturer,logger_model,logger_serial,logger_pid,"
