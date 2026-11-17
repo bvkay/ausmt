@@ -239,6 +239,26 @@ def test_date_only_and_inverted_time_windows_go_absent_with_notes():
     assert notes == []
 
 
+NOT_RFC3339 = ["2024-03-09T23:14:51", "2024-03-09 23:14:51", "2024-03-09 23:14:51+00:00"]
+
+
+@pytest.mark.parametrize("value", NOT_RFC3339)
+def test_a_time_without_an_offset_or_the_t_separator_goes_absent_with_a_note(value):
+    """The schema's date-time format is RFC 3339, which needs the T separator and an offset. A value
+    the sheet loader passed but the schema refuses fails the whole build at its self-check, and a
+    naive time cannot be compared with an aware one, so it must go absent here, on both paths."""
+    notes: list = []
+    doc = rs._sheet_doc({"start": value, "end": "2024-03-10T02:00:00+00:00"}, station_id="S1",
+                        notes=notes)
+    assert "time_period" not in doc["run"], doc["run"]
+    assert any("S1" in n and repr(value) in n for n in notes), notes
+    notes = []
+    doc = rs._sheet_doc({"start": "2024-03-09T02:00:00+00:00", "end": value}, station_id="S1",
+                        notes=notes)
+    assert doc["run"]["time_period"] == {"start": "2024-03-09T02:00:00+00:00"}
+    assert any("S1" in n and repr(value) in n for n in notes), notes
+
+
 # ---- the extended contract: Bz coil, magnetometer, time basis -----------------------------------
 #
 # sensor_* columns are induction coils, one per axis; magnetometer_* is ONE three-axis fluxgate unit
