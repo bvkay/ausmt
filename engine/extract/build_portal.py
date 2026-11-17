@@ -3312,6 +3312,53 @@ def station_runs(run_facts, run_ids, station_id, comps):
     return [run], notes
 
 
+def _only(node, keys) -> dict:
+    return {k: v for k, v in (node or {}).items() if k in keys}
+
+
+def _withheld_instrument(node) -> dict:
+    """An instrument reduced to its identity: maker, model, serial and persistent identifiers."""
+    out = _only(node, stcheck.WITHHELD_INSTRUMENT_KEYS)
+    if "identifiers" in out:
+        out["identifiers"] = [_only(row, stcheck.WITHHELD_IDENTIFIER_KEYS)
+                              for row in out["identifiers"]]
+    return out
+
+
+def withheld_run(run):
+    """One run reduced to what an embargoed record may state (the stcheck.WITHHELD_* sets): the
+    occupation window, the logger, and the sensor of each magnetic channel. The rate, the dipoles
+    and the azimuths are dropped. None when none of that is stated: a bare run id says nothing."""
+    out = {"id": run["id"]}
+    period = _only(run.get("time_period"), stcheck.WITHHELD_PERIOD_KEYS)
+    if period.get("start"):
+        out["time_period"] = period
+    logger = _withheld_instrument(run.get("data_logger"))
+    if logger:
+        out["data_logger"] = logger
+    channels = [{"component": ch["component"], "sensor": _withheld_instrument(ch.get("sensor"))}
+                for ch in run.get("channels") or []
+                if str(ch.get("component") or "")[:1].lower() in stcheck.WITHHELD_CHANNEL_FAMILIES]
+    channels = [ch for ch in channels if ch["sensor"]]
+    if channels:
+        out["channels"] = channels
+    return out if len(out) > 1 else None
+
+
+def withheld_station_runs(embargoed, sheet_row, run_ids, station_id) -> list:
+    """runs[] for one station of a survey whose bytes are withheld: when the station was occupied
+    and by which instruments, read from the survey's own run-metadata.csv row and from nowhere
+    else. The station's file IS the withheld product, so neither its >INFO block nor the components
+    its transfer function measured reach a run here. Only an embargoed survey publishes any; a
+    metadata_only survey keeps none. The id still comes from the store alone.
+
+    Returns no curation notes: the full assembly beside it already reports every one of them."""
+    if not (embargoed and sheet_row):
+        return []
+    runs, _ = station_runs(runsheet.merge(None, sheet_row, station_id, []), run_ids, station_id, None)
+    return [run for run in map(withheld_run, runs) if run]
+
+
 def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served,
                      prov, runs=None, resources=None) -> dict:
     """Build one station's station.json (engine/schema/ausmt-station.schema.json 0.1, the third public
@@ -3331,15 +3378,22 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
     with an active embargo, or metadata_only) the derived TF science IS the embargoed data: emitting
     median_relative_error, the completeness diagnostic or the frame phase medians here would publish
     exactly what the byte gate and the display gate withhold. `served` is the survey's
-    access_serve_state["served"] captured at the emit site, never re-derived."""
+    access_serve_state["served"] captured at the emit site, never re-derived.
+
+    An EMBARGOED record still states when its station was occupied and by which instruments. For a
+    non-served survey the caller passes `runs` from withheld_station_runs(), which reads the survey's
+    run sheet alone; the projection below is the shape guarantee on top of that source rule."""
     edi_served = edi_rel is not None
     if not served:
+        level = normalise_access_level((meta or {}).get("access", "open"))
+        occupied = ([run for run in map(withheld_run, runs or []) if run]
+                    if level == stcheck.WITHHELD_RUN_ACCESS_LEVEL else [])
         # The withheld record carries ONLY the discovery-safe identity the public catalogue already
         # exposes: no TF-derived science, no exact source position, no input_sha256.
         return {
             **_station_identity(r, label, slug),
             "country": (meta or {}).get("country", "Australia"), "organisation": org,
-            "access": {"level": normalise_access_level((meta or {}).get("access", "open")),
+            "access": {"level": level,
                        "embargo_until": (meta or {}).get("embargo_until"), "served": False},
             "distribution": {"edi_available": False, "license": lic, "edi_path": None},
             # discovery-universal flag: the survey is fully in the catalogue/surveys/mtcat; only the derived
@@ -3348,6 +3402,8 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
             "note": "This survey's access state withholds its derived science products (embargoed or "
                     "metadata_only). Discovery metadata remains in the catalogue; the science is released "
                     "when the survey's access.level is opened.",
+            # APPENDED so no frozen key moves, and absent where the run sheet states nothing.
+            **({"runs": occupied} if occupied else {}),
         }
     doc = {
         **_station_identity(r, label, slug),
@@ -3426,7 +3482,7 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
     # runs[], APPENDED so no existing key moves. Absent where the source asserts no acquisition
     # fact, which is most of the corpus and is the correct open-world statement: run metadata not
     # asserted, never "no runs occurred". Assembled by station_runs() from the >INFO extraction and
-    # the persistent run-id store; the withheld branch above returns before this and gains none.
+    # the persistent run-id store; the withheld branch above returns before this.
     if runs:
         doc["runs"] = runs
     # resources[], appended for the same reason. Absent where the station serves no bytes at
@@ -6332,6 +6388,11 @@ def _main_build(argv=None):
                 runsheet.merge(_run_facts_by_station.get(r["id"]), _sheet_row, r["id"], _run_notes),
                 _survey_run_ids, r["id"], r.get("comps"))
             _run_notes += _rnotes
+            if not _acc["served"]:
+                # The assembly above read the station's own file, which is the withheld product, so
+                # it stays curation-only here. The record gets the run sheet's window and instruments.
+                _runs = withheld_station_runs(_acc["embargo_active"], _sheet_row, _survey_run_ids,
+                                              r["id"])
             _station_product_jobs.append(
                 (r, srow, label, org, meta, lic, slug, p,
                  (f"edi/{slug}/{served_edi.name}" if served_edi is not None else None),

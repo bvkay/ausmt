@@ -21,12 +21,26 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import quote, unquote
 
-# The withheld stub's WHOLE key set (schema oneOf[0]): the nine frozen keys plus the three promotion
-# markers. Closed world, so any other key in a withheld record is a leak, never an extension.
+# The withheld stub's WHOLE key set (schema oneOf[0]): the nine frozen keys, the three promotion
+# markers, and `runs` on an embargoed record. Closed world, so any other key in a withheld record
+# is a leak, never an extension.
 WITHHELD_KEYS = frozenset({"schema", "version", "ausmt_id", "station", "survey", "survey_id",
-                           "country", "organisation", "access", "distribution", "withheld", "note"})
+                           "country", "organisation", "access", "distribution", "withheld", "note",
+                           "runs"})
 _WITHHELD_BLOCK_KEYS = {"access": frozenset({"level", "embargo_until", "served"}),
                         "distribution": frozenset({"edi_available", "license", "edi_path"})}
+# What an embargoed record's run may state: when the station was occupied and by which instruments.
+# Closed at every level like the stub around it, so the rate, the dipoles, the azimuths and anything
+# read out of the withheld file stay withheld. The emitter projects through these same sets, so what
+# is published and what is checked cannot drift. A metadata_only record gains no run at all.
+WITHHELD_RUN_ACCESS_LEVEL = "embargoed"
+WITHHELD_RUN_KEYS = frozenset({"id", "time_period", "data_logger", "channels"})
+WITHHELD_PERIOD_KEYS = frozenset({"start", "end", "time_basis"})
+WITHHELD_INSTRUMENT_KEYS = frozenset({"manufacturer", "model", "serial_number", "identifiers"})
+WITHHELD_IDENTIFIER_KEYS = frozenset({"scheme", "identifier"})
+WITHHELD_CHANNEL_KEYS = frozenset({"component", "sensor"})
+# A withheld channel exists only to name its sensor, and only a magnetic channel has one.
+WITHHELD_CHANNEL_FAMILIES = ("h", "b")
 # Bare canonical form, the only form AusMT publishes: a resolver prefix makes a DOI a URL.
 _BARE_DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 # The electrode-circuit members. They attach to the electric measurement circuit and to nothing else.
@@ -139,7 +153,74 @@ def _withheld_violations(doc) -> list:
             out += [f"withheld record's `{block}` carries `{k}`" for k in sorted(set(value) - allowed)]
     if (doc.get("distribution") or {}).get("edi_path") is not None:
         out.append("withheld record states a distribution.edi_path; nothing is distributed for it")
+    if "runs" in doc:
+        out += _withheld_run_violations(doc)
     return out
+
+
+def _closed(node, allowed, where) -> list:
+    """One object of a withheld run against its closed key set."""
+    if not isinstance(node, dict):
+        return [f"{where} is a {type(node).__name__}, not an object"]
+    return [f"{where} carries `{k}`, which a withheld record's run does not define"
+            for k in sorted(set(node) - allowed)]
+
+
+def _withheld_instrument_violations(node, where) -> list:
+    out = _closed(node, WITHHELD_INSTRUMENT_KEYS, where)
+    rows = node.get("identifiers", []) if isinstance(node, dict) else []
+    if not isinstance(rows, list):
+        return out + [f"{where} identifiers is a {type(rows).__name__}, not a list"]
+    for row in rows:
+        out += _closed(row, WITHHELD_IDENTIFIER_KEYS, f"{where} identifier")
+    return out
+
+
+def _withheld_run_violations(doc) -> list:
+    """An embargoed record may say when its station was occupied and by which instruments, and
+    nothing else about the acquisition. Every level is closed, so a rate, a dipole or a position
+    cannot ride in under a run, and the general run rules still apply on top."""
+    runs, access = doc.get("runs"), doc.get("access")
+    out = []
+    if not isinstance(access, dict) or access.get("level") != WITHHELD_RUN_ACCESS_LEVEL:
+        out.append("withheld record carries `runs` while its access level is not embargoed")
+    if not isinstance(runs, list) or not runs:
+        return out + ["withheld record's `runs` is not a non-empty list"]
+    for run in runs:
+        if not isinstance(run, dict):
+            continue   # named by _run_violations below
+        where = f"withheld run {run.get('id')!r}"
+        out += _closed(run, WITHHELD_RUN_KEYS, where)
+        if not (isinstance(run.get("id"), str) and run["id"].strip()):
+            out.append(f"{where} states no id")
+        if not any(k in run for k in ("time_period", "data_logger", "channels")):
+            out.append(f"{where} states neither a window nor an instrument")
+        if "time_period" in run:
+            out += _closed(run["time_period"], WITHHELD_PERIOD_KEYS, f"{where} time_period")
+        if "data_logger" in run:
+            out += _withheld_instrument_violations(run["data_logger"], f"{where} data_logger")
+        channels = run.get("channels", [])
+        if not isinstance(channels, list):
+            out.append(f"{where} channels is a {type(channels).__name__}, not a list")
+            continue
+        for channel in channels:
+            out += _closed(channel, WITHHELD_CHANNEL_KEYS, f"{where} channel")
+            if not isinstance(channel, dict):
+                continue
+            component = str(channel.get("component") or "")
+            if component[:1].lower() not in WITHHELD_CHANNEL_FAMILIES or "sensor" not in channel:
+                out.append(f"{where} channel {component!r} is not a magnetic channel naming its "
+                           f"sensor")
+            if "sensor" in channel:
+                out += _withheld_instrument_violations(channel["sensor"],
+                                                       f"{where} channel {component} sensor")
+    # A run whose containers are the wrong type is already named above; the general rules read
+    # only the ones they can walk.
+    walkable = [run for run in runs if not isinstance(run, dict)
+                or (isinstance(run.get("time_period", {}), dict)
+                    and isinstance(run.get("channels", []), list))]
+    return (out + _run_violations(walkable) + _doi_violations({"runs": runs})
+            + _added_violations(runs, "$.runs", "runs[]"))
 
 
 def _run_violations(runs) -> list:
