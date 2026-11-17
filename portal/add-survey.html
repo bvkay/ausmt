@@ -293,7 +293,9 @@
         publicly</b>, its map presence, exact station coordinates and screening diagnostics are visible to
         anyone regardless of level. <b>open</b> also serves the data files for download. <b>metadata_only</b>
         and <b>embargoed</b> withhold <b>all data bytes</b> (downloads route to the source archive) until a
-        curator releases them; an embargo never lifts automatically, even after its date passes.</div></div>
+        curator releases them; an embargo never lifts automatically, even after its date passes. Under
+        <b>embargoed</b>, each station's occupation dates and the serial numbers and DOIs of its logger and
+        magnetic sensors, from run-metadata.csv, stay public; <b>metadata_only</b> publishes none of them.</div></div>
 
       <!-- embargo_until and access contact, revealed only for a non-open level, mirroring the page's other
            show/hide blocks. Emitted into survey.yaml's access block by buildSurveyYaml (empty to null, date
