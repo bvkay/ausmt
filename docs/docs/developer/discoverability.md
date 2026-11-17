@@ -64,8 +64,8 @@ declare `noindex` and stay out of the sitemap; they keep working for anyone foll
 link, which is what the URL contract promises.
 
 Every page is rendered from the already-served public documents alone, so a page can never disclose
-anything the gated products do not already publish. An embargoed station's page shows the occupation
-window, logger and magnetic sensors its withheld `station.json` states, and nothing more.
+anything the gated products do not already publish. An embargoed station's page shows the run id,
+occupation window, logger and magnetic sensors its withheld `station.json` states, and nothing more.
 
 ## Page chrome and appearance
 

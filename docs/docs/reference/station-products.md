@@ -49,7 +49,7 @@ carries the survey's licence and credit inside the file (`Experiment/Surveys/<sl
 | Normative artifact | `engine/schema/ausmt-station.schema.json` for `station.json`; the build's product emitter, `engine/extract/build_portal.py`, for `dimensionality.json` |
 | Served location | `/data/products/<slug>/<station>/` |
 | Served schema | `/data/ausmt-station.schema.json`, `/data/schemas/ausmt-station/0.1/ausmt-station.schema.json` |
-| Version | 0.1 (draft) for `station.json`; `dimensionality.json` declares none and is additive and key-based |
+| Version | 0.1 (draft) for `station.json`: while it is a draft the bytes served under 0.1 can widen, so a validator holding an earlier copy can refuse a record the current copy accepts. `dimensionality.json` declares none and is additive and key-based |
 | Status | `station.json` is a public contract; `dimensionality.json` is served alongside it and is not a contract |
 | Access | the product tree is a served surface, so it rides the same access gate as the download files |
 | Validated | the build validates every emitted `station.json` against the shipped schema with format checking on, and against the semantic rules JSON Schema cannot state, and refuses to publish a document that fails; `scripts/verify.py` re-runs both over the built tree and checks that the set of published `ausmt_id` values equals the set of stations `mtcat.json` catalogues |
@@ -70,7 +70,7 @@ The two documents are gated differently, and the difference matters when looping
 
 | | Open survey | Withheld survey |
 |---|---|---|
-| `station.json` | full record | `200`, with `"withheld": true`, an `access` block, and no derived science; an embargoed survey's record also states when the station was occupied and by which instruments |
+| `station.json` | full record | `200`, with `"withheld": true`, an `access` block, and no derived science; an embargoed survey's record also states when the station was occupied and by which instruments, where its run sheet names the station |
 | `dimensionality.json` | full record | `404`, never written |
 
 So `station.json` always resolves and is worth requesting for any station. `dimensionality.json` should
@@ -659,8 +659,9 @@ record rather than asserting containment, so a row declared at that scope is dec
 ### 1.18 The withheld record
 
 A station in a survey that is not served gets a stub carrying only the discovery-safe identity the
-public catalogue already exposes. A station in an embargoed survey also states when it was occupied
-and by which instruments, in `runs`; a `metadata_only` survey's stub has no `runs`.
+public catalogue already exposes. A station in an embargoed survey whose run sheet names it also
+states when it was occupied and by which instruments, in `runs`; a `metadata_only` survey's stub has
+no `runs`.
 
 ```json
 {
@@ -721,8 +722,8 @@ occupied, and by which logger and sensors, is not derived from it, so the withhe
 much and no more. It is read from the survey's
 [`run-metadata.csv`](survey-yaml.md#113-run-metadatacsv-the-curated-acquisition-sheet) alone and
 never from the withheld file: not the `>INFO` block, not the header dates, not the components the
-transfer function measured. Its id comes from `run-ids.yaml`, as on a full record. Every level is
-closed:
+transfer function measured. Its id comes from `run-ids.yaml`, as on a full record, and a station
+with no id there publishes no run. Every level is closed:
 
 | Withheld run member | Members it may carry |
 |---|---|

@@ -227,7 +227,7 @@ is given, because it is a public contract; passing `--products` writes a second 
 puts `dimensionality.json` on disk at all. Deployment passes `--products <out>/products`, so the two are
 one directory and the served paths are the same either way. Every product carries a `provenance` block,
 with one exception: a withheld `station.json` is a closed-world stub of twelve members, plus a closed
-`runs` on an embargoed record, and carries none. A new product emits
+`runs` on an embargoed record, and carries no `provenance` block. A new product emits
 `products/<survey>/<station>/<product>.json` with a `method`/citation field, a `screening_diagnostic`
 or interpretation caveat, a `provenance` block and any companion assets; the steps are in
 [How to extend](extending.md#2-add-a-new-derived-science-product-eg-wire-up-strike) and the pattern is

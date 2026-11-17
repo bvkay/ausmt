@@ -7147,9 +7147,9 @@ def _main_build(argv=None):
     except OSError as _e:
         print(f"note: survey-metadata schema not served beside data ({type(_e).__name__}: {_e})", file=sys.stderr)
     # The station schema (the third public contract): the SAME two routes, by the same rule -
-    # data/schemas/ausmt-station/<version>/ausmt-station.schema.json is the version-specific immutable
-    # route the schema's own $id names, data/ausmt-station.schema.json the latest-convenience copy
-    # beside the data. Byte-copies of the in-tree artifact; the version segment derives from
+    # data/schemas/ausmt-station/<version>/ausmt-station.schema.json is the version-specific route
+    # the schema's own $id names, data/ausmt-station.schema.json the latest-convenience copy beside
+    # the data. Unlike the two schemas above, 0.1 is a draft, so the bytes at its route can widen. Byte-copies of the in-tree artifact; the version segment derives from
     # STATION_SCHEMA_VERSION (the generated mirror), never a literal.
     _st_schema = HERE.parent / "schema" / "ausmt-station.schema.json"
     try:
