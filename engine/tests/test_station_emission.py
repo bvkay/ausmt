@@ -9,7 +9,7 @@ What this module pins, all of it read off documents a REAL build wrote:
   * THE KEY SETS, on both branches (workflow contract section 2). The full record carries the fourteen
     frozen keys, exactly three promotion markers, the new canonical model where the source supports it
     and the one conditional coordinate key; the withheld stub carries the nine frozen keys plus exactly
-    three markers and nothing else. These are the pins that make byte-stability enforceable: before the
+    three markers, and runs[] only on an embargoed record whose run sheet names the station. These are the pins that make byte-stability enforceable: before the
     promotion nothing forbade a fifteenth key on either branch.
   * the markers themselves: `schema` names the contract, `version` is the generated constant, and
     `survey_id` is the SLUG, which is what mtcat and survey-metadata.json key on.
@@ -58,6 +58,9 @@ FROZEN_FULL_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", 
 FROZEN_WITHHELD_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", "access",
                         "distribution", "withheld", "note")
 PROMOTION_MARKERS = ("schema", "version", "survey_id")
+# The withheld stub's one conditional member: runs[], on an embargoed record whose survey's run sheet
+# states a window or an instrument for the station, and on no other withheld record.
+CONDITIONAL_WITHHELD_KEYS = ("runs",)
 NEW_MODEL_KEYS = ("runs", "resources")
 CONDITIONAL_FULL_KEYS = ("coordinate_policy",)
 # The five members the dimensionality call is made of. `screening_diagnostic` stays sidecar-only: where
@@ -164,8 +167,11 @@ def test_the_withheld_branch_carries_the_frozen_nine_plus_exactly_three_markers(
 
 def test_the_stub_key_set_is_exactly_what_the_semantic_layer_closes_over():
     """One definition, not two: the emitted stub's key set and the layer's closed world are the same
-    twelve names, so a widening of either surfaces here rather than at a deployment gate."""
-    assert set(FROZEN_WITHHELD_KEYS) | set(PROMOTION_MARKERS) == set(stcheck.WITHHELD_KEYS)
+    thirteen names, so a widening of either surfaces here rather than at a deployment gate."""
+    assert (set(FROZEN_WITHHELD_KEYS) | set(PROMOTION_MARKERS) | set(CONDITIONAL_WITHHELD_KEYS)
+            == set(stcheck.WITHHELD_KEYS))
+    assert len(stcheck.WITHHELD_KEYS) == 13
+    assert stcheck.WITHHELD_RUN_ACCESS_LEVEL == "embargoed"
 
 
 def test_every_record_opens_with_the_markers_and_survey_id_is_the_slug(built_access):
