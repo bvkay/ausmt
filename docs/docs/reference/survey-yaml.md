@@ -628,7 +628,7 @@ also carry these.
 | Type | string |
 | Allowed values | `open`, `metadata_only`, `embargoed` |
 | Example | `open` |
-| Note | Out of enum is a `FAIL`. Only `open` distributes data; anything else warns at validation and withholds at build. |
+| Note | Out of enum is a `FAIL`. Only `open` distributes data; anything else warns at validation and withholds at build. An `embargoed` survey withholds its transfer functions and everything derived from them, but not its occupation record: each station's public record still states when it was occupied and the serial numbers and PIDs of its data logger and magnetic sensors, from [`run-metadata.csv`](#113-run-metadatacsv-the-curated-acquisition-sheet). Leave those columns blank, or choose `metadata_only`, if occupation dates must not be public. A `metadata_only` survey publishes no run. |
 
 ### 8.3 access.embargo_until
 
@@ -839,7 +839,8 @@ A `*_pid` cell is a DOI, with or without the `https://doi.org/` resolver prefix;
 | A coil wins over the magnetometer on its own axis | An axis naming both cannot carry two sensors. The coil is published there and the build writes a curation note. |
 | Every published time is UTC | A local clock is corrected when the sheet is written, and `time_basis` states the correction. The build never shifts a time itself, and a row whose clock offset is not known carries no time. |
 | One run per station | No source yet describes two acquisitions at one station in a form the build can separate, so a sheet row is one run. |
-| A withheld survey publishes no `runs` | An embargoed or `metadata_only` survey serves the withheld station record, which has no `runs`, whatever the sheet holds. |
+| An embargoed survey publishes when and with what, and no more | An embargo withholds the transfer functions and everything derived from them; when a station was occupied and by which instruments is neither. Its withheld station record therefore carries a [closed `runs`](station-products.md#118-the-withheld-record) read from this sheet alone and never from the withheld file: the run id, `start`, `end` and `time_basis`, the logger, and the sensor of each magnetic channel, each with its PIDs. `sample_rate_hz`, the dipole lengths, the azimuths and the electric channels stay withheld. |
+| A `metadata_only` survey publishes no `runs` | Its withheld station record carries none, whatever the sheet holds. |
 
 ---
 

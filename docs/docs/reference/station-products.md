@@ -70,7 +70,7 @@ The two documents are gated differently, and the difference matters when looping
 
 | | Open survey | Withheld survey |
 |---|---|---|
-| `station.json` | full record | `200`, with `"withheld": true`, an `access` block, and no derived science |
+| `station.json` | full record | `200`, with `"withheld": true`, an `access` block, and no derived science; an embargoed survey's record also states when the station was occupied and by which instruments |
 | `dimensionality.json` | full record | `404`, never written |
 
 So `station.json` always resolves and is worth requesting for any station. `dimensionality.json` should
@@ -468,7 +468,8 @@ sources. The survey's curated acquisition sheet,
 [`run-metadata.csv`](survey-yaml.md#113-run-metadatacsv-the-curated-acquisition-sheet), is applied
 first; the `>INFO` block the custodian wrote, read by the dialect extractors described in
 [the build lifecycle](../developer/build-lifecycle.md#the-build-step-by-step), fills whatever the
-sheet leaves unsaid.
+sheet leaves unsaid. A withheld record of an embargoed survey carries a reduced run read from the
+sheet alone, described in section 1.18.
 
 | Member | Type | Definition |
 |---|---|---|
@@ -658,7 +659,8 @@ record rather than asserting containment, so a row declared at that scope is dec
 ### 1.18 The withheld record
 
 A station in a survey that is not served gets a stub carrying only the discovery-safe identity the
-public catalogue already exposes.
+public catalogue already exposes. A station in an embargoed survey also states when it was occupied
+and by which instruments, in `runs`; a `metadata_only` survey's stub has no `runs`.
 
 ```json
 {
@@ -671,17 +673,32 @@ public catalogue already exposes.
   "country": "Australia",
   "organisation": "Adelaide University",
   "access": { "level": "embargoed", "embargo_until": "2027-02-01", "served": false },
-  "distribution": { "edi_available": false, "license": "…", "edi_path": null },
+  "distribution": { "edi_available": false, "license": "CC-BY-4.0", "edi_path": null },
   "withheld": true,
-  "note": "This survey's access state withholds its derived science products …"
+  "note": "This survey's access state withholds its derived science products …",
+  "runs": [
+    { "id": "Vul24-13-r01",
+      "time_period": { "start": "2024-11-22T21:24:59+00:00", "end": "2024-11-30T07:38:32+00:00",
+                       "time_basis": "utc" },
+      "data_logger": { "manufacturer": "LEMI", "model": "LEMI-423", "serial_number": "#0038",
+                       "identifiers": [ { "scheme": "DOI", "identifier": "10.82388/bqys907u" } ] },
+      "channels": [
+        { "component": "hx",
+          "sensor": { "manufacturer": "LEMI", "model": "LEMI-120", "serial_number": "244",
+                      "identifiers": [ { "scheme": "DOI", "identifier": "10.82388/3y6e9dem" } ] } },
+        { "component": "hy",
+          "sensor": { "manufacturer": "LEMI", "model": "LEMI-120", "serial_number": "245",
+                      "identifiers": [ { "scheme": "DOI", "identifier": "10.82388/mwqtg78c" } ] } }
+      ] }
+  ]
 }
 ```
 
-The stub carries these twelve members and no thirteenth. That is enforced, not conventional: the
-withheld branch of the schema is closed, nested blocks included, and the build and `verify.py` both
-reject a record that grows a key. Extending the stub therefore takes a schema change, which is the
-point: a key-name blocklist over an open object is bypassable, and coordinates were once shown to
-validate under unbanned spellings and inside an open `access` block.
+The stub carries these twelve members, plus `runs` on an embargoed record, and nothing else. That is
+enforced, not conventional: the withheld branch of the schema is closed, nested blocks included, and
+the build and `verify.py` both reject a record that grows a key. Extending the stub therefore takes a
+schema change, which is the point: a key-name blocklist over an open object is bypassable, and
+coordinates were once shown to validate under unbanned spellings and inside an open `access` block.
 
 | Member | Type | Definition |
 |---|---|---|
@@ -697,10 +714,29 @@ validate under unbanned spellings and inside an open `access` block.
 | `distribution` | object | `{edi_available, license, edi_path}`: `false`, the survey's licence, and `null`. Nothing is distributed for a withheld record |
 | `withheld` | boolean | `true`, the marker a consumer tests on |
 | `note` | string | why the derived science is absent |
+| `runs` | array | embargoed records only, and absent where the survey's acquisition sheet states nothing for the station: when it was occupied and by which instruments |
 
-There is no `location`, no `data`, no `diagnostics`, no `processing`, no `runs`, no `resources` and no
-`provenance`. The survey's discovery metadata stays fully public in the catalogue; only the derived
-science is withheld here.
+An embargo withholds the transfer function and everything derived from it. When a station was
+occupied, and by which logger and sensors, is not derived from it, so the withheld run states that
+much and no more. It is read from the survey's
+[`run-metadata.csv`](survey-yaml.md#113-run-metadatacsv-the-curated-acquisition-sheet) alone and
+never from the withheld file: not the `>INFO` block, not the header dates, not the components the
+transfer function measured. Its id comes from `run-ids.yaml`, as on a full record. Every level is
+closed:
+
+| Withheld run member | Members it may carry |
+|---|---|
+| run | `id`, and at least one of `time_period`, `data_logger`, `channels` |
+| `time_period` | `start`, `end`, `time_basis` |
+| `data_logger` | `manufacturer`, `model`, `serial_number`, `identifiers` (rows of `scheme`, `identifier`) |
+| `channels[]` | `component` and `sensor`, magnetic components only; `sensor` has the `data_logger` shape |
+
+There is no `location`, no `data`, no `diagnostics`, no `processing`, no `resources` and no
+`provenance`, and a withheld run carries no `sample_rate_hz`, no dipole length, no azimuth, no
+contact resistance and no electric channel. A run whose sheet row states none of a window, a logger
+or a magnetic sensor is not published. The survey's discovery metadata stays fully public in the
+catalogue; only the derived science is withheld here. The station's static page shows the same
+occupation block.
 
 ---
 
