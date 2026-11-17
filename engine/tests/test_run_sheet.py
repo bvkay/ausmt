@@ -435,7 +435,16 @@ def test_an_extended_sheet_builds_a_valid_station(tmp_path):
     assert list(validator.iter_errors(doc)), "the schema must refuse a basis outside its vocabulary"
 
 
-def test_an_embargoed_survey_serves_no_runs_from_the_extended_sheet(tmp_path):
+def _lemi(model, serial, doi):
+    return {"manufacturer": "LEMI", "model": model, "serial_number": serial,
+            "identifiers": [{"scheme": "DOI", "identifier": doi}]}
+
+
+def test_an_embargoed_survey_serves_only_the_window_and_instruments_from_the_extended_sheet(
+        tmp_path):
+    """The run carries the window with its basis, the logger and one coil per magnetic axis. The
+    rate, the dipoles, the azimuths and the electric channels stay withheld, and the magnetometer,
+    which a coil outranks on every axis, reaches no file at all."""
     pytest.importorskip("mt_metadata")
     staged = tmp_path / "surveys"
     shutil.copytree(SURVEYS / "example-survey", staged / "example-survey")
@@ -455,7 +464,16 @@ def test_an_embargoed_survey_serves_no_runs_from_the_extended_sheet(tmp_path):
     assert r.returncode == 0, r.stderr
     doc = json.loads((out / "products" / "example-survey" / "EXAMPLE01" / "station.json")
                      .read_text(encoding="utf-8"))
-    assert doc.get("withheld") is True and "runs" not in doc
+    assert doc.get("withheld") is True
+    assert doc["runs"] == [{
+        "id": "EXAMPLE01-r01",
+        "time_period": {"start": "2022-02-12T07:59:23+00:00", "end": "2022-02-14T09:20:24+00:00",
+                        "time_basis": "utc"},
+        "data_logger": _lemi("LEMI-423", "#0040", "10.82388/c7ea5dpq"),
+        "channels": [{"component": "hx", "sensor": _lemi("LEMI-120", "125", "10.82388/ahbao8tk")},
+                     {"component": "hy", "sensor": _lemi("LEMI-120", "126", "10.82388/1nhybg3w")},
+                     {"component": "hz", "sensor": _lemi("LEMI-120", "127", "10.82388/fixture-bz")}],
+    }]
     for path in sorted(out.rglob("*")):
         if path.is_file() and path.suffix in (".json", ".html", ".xml", ".txt", ".csv"):
             assert "fixture-mag" not in path.read_text(encoding="utf-8", errors="ignore"), path
