@@ -174,12 +174,30 @@ def _rejected(base, mutate, why):
     assert errors(doc), f"the schema accepted a document that must be REJECTED: {why}"
 
 
+# What an embargoed stub may state about a run: its window and the logger. Valid on that stub, so
+# T13b fails only for the access level that carries it.
+_OCCUPIED_RUN = {"id": "Vul24-13-r01",
+                 "time_period": {"start": "2024-10-01T02:00:00+00:00", "time_basis": "utc"},
+                 "data_logger": {"manufacturer": "LEMI", "model": "LEMI-424", "serial_number": "101"}}
+
+
+def test_t13a_an_embargoed_stub_carrying_a_withheld_run_validates():
+    doc = fixture("promoted-vul24-13")
+    assert doc["access"]["level"] == "embargoed"
+    doc["runs"] = [copy.deepcopy(_OCCUPIED_RUN)]
+    assert not errors(doc), errors(doc)
+
+
 @pytest.mark.parametrize("why,mutate", [
     ("T12c EMBARGOED stub with a null embargo_until (the null is metadata_only's alone)",
      lambda d: d["access"].__setitem__("embargo_until", None)),
     ("T12d EMBARGOED stub with the embargo date DROPPED (fail-closed on the live embargoed survey)",
      lambda d: d["access"].pop("embargo_until")),
-    ("T13 withheld stub with injected runs[]", lambda d: d.__setitem__("runs", [{"id": "001"}])),
+    ("T13 embargoed stub with a run stating only its id",
+     lambda d: d.__setitem__("runs", [{"id": "001"}])),
+    ("T13b metadata_only stub carrying an otherwise valid withheld run",
+     lambda d: (d["access"].update({"level": "metadata_only", "embargo_until": None}),
+                d.__setitem__("runs", [copy.deepcopy(_OCCUPIED_RUN)]))),
     ("T14 withheld stub with injected coordinates",
      lambda d: d.__setitem__("location", {"lat": -31.0, "lon": 140.0})),
     ("T28a withheld + bare latitude/longitude keys",
