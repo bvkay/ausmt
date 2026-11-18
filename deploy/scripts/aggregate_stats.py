@@ -308,6 +308,18 @@ SWEEP_DISTINCT_FILES = 50
 _LANDING_PREFIXES = ("/surveys/", "/collections/")
 NETTYPE_UNKNOWN = "unknown"
 
+# THE NETWORK TYPE, for a non-operator request on a labelled day: the masked network looked up in the
+# table deploy/scripts/prep_nettype.py builds. The table holds only the four types below; unknown is
+# the miss and is never stored in it. The first line is a header naming the oldest source date, and
+# the table is used only while that source is no older than the maximum age, because prefixes change
+# hands. See NetTypes for the states.
+_NETTYPE_TABLE_VALUES = ("hosting", "education_research", "access_provider", "other")
+_NETTYPE_HEADER_RE = re.compile(r"^# ausmt-nettype v1 built=(\d{4}-\d{2}-\d{2}) "
+                                r"oldest_source=(\d{4}-\d{2}-\d{2}) "
+                                r"sources=([a-z0-9_]+(?:,[a-z0-9_]+)*)\s*$")
+_NETTYPE_PARTS = ("geoip", "nettype.csv")
+DEFAULT_NETTYPE_MAX_AGE_DAYS = 45
+
 # The append-only daily archive, written beside stats.json in the gateway state dir. See the archive
 # section further down for what it holds and, more importantly, what it deliberately does not.
 _ARCHIVE_FILENAME = "daily_archive.jsonl"
@@ -471,6 +483,74 @@ class AuStates(_RangeTable):
         return self.lookup(address)
 
 
+class NetTypes(_RangeTable):
+    """The network-type table. Construct via `open_table(path, today=..., max_age_days=...)`; it
+    never raises.
+
+    `state` is absent (no file), unreadable (an error reading it, or no valid row), stale (the
+    header is missing or unparseable, or its oldest source is more than `max_age_days` old on
+    `today`), aging (in date, but older than half that age) or loaded. Only loaded and aging tables
+    are used: every other state is treated as empty, so every lookup reads unknown. `full` is true
+    when the header names peeringdb among its sources, that is when the table can say more than
+    hosting."""
+
+    USABLE_STATES = ("loaded", "aging")
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.state = "absent"
+        self.sources: tuple[str, ...] = ()
+        self.full = False
+
+    @staticmethod
+    def _coerce_value(raw: str) -> str | None:
+        v = raw.strip().lower()
+        return v if v in _NETTYPE_TABLE_VALUES else None
+
+    @classmethod
+    def open_table(cls, path, *, today: dt.date,
+                   max_age_days: int = DEFAULT_NETTYPE_MAX_AGE_DAYS) -> "NetTypes":
+        p = Path(path) if path else None
+        if p is None or not p.exists():
+            return cls()
+        try:
+            with open(p, encoding="utf-8", newline="") as fh:
+                first = fh.readline()
+            t = cls.load(p)
+        except (OSError, ValueError, csv.Error):
+            t = cls()
+            t.state = "unreadable"
+            return t
+        if t.row_count == 0:
+            t.state = "unreadable"
+            return t
+        t.state = "stale"
+        m = _NETTYPE_HEADER_RE.match(first.rstrip("\r\n"))
+        if m:
+            try:
+                dt.date.fromisoformat(m.group(1))
+                age = (today - dt.date.fromisoformat(m.group(2))).days
+            except ValueError:
+                age = None
+            if age is not None and age <= max_age_days:
+                t.state = "aging" if age > max_age_days / 2 else "loaded"
+                t.sources = tuple(m.group(3).split(","))
+                t.full = "peeringdb" in t.sources
+        if not t.usable:
+            t._starts = {4: [], 6: []}
+            t._ranges = {4: [], 6: []}
+            t.loaded = False
+        return t
+
+    @property
+    def usable(self) -> bool:
+        return self.state in self.USABLE_STATES
+
+    def nettype(self, address) -> str:
+        """The network type of a masked address, or unknown."""
+        return self.lookup(address) or NETTYPE_UNKNOWN
+
+
 class OperatorNetworks:
     """The host operator list: one CIDR per line, with blank lines and # comments allowed. Construct
     via `load(path)`; it never raises.
@@ -584,6 +664,15 @@ def _labels_from_cfg(raw) -> str | None:
 
 def _default_operator_list(data_dir: str) -> Path:
     return Path(data_dir).joinpath(*_OPERATOR_LIST_PARTS)
+
+
+def _nettype_max_age(raw) -> int:
+    """The maximum source age in days; absent, malformed or not positive reads the default."""
+    try:
+        v = int((raw or "").strip())
+    except ValueError:
+        return DEFAULT_NETTYPE_MAX_AGE_DAYS
+    return v if v > 0 else DEFAULT_NETTYPE_MAX_AGE_DAYS
 
 
 class _LabelEvidence:
@@ -1373,6 +1462,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
               served_build: str | None = None, archive_out: list | None = None,
               ts_access: dict | None = None, labels_from: str | None = None,
               operator_nets: "OperatorNetworks | None" = None,
+              nettypes: "NetTypes | None" = None,
               label_stats_out: dict | None = None) -> dict:
     """Fold every COMPLETE day in `lines` into `prev`, returning the new cumulative stats dict.
 
@@ -1432,7 +1522,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     an admitted OPERATOR request (see _operator_label) is counted on the operator line in the totals
     and its month, as a request count with no dedupe, and reaches no other figure. The derivation is
     guarded: a fault costs that request its labels (operator unknown, so it is counted) and adds one
-    to `label_fallbacks` in `label_stats_out`, and never costs the fold."""
+    to `label_fallbacks` in `label_stats_out`, and never costs the fold. `nettypes` is the OPTIONAL
+    network-type table (NetTypes); absent or unusable, every network type reads unknown."""
     stats = _coerce_prev(prev)
     prev_folded = stats.get("last_folded_date")
     cutoff_date = (run_dt.date() - dt.timedelta(days=1))  # last complete day
@@ -1526,7 +1617,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                 operator = _operator_label(source, rec["address"], rec["ua"], operator_nets)
                 if operator != OPERATOR_YES:
                     client_class = _client_class(classify_client(rec["ua"]), kind, rec, evidence)
-                    nettype = NETTYPE_UNKNOWN
+                    nettype = (nettypes.nettype(rec["address"]) if nettypes is not None
+                               else NETTYPE_UNKNOWN)
             except Exception:  # noqa: BLE001 -- a label fault must never cost the request or the fold
                 operator, client_class, nettype = OPERATOR_UNKNOWN, "unknown", NETTYPE_UNKNOWN
                 label_fallbacks += 1
@@ -1762,7 +1854,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
         month_index[month_key]["geo_days"] = _as_int(month_index[month_key].get("geo_days")) + 1
     if labels_from is not None:
         _fold_label_days(stats, month_index, days_seen, prev_folded, cutoff, labels_from,
-                         operator_nets)
+                         operator_nets, nettypes)
         for date in days_seen:
             if date >= labels_from:
                 archive_index[date]["labelled"] = True
@@ -1832,7 +1924,8 @@ def _prev_day(date_str: str) -> str:
 
 
 def _fold_label_days(stats: dict, month_index: dict, days_seen: dict, prev_folded, cutoff: str,
-                     labels_from: str, operator_nets: "OperatorNetworks | None") -> None:
+                     labels_from: str, operator_nets: "OperatorNetworks | None",
+                     nettypes: "NetTypes | None" = None) -> None:
     """The label day counters and the labels_since stamp for the days this call folded.
 
     labels_since is the first labelled day this fold could fold: labels_from, or the day after the
@@ -1848,6 +1941,8 @@ def _fold_label_days(stats: dict, month_index: dict, days_seen: dict, prev_folde
     stats.setdefault("labels_since", first)
     _dense_label_blocks(stats["totals"])
     list_read = operator_nets is not None and operator_nets.read
+    nettype_used = nettypes is not None and nettypes.usable
+    nettype_full = nettype_used and nettypes.full
     for date, month_key in days_seen.items():
         if date < labels_from:
             continue
@@ -1855,6 +1950,8 @@ def _fold_label_days(stats: dict, month_index: dict, days_seen: dict, prev_folde
         _dense_label_blocks(m)
         m["label_days"] = _as_int(m.get("label_days")) + 1
         m["operator_list_days"] = _as_int(m.get("operator_list_days")) + (1 if list_read else 0)
+        m["nettype_days"] = _as_int(m.get("nettype_days")) + (1 if nettype_used else 0)
+        m["nettype_full_days"] = _as_int(m.get("nettype_full_days")) + (1 if nettype_full else 0)
 
 
 def _bump(counter: dict, key: str, n: int = 1) -> None:
@@ -2348,10 +2445,14 @@ def main(argv=None) -> int:
         # The labels switch. Absent or malformed, labels are off, the operator list is not opened,
         # and the fold is exactly the unlabelled fold; removing the setting is the rollback.
         labels_from = _labels_from_cfg(os.environ.get("AUSMT_STATS_LABELS_FROM"))
-        operator_nets = None
+        operator_nets = nettypes = None
         if labels_from is not None:
             operator_nets = OperatorNetworks.load(
                 _cfg("AUSMT_STATS_OPERATOR_NETWORKS", str(_default_operator_list(data_dir))))
+            nettypes = NetTypes.open_table(
+                _cfg("AUSMT_STATS_NETTYPE_CSV", str(Path(data_dir).joinpath(*_NETTYPE_PARTS))),
+                today=run_dt.date(),
+                max_age_days=_nettype_max_age(os.environ.get("AUSMT_STATS_NETTYPE_MAX_AGE_DAYS")))
         skipped_logs: list[str] = []
         other_logs: list[str] = []
         lines = read_log_lines(log_dir, skipped=skipped_logs, with_source=True,
@@ -2362,14 +2463,18 @@ def main(argv=None) -> int:
                           au_states=au_states, collections=collections,
                           served_build=served_build, archive_out=archive_rows,
                           ts_access=ts_access, labels_from=labels_from,
-                          operator_nets=operator_nets, label_stats_out=label_stats)
+                          operator_nets=operator_nets, nettypes=nettypes,
+                          label_stats_out=label_stats)
         if labels_from is None:
             label_journal = "labels=off"
         else:
             # Only the state of the operator list is ever printed: no entry, count or line number.
             on = str(stats.get("last_folded_date") or "") >= labels_from
             label_journal = (f"labels={'on' if on else 'waiting'} from={labels_from} "
-                             f"operator_list={operator_nets.state} other_files={len(other_logs)} "
+                             f"operator_list={operator_nets.state} "
+                             f"nettype={nettypes.state} nettype_rows={nettypes.row_count} "
+                             f"nettype_sources={','.join(nettypes.sources) or 'none'} "
+                             f"other_files={len(other_logs)} "
                              f"label_fallbacks={label_stats.get('label_fallbacks', 0)} "
                              f"prepass={label_stats.get('prepass', 'none')}")
         dest_dir = Path(stats_file).parent

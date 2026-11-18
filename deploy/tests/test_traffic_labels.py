@@ -264,7 +264,8 @@ def _identity_scenario(root: Path) -> dict:
 
 
 def _run_main(monkeypatch, env: dict, now: str, **extra) -> None:
-    for k in ("AUSMT_STATS_LABELS_FROM", "AUSMT_STATS_OPERATOR_NETWORKS"):
+    for k in ("AUSMT_STATS_LABELS_FROM", "AUSMT_STATS_OPERATOR_NETWORKS",
+              "AUSMT_STATS_NETTYPE_CSV", "AUSMT_STATS_NETTYPE_MAX_AGE_DAYS"):
         monkeypatch.delenv(k, raising=False)
     for k, v in {**env, **extra, "AUSMT_STATS_NOW": now}.items():
         monkeypatch.setenv(k, v)
@@ -912,3 +913,243 @@ def test_journal_reports_fold_seconds(tmp_path, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert re.search(pat, err), err
     assert re.search(r"(?:^|\s)prepass=ok(?:\s|$)", err), err
+
+
+# --------------------------------------------------------------------------------------------------
+# Network type: the table, its header gate and the day counters.
+# --------------------------------------------------------------------------------------------------
+_NETTYPE = _FIXTURES / "nettype.sample.csv"
+_AU_STATES = _FIXTURES / "dbip-au-states.sample.csv"
+_NT_FULL = "x4bnet,iptoasn,peeringdb"
+_NT_RE = r"(?:^|\s)nettype=%s nettype_rows=%s nettype_sources=%s(?:\s|$)"
+
+
+def _nettypes(path=_NETTYPE, *, today=None, max_age=45):
+    return AGG.NetTypes.open_table(path, today=today or _RUN.date(), max_age_days=max_age)
+
+
+def _nettype_file(root: Path, *, oldest: str, built: str = "2026-07-11", sources: str = _NT_FULL,
+                  header: str | None = None, name: str = "nettype.csv") -> Path:
+    """The sample table under a header with the given dates and sources, or `header` verbatim."""
+    rows = [ln for ln in _NETTYPE.read_text(encoding="utf-8").splitlines()[1:]]
+    first = header if header is not None else (
+        f"# ausmt-nettype v1 built={built} oldest_source={oldest} sources={sources}")
+    p = root / name
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("\n".join(([first] if first else []) + rows) + "\n", encoding="utf-8")
+    return p
+
+
+def _keys(labels: dict) -> set:
+    return {k for per in labels.values() for k in per}
+
+
+def test_nettype_lookup_ipv4_ipv6_masked():
+    """The masked IPv4 and IPv6 networks resolve to their table type and land on the joint key at
+    cumulative and month grain; an address the table does not cover reads unknown."""
+    nt = _nettypes()
+    assert nt.state == "loaded" and nt.full
+    assert nt.nettype("203.0.113.0") == "hosting"
+    assert nt.nettype("2001:db8:2::") == "education_research"
+    assert nt.nettype("2001:db8:3::") == "access_provider"
+    assert nt.nettype("2001:db8:4::") == "other"
+    for addr in ("2001:db8:9::", "not-an-address", None, ""):
+        assert nt.nettype(addr) == "unknown", addr
+    lines = [_line("/data/catalogue.json", "203.0.113.0"),
+             _line("/data/edi/label-survey/L1.edi", "203.0.113.0"),
+             _line("/data/edi/label-survey/L2.edi", "2001:db8:2::"),
+             _line("/data/mtcat.json", "2001:db8:3::", ua="curl/8.0"),
+             _line("/data/edi/label-survey/L2.edi", "2001:db8:9::")]
+    stats, archive = _labelled(lines, nettypes=nt)
+    labels = stats["totals"]["labels"]
+    assert labels["downloads"] == {"portal_session|hosting": 1,
+                                   "unknown|education_research": 1, "unknown|unknown": 1}
+    assert labels["visits"] == {"portal_session|hosting": 1}
+    assert labels["api"] == {"tool|access_provider": 1}
+    assert stats["monthly"][0]["labels"] == labels
+    assert stats["monthly"][0]["nettype_days"] == 1
+    assert "hosting" not in json.dumps(archive)
+
+
+def test_nettype_rejects_values_outside_closed_set():
+    """A row whose type is outside hosting, education_research, access_provider and other is
+    skipped, so a hand-edited table cannot put a new value, an AS number or a stored unknown on
+    the screen; those networks read unknown."""
+    nt = _nettypes()
+    assert nt.row_count == 4
+    for addr in ("2001:db8:5::", "2001:db8:6::", "2001:db8:7::"):
+        assert nt.nettype(addr) == "unknown", addr
+    lines = [_line("/data/catalogue.json", a) for a in ("2001:db8:5::", "2001:db8:7::")]
+    stats, _ = _labelled(lines, nettypes=nt)
+    assert _keys(stats["totals"]["labels"]) <= {
+        f"{c}|{n}" for c in AGG._LABEL_CLIENTS for n in AGG._LABEL_NETTYPES}
+    assert stats["totals"]["labels"]["visits"] == {"portal_session|unknown": 2}
+
+
+@pytest.mark.parametrize("case", ["absent", "directory", "no_rows", "unheadered", "bad_header",
+                                  "stale"])
+def test_nettype_absent_unreadable_unheadered_or_stale_reads_unknown(tmp_path, case):
+    """An absent, unreadable, unheadered or stale table is treated as empty: every request reads
+    unknown network, the day does not count as having a network table, and every other figure is
+    unchanged. Staleness is judged on oldest_source, never on the build date."""
+    path = tmp_path / "nettype.csv"
+    want = {"absent": "absent", "directory": "unreadable", "no_rows": "unreadable",
+            "unheadered": "stale", "bad_header": "stale", "stale": "stale"}[case]
+    if case == "directory":
+        path.mkdir()
+    elif case == "no_rows":
+        path.write_text(f"# ausmt-nettype v1 built=2026-07-11 oldest_source=2026-07-01 "
+                        f"sources={_NT_FULL}\n203.0.113.0,203.0.113.255,government\n",
+                        encoding="utf-8")
+    elif case == "unheadered":
+        _nettype_file(tmp_path, oldest="", header="")
+    elif case == "bad_header":
+        _nettype_file(tmp_path, oldest="", header="# ausmt-nettype v2 built=2026-07-11")
+    elif case == "stale":
+        # Built yesterday from a source 46 days old.
+        _nettype_file(tmp_path, built="2026-07-11", oldest="2026-05-27")
+    nt = _nettypes(path)
+    assert nt.state == want
+    assert nt.nettype("203.0.113.0") == "unknown"
+    lines = _mixed_day("2026-07-11")
+    stats, archive = _labelled(lines, nettypes=nt)
+    plain, plain_arc = _labelled(lines)
+    assert _strip_labels(stats) == _strip_labels(plain)
+    assert archive == plain_arc
+    assert all(k.endswith("|unknown") for k in _keys(stats["totals"]["labels"]))
+    m = stats["monthly"][0]
+    assert m["label_days"] == 1 and m["nettype_days"] == 0 and m["nettype_full_days"] == 0
+    # Positive controls: a source exactly 45 days old is in date, and an old build date does not
+    # make a table with a recent source stale.
+    for built, oldest in (("2026-07-11", "2026-05-28"), ("2026-01-01", "2026-07-01")):
+        fresh = _nettype_file(tmp_path / f"ok-{oldest}", built=built, oldest=oldest)
+        assert _nettypes(fresh).state in ("loaded", "aging"), (built, oldest)
+        assert _nettypes(fresh).nettype("203.0.113.0") == "hosting"
+
+
+def test_nettype_aging_warning_in_journal(tmp_path, monkeypatch, capsys):
+    """A table whose oldest source is past half the maximum age still labels, counts its days and
+    says nettype=aging in the journal, with its row count and sources. The maximum age is read from
+    AUSMT_STATS_NETTYPE_MAX_AGE_DAYS, and the journal prints no address or row."""
+    env = _identity_scenario(tmp_path)
+    data = Path(env["AUSMT_DATA_DIR"])
+    _nettype_file(data / "geoip", oldest="2026-06-12")
+    _run_main(monkeypatch, env, "2026-07-12T03:30:00Z", AUSMT_STATS_LABELS_FROM="2026-07-01")
+    err = capsys.readouterr().err
+    assert re.search(_NT_RE % ("aging", "4", _NT_FULL), err), err
+    assert _IPV4_RE.findall(err.replace(str(tmp_path), "")) == []
+    stats = json.loads((data / "gateway" / "state" / "stats.json").read_text(encoding="utf-8"))
+    month = stats["monthly"][0]
+    assert month["nettype_days"] == month["label_days"] == 2
+    assert stats["totals"]["labels"]["visits"].get("portal_session|hosting", 0) >= 1
+    # The same table past a shorter maximum age is stale; a fresh one named in .env is loaded.
+    for extra, state in (({"AUSMT_STATS_NETTYPE_MAX_AGE_DAYS": "20"}, "stale"),
+                         ({"AUSMT_STATS_NETTYPE_MAX_AGE_DAYS": "junk"}, "aging"),
+                         ({"AUSMT_STATS_NETTYPE_CSV": str(
+                             _nettype_file(tmp_path / "elsewhere", oldest="2026-07-05"))},
+                          "loaded")):
+        root = tmp_path / f"r-{state}-{len(extra)}-{sorted(extra)[0]}"
+        root.mkdir()
+        env2 = _identity_scenario(root)
+        _nettype_file(Path(env2["AUSMT_DATA_DIR"]) / "geoip", oldest="2026-06-12")
+        _run_main(monkeypatch, env2, "2026-07-12T03:30:00Z",
+                  AUSMT_STATS_LABELS_FROM="2026-07-01", **extra)
+        assert re.search(r"(?:^|\s)nettype=%s(?:\s|$)" % state, capsys.readouterr().err), extra
+    absent = tmp_path / "absent"
+    absent.mkdir()
+    _run_main(monkeypatch, _identity_scenario(absent), "2026-07-12T03:30:00Z",
+              AUSMT_STATS_LABELS_FROM="2026-07-01")
+    assert re.search(_NT_RE % ("absent", "0", "none"), capsys.readouterr().err)
+    off = tmp_path / "off"
+    off.mkdir()
+    env3 = _identity_scenario(off)
+    _nettype_file(Path(env3["AUSMT_DATA_DIR"]) / "geoip", oldest="2026-06-12")
+    _run_main(monkeypatch, env3, "2026-07-12T03:30:00Z")
+    assert not re.search(r"(?:^|\s)nettype", capsys.readouterr().err)
+
+
+def test_nettype_full_days_only_with_peeringdb_source(tmp_path):
+    """A labelled day counts toward nettype_full_days only when the table it used names peeringdb
+    among its sources; a hosting-only table counts toward nettype_days alone."""
+    lines = _mixed_day("2026-07-10") + _mixed_day("2026-07-11")
+    hosting = _nettypes(_nettype_file(tmp_path / "h", oldest="2026-07-01", sources="x4bnet"))
+    full = _nettypes(_nettype_file(tmp_path / "f", oldest="2026-07-01"))
+    assert not hosting.full and full.full
+    s1, _ = _labelled(lines, nettypes=hosting)
+    s2, _ = _labelled(lines, nettypes=full)
+    assert (s1["monthly"][0]["nettype_days"], s1["monthly"][0]["nettype_full_days"]) == (2, 0)
+    assert (s2["monthly"][0]["nettype_days"], s2["monthly"][0]["nettype_full_days"]) == (2, 2)
+    assert s1["monthly"][0]["label_days"] == s2["monthly"][0]["label_days"] == 2
+
+
+_LABEL_TOKENS = set(AGG._LABEL_CLIENTS) | (set(AGG._LABEL_NETTYPES) - {"unknown"}) | {
+    "labels", "operator", "crawler_excluded", "by_client_class", "labelled", "nettype"}
+
+
+def _label_key_paths(node, path=""):
+    """Every dict key under `node` that is a label token or a joint key, with its path."""
+    hits = []
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if isinstance(k, str) and ("|" in k or k in _LABEL_TOKENS):
+                hits.append(f"{path}/{k}")
+            hits += _label_key_paths(v, f"{path}/{k}")
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            hits += _label_key_paths(v, f"{path}[{i}]")
+    return hits
+
+
+def test_no_label_crossed_with_geography_or_survey():
+    """Labels are held at cumulative and month grain only and are never crossed with country,
+    state, survey, dataset or collection, nor written on a day row. The archive carries the client
+    class alone and never a network type."""
+    lines = [ln for ln in _reconcile_lines() if not isinstance(ln, tuple)]
+    lines += [_line("/data/edi/label-survey/L1.edi", "203.0.113.0", date="2026-07-11")]
+    stats, archive = _labelled(lines, au_states=AGG.AuStates.load(_AU_STATES),
+                               collections={"Label Survey": "demo"}, nettypes=_nettypes())
+    assert stats["by_state"] and stats["by_collection"] and stats["downloads"]["by_survey"]
+    assert sum(sum(per.values()) for per in stats["totals"]["labels"].values())
+    assert any(not k.endswith("|unknown") for k in _keys(stats["totals"]["labels"]))
+    for name in ("countries", "by_country_detail", "by_state", "by_state_detail", "by_collection",
+                 "handoffs", "daily"):
+        assert _label_key_paths(stats[name]) == [], name
+    assert _label_key_paths(stats["downloads"]) == []
+    for m in stats["monthly"]:
+        for name, block in m.items():
+            if name not in ("labels", "operator", "crawler_excluded"):
+                assert _label_key_paths(block) == [], (m["month"], name)
+    for line in archive:
+        text = json.dumps(line)
+        for token in ("|", "nettype", "hosting", "education_research", "access_provider", "other"):
+            assert token not in text, (line["date"], token)
+        rest = {k: v for k, v in line.items() if k not in _ARCHIVE_LABEL_KEYS}
+        assert _label_key_paths(rest) == [], line["date"]
+
+
+def test_labels_never_drop_a_request(tmp_path):
+    """Labels decide where a counted request is reported, never whether it is counted: with no
+    inputs, with every input loaded and with every input corrupt, a fold of traffic with no operator
+    request gives the same figures as an unlabelled fold, and the label sums still reconcile."""
+    lines = [ln for ln in _reconcile_lines() if not isinstance(ln, tuple)]
+    plain, plain_arc = _fold(lines)
+    junk_ops = tmp_path / "ops.txt"
+    junk_ops.write_text("not a network\n", encoding="utf-8")
+    junk_nt = tmp_path / "nettype.csv"
+    junk_nt.write_bytes(b"\xff\xfe\x00 not a table\n")
+    variants = {
+        "none": {"operator_nets": None, "nettypes": None},
+        "all": {"operator_nets": _nets(), "nettypes": _nettypes()},
+        "corrupt": {"operator_nets": AGG.OperatorNetworks.load(junk_ops),
+                    "nettypes": _nettypes(junk_nt)},
+    }
+    assert variants["corrupt"]["nettypes"].state == "unreadable"
+    for name, kw in variants.items():
+        stats, archive = _fold(lines, labels_from="2026-07-01", **kw)
+        assert _strip_labels(stats) == plain, name
+        assert _strip_archive(archive) == plain_arc, name
+        counted = {"downloads": stats["totals"]["downloads"], "visits": stats["totals"]["visits"],
+                   "api": stats["totals"]["api_requests"], "handoffs": stats["handoffs"]["requests"]}
+        for metric, n in counted.items():
+            assert sum(stats["totals"]["labels"][metric].values()) == n, (name, metric)
+        assert stats["totals"]["operator"] == dict.fromkeys(AGG._OPERATOR_KEYS, 0), name

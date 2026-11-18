@@ -341,8 +341,7 @@ absolute.** The salvaged raw files remain on the box at zero cost.
 
 Three labels per admitted request, derived at fold time from fields the fold already reads plus the
 name of the log file a line came from: operator, client class and network type. No edge change and no
-header beyond the user-agent. This section records the operator label, the switch and the client
-class; the network type is recorded here when it is built.
+header beyond the user-agent. This section records the switch and the three labels.
 
 ### The switch and rollback
 
@@ -403,11 +402,40 @@ and the journal says `prepass=failed`.
 
 A deduplicated download takes the class of the counted line. The totals and each month carry
 `labels`, a map per metric (downloads, visits, api, handoffs) of `<client>|<nettype>` counts that
-sums to the counted figure; the network type reads `unknown` until it is built. A labelled archive
+sums to the counted figure. A labelled archive
 day carries `labelled: true`, `by_client_class` (per metric, by class) and `crawler_excluded`, and no
 network type, operator figure, address or user-agent. The browser and scripted split is unchanged.
 The journal also carries `fold_seconds`, the run time of the fold, for comparison with the unit's
 start timeout.
+
+### Network type
+
+Non-operator requests only. Closed set hosting, education_research, access_provider, other,
+unknown. `NetTypes` (a `_RangeTable`) looks up the masked address in
+`$AUSMT_DATA_DIR/geoip/nettype.csv` (`AUSMT_STATS_NETTYPE_CSV`); its value hook accepts only the
+four stored types, so unknown is the miss and is never stored. Government, enterprise, transit and
+every other source type fold into other, so that no value points at a single agency.
+
+The table is built by `deploy/scripts/prep_nettype.py`: stdlib only, no network call, ranges widened
+to /24 and /48, overlaps resolved hosting first, rows sorted and disjoint because the lookup tests a
+single bisect candidate. No AS number, organisation name or domain is written. The default build is
+hosting only, from the X4BNet datacenter lists (MIT; built in part from IPLocate.io data, CC BY-SA
+4.0); the full build adds iptoasn.com (PDDL) prefixes typed from a PeeringDB net table, and waits on
+a reading of the PeeringDB terms for a stored snapshot. The X4BNet licence text is copied into the
+table header.
+
+The first line, `# ausmt-nettype v1 built=... oldest_source=... sources=...`, gates the table. States:
+absent; unreadable (an error reading it, or no valid row); stale (header missing or unparseable, or
+oldest_source more than `AUSMT_STATS_NETTYPE_MAX_AGE_DAYS`, default 45, days before the run date);
+aging (in date but past half that age, a journal warning only); loaded. Only loaded and aging tables
+are used; otherwise every request reads unknown. Staleness is judged on the oldest source, never the
+build date. The table is opened only while labels are on.
+
+Each labelled month carries `nettype_days` (days with a usable table) and `nettype_full_days` (days
+whose table names peeringdb among its sources), beside `label_days`. Network type exists only in the
+joint `labels` keys at month and cumulative grain: never on a day row or an archive line, and never
+crossed with country, state, survey, dataset or collection. The journal prints `nettype=<state>
+nettype_rows=N nettype_sources=<list>`. A fault in the lookup falls under the label guard.
 
 ### Operator list custody
 

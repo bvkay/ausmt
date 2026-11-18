@@ -1260,6 +1260,14 @@ table holds fewer than 5000 net records (`--min-peeringdb-records` overrides), w
 is not the MIT text, or when any input sits inside the output's directory. Repeat the chore monthly
 beside the db-ip refresh.
 
+The fold opens the table only while labels are on (`AUSMT_STATS_NETTYPE_CSV` in `.env` overrides the
+path). It judges the table by the `oldest_source` date in its header, never by the build date: older
+than `AUSMT_STATS_NETTYPE_MAX_AGE_DAYS` (default 45) the table is `stale` and every request reads
+unknown network; older than half that, it is still used and the journal says `nettype=aging`, which
+is the prompt to refresh. A missing, unreadable or unheadered table also reads unknown, and a row
+whose type is not one of the four is skipped. Each labelled month counts the days it had a usable
+table (`nettype_days`) and the days that table was a full build (`nettype_full_days`).
+
 #### Install the daily timer
 
 ```sh
@@ -1335,6 +1343,9 @@ fold says which:
 | `labels=waiting from=<date>` | set, and no day of that month has been folded yet |
 | `labels=on from=<date>` | labelled days are being folded |
 | `operator_list=<state>` | `loaded`, `empty` (comments only), `partial` (a line was skipped), `absent` or `unreadable`; no entry or count is ever printed, so find a skipped line by reading the file on the host |
+| `nettype=<state>` | the network-type table: `loaded`, `aging` (refresh it), `stale` (too old or no valid header, so unused), `absent` or `unreadable` |
+| `nettype_rows=N` | valid rows read from the network-type table |
+| `nettype_sources=<list>` | the sources its header names (`x4bnet`, or `x4bnet,iptoasn,peeringdb`), or `none` when it is unused |
 | `other_files=N` | log files read that are neither box nor front-door names |
 | `label_fallbacks=N` | requests whose labels failed and were counted as not operator |
 | `prepass=<state>` | `ok`, `failed` (the client-class evidence was lost, so browser-like requests read unknown) or `none` (no labelled day in this fold) |
@@ -1361,6 +1372,7 @@ labelled fold, revert the code, and start the timer again.
 | Most Australian traffic lands in **Not in the state table** | The state table is stale or was built from a partial CSV. Re-run `prep_au_states.py` over a fresh db-ip City Lite download. The AU country figure is unaffected; the bucket exists so the breakdown still reconciles with it. |
 | **Counted before state data existed** is a large row | Expected on a box that folded days before the state table was installed. Those days carry no state data and are never backfilled (the raw logs have rotated away). The row shrinks in relative terms as new days fold. |
 | `prep_au_states.py` exits non-zero with "no Australian (AU) state ranges" | The input was not db-ip's **IP to City Lite** CSV (the Country Lite CSV has no state column), or the download is truncated. Nothing was written; re-download and re-run. |
+| Journal says `nettype=stale`, `absent` or `unreadable` | The network-type table is older than the maximum age, missing, or not a table `prep_nettype.py` wrote. Every labelled request reads unknown network until it is rebuilt (above); every count is unaffected. |
 | `prep_nettype.py` exits non-zero | Read its message: a truncated download (too few X4BNet CIDRs or PeeringDB records), half of the iptoasn and PeeringDB pair, a licence file that is not the MIT text, or a download kept in the output's directory. Nothing was written; fix the input and re-run. |
 | Downloads counted but `unattributed` is high | The served `manifest.json` did not resolve those paths (a build/serve skew, or NCI-tier absolute URLs). Confirm `site-data/current/manifest.json` matches what is served. The licence sidecars beside each survey MTH5 (`bundles/*.LICENSE.txt`) are **not** counted, so they no longer inflate this figure. |
 | Quarterly view says "No monthly rollups yet" | The box has not folded a day since the detailed aggregator was installed. Rollups begin at the next daily fold and fill in one month at a time; earlier months are deliberately **not** backfilled. |

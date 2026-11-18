@@ -118,6 +118,20 @@ a count per class for each day, with no network detail. Declared crawlers stay e
 their requests are now also counted, per month, as excluded crawler requests. The existing browser
 and scripted split of downloads is unchanged.
 
+## Network type
+
+From the same date, each counted request that is not the operator's also carries a network type,
+looked up from its masked network in a table held on the host: **hosting**, **education or
+research**, **access provider**, **other** or **unknown**. Government, enterprise, transit and every
+other kind of network fold into other, so that no value points at a single organisation. Unknown
+means the table does not cover the network, or the table was missing or out of date that day. No
+address is sent anywhere for the lookup. The table is rebuilt monthly, and a table whose oldest
+source is more than 45 days old is not used, so every request then reads unknown.
+
+By default the table lists hosting networks only, so every other network reads unknown. Network type
+is kept only in the monthly and cumulative statistics, joined with the client class; it is never
+written to the permanent daily record and never crossed with country, state, survey or dataset.
+
 ## Geolocation data attribution
 
 Country resolution uses the IP to Country Lite database by DB-IP (<https://db-ip.com>), and the
@@ -133,8 +147,16 @@ every other metric is unaffected. The City Lite CSV is never retained: a prepara
 Australia-only `start_ip,end_ip,state_code` table and the download is deleted. The derived table carries
 the DB-IP attribution in its own header, because a file outlives the terminal it was made in.
 
+## Network type data attribution
+
+Hosting ranges come from the X4BNet `lists_vpn` datacenter lists, used under the MIT licence, whose
+notice is carried in the header of the derived table. Hosting ranges are built in part from
+IPLocate.io data (CC BY-SA 4.0). When the full table is built, network types also come from PeeringDB,
+and prefix to network from iptoasn.com (PDDL). The derived table holds IP ranges and a type only: no
+network number, organisation name or domain.
+
 ## Operating it
 
 The aggregator runs as a daily host timer and the workbench Analytics screen (under Operations) renders
-the result. Installing the timer, refreshing the DB-IP Country CSV and rebuilding the state table are
-documented in `deploy/README.md` under "Usage analytics".
+the result. Installing the timer, refreshing the DB-IP Country CSV and rebuilding the state table and
+the network-type table are documented in `deploy/README.md` under "Usage analytics".
