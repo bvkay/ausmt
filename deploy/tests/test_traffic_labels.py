@@ -610,3 +610,305 @@ def test_label_code_exception_falls_back_to_unknown(tmp_path, monkeypatch, capsy
     assert on["totals"]["operator"]["visits"] == 0
     assert re.search(r"(?:^|\s)label_fallbacks=1(?:\s|$)", err), err
     assert "label lookup fault" not in err
+
+
+# --------------------------------------------------------------------------------------------------
+# Client class: portal and landing evidence, the sweep, the crawler tally and the single parse.
+# --------------------------------------------------------------------------------------------------
+_CRAWLER = "Googlebot/2.1"
+_ARCHIVE_LABEL_KEYS = ("labelled", "by_client_class", "crawler_excluded")
+
+
+def _labelled(lines, **kw):
+    kw.setdefault("labels_from", "2026-07-01")
+    kw.setdefault("operator_nets", _nets())
+    return _fold(lines, **kw)
+
+
+def _dl(stats):
+    return stats["totals"]["labels"].get("downloads", {})
+
+
+def _files(n, addr, *, date="2026-07-11", ua=_BROWSER, prefix="f", query=""):
+    """`n` distinct station-file downloads from one network and one user-agent on `date`."""
+    return [_line(f"/data/edi/sweep/{prefix}{i}.edi{query}", addr, date=date, ua=ua)
+            for i in range(n)]
+
+
+def _strip_archive(lines):
+    return [{k: v for k, v in ln.items() if k not in _ARCHIVE_LABEL_KEYS} for ln in lines]
+
+
+def test_portal_session_same_day_or_previous_day_visit():
+    """A browser-like download is a portal session when its network loaded the catalogue that day or
+    the day before, including a day before that an earlier fold already folded."""
+    lines = [
+        _line("/data/catalogue.json", "2001:db8:2::", date="2026-07-10"),
+        _line("/data/edi/label-survey/L1.edi", "2001:db8:2::", date="2026-07-10"),
+        _line("/data/catalogue.json", "2001:db8:3::", date="2026-07-10"),
+        _line("/data/edi/label-survey/L1.edi", "2001:db8:3::", date="2026-07-11"),
+        _line("/data/edi/label-survey/L1.edi", "2001:db8:4::", date="2026-07-11"),
+    ]
+    stats, _ = _labelled(lines)
+    assert _dl(stats) == {"portal_session|unknown": 2, "unknown|unknown": 1}
+    assert stats["totals"]["labels"]["visits"] == {"portal_session|unknown": 2}
+    # The previous day was folded by an earlier run; its lines are still read as evidence.
+    visit = [_line("/data/catalogue.json", "2001:db8:7::", date="2026-07-10")]
+    first, _ = _labelled(visit, run=_RUN - dt.timedelta(days=1))
+    assert first["last_folded_date"] == "2026-07-10"
+    later = visit + [_line("/data/edi/label-survey/L2.edi", "2001:db8:7::", date="2026-07-11")]
+    second, _ = _labelled(later, prev=json.loads(json.dumps(first)))
+    assert second["monthly"][0]["labels"]["downloads"] == {"portal_session|unknown": 1}
+    assert second["totals"]["visits"] == 1
+
+
+def test_visit_two_days_before_is_unknown():
+    """Evidence reaches back one day and no further."""
+    lines = [_line("/data/catalogue.json", "2001:db8:2::", date="2026-07-09"),
+             _line("/data/edi/label-survey/L1.edi", "2001:db8:2::", date="2026-07-11")]
+    stats, _ = _labelled(lines)
+    assert _dl(stats) == {"unknown|unknown": 1}
+    prior = {"schema": 2, "last_folded_date": "2026-07-10", "daily": [], "monthly": []}
+    stats2, _ = _labelled(lines, prev=prior)
+    assert _dl(stats2) == {"unknown|unknown": 1}
+
+
+def test_bulk_label_is_portal_evidence():
+    """A download carrying the portal's export label, answered 200 or 206, is portal evidence for
+    its network; a refused one is not."""
+    lines = [
+        _line("/data/edi/label-survey/L1.edi?sel=bulk", "2001:db8:2::", date="2026-07-10",
+              status=206),
+        _line("/data/edi/label-survey/L2.edi", "2001:db8:2::", date="2026-07-11"),
+        _line("/data/edi/label-survey/L1.edi?sel=bulk", "2001:db8:3::", date="2026-07-11",
+              status=404),
+        _line("/data/edi/label-survey/L2.edi", "2001:db8:3::", date="2026-07-11"),
+    ]
+    stats, _ = _labelled(lines)
+    assert _dl(stats) == {"portal_session|unknown": 2, "unknown|unknown": 1}
+
+
+def test_landing_page_evidence_gives_landing_page():
+    """A survey or collection page answered 200 or 304 to a browser-like client is landing
+    evidence for its network that day and the next. Portal evidence wins over landing evidence,
+    and a refused page, a crawler or a scripted client gives none."""
+    bundle = "/data/bundles/label-survey-edi.zip"
+    lines = [
+        _line("/surveys/label-survey/", "2001:db8:2::", date="2026-07-11"),
+        _line(bundle, "2001:db8:2::", date="2026-07-11"),
+        _line("/collections/demo/", "2001:db8:3::", date="2026-07-10", status=304),
+        _line(bundle, "2001:db8:3::", date="2026-07-11"),
+        _line("/surveys/label-survey/", "2001:db8:4::", date="2026-07-11", status=404),
+        _line(bundle, "2001:db8:4::", date="2026-07-11"),
+        _line("/surveys/label-survey/", "2001:db8:5::", date="2026-07-11"),
+        _line("/data/catalogue.json", "2001:db8:5::", date="2026-07-11"),
+        _line(bundle, "2001:db8:5::", date="2026-07-11"),
+        _line("/surveys/label-survey/", "2001:db8:6::", date="2026-07-11", ua=_CRAWLER),
+        _line(bundle, "2001:db8:6::", date="2026-07-11"),
+        _line("/surveys/label-survey/", "2001:db8:8::", date="2026-07-11", ua="curl/8.0"),
+        _line(bundle, "2001:db8:8::", date="2026-07-11"),
+    ]
+    stats, _ = _labelled(lines)
+    assert _dl(stats) == {"landing_page|unknown": 2, "portal_session|unknown": 1,
+                          "unknown|unknown": 3}
+
+
+def test_sweep_marks_downloads_tool_per_network_and_agent():
+    """One user-agent on one network that fetches more than 50 distinct unlabelled files in a day has
+    every download that day counted as tool. Another user-agent on the same network keeps its own
+    class, the swept client's visits are not swept, exactly 50 files is not a sweep, and files
+    carrying the export label do not count toward it."""
+    a, b = "2001:db8:2::", "2001:db8:3::"
+    other_ua = "Mozilla/5.0 (Macintosh) Gecko/20100101"
+    lines = [_line("/data/catalogue.json", a), _line("/data/catalogue.json", b)]
+    lines += _files(51, a)
+    lines += _files(3, a, ua=other_ua, prefix="g")
+    lines += _files(50, b, prefix="h")
+    lines += _files(10, b, prefix="k", query="?sel=bulk")
+    stats, archive = _labelled(lines)
+    assert _dl(stats) == {"tool|unknown": 51, "portal_session|unknown": 63}
+    assert stats["totals"]["labels"]["visits"] == {"portal_session|unknown": 2}
+    day = next(ln for ln in archive if ln["date"] == "2026-07-11")
+    assert day["by_client_class"]["downloads"] == {"tool": 51, "portal_session": 63}
+    # The split by user-agent alone is untouched: every one of these is a browser download.
+    assert stats["totals"]["downloads_by_client"] == {"browser": 114}
+    # The same 51 files on two days are two sweeps of 51, never one of 102 across the pair.
+    split = [_line("/data/catalogue.json", a, date="2026-07-10")]
+    split += _files(30, a, date="2026-07-10") + _files(30, a, date="2026-07-11", prefix="m")
+    stats2, _ = _labelled(split)
+    assert _dl(stats2) == {"portal_session|unknown": 60}
+
+
+def test_spoofed_scraper_that_visited_first_is_tool_by_sweep():
+    """A scraper that sends a browser user-agent and loads the portal before fetching 120 files is
+    tool for every one of those downloads, the ones before its 51st file included. Its portal load
+    stays a portal session."""
+    a = "2001:db8:9::"
+    lines = [_line("/data/catalogue.json", a)] + _files(120, a)
+    stats, _ = _labelled(lines)
+    assert _dl(stats) == {"tool|unknown": 120}
+    assert stats["totals"]["labels"]["visits"] == {"portal_session|unknown": 1}
+
+
+def test_crawler_tallied_in_crawler_excluded():
+    """A declared crawler stays out of every figure. On a labelled day each of its admitted requests
+    is tallied by class in crawler_excluded at the cumulative, month and archive grains, without the
+    download dedupe; before labels_from it is not tallied."""
+    a = "2001:db8:2::"
+    crawl = [_line("/data/catalogue.json", a, ua=_CRAWLER),
+             _line("/data/edi/label-survey/L1.edi", a, ua=_CRAWLER),
+             _line("/data/edi/label-survey/L1.edi", a, ua=_CRAWLER),
+             _line("/data/mtcat.json", a, ua=_CRAWLER),
+             _line("/go/ts/label-survey/L1/l1", a, ua=_CRAWLER, status=302),
+             _line("/data/catalogue.json", a, ua=_CRAWLER, status=500)]
+    public = [_line("/data/catalogue.json", "2001:db8:3::")]
+    stats, archive = _labelled(crawl + public)
+    plain, _ = _labelled(public)
+    want = {"downloads": 2, "visits": 1, "api": 1, "handoffs": 1}
+    assert stats["totals"]["crawler_excluded"] == want
+    assert stats["monthly"][0]["crawler_excluded"] == want
+    assert archive[0]["crawler_excluded"] == want
+    assert _strip_labels(stats) == _strip_labels(plain)
+    assert plain["totals"]["crawler_excluded"] == dict.fromkeys(want, 0)
+    early = [_line("/data/catalogue.json", a, ua=_CRAWLER, date="2026-06-30"),
+             _line("/data/catalogue.json", "2001:db8:3::", date="2026-06-30")]
+    before, _ = _labelled(early + public)
+    assert before["totals"]["crawler_excluded"] == dict.fromkeys(want, 0)
+    assert "crawler_excluded" not in next(m for m in before["monthly"] if m["month"] == "2026-06")
+
+
+def test_download_label_follows_counted_line():
+    """A deduplicated download takes the class of the line that was counted, not of a later line
+    for the same file from the same network."""
+    a = "2001:db8:2::"
+    lines = [_line("/data/catalogue.json", a),
+             _line("/data/edi/label-survey/L1.edi", a, ua="curl/8.0"),
+             _line("/data/edi/label-survey/L1.edi", a)]
+    stats, archive = _labelled(lines)
+    assert stats["totals"]["downloads"] == 1
+    assert _dl(stats) == {"tool|unknown": 1}
+    assert archive[0]["by_client_class"]["downloads"] == {"tool": 1}
+    flipped = [lines[0], lines[2], lines[1]]
+    stats2, _ = _labelled(flipped)
+    assert _dl(stats2) == {"portal_session|unknown": 1}
+
+
+def _reconcile_lines():
+    days = ("2026-07-10", "2026-07-11")
+    lines = [ln for d in days for ln in _mixed_day(d)]
+    lines += [("box", ln) for d in days for ln in _box_day(d)]
+    lines += _files(55, "2001:db8:2::")
+    lines += [_line("/surveys/label-survey/", "2001:db8:3::"),
+              _line("/data/bundles/label-survey-edi.zip", "2001:db8:3::")]
+    return lines
+
+
+def test_label_sums_reconcile_per_metric():
+    """The joint label counts sum exactly to the counted figure of each class, in the totals and the
+    month, and the archive's client classes sum to that day's counts."""
+    stats, archive = _labelled(_reconcile_lines())
+    counted = {"downloads": stats["totals"]["downloads"], "visits": stats["totals"]["visits"],
+               "api": stats["totals"]["api_requests"], "handoffs": stats["handoffs"]["requests"]}
+    assert all(counted.values())
+    for metric, n in counted.items():
+        assert sum(stats["totals"]["labels"][metric].values()) == n, metric
+        assert sum(stats["monthly"][0]["labels"][metric].values()) == n, metric
+    for line in archive:
+        day = {"downloads": line.get("downloads", 0), "visits": line.get("visits", 0),
+               "api": line.get("api", 0),
+               "handoffs": line.get("handoffs", {}).get("requests", 0)}
+        for metric, n in day.items():
+            assert sum(line["by_client_class"].get(metric, {}).values()) == n, (line["date"], metric)
+
+
+def test_browser_scripted_split_unchanged_by_labels_for_non_operator_lines():
+    """For traffic with no operator line, a labelled fold equals an unlabelled one in every existing
+    figure, the browser and scripted split included, at every grain."""
+    lines = [ln for ln in _reconcile_lines() if not isinstance(ln, tuple)]
+    on, on_arc = _labelled(lines)
+    off, off_arc = _fold(lines)
+    assert _strip_labels(on) == off
+    assert _strip_archive(on_arc) == off_arc
+    assert on["totals"]["downloads_by_client"] == off["totals"]["downloads_by_client"]
+    assert on["totals"]["downloads_by_client"]["browser"] >= 56
+
+
+def test_archive_line_carries_client_class_and_no_nettype_or_operator():
+    """A labelled archive day says so and carries its client classes and crawler tally. It carries
+    no network type, no joint key, no operator block, no address and no user-agent."""
+    stats, archive = _labelled(_reconcile_lines())
+    assert archive
+    for line in archive:
+        assert line["labelled"] is True
+        assert set(line["by_client_class"]) <= set(AGG._LABEL_METRICS)
+        for per in line["by_client_class"].values():
+            assert set(per) <= set(AGG._LABEL_CLIENTS)
+        assert set(line["crawler_excluded"]) <= set(AGG._LABEL_METRICS)
+        text = json.dumps(line)
+        for token in ("|", "nettype", "hosting", "education_research", "access_provider",
+                      "operator", "Mozilla", "curl", "python-requests", "Googlebot",
+                      "203.0.113", "2001:db8"):
+            assert token not in text, (line["date"], token)
+    _, unlabelled = _fold([ln for ln in _reconcile_lines() if not isinstance(ln, tuple)])
+    for line in unlabelled:
+        assert not set(line) & set(_ARCHIVE_LABEL_KEYS), line
+
+
+def test_evidence_sets_never_written(tmp_path, monkeypatch, capsys):
+    """The evidence and sweep sets are built from masked networks and user-agents and die with the
+    run: no address, network, user-agent or path set reaches stats.json, the archive or the
+    journal of a labelled fold."""
+    state = _labelled_main(monkeypatch, tmp_path, "192.0.2.0/24\n")
+    err = capsys.readouterr().err.replace(str(tmp_path), "<root>")
+    stats_text = (state / "stats.json").read_text(encoding="utf-8")
+    archive_text = (state / "daily_archive.jsonl").read_text(encoding="utf-8")
+    assert "by_client_class" in archive_text
+    for name, out in (("stats", stats_text), ("archive", archive_text), ("stderr", err)):
+        assert _IPV4_RE.findall(out) == [], name
+        assert _IPV6_RE.findall(out) == [], name
+        for token in ("203.0.113", "2001:db8", "Mozilla", "AppleWebKit", "curl/", "python-requests",
+                      "Googlebot", "evidence", "sweep"):
+            assert token not in out, (name, token)
+
+
+def test_prepass_failure_keeps_counting(tmp_path, monkeypatch, capsys):
+    """A fault in the evidence pre-pass empties the evidence and sweep sets and costs nothing else:
+    every request is still counted, scripted clients are still tool, and the journal says
+    prepass=failed."""
+    def explode(*_a, **_k):
+        raise RuntimeError("prepass fault")
+
+    lines = [_line("/data/catalogue.json", "2001:db8:2::")] + _files(60, "2001:db8:2::") + \
+        [_line("/data/mtcat.json", "2001:db8:3::", ua="curl/8.0")]
+    good, _ = _labelled(lines)
+    monkeypatch.setattr(AGG, "_label_prepass", explode)
+    out: dict = {}
+    bad, _ = _labelled(lines, label_stats_out=out)
+    assert out["prepass"] == "failed"
+    assert _strip_labels(bad) == _strip_labels(good)
+    assert _dl(bad) == {"unknown|unknown": 60}
+    assert bad["totals"]["labels"]["visits"] == {"unknown|unknown": 1}
+    assert bad["totals"]["labels"]["api"] == {"tool|unknown": 1}
+    state = _labelled_main(monkeypatch, tmp_path, "192.0.2.0/24\n")
+    err = capsys.readouterr().err
+    assert re.search(r"(?:^|\s)prepass=failed(?:\s|$)", err), err
+    assert "prepass fault" not in err
+    assert json.loads((state / "stats.json").read_text(encoding="utf-8"))["totals"]["visits"] >= 1
+
+
+def test_journal_reports_fold_seconds(tmp_path, monkeypatch, capsys):
+    """The journal line carries the fold's run time, labelled or not, and a labelled fold says the
+    pre-pass ran."""
+    pat = r"(?:^|\s)fold_seconds=\d+(?:\.\d+)?(?:\s|$)"
+    off = tmp_path / "off"
+    off.mkdir()
+    _run_main(monkeypatch, _identity_scenario(off), "2026-07-12T03:30:00Z")
+    err = capsys.readouterr().err
+    assert re.search(pat, err), err
+    assert "prepass=" not in err
+    on = tmp_path / "on"
+    on.mkdir()
+    _labelled_main(monkeypatch, on, "192.0.2.0/24\n")
+    err = capsys.readouterr().err
+    assert re.search(pat, err), err
+    assert re.search(r"(?:^|\s)prepass=ok(?:\s|$)", err), err

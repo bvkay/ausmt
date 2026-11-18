@@ -1298,6 +1298,8 @@ fold says which:
 | `operator_list=<state>` | `loaded`, `empty` (comments only), `partial` (a line was skipped), `absent` or `unreadable`; no entry or count is ever printed, so find a skipped line by reading the file on the host |
 | `other_files=N` | log files read that are neither box nor front-door names |
 | `label_fallbacks=N` | requests whose labels failed and were counted as not operator |
+| `prepass=<state>` | `ok`, `failed` (the client-class evidence was lost, so browser-like requests read unknown) or `none` (no labelled day in this fold) |
+| `fold_seconds=N` | the fold's run time, printed whether or not labels are on; compare it with `TimeoutStartSec` before switching labels on |
 
 With the list absent or unreadable the request is still counted unless rules 1 to 3 catch it, and the
 month records that day as one without an operator list. `stats.json` gains `labels_since`, the first

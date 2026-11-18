@@ -96,6 +96,28 @@ never per day. Figures before that date include the operator's own requests and 
 The `ausmt-ops/` name is public: anyone sending it only moves their own requests into the operator
 total.
 
+## Client class
+
+From the same date, each counted request that is not the operator's also carries a client class,
+worked out while the day is folded:
+
+- **tool**: a documented HTTP client or a request with no user-agent, or one client (the same
+  user-agent on the same masked network) that fetched more than 50 different files in a day without
+  the portal's export label. Every download from such a client that day is a tool download; its
+  catalogue loads and other requests are not;
+- **portal session**: a browser-like client whose masked network loaded the portal, or took a file
+  carrying the export label, that day or the day before;
+- **landing page**: a browser-like client whose masked network opened a survey or collection page
+  that day or the day before;
+- **unknown**: every other browser-like request.
+
+A download counted once under the same-day rule takes the class of the request that was counted.
+The evidence behind the class is held in memory while the day is folded and is never stored. The
+statistics keep the class at month and cumulative grain, and the permanent daily record keeps only
+a count per class for each day, with no network detail. Declared crawlers stay excluded, as before;
+their requests are now also counted, per month, as excluded crawler requests. The existing browser
+and scripted split of downloads is unchanged.
+
 ## Geolocation data attribution
 
 Country resolution uses the IP to Country Lite database by DB-IP (<https://db-ip.com>), and the

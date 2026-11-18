@@ -98,6 +98,7 @@ import json
 import os
 import re
 import sys
+import time
 import zlib
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -289,6 +290,23 @@ OPERATOR_UNKNOWN = "unknown"
 _OPERATOR_LIST_PARTS = ("stats-private", "operator-networks.txt")
 # The switch is the first day of a month, so a labelled month is labelled from its first day.
 _LABELS_FROM_RE = re.compile(r"^\d{4}-\d{2}-01$")
+
+# THE CLIENT CLASS, for a non-operator request on a labelled day. Precedence:
+#   * a declared crawler is not a class: it stays excluded and is tallied in crawler_excluded;
+#   * tool: a scripted or empty user-agent (classify_client);
+#   * tool, downloads only: one (day, masked network, exact user-agent) that fetched more than
+#     SWEEP_DISTINCT_FILES distinct download paths without the export label that day. Every download
+#     of that triple that day is tool; its visits, API requests and hand-offs are not swept, and nor
+#     is any other user-agent on the same network;
+#   * portal_session: the network loaded the catalogue, or took a download carrying the export
+#     label, that day or the day before;
+#   * landing_page: the network opened a survey or collection page that day or the day before;
+#   * unknown: every other browser-like request.
+# The evidence comes only from non-operator, browser-like lines. It is built from the masked address
+# and the transient user-agent, held in memory for the run and never written (see _LabelEvidence).
+SWEEP_DISTINCT_FILES = 50
+_LANDING_PREFIXES = ("/surveys/", "/collections/")
+NETTYPE_UNKNOWN = "unknown"
 
 # The append-only daily archive, written beside stats.json in the gateway state dir. See the archive
 # section further down for what it holds and, more importantly, what it deliberately does not.
@@ -566,6 +584,106 @@ def _labels_from_cfg(raw) -> str | None:
 
 def _default_operator_list(data_dir: str) -> Path:
     return Path(data_dir).joinpath(*_OPERATOR_LIST_PARTS)
+
+
+class _LabelEvidence:
+    """The run-local evidence behind the client class. `portal` and `landing` hold (date, masked
+    network) pairs; `sweep` maps (date, masked network, user-agent) to the set of distinct unlabelled
+    download paths it fetched. Nothing here is ever written, and an empty instance is the honest
+    state after a failed pre-pass: every browser-like request then reads unknown."""
+
+    def __init__(self) -> None:
+        self.portal: set = set()
+        self.landing: set = set()
+        self.sweep: dict = {}
+        self._prev: dict = {}
+
+    def _prev_day(self, date: str) -> str:
+        p = self._prev.get(date)
+        if p is None:
+            p = (dt.date.fromisoformat(date) - dt.timedelta(days=1)).isoformat()
+            self._prev[date] = p
+        return p
+
+    def seen(self, pairs: set, date: str, address) -> bool:
+        if not address:
+            return False
+        return (date, address) in pairs or (self._prev_day(date), address) in pairs
+
+    def swept(self, date: str, address, ua: str) -> bool:
+        return len(self.sweep.get((date, address or "", ua), ())) > SWEEP_DISTINCT_FILES
+
+
+def _parse_records(lines, cutoff: str, prev_folded) -> list[dict]:
+    """Each line parsed once into the reduced record both passes read: parse_caddy_line's fields plus
+    `source`, `kind` and `rel`. A record is kept when its date is no later than `cutoff` and no
+    earlier than the prior watermark, so the day before the first new day is present as evidence
+    while the fold itself still skips it. Each item is a bare line, read as front door, or a
+    (source, line) pair."""
+    out: list[dict] = []
+    for item in lines:
+        source, raw = item if isinstance(item, tuple) and len(item) == 2 else ("frontdoor", item)
+        rec = parse_caddy_line(raw) if isinstance(raw, str) else None
+        if rec is None:
+            continue
+        date = rec["date"]
+        if date > cutoff or (prev_folded is not None and date < prev_folded):
+            continue
+        rec["source"] = source
+        rec["kind"], rec["rel"] = classify(rec["path"])
+        out.append(rec)
+    return out
+
+
+def _label_prepass(records: list[dict], first: str,
+                   operator_nets: "OperatorNetworks | None") -> _LabelEvidence:
+    """The portal, landing and sweep evidence from every non-operator, browser-like record dated
+    `first` or later."""
+    ev = _LabelEvidence()
+    for rec in records:
+        date = rec["date"]
+        if date < first or rec["method"] not in ("GET", ""):
+            continue
+        if classify_client(rec["ua"]) != CLIENT_BROWSER:
+            continue
+        status, address = rec["status"], rec["address"]
+        if _operator_label(rec["source"], address, rec["ua"], operator_nets) == OPERATOR_YES:
+            continue
+        if address and ((rec["kind"] == "visit" and status in (200, 304))
+                        or (rec["bulk"] and status in (200, 206))):
+            ev.portal.add((date, address))
+        if address and status in (200, 304) and rec["path"].startswith(_LANDING_PREFIXES):
+            ev.landing.add((date, address))
+        if rec["kind"] == "download" and status in (200, 206) and not rec["bulk"]:
+            ev.sweep.setdefault((date, address or "", rec["ua"]), set()).add(rec["rel"])
+    return ev
+
+
+def _client_class(client: str, kind: str, rec: dict, ev: _LabelEvidence) -> str | None:
+    """The client class of one admitted non-operator request, or None for a declared crawler, which
+    has no class (see SWEEP_DISTINCT_FILES for the precedence)."""
+    if client == CLIENT_CRAWLER:
+        return None
+    if client == CLIENT_SCRIPTED:
+        return "tool"
+    date, address = rec["date"], rec["address"]
+    if kind == "download" and ev.swept(date, address, rec["ua"]):
+        return "tool"
+    if ev.seen(ev.portal, date, address):
+        return "portal_session"
+    if ev.seen(ev.landing, date, address):
+        return "landing_page"
+    return "unknown"
+
+
+def _bump_labels(totals: dict, month: dict, arc: dict, metric: str, client_class: str,
+                 nettype: str) -> None:
+    """One counted request on its joint client|network key at the cumulative and month grains, and
+    on its client class alone on the archive day, which carries no network type."""
+    key = f"{client_class}|{nettype}"
+    for row in (totals, month):
+        _bump(row.setdefault("labels", {}).setdefault(metric, {}), key)
+    _bump(arc.setdefault("by_client_class", {}).setdefault(metric, {}), client_class)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -1363,21 +1481,32 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     # place on a rendered day row. Geography is deliberately absent from them (see _archive_line).
     archive_index: dict[str, dict] = {}
     label_fallbacks = 0
+    # date -> {metric: n} of declared crawler requests on labelled days, for THIS run only, so the
+    # archive line of a day with counted activity can carry that day's tally.
+    crawler_days: dict[str, dict] = {}
 
-    for item in lines:
-        source, raw = item if isinstance(item, tuple) and len(item) == 2 else ("frontdoor", item)
-        rec = parse_caddy_line(raw) if isinstance(raw, str) else None
-        if rec is None:
-            continue
+    # Records run from the day before the first new day to the cutoff; the fold below skips that
+    # earlier day, which is read only as evidence for the client class.
+    records = _parse_records(lines, cutoff, prev_folded)
+    evidence = _LabelEvidence()
+    prepass = "none"
+    if labels_from is not None and cutoff >= labels_from:
+        try:
+            evidence = _label_prepass(records, _prev_day(labels_from), operator_nets)
+            prepass = "ok"
+        except Exception:  # noqa: BLE001 -- lost evidence reads unknown, it never costs the fold
+            evidence = _LabelEvidence()
+            prepass = "failed"
+
+    for rec in records:
+        source = rec["source"]
         date = rec["date"]
         # Only fold strictly-new, strictly-complete days.
-        if date > cutoff:
-            continue
         if prev_folded is not None and date <= prev_folded:
             continue
         if rec["method"] not in ("GET", ""):
             continue
-        kind, rel = classify(rec["path"])
+        kind, rel = rec["kind"], rec["rel"]
         if kind == "ignore":
             continue
         if kind in ("visit", "api"):
@@ -1390,11 +1519,16 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             continue
         # Operator before crawler, so a crawler-named operator probe is still on the operator line.
         # Moving the crawler drop after admission changes no result: both paths drop the line.
-        if labels_from is not None and date >= labels_from:
+        labelled = labels_from is not None and date >= labels_from
+        client_class = nettype = None
+        if labelled:
             try:
                 operator = _operator_label(source, rec["address"], rec["ua"], operator_nets)
+                if operator != OPERATOR_YES:
+                    client_class = _client_class(classify_client(rec["ua"]), kind, rec, evidence)
+                    nettype = NETTYPE_UNKNOWN
             except Exception:  # noqa: BLE001 -- a label fault must never cost the request or the fold
-                operator = OPERATOR_UNKNOWN
+                operator, client_class, nettype = OPERATOR_UNKNOWN, "unknown", NETTYPE_UNKNOWN
                 label_fallbacks += 1
             if operator == OPERATOR_YES:
                 metric = _KIND_METRIC[kind]
@@ -1408,6 +1542,15 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                 continue
         client = classify_client(rec["ua"])
         if client == CLIENT_CRAWLER:
+            # On a labelled day each admitted crawler request is tallied, with no dedupe, and still
+            # reaches no counted figure.
+            if labelled:
+                metric = _KIND_METRIC[kind]
+                month = _month_row(month_index, stats["monthly"], date[:7])
+                for block in (totals.setdefault("crawler_excluded", _empty_crawler()),
+                              month.setdefault("crawler_excluded", _empty_crawler()),
+                              crawler_days.setdefault(date, {})):
+                    _bump(block, metric)
             continue
         day = _day_row(daily_index, stats["daily"], date)
         month = _month_row(month_index, stats["monthly"], date[:7])
@@ -1420,6 +1563,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             day["visits"] += 1
             month["visits"] += 1
             arc["visits"] += 1
+            if labelled:
+                _bump_labels(totals, month, arc, "visits", client_class, nettype)
             _count_geo(geoip, au_states, rec["address"], countries, by_country_detail, by_state,
                        by_state_detail, month, metric="visits")
             geo_days_seen[date] = date[:7]
@@ -1428,6 +1573,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             day["api_requests"] = _as_int(day.get("api_requests")) + 1
             month["api_requests"] += 1
             arc["api"] += 1
+            if labelled:
+                _bump_labels(totals, month, arc, "api", client_class, nettype)
             # The API line is a counted class WITH geography: leaving it out makes any reach claim
             # built from the country table silently exclude programmatic consumers.
             _count_geo(geoip, au_states, rec["address"], countries, by_country_detail, by_state,
@@ -1439,6 +1586,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             # Location it sent is not logged at all. So the size and the destination host come from the
             # served, register-derived index, and a route that index does not publish is drift -- one
             # request, no bytes, no survey and no level, in this family's own unattributed bucket.
+            if labelled:
+                _bump_labels(totals, month, arc, "handoffs", client_class, nettype)
             entry = _handoff_row(ts_access, rel)
             size = max(_as_int(entry.get("bytes")), 0) if entry else 0
             survey, _station, level = rel.split("/")
@@ -1499,6 +1648,9 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                 _bump(totals["downloads_by_client"], client)
                 _bump(month["downloads_by_client"], client)
                 _bump(arc["by_client"], client)
+                # The counted line's class is the download's class; a deduplicated line adds none.
+                if labelled:
+                    _bump_labels(totals, month, arc, "downloads", client_class, nettype)
             row = reverse_map.get(rel) or _release_bundle_row(reverse_map, rel)
             if row is None:
                 totals["unattributed"] += n
@@ -1611,8 +1763,14 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     if labels_from is not None:
         _fold_label_days(stats, month_index, days_seen, prev_folded, cutoff, labels_from,
                          operator_nets)
+        for date in days_seen:
+            if date >= labels_from:
+                archive_index[date]["labelled"] = True
+                if date in crawler_days:
+                    archive_index[date]["crawler_excluded"] = crawler_days[date]
     if label_stats_out is not None:
         label_stats_out["label_fallbacks"] = label_fallbacks
+        label_stats_out["prepass"] = prepass
 
     # Advance the fold watermark to the run's date-1 (the cutoff), always — a window with no lines
     # still advances so old dates are never re-scanned.
@@ -1655,6 +1813,24 @@ def _empty_operator() -> dict:
     return dict.fromkeys(_OPERATOR_KEYS, 0)
 
 
+def _empty_crawler() -> dict:
+    """The crawler tally, dense once labels have started so that a zero is a measured zero."""
+    return dict.fromkeys(_LABEL_METRICS, 0)
+
+
+def _dense_label_blocks(row: dict) -> None:
+    row.setdefault("operator", _empty_operator())
+    crawler = row.setdefault("crawler_excluded", _empty_crawler())
+    labels = row.setdefault("labels", {})
+    for metric in _LABEL_METRICS:
+        crawler.setdefault(metric, 0)
+        labels.setdefault(metric, {})
+
+
+def _prev_day(date_str: str) -> str:
+    return (dt.date.fromisoformat(date_str) - dt.timedelta(days=1)).isoformat()
+
+
 def _fold_label_days(stats: dict, month_index: dict, days_seen: dict, prev_folded, cutoff: str,
                      labels_from: str, operator_nets: "OperatorNetworks | None") -> None:
     """The label day counters and the labels_since stamp for the days this call folded.
@@ -1670,13 +1846,13 @@ def _fold_label_days(stats: dict, month_index: dict, days_seen: dict, prev_folde
     if first > cutoff:
         return
     stats.setdefault("labels_since", first)
-    stats["totals"].setdefault("operator", _empty_operator())
+    _dense_label_blocks(stats["totals"])
     list_read = operator_nets is not None and operator_nets.read
     for date, month_key in days_seen.items():
         if date < labels_from:
             continue
         m = month_index[month_key]
-        m.setdefault("operator", _empty_operator())
+        _dense_label_blocks(m)
         m["label_days"] = _as_int(m.get("label_days")) + 1
         m["operator_list_days"] = _as_int(m.get("operator_list_days")) + (1 if list_read else 0)
 
@@ -1959,6 +2135,13 @@ def _archive_line(row: dict, *, served_build: str | None = None) -> dict:
     handoffs = _handoff_archive_block(row.get("handoffs"))
     if handoffs:
         out["handoffs"] = handoffs
+    # A labelled day carries its client classes and crawler tally, and never a network type, an
+    # operator figure or anything per network.
+    if row.get("labelled"):
+        out["labelled"] = True
+        for key in ("by_client_class", "crawler_excluded"):
+            if row.get(key):
+                out[key] = row[key]
     if served_build:
         out["served_build"] = served_build
     return out
@@ -2143,6 +2326,7 @@ def main(argv=None) -> int:
         daily_keep = DEFAULT_DAILY_KEEP_DAYS
 
     try:
+        started = time.monotonic()
         run_dt = _run_datetime()
         reverse_map = build_reverse_map(_load_json(manifest_path))
         geoip = GeoIP.load(dbip_csv)
@@ -2186,7 +2370,8 @@ def main(argv=None) -> int:
             on = str(stats.get("last_folded_date") or "") >= labels_from
             label_journal = (f"labels={'on' if on else 'waiting'} from={labels_from} "
                              f"operator_list={operator_nets.state} other_files={len(other_logs)} "
-                             f"label_fallbacks={label_stats.get('label_fallbacks', 0)}")
+                             f"label_fallbacks={label_stats.get('label_fallbacks', 0)} "
+                             f"prepass={label_stats.get('prepass', 'none')}")
         dest_dir = Path(stats_file).parent
         if not dest_dir.is_dir():
             print(f"aggregate_stats: state dir {dest_dir} does not exist -- not writing stats.json "
@@ -2204,7 +2389,8 @@ def main(argv=None) -> int:
               f"manifest_rows={len(reverse_map)} geoip_rows={geoip.row_count} "
               f"au_state_rows={au_states.row_count} collections={len(collections)} "
               f"log_lines={len(lines)} files_skipped={len(skipped_logs)} "
-              f"archived_days={archived} {label_journal} -> {stats_file}", file=sys.stderr)
+              f"archived_days={archived} {label_journal} "
+              f"fold_seconds={time.monotonic() - started:.1f} -> {stats_file}", file=sys.stderr)
     except Exception as exc:  # noqa: BLE001 -- never raise into the timer; note loudly and exit 0
         print(f"aggregate_stats: aborted without writing ({type(exc).__name__}: {exc})", file=sys.stderr)
         return 0

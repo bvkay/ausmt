@@ -341,8 +341,8 @@ absolute.** The salvaged raw files remain on the box at zero cost.
 
 Three labels per admitted request, derived at fold time from fields the fold already reads plus the
 name of the log file a line came from: operator, client class and network type. No edge change and no
-header beyond the user-agent. This section records the operator label and the switch; the client
-class and network type are recorded here when they are built.
+header beyond the user-agent. This section records the operator label, the switch and the client
+class; the network type is recorded here when it is built.
 
 ### The switch and rollback
 
@@ -374,6 +374,40 @@ labels, never the request or the fold, and is counted as `label_fallbacks`.
 
 Each labelled month carries `label_days` and `operator_list_days`, so a month whose operator list
 was missing on some days says so rather than looking complete.
+
+### Client class
+
+Non-operator requests only. Closed set portal_session, landing_page, tool, unknown. Precedence:
+
+1. a declared crawler (classify_client) has no class: it stays excluded and each admitted crawler
+   request on a labelled day is tallied, not de-duplicated, in `crawler_excluded` at cumulative,
+   month and archive grain (the archive tally only on a day with counted activity);
+2. tool: classify_client returns scripted (a scripted token or an empty user-agent);
+3. tool, downloads only: the triple (day, masked network, exact user-agent) fetched more than
+   `SWEEP_DISTINCT_FILES` = 50 distinct download paths without the export label that day. Every
+   download of that triple that day is tool. Its visits, API requests and hand-offs, and other
+   user-agents on the same network, are not swept;
+4. portal_session: the network had an admitted catalogue load (200 or 304), or a request carrying the
+   export label answered 200 or 206, that day or the day before;
+5. landing_page: the network had a `/surveys/` or `/collections/` page answered 200 or 304 that day
+   or the day before;
+6. unknown.
+
+The evidence (4, 5) and the sweep (3) come from a pre-pass over non-operator, browser-like records
+from the day before labels start, or the day before the first new day if later, to the cutoff. Each
+log line is parsed once into a reduced record that both passes read; the records keep the day of the
+prior watermark so it can serve as evidence, and the fold still skips it. The sets are built from the
+masked address and the transient user-agent, are never written, and die with the process. If the
+pre-pass raises, the sets are emptied, every browser-like request reads unknown, counting continues,
+and the journal says `prepass=failed`.
+
+A deduplicated download takes the class of the counted line. The totals and each month carry
+`labels`, a map per metric (downloads, visits, api, handoffs) of `<client>|<nettype>` counts that
+sums to the counted figure; the network type reads `unknown` until it is built. A labelled archive
+day carries `labelled: true`, `by_client_class` (per metric, by class) and `crawler_excluded`, and no
+network type, operator figure, address or user-agent. The browser and scripted split is unchanged.
+The journal also carries `fold_seconds`, the run time of the fold, for comparison with the unit's
+start timeout.
 
 ### Operator list custody
 
