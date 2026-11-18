@@ -3831,6 +3831,13 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
 
     # The label rows are omitted, like the hand-off row, when no month shown was labelled.
     labelled = any(_is_labelled(c) for c in cols)
+    select_row = _has_select_split(stats)
+
+    def _select_cell(c):
+        if not _select_measured(stats, c):
+            return _NOT_MEASURED
+        files, events = _select_figures(c)
+        return f"{_esc(files)} / {_esc(events)}"
     handoff_row = any(isinstance(c.get("handoffs"), dict) for c in cols)
     body = (
         _row("Downloads", lambda c: _esc(_as_int(c.get("downloads"))))
@@ -3846,6 +3853,7 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
         + _row("Station files / bundles",
                _measured(lambda c: (f'{_esc(_as_int((c.get("kinds") or {}).get("file")))}'
                                     f' / {_esc(_as_int((c.get("kinds") or {}).get("bundle")))}')))
+        + (_row("Selection exports: files / exports", _select_cell) if select_row else "")
         + _row("Top survey",
                _measured(lambda c: (_esc(_survey_rows(c.get("surveys") or {})[0]["survey"])
                                     if (c.get("surveys") or {}) else "&mdash;")))
@@ -4334,6 +4342,13 @@ def _labels_headline(stats: dict) -> str:
         split = _audience_split(counts)
         lines.append(f'{_esc(name)} {sum(counts.values()):,}: people {split["people"]:,}, automated '
                      f'{split["automated"]:,}, unclassified {split["unclassified"]:,}.')
+        if metric == "downloads" and _has_select_split(stats):
+            if _select_measured(stats, month):
+                files, events = _select_figures(month)
+                lines.append(f'Selection exports: {files:,} files in {events:,} exports. One export '
+                             f'is one action by one person.')
+            else:
+                lines.append(f'Selection exports: {_NOT_MEASURED}.')
     operator = month.get("operator") if isinstance(month.get("operator"), dict) else {}
     since = _labels_since(stats) or month["month"]
     excluded = (f'Operator, excluded from every figure on this page since {_esc(since)}: downloads '
@@ -4403,7 +4418,9 @@ def _labels_intro(stats: dict) -> str:
         'Everything else is unclassified, never guessed. A person on a commercial VPN, or a '
         'university job in a public cloud, reads hosting. A script that opens the portal first and '
         'fetches fewer than 51 files a day reads as people. Labels are reported at month grain only '
-        'and are never crossed with country, state, survey or dataset.</p>')
+        'and are never crossed with country, state, survey or dataset. A selection export fetches '
+        'each selected station&#x27;s file separately, so one export can add thousands of '
+        'downloads; the selection exports row shows how many.</p>')
 
 
 def _classification_table(stats: dict) -> str:
@@ -4505,6 +4522,41 @@ def _label_seam_notes(cols: list) -> str:
                          f'days; operator browsing from the operator&#x27;s own networks may be '
                          f'counted on those days.')
     return "".join(f'<p class="opsnote">{n}</p>' for n in notes)
+
+
+def _has_select_split(stats: dict) -> bool:
+    """True when the fold has taken the bulk and single download split at all."""
+    totals = stats.get("totals") if isinstance(stats, dict) else None
+    return isinstance(totals, dict) and isinstance(totals.get("downloads_by_select"), dict)
+
+
+def _select_measured(stats: dict, month: dict) -> bool:
+    """True when the bulk and single split covers this month. Month rows carry the split densely,
+    so a zero is told from an unmeasured month by `select_since` (a month wholly before it was
+    never split) and by the current-rules counter, never by the value."""
+    if not _has_select_split(stats) or _month_has_no_current_detail(month):
+        return False
+    since = stats.get("select_since")
+    return not isinstance(since, str) or not since or month["month"] >= since[:7]
+
+
+def _select_figures(month: dict) -> tuple[int, int]:
+    """(files, exports) for a month: downloads that carried the export label, and the export-event
+    count, which is distinct networks per day and so a floor on export actions."""
+    split = month.get("downloads_by_select")
+    files = _as_int(split.get("bulk")) if isinstance(split, dict) else 0
+    return files, _as_int(month.get("bulk_export_events"))
+
+
+def _select_csv_cells(stats: dict, month: dict) -> list:
+    """downloads_select_bulk, downloads_select_single and bulk_export_events, empty where the split
+    did not cover the month."""
+    if not _select_measured(stats, month):
+        return ["", "", ""]
+    split = month.get("downloads_by_select")
+    split = split if isinstance(split, dict) else {}
+    return [_as_int(split.get("bulk")), _as_int(split.get("single")),
+            _as_int(month.get("bulk_export_events"))]
 
 
 def _label_csv_cells(month: dict) -> list:
@@ -4704,6 +4756,7 @@ def analytics_monthly_csv(stats) -> str:
                "downloads_browser", "downloads_scripted", "networks_peak",
                "countries", "active_days", "days_without_detail", "geo_days", "detail_days"]
               + _LABEL_CSV_COLUMNS
+              + ["downloads_select_bulk", "downloads_select_single", "bulk_export_events"]
               + [f"format_{f}" for f in formats] + [f"kind_{k}" for k in kinds])
     if states:
         header += (["au_requests"] + [f"state_{c}" for c in states]
@@ -4726,6 +4779,7 @@ def analytics_monthly_csv(stats) -> str:
                 _as_int(r.get("days")), _as_int(r.get("seeded_days")),
                 "" if blank else _as_int(r.get("geo_days")), _as_int(r.get("detail_days"))]
                + _label_csv_cells(r)
+               + _select_csv_cells(stats, r)
                + [_as_int((r.get("formats") or {}).get(f)) for f in formats]
                + [_as_int((r.get("kinds") or {}).get(k)) for k in kinds])
         if states:

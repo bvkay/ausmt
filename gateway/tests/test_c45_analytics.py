@@ -2014,7 +2014,8 @@ def test_monthly_csv_label_columns_in_order_and_empty_not_zero_before_labels():
     header = rows[0]
     at = header.index("detail_days") + 1
     assert header[at:at + len(cols)] == cols
-    assert header[at + len(cols)].startswith("format_")
+    first_dynamic = min(i for i, h in enumerate(header) if h.startswith(("format_", "kind_")))
+    assert first_dynamic >= at + len(cols), "the label columns precede every dynamic column"
     by_month = {r[0]: dict(zip(header, r)) for r in rows[1:]}
     assert all(by_month["2026-05"][c] == "" for c in cols), "an unlabelled month exports empty"
     july = by_month["2026-07"]
@@ -2118,3 +2119,124 @@ def test_new_wording_has_no_dash_characters():
         assert part, "every label surface renders for a labelled box"
         for dash in ("\u2014", "\u2013", "&mdash;", "&ndash;", "&#8212;", "&#8211;"):
             assert dash not in part, (dash, part)
+
+
+# --------------------------------------------------------------------------------------------------
+# SELECTION EXPORTS beside the download figures. A selection export fetches each selected station's
+# file separately under the export label, so one export can add thousands of counted downloads. The
+# fold already holds the month's bulk and single split and its export-event count; these pins hold
+# them on the quarterly table, in the headline and in the monthly export, never crossed with
+# geography, survey or dataset, and "not measured" for a month before the split began.
+# --------------------------------------------------------------------------------------------------
+def _select_stats(**over) -> dict:
+    """The labelled fixture with the selection split from its June month on. May predates it and
+    carries the dense zeroes a carried-forward month holds, which must not read as measured."""
+    doc = _label_stats()
+    doc["select_since"] = "2026-06-01"
+    doc["monthly"][0].update(downloads_by_select={"single": 0, "bulk": 0}, bulk_export_events=0)
+    doc["monthly"][1].update(downloads_by_select={"single": 50, "bulk": 5}, bulk_export_events=1)
+    doc.update(over)
+    return doc
+
+
+def test_selection_exports_row_follows_station_files_row(tmp_path):
+    """QUARTERLY ROW PIN. Directly after the station files and bundles row, each shown month gives
+    its export files and export events, and a month before the split began reads "not measured".
+    A box whose fold never took the split shows no row. FAILS IF the row is missing, misplaced,
+    wrong, or renders a zero for an unmeasured month."""
+    table = _quarterly(run(_analytics(tmp_path, _select_stats())))
+    nm = curatorpage._NOT_MEASURED                                                     # noqa: SLF001
+    assert _row_cells(table, "Selection exports: files / exports") == [nm, "5 / 1", "33 / 7"]
+    after = table.split("Station files / bundles", 1)[1].split("</tr>", 1)[1]
+    assert after.lstrip().startswith("<tr><td>Selection exports: files / exports"), after[:120]
+
+    unstamped = _select_stats(select_since=None)
+    cells = _row_cells(_quarterly(run(_analytics(tmp_path / "b", unstamped))),
+                       "Selection exports: files / exports")
+    assert cells == ["0 / 0", "5 / 1", "33 / 7"], "no stamp: the split counts from the first fold"
+
+    never = _select_stats()
+    never["totals"].pop("downloads_by_select")
+    assert "Selection exports" not in run(_analytics(tmp_path / "c", never))
+
+
+def test_headline_selection_exports_line_under_downloads(tmp_path):
+    """HEADLINE PIN. Directly under the Downloads line the latest labelled month says how many of its
+    files came from selection exports and in how many exports. FAILS IF the line is missing, out of
+    place, wrong, or claims a figure for a month the split did not cover."""
+    text = _text(run(_analytics(tmp_path, _select_stats())))
+    downloads = "Downloads 52: people 20, automated 24, unclassified 8."
+    line = "Selection exports: 33 files in 7 exports. One export is one action by one person."
+    assert downloads + " " + line + " Portal visits 212" in text, text[text.find(downloads) - 5:][:400]
+
+    late = _text(curatorpage._labels_headline(_select_stats(select_since="2026-08-01")))  # noqa: SLF001
+    assert "Selection exports: not measured." in late and "33 files" not in late
+    assert "Selection exports" not in _text(curatorpage._labels_headline(_v7_stats()))   # noqa: SLF001
+
+
+def test_monthly_csv_selection_columns_after_label_columns():
+    """CSV PIN. downloads_select_bulk, downloads_select_single and bulk_export_events follow the
+    label columns, and a month the split did not cover leaves all three empty. FAILS IF a column is
+    missing, misplaced, wrong, or an unmeasured month exports 0."""
+    cols = ["downloads_select_bulk", "downloads_select_single", "bulk_export_events"]
+    rows = list(csv.reader(io.StringIO(curatorpage.analytics_monthly_csv(_select_stats()))))
+    header = rows[0]
+    at = header.index("downloads_net_unknown") + 1
+    assert header[at:at + 3] == cols and header[at + 3].startswith("format_")
+    assert header.count("bulk_export_events") == 1
+    by_month = {r[0]: dict(zip(header, r)) for r in rows[1:]}
+    assert [by_month["2026-05"][c] for c in cols] == ["", "", ""]
+    assert [by_month["2026-06"][c] for c in cols] == ["5", "50", "1"]
+    assert [by_month["2026-07"][c] for c in cols] == ["33", "19", "7"]
+
+    never = _select_stats()
+    never["totals"].pop("downloads_by_select")
+    rows = list(csv.DictReader(io.StringIO(curatorpage.analytics_monthly_csv(never))))
+    assert all(r[c] == "" for r in rows for c in cols)
+
+
+def test_intro_caveat_names_selection_exports(tmp_path):
+    """INTRO PIN. The labels paragraph says what one export does to the download count. FAILS IF the
+    sentence is missing from a labelled box or shown on an unlabelled one."""
+    sentence = ("A selection export fetches each selected station's file separately, so one export "
+                "can add thousands of downloads; the selection exports row shows how many.")
+    html = run(_analytics(tmp_path, _select_stats()))
+    intro = _text(html.split("each counted request carries three labels", 1)[1].split("</p>", 1)[0])
+    assert sentence in intro
+    assert sentence not in _text(run(_analytics(tmp_path / "b", _v7_stats())))
+
+
+def test_selection_exports_not_crossed_with_geography_or_survey(tmp_path):
+    """GRAIN PIN. The export figures are month and cumulative only: no survey, top-dataset, country
+    or state table carries one, and neither the survey nor the country export gains a column. FAILS
+    IF an export figure appears beside a place, a survey or a dataset."""
+    doc = _select_stats()
+    html = run(_analytics(tmp_path, doc))
+    for start, end in (("<h2>Downloads by survey</h2>", "<h2>Daily downloads"),
+                       ("<h2>Top datasets</h2>", "<h2>By country</h2>"),
+                       ("<h2>By country</h2>", None)):
+        section = html.split(start, 1)[1]
+        section = section if end is None else section.split(end, 1)[0]
+        assert "Selection export" not in section and "sel=bulk" not in section, start
+        assert "export event" not in section.lower(), start
+    assert next(csv.reader(io.StringIO(curatorpage.analytics_survey_csv(doc)))) == [
+        "month", "survey", "downloads", "download_bytes", "countries", "files", "bundles"]
+    assert next(csv.reader(io.StringIO(curatorpage.analytics_country_csv(doc)))) == [
+        "month", "country", "requests", "downloads", "visits", "api", "download_bytes", "geo_days"]
+
+
+def test_export_label_caveat_survives_unchanged(tmp_path):
+    """CAVEAT PIN. The existing wording on the export label, in the intro and on the bulk export
+    line, still renders word for word beside the new figures. FAILS IF any of it is reworded."""
+    html = run(_analytics(tmp_path, _select_stats()))
+    for caveat in (
+            "That is a label on requests that already happen: no new request, no beacon, no "
+            "identity. The flag is stripped off before the file is attributed, so a labelled and "
+            "an unlabelled fetch of the same file are still one download.",
+            "Bulk map exports: <b>7</b> event(s), <b>33</b> file(s). An export is a map selection "
+            "the portal zips in the browser, and it labels its own file requests so they can be "
+            "told apart from single downloads. The event figure counts distinct networks per day, "
+            "so two exports from one network on one day read as one: it is a floor, not a count "
+            "of actions.",
+            "The selection split is counted from <b>2026-06-01</b> onward"):
+        assert caveat in html, caveat

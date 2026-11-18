@@ -150,6 +150,15 @@ requests on their own lines, and a table of how that month's requests were class
 and by network type. The quarterly table gains the same splits per month and the number of
 labelled days.
 
+A selection export fetches each selected station's file separately under the export label, so one
+export can add thousands of counted downloads. The screen therefore shows, directly under the
+headline's download line and in a quarterly row after the station files and bundles row, how many of
+a month's downloads came from selection exports and in how many exports. The export count is
+distinct masked networks per day that took a labelled file, so two exports from one network on one
+day read as one. Both figures are monthly and cumulative only, never crossed with country, state,
+survey or dataset; a month before the selection split began reads "not measured". From
+`labels_since` they exclude the operator's own exports, like every other figure.
+
 Labels are reported at month grain only. No audience, client class or network type figure is
 given for a single day, and none is crossed with country, state, survey or dataset: the survey
 and country exports keep their columns, and the country, state, survey and top-dataset tables
@@ -166,7 +175,8 @@ The monthly CSV export carries the same month figures in fixed columns after `de
 unclassified for downloads, visits, API requests and hand-offs; the operator's downloads, visits,
 API requests, hand-offs and download bytes; the declared crawler requests per metric; and
 downloads by client class and by network type. Every one of those cells is empty, never 0, for a
-month without labelled days. `downloads_browser` and `downloads_scripted` are unchanged: they are a
+month without labelled days. After them come `downloads_select_bulk`, `downloads_select_single` and
+`bulk_export_events`, empty for a month the selection split did not cover. `downloads_browser` and `downloads_scripted` are unchanged: they are a
 user-agent split only, and a browser-like user-agent is not evidence of a person.
 
 ## Geolocation data attribution

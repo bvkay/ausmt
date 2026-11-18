@@ -467,10 +467,22 @@ The Analytics screen is server-rendered with no script. Its label surfaces are:
 - quarterly rows after the browser and scripted row, reading "not measured" for a month without
   `label_days` and omitted, like the hand-off row, when no shown month is labelled. Seam notes name
   partial labelling, a missing network table, a hosting-only table and a missing operator list;
-- a scope line on the survey, top-dataset, country and state tables.
+- a scope line on the survey, top-dataset, country and state tables;
+- selection exports beside the download figures, because one export fetches each selected file
+  separately and can add thousands of counted downloads. The month row already holds
+  `downloads_by_select` and `bulk_export_events`, both excluding operator requests on labelled days,
+  so no fold change is needed. A headline line under Downloads ("Selection exports: F files in E
+  exports. One export is one action by one person.") and a quarterly row after the station files
+  and bundles row ("Selection exports: files / exports") read them, and the labels paragraph says
+  what one export does to the count. Month rows carry the split densely, so a month counts as
+  measured only when the fold has taken the split, the month carries current-rules days, and it is
+  not wholly before `select_since`; otherwise it reads "not measured". The existing bulk export
+  line and its caveat are unchanged.
 
 `analytics.csv` gains the fixed label columns after `detail_days`, empty rather than 0 for a month
-without `label_days`. The survey and country exports are unchanged, and no label figure is ever
+without `label_days`, then `downloads_select_bulk`, `downloads_select_single` and
+`bulk_export_events`, empty where the selection split did not cover the month. The survey and
+country exports are unchanged, and no label figure is ever
 crossed with country, state, survey or dataset.
 
 ### History

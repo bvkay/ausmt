@@ -1153,3 +1153,35 @@ def test_labels_never_drop_a_request(tmp_path):
         for metric, n in counted.items():
             assert sum(stats["totals"]["labels"][metric].values()) == n, (name, metric)
         assert stats["totals"]["operator"] == dict.fromkeys(AGG._OPERATOR_KEYS, 0), name
+
+
+# ---- selection exports beside the download figures ----------------------------------------------
+def test_operator_selection_exports_leave_the_export_figures():
+    """On a labelled day an operator's labelled export downloads reach neither the bulk and single
+    split nor the export-event count, at any grain, and no export figure is held beside a country,
+    state, survey, dataset or collection."""
+    date = "2026-07-11"
+    public = [_line("/data/edi/label-survey/L1.edi?sel=bulk", "203.0.113.0", date=date),
+              _line("/data/edi/label-survey/L2.edi?sel=bulk", "203.0.113.0", date=date),
+              _line("/data/edi/label-survey/L1.edi", "2001:db8:9::", date=date)]
+    operator = [("box", _line(f"/data/edi/label-survey/L{i}.edi?sel=bulk", "2001:db8:44::",
+                              date=date)) for i in (1, 2)]
+    stats, archive = _labelled(public + operator)
+    month = stats["monthly"][0]
+    for row in (stats["totals"], month):
+        assert row["downloads_by_select"] == {"single": 1, "bulk": 2}, row["downloads_by_select"]
+        assert row["bulk_export_events"] == 1
+    assert month["operator"]["downloads"] == 2
+    (line,) = archive
+    assert line["bulk_events"] == 1 and line["by_select"] == {"single": 1, "bulk": 2}
+
+    unlabelled, _ = _fold(public + operator)
+    assert unlabelled["totals"]["bulk_export_events"] == 2, "labels off: the operator still counts"
+
+    for key in ("countries", "by_country_detail", "by_state", "by_state_detail", "by_collection"):
+        assert "select" not in json.dumps(stats.get(key, {})), key
+        assert "select" not in json.dumps(month.get(key, {})), key
+        assert "bulk" not in json.dumps(month.get(key, {})), key
+    for key in ("by_survey", "by_dataset"):
+        assert "select" not in json.dumps(stats["downloads"].get(key, {})), key
+    assert "select" not in json.dumps(month["surveys"]) and "bulk" not in json.dumps(month["surveys"])
