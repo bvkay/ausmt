@@ -436,3 +436,16 @@ def test_the_serve_env_template_offers_the_expected_sender_as_optional():
     assert lines == ["AUSMT_PUBLISH_SENDER="], lines
     para = example.split("\nAUSMT_PUBLISH_SENDER=")[0].rsplit("\n\n", 1)[-1]
     assert "published.json" in para and "optional" in para.lower(), para
+
+
+def test_doctor_stub_receives_client_name_when_curl_overridden(tmp_path):
+    """With AUSMT_DOCTOR_CURL set to a stub, every probe still sends the doctor's client name, so
+    the usage fold counts the doctor as the operator. Fails if the override drops the name."""
+    env = _env(tmp_path, _tree(tmp_path))
+    assert env["AUSMT_DOCTOR_CURL"].endswith("/curl")
+    r = _run(env)
+    assert r.returncode == 0, r.stdout
+    calls = Path(env["CURL_LOG"]).read_text(encoding="utf-8").splitlines()
+    assert calls
+    for call in calls:
+        assert call.startswith("-A ausmt-ops/1-doctor-serve "), call

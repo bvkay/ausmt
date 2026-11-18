@@ -360,7 +360,12 @@ Closed set yes, no, unknown; unknown counts as not operator. The first match is 
    Caddy roll of it). That listener is published on loopback only, so curators browsing the box over
    the tailnet are operator. A file of any other name is read as front door and counted in the
    journal as `other_files`;
-2. the user-agent opens with `ausmt-ops/`;
+2. the user-agent opens with `ausmt-ops/`. The repository's jobs send `ausmt-ops/1-<job>`: the
+   three doctors append `-A ausmt-ops/1-doctor-frontdoor`, `-doctor-serve` or `-doctor-box` after
+   the `AUSMT_DOCTOR_CURL` override, so a stub or wrapper keeps it, and both `make smoke` curls
+   send `ausmt-ops/1-smoke`. The token has no space because `$CURL` expands unquoted at every call
+   site. The name is public: a third party sending it only moves its own requests onto the
+   operator line;
 3. the masked address is in a fixed in-code list of loopback, private, link-local, shared and
    unspecified ranges. It is never `is_private`, which also covers the documentation ranges;
 4. the masked address is inside an entry of the host operator list.

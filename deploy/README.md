@@ -1303,7 +1303,9 @@ A request on a labelled day is operator when the first of these holds:
    so curators browsing the box over the tailnet are operator. Front-door files start with
    `access-frontdoor`. A file of any other name, such as a hand-placed salvage archive, is read as
    front door and never as operator, and the journal counts such files as `other_files=N`;
-2. its user-agent starts with `ausmt-ops/` (any case). Manual probes should send
+2. its user-agent starts with `ausmt-ops/` (any case). The three doctors send
+   `ausmt-ops/1-doctor-frontdoor`, `ausmt-ops/1-doctor-serve` and `ausmt-ops/1-doctor-box`, even with
+   `AUSMT_DOCTOR_CURL` set, and `make smoke` sends `ausmt-ops/1-smoke`. Manual probes should send
    `curl -A ausmt-ops/1-manual`;
 3. its masked address is loopback, private, link-local, shared address space (100.64.0.0/10) or
    unspecified;

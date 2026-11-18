@@ -55,7 +55,8 @@
 #                            station id no register carries; set this to a REAL suppressed station's
 #                            route once the corpus has one)
 #   AUSMT_DOCTOR_DOCKER      the docker command            (default: docker)
-#   AUSMT_DOCTOR_CURL        the curl command              (default: curl)
+#   AUSMT_DOCTOR_CURL        the curl command              (default: curl); every probe also sends
+#                            -A ausmt-ops/1-doctor-frontdoor so the usage fold counts it as the operator
 #   AUSMT_DOCTOR_TAILSCALE   the tailscale command         (default: tailscale)
 #   AUSMT_DOCTOR_OPENSSL     the openssl command           (default: openssl)
 #   AUSMT_DOCTOR_DIG         the DNS lookup command         (default: dig)
@@ -77,7 +78,7 @@ CADDYFILE_REPO="${AUSMT_DOCTOR_CADDYFILE:-$HERE/Caddyfile}"
 TS_MAP="${AUSMT_DOCTOR_TS_MAP:-$HERE/ts-routes.map}"
 COMPOSE_FILE="${AUSMT_DOCTOR_COMPOSE:-$HERE/compose.yaml}"
 DOCKER="${AUSMT_DOCTOR_DOCKER:-docker}"
-CURL="${AUSMT_DOCTOR_CURL:-curl}"
+CURL="${AUSMT_DOCTOR_CURL:-curl} -A ausmt-ops/1-doctor-frontdoor"
 TAILSCALE="${AUSMT_DOCTOR_TAILSCALE:-tailscale}"
 OPENSSL="${AUSMT_DOCTOR_OPENSSL:-openssl}"
 DIG="${AUSMT_DOCTOR_DIG:-dig}"

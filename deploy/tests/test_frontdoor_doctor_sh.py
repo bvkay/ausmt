@@ -667,3 +667,18 @@ def test_an_unreadable_env_file_fails_by_name_and_points_at_sudo(tmp_path, shell
     assert r.returncode != 0
     assert any(ln.startswith("FAIL") and str(envf) in ln and "sudo" in ln
                for ln in r.stdout.splitlines()), r.stdout
+
+
+def test_doctor_stub_receives_client_name_when_curl_overridden(tmp_path):
+    """With AUSMT_DOCTOR_CURL set to a stub, every probe still sends the doctor's client name, so
+    the usage fold counts the doctor as the operator. Fails if the override drops the name."""
+    cf = _caddyfile(tmp_path)
+    argv_log = tmp_path / "curl.argv"
+    env = _hash_env(tmp_path, cf, CURL_ARGV_LOG=str(argv_log))
+    assert env["AUSMT_DOCTOR_CURL"].endswith("/curl")
+    r = _run(env, "report")
+    assert r.returncode == 0, r.stdout
+    calls = argv_log.read_text(encoding="utf-8").splitlines()
+    assert calls
+    for call in calls:
+        assert call.startswith("-A ausmt-ops/1-doctor-frontdoor "), call

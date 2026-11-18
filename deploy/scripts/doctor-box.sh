@@ -34,7 +34,8 @@
 #   AUSMT_DOCTOR_COMPOSE    compose file (default: deploy/compose.yaml)
 #   PROFILE                 portal (default) or gateway — selects the gateway container + healthz checks
 #   AUSMT_DOCTOR_DOCKER     docker command       (default: docker)
-#   AUSMT_DOCTOR_CURL       curl command         (default: curl)
+#   AUSMT_DOCTOR_CURL       curl command         (default: curl); every probe also sends
+#                           -A ausmt-ops/1-doctor-box so the usage fold counts it as the operator
 #   AUSMT_DOCTOR_SYSTEMCTL  systemctl command    (default: systemctl)
 #   AUSMT_DOCTOR_GIT        git command          (default: git)
 #   AUSMT_DOCTOR_GETFACL    getfacl command      (default: getfacl)
@@ -56,7 +57,7 @@ DEPLOY_DIR="$(cd "$HERE/.." && pwd)"
 ENV_FILE="${AUSMT_DOCTOR_ENV:-$DEPLOY_DIR/.env}"
 COMPOSE_FILE="${AUSMT_DOCTOR_COMPOSE:-$DEPLOY_DIR/compose.yaml}"
 DOCKER="${AUSMT_DOCTOR_DOCKER:-docker}"
-CURL="${AUSMT_DOCTOR_CURL:-curl}"
+CURL="${AUSMT_DOCTOR_CURL:-curl} -A ausmt-ops/1-doctor-box"
 SYSTEMCTL="${AUSMT_DOCTOR_SYSTEMCTL:-systemctl}"
 GIT="${AUSMT_DOCTOR_GIT:-git}"
 GETFACL="${AUSMT_DOCTOR_GETFACL:-getfacl}"

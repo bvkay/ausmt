@@ -229,10 +229,11 @@ refresh-pid-status:
 	  scripts/refresh_pid_status.py --surveys /srv/surveys/surveys --out /out/cache/pid_status.json; \
 	echo "refresh-pid-status: done (the next rebuild-data consumes the cache)"
 
-# Post-deploy smoke check: the portal serves 200s for the app shell and the generated catalogue.
+# Post-deploy smoke check: the portal serves 200s for the app shell and the generated catalogue. The
+# curls send the operator client name so the usage fold counts them as the operator.
 smoke:
-	curl -fsS http://localhost:8443/ > /dev/null && echo "OK: / (200)"
-	curl -fsS http://localhost:8443/data/catalogue.json > /dev/null && echo "OK: /data/catalogue.json (200)"
+	curl -fsS -A ausmt-ops/1-smoke http://localhost:8443/ > /dev/null && echo "OK: / (200)"
+	curl -fsS -A ausmt-ops/1-smoke http://localhost:8443/data/catalogue.json > /dev/null && echo "OK: /data/catalogue.json (200)"
 
 # Fast-forward-only pull of the surveys-live checkout — refuses to run (and exits non-zero) if the
 # local checkout has diverged (e.g. an operator's stray local edit), rather than silently merging
