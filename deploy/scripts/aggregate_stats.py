@@ -96,6 +96,7 @@ import gzip
 import ipaddress
 import json
 import os
+import re
 import sys
 import zlib
 from pathlib import Path
@@ -264,6 +265,31 @@ _LABEL_METRICS = ("downloads", "visits", "api", "handoffs")
 _OPERATOR_KEYS = _LABEL_METRICS + ("download_bytes",)
 _LABEL_DAY_COUNTERS = ("label_days", "nettype_days", "nettype_full_days", "operator_list_days")
 
+# THE OPERATOR LABEL: yes, no or unknown, and unknown counts as not operator. The first match is yes:
+#   * the line came from the box listener's own log, which is published on loopback only, so every
+#     request in it reached the box over the host or the tailnet. Only its exact names match, so a
+#     hand-placed file of any other name is never taken for it;
+#   * the user-agent opens with the client name the repository's own jobs send;
+#   * the masked address is in _INTERNAL_RANGES. This is an explicit list and never is_private,
+#     because is_private also covers the documentation ranges the tests use;
+#   * the masked address is inside an entry of the host operator list (OperatorNetworks).
+# Otherwise it is no when that list was read, and unknown when it is absent or unreadable.
+_BOX_LOG_NAME = "access.json"
+_BOX_LOG_ROLL = re.compile(r"^access-\d{4}-\d{2}-\d{2}T[0-9.-]+\.(json|log)(\.gz)?$")
+_FRONTDOOR_LOG_PREFIX = "access-frontdoor"
+_OPERATOR_UA_PREFIX = "ausmt-ops/"
+_INTERNAL_RANGES = tuple(ipaddress.ip_network(n) for n in (
+    "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16",
+    "100.64.0.0/10", "::/128", "fc00::/7", "fe80::/10"))
+OPERATOR_YES = "yes"
+OPERATOR_NO = "no"
+OPERATOR_UNKNOWN = "unknown"
+# The list lives outside the gateway state dir (which backup.sh snapshots and the gateway mounts) and
+# outside every compose volume source, so nothing served can read it.
+_OPERATOR_LIST_PARTS = ("stats-private", "operator-networks.txt")
+# The switch is the first day of a month, so a labelled month is labelled from its first day.
+_LABELS_FROM_RE = re.compile(r"^\d{4}-\d{2}-01$")
+
 # The append-only daily archive, written beside stats.json in the gateway state dir. See the archive
 # section further down for what it holds and, more importantly, what it deliberately does not.
 _ARCHIVE_FILENAME = "daily_archive.jsonl"
@@ -425,6 +451,121 @@ class AuStates(_RangeTable):
     def state(self, address: str | None) -> str | None:
         """The state/territory code for `address`, or None when the table does not cover it."""
         return self.lookup(address)
+
+
+class OperatorNetworks:
+    """The host operator list: one CIDR per line, with blank lines and # comments allowed. Construct
+    via `load(path)`; it never raises.
+
+    An IPv4 entry narrower than /24 is widened to its /24 and an IPv6 entry narrower than /48 to its
+    /48, because the address it is matched against was masked to that grain at the edge.
+
+    `state` is the only thing about the list that may leave this object: absent (no file),
+    unreadable (an OSError, or content with no valid entry), empty (comments and blanks only),
+    partial (a valid entry and a skipped line) or loaded. No entry, count or line number is ever
+    written or printed; the entries live only in this run-local list."""
+
+    READ_STATES = ("loaded", "empty", "partial")
+
+    def __init__(self) -> None:
+        self._nets: list = []
+        self.state = "absent"
+
+    @classmethod
+    def load(cls, path) -> "OperatorNetworks":
+        o = cls()
+        if not path:
+            return o
+        p = Path(path)
+        if not p.exists():
+            return o
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            o.state = "unreadable"
+            return o
+        skipped = 0
+        for raw in text.splitlines():
+            entry = raw.split("#", 1)[0].strip()
+            if not entry:
+                continue
+            try:
+                net = ipaddress.ip_network(entry, strict=False)
+            except ValueError:
+                skipped += 1
+                continue
+            grain = 24 if net.version == 4 else 48
+            o._nets.append(net.supernet(new_prefix=grain) if net.prefixlen > grain else net)
+        if not o._nets:
+            o.state = "unreadable" if skipped else "empty"
+        else:
+            o.state = "partial" if skipped else "loaded"
+        return o
+
+    @property
+    def read(self) -> bool:
+        """True when the list was read (loaded, empty or partial), so a miss means not operator."""
+        return self.state in self.READ_STATES
+
+    def contains(self, address) -> bool:
+        if not self._nets or not isinstance(address, str):
+            return False
+        try:
+            ip = ipaddress.ip_address(address.strip())
+        except ValueError:
+            return False
+        return any(ip in net for net in self._nets if net.version == ip.version)
+
+
+def _log_source(name: str) -> str:
+    """'box', 'frontdoor' or 'other' for a log file basename. Box is a positive match on the box
+    listener's own names; any name that is neither is 'other' and is never operator by name."""
+    if name == _BOX_LOG_NAME or _BOX_LOG_ROLL.match(name):
+        return "box"
+    if name.startswith(_FRONTDOOR_LOG_PREFIX):
+        return "frontdoor"
+    return "other"
+
+
+def _is_internal(address) -> bool:
+    if not isinstance(address, str):
+        return False
+    try:
+        ip = ipaddress.ip_address(address.strip())
+    except ValueError:
+        return False
+    return any(ip in net for net in _INTERNAL_RANGES if net.version == ip.version)
+
+
+def _operator_label(source: str, address, ua: str, operator_nets: "OperatorNetworks | None") -> str:
+    """OPERATOR_YES, OPERATOR_NO or OPERATOR_UNKNOWN for one admitted request (see _INTERNAL_RANGES
+    for the rule). Unknown is counted as not operator."""
+    if source == "box":
+        return OPERATOR_YES
+    if (ua or "").strip().lower().startswith(_OPERATOR_UA_PREFIX):
+        return OPERATOR_YES
+    if _is_internal(address):
+        return OPERATOR_YES
+    if operator_nets is not None and operator_nets.contains(address):
+        return OPERATOR_YES
+    return OPERATOR_NO if operator_nets is not None and operator_nets.read else OPERATOR_UNKNOWN
+
+
+def _labels_from_cfg(raw) -> str | None:
+    """The labels switch as an ISO date, or None (labels off) when it is absent, malformed or not the
+    first day of a month."""
+    v = (raw or "").strip()
+    if not _LABELS_FROM_RE.match(v):
+        return None
+    try:
+        dt.date.fromisoformat(v)
+    except ValueError:
+        return None
+    return v
+
+
+def _default_operator_list(data_dir: str) -> Path:
+    return Path(data_dir).joinpath(*_OPERATOR_LIST_PARTS)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -1112,7 +1253,9 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
               run_dt: dt.datetime, *, daily_keep: int = DEFAULT_DAILY_KEEP_DAYS,
               au_states: "AuStates | None" = None, collections: dict[str, str] | None = None,
               served_build: str | None = None, archive_out: list | None = None,
-              ts_access: dict | None = None) -> dict:
+              ts_access: dict | None = None, labels_from: str | None = None,
+              operator_nets: "OperatorNetworks | None" = None,
+              label_stats_out: dict | None = None) -> dict:
     """Fold every COMPLETE day in `lines` into `prev`, returning the new cumulative stats dict.
 
     Only dates d with last_folded_date < d < run_dt.date() are folded (a strictly-earlier complete
@@ -1162,7 +1305,16 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     NON-GEO granularity, for the append-only archive (see _archive_line). It is an out channel and not
     a second return value, so every existing caller keeps its signature; `aggregate` stays a function
     of its inputs and simply hands the caller the rows it built. `served_build` is stamped onto those
-    rows when the served tree names itself."""
+    rows when the served tree names itself.
+
+    REQUEST LABELS. Each item of `lines` is a bare line, read as front door, or a (source, line) pair
+    from read_log_lines(with_source=True). A day D is labelled when `labels_from` is set and
+    D >= labels_from; every other day folds exactly as it would with no labels at all, and with
+    `labels_from` None the output is byte-identical to a fold that predates labels. On a labelled day
+    an admitted OPERATOR request (see _operator_label) is counted on the operator line in the totals
+    and its month, as a request count with no dedupe, and reaches no other figure. The derivation is
+    guarded: a fault costs that request its labels (operator unknown, so it is counted) and adds one
+    to `label_fallbacks` in `label_stats_out`, and never costs the fold."""
     stats = _coerce_prev(prev)
     prev_folded = stats.get("last_folded_date")
     cutoff_date = (run_dt.date() - dt.timedelta(days=1))  # last complete day
@@ -1210,8 +1362,10 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     # record, so they carry the finer per-survey / per-dataset / per-collection detail that has no
     # place on a rendered day row. Geography is deliberately absent from them (see _archive_line).
     archive_index: dict[str, dict] = {}
+    label_fallbacks = 0
 
-    for raw in lines:
+    for item in lines:
+        source, raw = item if isinstance(item, tuple) and len(item) == 2 else ("frontdoor", item)
         rec = parse_caddy_line(raw) if isinstance(raw, str) else None
         if rec is None:
             continue
@@ -1223,9 +1377,6 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             continue
         if rec["method"] not in ("GET", ""):
             continue
-        client = classify_client(rec["ua"])
-        if client == CLIENT_CRAWLER:
-            continue
         kind, rel = classify(rec["path"])
         if kind == "ignore":
             continue
@@ -1236,6 +1387,27 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             if rec["status"] != _HANDOFF_STATUS:  # the 302 IS the hand-off; a 404 is the table refusing
                 continue
         elif rec["status"] not in (200, 206):   # download: a complete OR a ranged/resumed transfer
+            continue
+        # Operator before crawler, so a crawler-named operator probe is still on the operator line.
+        # Moving the crawler drop after admission changes no result: both paths drop the line.
+        if labels_from is not None and date >= labels_from:
+            try:
+                operator = _operator_label(source, rec["address"], rec["ua"], operator_nets)
+            except Exception:  # noqa: BLE001 -- a label fault must never cost the request or the fold
+                operator = OPERATOR_UNKNOWN
+                label_fallbacks += 1
+            if operator == OPERATOR_YES:
+                metric = _KIND_METRIC[kind]
+                month = _month_row(month_index, stats["monthly"], date[:7])
+                for block in (totals.setdefault("operator", _empty_operator()),
+                              month.setdefault("operator", _empty_operator())):
+                    block[metric] = _as_int(block.get(metric)) + 1
+                    if kind == "download":
+                        block["download_bytes"] = (_as_int(block.get("download_bytes"))
+                                                   + max(rec["size"], 0))
+                continue
+        client = classify_client(rec["ua"])
+        if client == CLIENT_CRAWLER:
             continue
         day = _day_row(daily_index, stats["daily"], date)
         month = _month_row(month_index, stats["monthly"], date[:7])
@@ -1436,6 +1608,11 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     # One increment per distinct date that actually contributed a country to this month.
     for month_key in geo_days_seen.values():
         month_index[month_key]["geo_days"] = _as_int(month_index[month_key].get("geo_days")) + 1
+    if labels_from is not None:
+        _fold_label_days(stats, month_index, days_seen, prev_folded, cutoff, labels_from,
+                         operator_nets)
+    if label_stats_out is not None:
+        label_stats_out["label_fallbacks"] = label_fallbacks
 
     # Advance the fold watermark to the run's date-1 (the cutoff), always — a window with no lines
     # still advances so old dates are never re-scanned.
@@ -1468,6 +1645,40 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
         archive_out.extend(_archive_line(archive_index[d], served_build=served_build)
                            for d in sorted(archive_index))
     return stats
+
+
+_KIND_METRIC = {"download": "downloads", "visit": "visits", "api": "api", "handoff": "handoffs"}
+
+
+def _empty_operator() -> dict:
+    """The operator line, dense once labels have started so that a zero is a measured zero."""
+    return dict.fromkeys(_OPERATOR_KEYS, 0)
+
+
+def _fold_label_days(stats: dict, month_index: dict, days_seen: dict, prev_folded, cutoff: str,
+                     labels_from: str, operator_nets: "OperatorNetworks | None") -> None:
+    """The label day counters and the labels_since stamp for the days this call folded.
+
+    labels_since is the first labelled day this fold could fold: labels_from, or the day after the
+    prior watermark when that is later. It is stamped once and never moved, so a later switch date
+    or a switch removed leaves it where it is. The label blocks are written only from that day on, at
+    the cumulative and month grains, never on a day row or an archive line."""
+    first = labels_from
+    after_prev = _next_day(prev_folded)
+    if after_prev is not None and after_prev > first:
+        first = after_prev
+    if first > cutoff:
+        return
+    stats.setdefault("labels_since", first)
+    stats["totals"].setdefault("operator", _empty_operator())
+    list_read = operator_nets is not None and operator_nets.read
+    for date, month_key in days_seen.items():
+        if date < labels_from:
+            continue
+        m = month_index[month_key]
+        m.setdefault("operator", _empty_operator())
+        m["label_days"] = _as_int(m.get("label_days")) + 1
+        m["operator_list_days"] = _as_int(m.get("operator_list_days")) + (1 if list_read else 0)
 
 
 def _bump(counter: dict, key: str, n: int = 1) -> None:
@@ -1756,7 +1967,8 @@ def _archive_line(row: dict, *, served_build: str | None = None) -> dict:
 # --------------------------------------------------------------------------------------------------
 # I/O: read the log dir, load inputs, write stats.json atomically (tmp -> chmod 0644 -> os.replace).
 # --------------------------------------------------------------------------------------------------
-def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
+def read_log_lines(log_dir, *, skipped: list | None = None, with_source: bool = False,
+                   other_files: list | None = None) -> list:
     """Every line of every Caddy access-log file under `log_dir`: the live access.json, its PLAIN
     rolled siblings (access*.json / access*.log), and its COMPRESSED rolled siblings (access*.json.gz).
 
@@ -1783,8 +1995,12 @@ def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
     A gzip archive gets the distinction it earns. Failing to OPEN it is the same fault as above and is
     reported. Opening it and finding it is not a gzip stream (or is truncated mid-stream) is the
     already-documented salvage case, expected of a hand-placed or half-pulled archive, and stays a
-    silent skip: it must not turn a routine recovery into a nightly warning."""
-    lines: list[str] = []
+    silent skip: it must not turn a routine recovery into a nightly warning.
+
+    `with_source` returns (source, line) pairs instead, where source is _log_source of the file name,
+    so the fold can tell a box-log line from a front-door one. `other_files`, when given, receives the
+    path of each file read whose name is neither; only their count is ever reported."""
+    lines: list = []
     if not log_dir:
         return lines
     d = Path(log_dir)
@@ -1797,11 +2013,18 @@ def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
         if skipped is not None:
             skipped.append(str(path))
 
+    def _take(path, text: str) -> None:
+        source = _log_source(Path(path).name)
+        if other_files is not None and source == "other":
+            other_files.append(str(path))
+        got = text.splitlines()
+        lines.extend([(source, ln) for ln in got] if with_source else got)
+
     files = sorted(glob.glob(str(d / "access*.json")) + glob.glob(str(d / "access*.log")))
     for f in files:
         try:
             with open(f, encoding="utf-8", errors="replace") as fh:
-                lines.extend(fh.read().splitlines())
+                _take(f, fh.read())
         except OSError as exc:
             _unreadable(f, exc)
     for f in sorted(glob.glob(str(d / "access*.json.gz"))):
@@ -1812,7 +2035,7 @@ def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
             continue
         try:
             with gzip.open(raw, "rt", encoding="utf-8", errors="replace") as fh:
-                lines.extend(fh.read().splitlines())
+                _take(f, fh.read())
         except (OSError, EOFError, zlib.error):
             # Not a gzip stream, truncated, or corrupt mid-stream. Skip this archive and keep the
             # readable ones: one bad file must never cost a whole fold (gzip.BadGzipFile is an OSError).
@@ -1938,13 +2161,32 @@ def main(argv=None) -> int:
         # Absent, hand-offs still count as requests and carry no bytes -- see `aggregate`.
         ts_access = _load_json(served_dir / "ts_access.json") or {}
         prev = _load_json(stats_file)
+        # The labels switch. Absent or malformed, labels are off, the operator list is not opened,
+        # and the fold is exactly the unlabelled fold; removing the setting is the rollback.
+        labels_from = _labels_from_cfg(os.environ.get("AUSMT_STATS_LABELS_FROM"))
+        operator_nets = None
+        if labels_from is not None:
+            operator_nets = OperatorNetworks.load(
+                _cfg("AUSMT_STATS_OPERATOR_NETWORKS", str(_default_operator_list(data_dir))))
         skipped_logs: list[str] = []
-        lines = read_log_lines(log_dir, skipped=skipped_logs)
+        other_logs: list[str] = []
+        lines = read_log_lines(log_dir, skipped=skipped_logs, with_source=True,
+                               other_files=other_logs)
         archive_rows: list[dict] = []
+        label_stats: dict = {}
         stats = aggregate(prev, lines, reverse_map, geoip, run_dt, daily_keep=daily_keep,
                           au_states=au_states, collections=collections,
                           served_build=served_build, archive_out=archive_rows,
-                          ts_access=ts_access)
+                          ts_access=ts_access, labels_from=labels_from,
+                          operator_nets=operator_nets, label_stats_out=label_stats)
+        if labels_from is None:
+            label_journal = "labels=off"
+        else:
+            # Only the state of the operator list is ever printed: no entry, count or line number.
+            on = str(stats.get("last_folded_date") or "") >= labels_from
+            label_journal = (f"labels={'on' if on else 'waiting'} from={labels_from} "
+                             f"operator_list={operator_nets.state} other_files={len(other_logs)} "
+                             f"label_fallbacks={label_stats.get('label_fallbacks', 0)}")
         dest_dir = Path(stats_file).parent
         if not dest_dir.is_dir():
             print(f"aggregate_stats: state dir {dest_dir} does not exist -- not writing stats.json "
@@ -1962,7 +2204,7 @@ def main(argv=None) -> int:
               f"manifest_rows={len(reverse_map)} geoip_rows={geoip.row_count} "
               f"au_state_rows={au_states.row_count} collections={len(collections)} "
               f"log_lines={len(lines)} files_skipped={len(skipped_logs)} "
-              f"archived_days={archived} -> {stats_file}", file=sys.stderr)
+              f"archived_days={archived} {label_journal} -> {stats_file}", file=sys.stderr)
     except Exception as exc:  # noqa: BLE001 -- never raise into the timer; note loudly and exit 0
         print(f"aggregate_stats: aborted without writing ({type(exc).__name__}: {exc})", file=sys.stderr)
         return 0

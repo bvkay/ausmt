@@ -336,3 +336,50 @@ The July 2026 rotation-loss window (27 Jul 00:00 to 28 Jul 13:27 UTC, dropped be
 accepted as-is by owner ruling: the site is not publicly launched, so pre-DNS numbers are not a
 reporting baseline. No backfill machinery exists and none was built. **"Nothing is backfilled" stays
 absolute.** The salvaged raw files remain on the box at zero cost.
+
+## D9. Request labels
+
+Three labels per admitted request, derived at fold time from fields the fold already reads plus the
+name of the log file a line came from: operator, client class and network type. No edge change and no
+header beyond the user-agent. This section records the operator label and the switch; the client
+class and network type are recorded here when they are built.
+
+### The switch and rollback
+
+`AUSMT_STATS_LABELS_FROM` in the host `.env`, a first-of-month date. Absent, malformed or mid-month,
+labels are off and the fold output is byte-identical to the unlabelled fold across successive folds
+(pinned against golden output of the unlabelled fold). A day D is labelled when D >= that date; every
+other day folds exactly as before. Removing the setting is the soft rollback: labelling stops at the
+next fold and the label blocks already folded are carried forward. `labels_since` is stamped once, at
+the first labelled day folded, and never moved.
+
+### Operator
+
+Closed set yes, no, unknown; unknown counts as not operator. The first match is yes:
+
+1. the line came from the box listener's own log, matched positively by name (`access.json` or a
+   Caddy roll of it). That listener is published on loopback only, so curators browsing the box over
+   the tailnet are operator. A file of any other name is read as front door and counted in the
+   journal as `other_files`;
+2. the user-agent opens with `ausmt-ops/`;
+3. the masked address is in a fixed in-code list of loopback, private, link-local, shared and
+   unspecified ranges. It is never `is_private`, which also covers the documentation ranges;
+4. the masked address is inside an entry of the host operator list.
+
+Otherwise no when the list was read (loaded, empty or partial), and unknown when it is absent or
+unreadable. An operator request is counted on the operator line (downloads, visits, API requests,
+hand-offs, download bytes; request counts, not de-duplicated) in the totals and its month, and
+reaches no other figure, day row or archive line. A fault in the label code costs that request its
+labels, never the request or the fold, and is counted as `label_fallbacks`.
+
+Each labelled month carries `label_days` and `operator_list_days`, so a month whose operator list
+was missing on some days says so rather than looking complete.
+
+### Operator list custody
+
+`$AUSMT_DATA_DIR/stats-private/operator-networks.txt`, directory 0700 and file 0600, owned by the
+account the fold runs as. It is outside the gateway state dir that `backup.sh` snapshots and the
+gateway mounts, and outside every compose volume source, so no route can read it. Entries are widened
+to /24 or /48, the grain of the masked address. No entry, count or line number is written to
+`stats.json`, the archive or the journal; the journal prints only the list state. If the fold moves to
+another host the file moves by hand, never through git.

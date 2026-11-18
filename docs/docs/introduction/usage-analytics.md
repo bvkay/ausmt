@@ -81,6 +81,21 @@ row, and the state rows add up to the AU figure exactly. The download, visit, AP
 began later and read "not measured" where they predate the request count. Where the state table is
 absent the screen shows no state section.
 
+## Operator requests
+
+The site's own operator and curators make requests too: checking a release, browsing the curation
+host, running health checks. From a date the operator sets in host configuration, recorded in the
+statistics as `labels_since`, each counted request is first checked for being one of these, while the
+day is folded and without storing anything per request. A request is the operator's when it arrives
+in the curation host's own log (which only the host itself and its private network can reach), when
+its user-agent starts with the client name the site's own checks send (`ausmt-ops/`), when its masked
+address is a loopback or private address, or when its masked network is in the operator's list of
+static networks, which is held on the host and never published. Operator requests are taken out of
+every figure from that date and counted only in a separate operator total per month and overall,
+never per day. Figures before that date include the operator's own requests and are not revised.
+The `ausmt-ops/` name is public: anyone sending it only moves their own requests into the operator
+total.
+
 ## Geolocation data attribution
 
 Country resolution uses the IP to Country Lite database by DB-IP (<https://db-ip.com>), and the

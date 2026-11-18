@@ -50,7 +50,8 @@ _IPV4_RE = re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b")
 _IPV6_RE = re.compile(r"[0-9a-fA-F]{1,4}::[0-9a-fA-F:]*|::[0-9a-fA-F]{1,4}|"
                       r"(?:[0-9a-fA-F]{1,4}:){3,}[0-9a-fA-F]{1,4}")
 # A UA fingerprint the leak sweep hunts (the exact strings the synthetic lines carry).
-_UA_MARKERS = ("Mozilla", "Chrome", "Safari", "AppleWebKit", "Googlebot", "curl/", "python-requests")
+_UA_MARKERS = ("Mozilla", "Chrome", "Safari", "AppleWebKit", "Googlebot", "curl/", "python-requests",
+               "ausmt-ops")
 
 
 def _load_agg():

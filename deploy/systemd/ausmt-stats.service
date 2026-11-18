@@ -43,7 +43,9 @@ WorkingDirectory=__DEPLOY_DIR__
 # One pass: read the log(s), fold each complete day into stats.json, exit. Invoked via `python3` (no
 # reliance on the file's exec bit) — stdlib only, so the system python3 is sufficient. The aggregator
 # ALWAYS exits 0 on the normal path (best-effort, timer-safe); a broken input degrades a metric, it does
-# not abort the run.
+# not abort the run. With AUSMT_STATS_LABELS_FROM set it also reads the operator list in
+# $AUSMT_DATA_DIR/stats-private, which must be owned by the User= above with mode 0700 on the
+# directory and 0600 on the file, because no other account may read it.
 ExecStart=/usr/bin/env python3 __DEPLOY_DIR__/scripts/aggregate_stats.py
 # The fold is quick (read a few log files, one manifest, one CSV, one JSON write); bound a wedged run
 # well under the daily cadence.

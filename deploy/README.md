@@ -1242,6 +1242,73 @@ Then open **Curator → Operations → Analytics**. Before the first fold it sho
 a `stats.json` older than ~2 aggregation periods (≈ 2 days) shows a **STALE** banner (the timer is not
 running) rather than presenting old figures as live.
 
+#### Request labels: the operator list and the switch
+
+The fold can label each counted request. The operator label takes the site's own requests out of
+every figure and counts them on a separate operator line, at month and cumulative grain only. The
+code ships switched off: with `AUSMT_STATS_LABELS_FROM` unset the fold output is byte for byte the
+unlabelled output, and the operator list is not opened.
+
+A request on a labelled day is operator when the first of these holds:
+
+1. it is in the box listener's own log, `access.json` or a Caddy roll of it
+   (`access-<date>T<time>.json`, `.log` or `.json.gz`). That listener is published on loopback only,
+   so curators browsing the box over the tailnet are operator. Front-door files start with
+   `access-frontdoor`. A file of any other name, such as a hand-placed salvage archive, is read as
+   front door and never as operator, and the journal counts such files as `other_files=N`;
+2. its user-agent starts with `ausmt-ops/` (any case). Manual probes should send
+   `curl -A ausmt-ops/1-manual`;
+3. its masked address is loopback, private, link-local, shared address space (100.64.0.0/10) or
+   unspecified;
+4. its masked address is inside an entry of the operator list.
+
+**Create the operator list** once, on the host that runs the fold, as the `User=` of
+`ausmt-stats.service`:
+
+```sh
+install -d -m 0700 "$AUSMT_DATA_DIR/stats-private"
+install -m 0600 /dev/null "$AUSMT_DATA_DIR/stats-private/operator-networks.txt"
+```
+
+Edit the file to hold one CIDR per line for the static networks the operator controls, with `#`
+comments and blank lines allowed. An invented example:
+
+```text
+# operator static networks
+192.0.2.0/24
+2001:db8:1::/48
+```
+
+An IPv4 entry narrower than /24 is widened to its /24, and an IPv6 entry narrower than /48 to its
+/48, because addresses are masked to that grain before they are logged; neighbours on the same /24
+are therefore operator too. With no static networks, leave the file holding comments only: that is a
+deliberate empty list. The file lives outside the gateway state dir that `backup.sh` snapshots and
+outside every compose volume, so no container and no route can read it. Never paste its contents into
+chat, git or a ticket. `AUSMT_STATS_OPERATOR_NETWORKS` in `.env` overrides the path.
+
+**Switch labels on** by adding `AUSMT_STATS_LABELS_FROM=YYYY-MM-01` to `deploy/.env` before that
+month begins. A value that is not the first day of a month reads as off. The journal line of each
+fold says which:
+
+| Journal field | Meaning |
+| --- | --- |
+| `labels=off` | not set, or not a valid first-of-month date |
+| `labels=waiting from=<date>` | set, and no day of that month has been folded yet |
+| `labels=on from=<date>` | labelled days are being folded |
+| `operator_list=<state>` | `loaded`, `empty` (comments only), `partial` (a line was skipped), `absent` or `unreadable`; no entry or count is ever printed, so find a skipped line by reading the file on the host |
+| `other_files=N` | log files read that are neither box nor front-door names |
+| `label_fallbacks=N` | requests whose labels failed and were counted as not operator |
+
+With the list absent or unreadable the request is still counted unless rules 1 to 3 catch it, and the
+month records that day as one without an operator list. `stats.json` gains `labels_since`, the first
+labelled day folded, stamped once and never moved. Do not run the fold repeatedly to test the switch:
+each run advances the fold watermark.
+
+**Rollback.** Soft: remove `AUSMT_STATS_LABELS_FROM` from `deploy/.env`. Labelling stops at the next
+fold, and the label figures already folded are kept. Full code revert: stop `ausmt-stats.timer`,
+restore `stats.json` from the `$AUSMT_DATA_DIR/backups/<ts>/` snapshot taken before the first
+labelled fold, revert the code, and start the timer again.
+
 #### Troubleshooting
 
 | Symptom | Cause → fix |
