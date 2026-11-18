@@ -511,9 +511,9 @@ class NetTypes(_RangeTable):
     def open_table(cls, path, *, today: dt.date,
                    max_age_days: int = DEFAULT_NETTYPE_MAX_AGE_DAYS) -> "NetTypes":
         p = Path(path) if path else None
-        if p is None or not p.exists():
-            return cls()
         try:
+            if p is None or not p.exists():
+                return cls()
             with open(p, encoding="utf-8", newline="") as fh:
                 first = fh.readline()
             t = cls.load(p)
@@ -575,9 +575,9 @@ class OperatorNetworks:
         if not path:
             return o
         p = Path(path)
-        if not p.exists():
-            return o
         try:
+            if not p.exists():
+                return o
             text = p.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             o.state = "unreadable"
@@ -703,13 +703,27 @@ class _LabelEvidence:
         return len(self.sweep.get((date, address or "", ua), ())) > SWEEP_DISTINCT_FILES
 
 
-def _parse_records(lines, cutoff: str, prev_folded) -> list[dict]:
-    """Each line parsed once into the reduced record both passes read: parse_caddy_line's fields plus
-    `source`, `kind` and `rel`. A record is kept when its date is no later than `cutoff` and no
-    earlier than the prior watermark, so the day before the first new day is present as evidence
-    while the fold itself still skips it. Each item is a bare line, read as front door, or a
-    (source, line) pair."""
-    out: list[dict] = []
+class _Record:
+    """One parsed line as both passes read it, held only while labels are on. Slots rather than a
+    dict, because a labelled fold keeps every record of its window in memory at once."""
+
+    __slots__ = ("date", "method", "path", "status", "size", "address", "ua", "bulk", "source",
+                 "kind", "rel")
+
+    def __init__(self, rec: dict) -> None:
+        for name in self.__slots__:
+            setattr(self, name, rec[name])
+
+    def __getitem__(self, name: str):
+        return getattr(self, name)
+
+
+def _parse_records(lines, cutoff: str, prev_folded):
+    """Each line parsed once, lazily, into the reduced record both passes read: parse_caddy_line's
+    fields plus `source`, `kind` and `rel`. A record is yielded when its date is no later than
+    `cutoff` and no earlier than the prior watermark, so the day before the first new day is present
+    as evidence while the fold itself still skips it. Each item is a bare line, read as front door,
+    or a (source, line) pair."""
     for item in lines:
         source, raw = item if isinstance(item, tuple) and len(item) == 2 else ("frontdoor", item)
         rec = parse_caddy_line(raw) if isinstance(raw, str) else None
@@ -720,11 +734,10 @@ def _parse_records(lines, cutoff: str, prev_folded) -> list[dict]:
             continue
         rec["source"] = source
         rec["kind"], rec["rel"] = classify(rec["path"])
-        out.append(rec)
-    return out
+        yield rec
 
 
-def _label_prepass(records: list[dict], first: str,
+def _label_prepass(records: list, first: str,
                    operator_nets: "OperatorNetworks | None") -> _LabelEvidence:
     """The portal, landing and sweep evidence from every non-operator, browser-like record dated
     `first` or later."""
@@ -1577,11 +1590,13 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     crawler_days: dict[str, dict] = {}
 
     # Records run from the day before the first new day to the cutoff; the fold below skips that
-    # earlier day, which is read only as evidence for the client class.
+    # earlier day, which is read only as evidence for the client class. With no labelled day in
+    # reach each line is parsed and folded in turn and none is kept, exactly as an unlabelled fold.
     records = _parse_records(lines, cutoff, prev_folded)
     evidence = _LabelEvidence()
     prepass = "none"
     if labels_from is not None and cutoff >= labels_from:
+        records = [_Record(rec) for rec in records]
         try:
             evidence = _label_prepass(records, _prev_day(labels_from), operator_nets)
             prepass = "ok"
@@ -2444,7 +2459,8 @@ def main(argv=None) -> int:
         prev = _load_json(stats_file)
         # The labels switch. Absent or malformed, labels are off, the operator list is not opened,
         # and the fold is exactly the unlabelled fold; removing the setting is the rollback.
-        labels_from = _labels_from_cfg(os.environ.get("AUSMT_STATS_LABELS_FROM"))
+        labels_raw = os.environ.get("AUSMT_STATS_LABELS_FROM") or ""
+        labels_from = _labels_from_cfg(labels_raw)
         operator_nets = nettypes = None
         if labels_from is not None:
             operator_nets = OperatorNetworks.load(
@@ -2455,8 +2471,10 @@ def main(argv=None) -> int:
                 max_age_days=_nettype_max_age(os.environ.get("AUSMT_STATS_NETTYPE_MAX_AGE_DAYS")))
         skipped_logs: list[str] = []
         other_logs: list[str] = []
-        lines = read_log_lines(log_dir, skipped=skipped_logs, with_source=True,
-                               other_files=other_logs)
+        # The source of each line is read only when labels are set; unlabelled, the log is read as
+        # plain lines.
+        lines = read_log_lines(log_dir, skipped=skipped_logs,
+                               with_source=labels_from is not None, other_files=other_logs)
         archive_rows: list[dict] = []
         label_stats: dict = {}
         stats = aggregate(prev, lines, reverse_map, geoip, run_dt, daily_keep=daily_keep,
@@ -2466,7 +2484,8 @@ def main(argv=None) -> int:
                           operator_nets=operator_nets, nettypes=nettypes,
                           label_stats_out=label_stats)
         if labels_from is None:
-            label_journal = "labels=off"
+            # A set but rejected switch is named, never echoed.
+            label_journal = "labels=off" + (" from=invalid" if labels_raw.strip() else "")
         else:
             # Only the state of the operator list is ever printed: no entry, count or line number.
             on = str(stats.get("last_folded_date") or "") >= labels_from

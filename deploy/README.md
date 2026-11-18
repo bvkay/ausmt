@@ -1311,16 +1311,21 @@ A request on a labelled day is operator when the first of these holds:
    unspecified;
 4. its masked address is inside an entry of the operator list.
 
-**Create the operator list** once, on the host that runs the fold, as the `User=` of
-`ausmt-stats.service`:
+**Create the operator list** once, on the host that runs the fold. The directory and the file must
+belong to the `User=` of `ausmt-stats.service` (`ausmt` below; check the unit), because the fold
+cannot enter a 0700 directory owned by anyone else:
 
 ```sh
-install -d -m 0700 "$AUSMT_DATA_DIR/stats-private"
-install -m 0600 /dev/null "$AUSMT_DATA_DIR/stats-private/operator-networks.txt"
+sudo install -d -m 0700 -o ausmt -g ausmt "$AUSMT_DATA_DIR/stats-private"
+sudo install -m 0600 -o ausmt -g ausmt /dev/null "$AUSMT_DATA_DIR/stats-private/operator-networks.txt"
+sudo -u ausmt "${EDITOR:-vi}" "$AUSMT_DATA_DIR/stats-private/operator-networks.txt"
 ```
 
-Edit the file to hold one CIDR per line for the static networks the operator controls, with `#`
-comments and blank lines allowed. An invented example:
+Edit the file, as that account, to hold one CIDR per line for the static networks the operator
+controls, with `#` comments and blank lines allowed. After the next fold, confirm the journal reads
+`operator_list=loaded` (or `empty` for a comments-only file); `unreadable` means the fold account
+cannot read the file or its directory, and requests from the listed networks are then counted as
+public. An invented example:
 
 ```text
 # operator static networks
@@ -1332,8 +1337,11 @@ An IPv4 entry narrower than /24 is widened to its /24, and an IPv6 entry narrowe
 /48, because addresses are masked to that grain before they are logged; neighbours on the same /24
 are therefore operator too. With no static networks, leave the file holding comments only: that is a
 deliberate empty list. The file lives outside the gateway state dir that `backup.sh` snapshots and
-outside every compose volume, so no container and no route can read it. Never paste its contents into
-chat, git or a ticket. `AUSMT_STATS_OPERATOR_NETWORKS` in `.env` overrides the path.
+outside every compose volume, so no container and no route can read it. It is still under
+`$AUSMT_DATA_DIR`: if the host-level backup covers that whole directory, the list is in those backups,
+so check that backup's include and exclude set before switching labels on, and either exclude
+`stats-private` or keep the list in the backups knowingly. Never paste its contents into chat, git or a
+ticket. `AUSMT_STATS_OPERATOR_NETWORKS` in `.env` overrides the path.
 
 **Switch labels on** by adding `AUSMT_STATS_LABELS_FROM=YYYY-MM-01` to `deploy/.env` before that
 month begins. A value that is not the first day of a month reads as off. The journal line of each
@@ -1341,7 +1349,8 @@ fold says which:
 
 | Journal field | Meaning |
 | --- | --- |
-| `labels=off` | not set, or not a valid first-of-month date |
+| `labels=off` | not set |
+| `labels=off from=invalid` | set, but not a valid first-of-month date, so labels stay off; the value is not echoed |
 | `labels=waiting from=<date>` | set, and no day of that month has been folded yet |
 | `labels=on from=<date>` | labelled days are being folded |
 | `operator_list=<state>` | `loaded`, `empty` (comments only), `partial` (a line was skipped), `absent` or `unreadable`; no entry or count is ever printed, so find a skipped line by reading the file on the host |
@@ -1358,10 +1367,28 @@ month records that day as one without an operator list. `stats.json` gains `labe
 labelled day folded, stamped once and never moved. Do not run the fold repeatedly to test the switch:
 each run advances the fold watermark.
 
+**Serve host.** The serve-host doctor runs from an installed copy, so after pulling the code there,
+reinstall it as the provisioning script does, then run both doctors once and confirm they pass:
+
+```sh
+sudo install -o root -g root -m 0755 deploy/nectar/doctor-serve.sh /usr/local/bin/ausmt-doctor-serve
+```
+
+Until it is reinstalled, the installed copy keeps sending curl's own user-agent.
+
 **Rollback.** Soft: remove `AUSMT_STATS_LABELS_FROM` from `deploy/.env`. Labelling stops at the next
-fold, and the label figures already folded are kept. Full code revert: stop `ausmt-stats.timer`,
-restore `stats.json` from the `$AUSMT_DATA_DIR/backups/<ts>/` snapshot taken before the first
-labelled fold, revert the code, and start the timer again.
+fold, and the label figures already folded are kept. The page then still says that operator requests
+are excluded from every figure since `labels_since`, which no longer holds for the days folded after
+the rollback; the seam note under the quarterly table states how many active days of each month are
+labelled, and is the line to read.
+
+Full code revert: stop `ausmt-stats.timer`, revert the code, and start the timer again. Restore
+nothing: the unlabelled fold drops `labels_since` and every label block from `stats.json` at its next
+run and keeps every other figure. The daily and monthly figures from `labels_since` to the revert
+still exclude operator requests, and the archive lines of those days keep their `labelled`,
+`by_client_class` and `crawler_excluded` keys. Restoring `stats.json` from a snapshot taken before
+the first labelled fold is a last resort only: it loses every figure folded since that snapshot, and
+those days cannot be folded again once their raw logs have rotated away.
 
 #### Troubleshooting
 

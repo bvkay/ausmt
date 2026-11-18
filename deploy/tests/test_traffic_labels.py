@@ -11,6 +11,7 @@ import datetime as dt
 import gzip
 import importlib.util
 import json
+import os
 import re
 from pathlib import Path
 
@@ -1185,3 +1186,164 @@ def test_operator_selection_exports_leave_the_export_figures():
     for key in ("by_survey", "by_dataset"):
         assert "select" not in json.dumps(stats["downloads"].get(key, {})), key
     assert "select" not in json.dumps(month["surveys"]) and "bulk" not in json.dumps(month["surveys"])
+
+
+# ---- evidence edges: the sweep, the first labelled day and operator lines -----------------------
+def test_swept_client_visits_api_and_handoffs_are_not_swept():
+    """The sweep reaches downloads only. A swept client's own visit, API request and hand-off on the
+    sweep day keep the class their evidence gives them."""
+    a, date = "2001:db8:2::", "2026-07-11"
+    lines = [_line("/data/catalogue.json", a, date=date)] + _files(51, a, date=date)
+    lines += [_line("/data/mtcat.json", a, date=date),
+              _line("/go/ts/label-survey/L1/l1", a, date=date, status=302)]
+    stats, _ = _labelled(lines)
+    labels = stats["totals"]["labels"]
+    assert _dl(stats) == {"tool|unknown": 51}
+    assert labels["visits"] == {"portal_session|unknown": 1}
+    assert labels["api"] == {"portal_session|unknown": 1}
+    assert labels["handoffs"] == {"portal_session|unknown": 1}
+
+
+def test_first_labelled_day_reads_the_unlabelled_day_before_as_evidence():
+    """The first labelled day's previous day is itself unlabelled, and its portal load is still
+    evidence: a session that opened the portal the evening before the switch reads as a portal
+    session on the first labelled day."""
+    lines = [_line("/data/catalogue.json", "203.0.113.0", date="2026-07-31"),
+             _line("/data/edi/label-survey/L1.edi", "203.0.113.0", date="2026-08-01")]
+    stats, _ = _labelled(lines, labels_from="2026-08-01",
+                         run=dt.datetime(2026, 8, 2, 3, 30, tzinfo=dt.timezone.utc))
+    assert stats["labels_since"] == "2026-08-01"
+    assert _dl(stats) == {"portal_session|unknown": 1}
+
+
+def test_operator_lines_give_no_evidence():
+    """An operator request is never evidence for a public one: a portal load sent with the operator
+    client name leaves a browser download from the same network unknown, and the load itself is on
+    the operator line."""
+    a = "203.0.113.0"
+    assert AGG.classify_client("ausmt-ops/1-manual") == AGG.CLIENT_BROWSER
+    lines = [_line("/data/catalogue.json", a, ua="ausmt-ops/1-manual"),
+             _line("/surveys/label-survey/", a, ua="ausmt-ops/1-manual"),
+             _line("/data/edi/label-survey/L1.edi", a)]
+    stats, _ = _labelled(lines)
+    assert _dl(stats) == {"unknown|unknown": 1}
+    assert stats["totals"]["operator"]["visits"] == 1
+    assert stats["totals"]["visits"] == 0
+
+
+# ---- inputs that cannot be reached --------------------------------------------------------------
+def _locked_dir(root: Path) -> Path:
+    locked = root / "locked"
+    locked.mkdir()
+    (locked / "operator-networks.txt").write_text("192.0.2.0/24\n", encoding="utf-8")
+    (locked / "nettype.csv").write_text(_NETTYPE.read_text(encoding="utf-8"), encoding="utf-8")
+    locked.chmod(0)
+    return locked
+
+
+@pytest.mark.skipif(not hasattr(os, "geteuid") or os.geteuid() == 0,
+                    reason="a directory mode does not bind the superuser")
+def test_untraversable_input_directory_reads_unreadable_and_the_fold_writes(tmp_path, monkeypatch,
+                                                                           capsys):
+    """An operator list or network-type table inside a directory the fold account cannot enter reads
+    unreadable, and the fold still writes stats.json. Fails if either loader lets the permission
+    error escape and the whole fold aborts."""
+    locked = _locked_dir(tmp_path)
+    try:
+        nets = AGG.OperatorNetworks.load(locked / "operator-networks.txt")
+        table = _nettypes(locked / "nettype.csv")
+        assert nets.state == "unreadable" and not nets.read
+        assert table.state == "unreadable" and not table.usable
+        root = tmp_path / "run"
+        root.mkdir()
+        env = _identity_scenario(root)
+        _run_main(monkeypatch, env, "2026-07-12T03:30:00Z", AUSMT_STATS_LABELS_FROM="2026-07-01",
+                  AUSMT_STATS_OPERATOR_NETWORKS=str(locked / "operator-networks.txt"),
+                  AUSMT_STATS_NETTYPE_CSV=str(locked / "nettype.csv"))
+    finally:
+        locked.chmod(0o700)
+    err = capsys.readouterr().err
+    assert "aborted without writing" not in err, err
+    assert re.search(r"(?:^|\s)operator_list=unreadable(?:\s|$)", err), err
+    assert re.search(r"(?:^|\s)nettype=unreadable(?:\s|$)", err), err
+    stats = json.loads((Path(env["AUSMT_DATA_DIR"]) / "gateway" / "state" / "stats.json")
+                       .read_text(encoding="utf-8"))
+    assert stats["totals"]["visits"] >= 1
+
+
+# ---- the switch: a rejected value -----------------------------------------------------------------
+@pytest.mark.parametrize("value", ["2026-07-15", "2026-13-01", "soon"])
+def test_rejected_switch_value_is_named_in_the_journal(tmp_path, monkeypatch, capsys, value):
+    """A switch that is set but rejected leaves labels off, says so in the journal without echoing
+    the value, and writes exactly what an unset switch writes."""
+    off, bad = tmp_path / "off", tmp_path / "bad"
+    for root in (off, bad):
+        root.mkdir()
+    _run_main(monkeypatch, _identity_scenario(off), "2026-07-12T03:30:00Z")
+    plain = capsys.readouterr().err
+    assert "from=invalid" not in plain
+    _run_main(monkeypatch, _identity_scenario(bad), "2026-07-12T03:30:00Z",
+              AUSMT_STATS_LABELS_FROM=value)
+    err = capsys.readouterr().err
+    assert re.search(r"(?:^|\s)labels=off from=invalid(?:\s|$)", err), err
+    assert value not in err
+    for name in ("stats.json", "daily_archive.jsonl"):
+        assert ((bad / "data" / "gateway" / "state" / name).read_bytes()
+                == (off / "data" / "gateway" / "state" / name).read_bytes()), name
+
+
+# ---- labels off streams the log -----------------------------------------------------------------
+def _tracked_parse(monkeypatch):
+    """Patch the line parser so each parsed record counts itself while alive; returns the counter."""
+    live = {"now": 0, "peak": 0}
+
+    class _Tracked(dict):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            live["now"] += 1
+            live["peak"] = max(live["peak"], live["now"])
+
+        def __del__(self):
+            live["now"] -= 1
+
+    real = AGG.parse_caddy_line
+
+    def parse(line):
+        rec = real(line)
+        return None if rec is None else _Tracked(rec)
+
+    monkeypatch.setattr(AGG, "parse_caddy_line", parse)
+    return live
+
+
+@pytest.mark.parametrize("labels_from", [None, "2026-08-01"])
+def test_unlabelled_fold_holds_one_parsed_line_at_a_time(monkeypatch, labels_from):
+    """With labels off, or set for a month not yet reached, the fold parses and folds each line in
+    turn as it did before labels, and never holds the parsed window in memory. Fails if every parsed
+    line is kept until the fold ends."""
+    live = _tracked_parse(monkeypatch)
+    days = ("2026-07-10", "2026-07-11")
+    lines = (ln for d in days for ln in _mixed_day(d) + _files(40, "192.0.2.0", date=d))
+    stats, _ = _fold(lines, labels_from=labels_from, operator_nets=_nets())
+    assert stats["totals"]["downloads"] >= 80
+    assert live["peak"] <= 2, live
+
+
+def test_unlabelled_main_reads_plain_lines(tmp_path, monkeypatch):
+    """With labels off, main reads the log as plain lines, as the fold did before labels, and asks
+    for each line's source only when labels are set."""
+    seen = []
+    real = AGG.read_log_lines
+
+    def spy(*a, **k):
+        seen.append(bool(k.get("with_source")))
+        return real(*a, **k)
+
+    monkeypatch.setattr(AGG, "read_log_lines", spy)
+    off, on = tmp_path / "off", tmp_path / "on"
+    for root in (off, on):
+        root.mkdir()
+    _run_main(monkeypatch, _identity_scenario(off), "2026-07-12T03:30:00Z")
+    _run_main(monkeypatch, _identity_scenario(on), "2026-07-12T03:30:00Z",
+              AUSMT_STATS_LABELS_FROM="2026-07-01")
+    assert seen == [False, True]
