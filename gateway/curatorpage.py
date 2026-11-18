@@ -4260,14 +4260,23 @@ def audience(client: str, nettype: str) -> str:
     return "automated" if nettype == "hosting" else "unclassified"
 
 
-def _is_labelled(month: dict) -> bool:
-    """True for a month the fold labelled on at least one day. Keyed on the stored day counter, so a
-    month folded before labels began reads as unmeasured rather than as zero."""
+def _has_label_days(month: dict) -> bool:
     return isinstance(month, dict) and _as_int(month.get("label_days")) > 0
 
 
+def _is_labelled(month: dict) -> bool:
+    """True for a month the fold labelled on at least one day, so a month folded before labels began
+    reads as unmeasured rather than as zero. The day counter covers counted days only, so a labelled
+    month whose only admitted requests were the operator's or a crawler's is known by the operator
+    or crawler line the fold writes only on labelled days."""
+    return _has_label_days(month) or (isinstance(month, dict) and (
+        isinstance(month.get("operator"), dict) or isinstance(month.get("crawler_excluded"), dict)))
+
+
 def _latest_labelled(stats: dict) -> dict | None:
-    rows = [m for m in _monthly_rows(stats) if _is_labelled(m)]
+    """The latest month with a labelled counted day: the month the headline and the classification
+    table describe."""
+    rows = [m for m in _monthly_rows(stats) if _has_label_days(m)]
     return rows[-1] if rows else None
 
 
@@ -4346,7 +4355,11 @@ def _labels_headline(stats: dict) -> str:
             if _select_measured(stats, month):
                 files, events = _select_figures(month)
                 lines.append(f'Selection exports: {files:,} files in {events:,} exports. One export '
-                             f'is one action by one person.')
+                             f'is one action by one person.'
+                             + ('' if labelled >= days else
+                                f' This line covers the whole month, including the '
+                                f'{days - labelled} active days that are not labelled, on which '
+                                f'the operator&#x27;s own exports are counted.'))
             else:
                 lines.append(f'Selection exports: {_NOT_MEASURED}.')
     operator = month.get("operator") if isinstance(month.get("operator"), dict) else {}
@@ -4512,8 +4525,8 @@ def _label_seam_notes(cols: list) -> str:
                          f'labelled and include the operator&#x27;s own requests.')
         if nettype < labelled:
             notes.append(f'{name}: the network-type table was unavailable on {labelled - nettype} '
-                         f'labelled days (missing, or a source older than 45 days); those requests '
-                         f'read unknown network, so automated is a floor.')
+                         f'labelled days (missing, unreadable or out of date; see the fold journal); '
+                         f'those requests read unknown network, so automated is a floor.')
         if full < nettype:
             notes.append(f'{name}: network type covered hosting only on {nettype - full} labelled '
                          f'days.')

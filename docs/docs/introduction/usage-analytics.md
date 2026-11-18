@@ -17,7 +17,10 @@ aggregate counts are stored.
 | API requests | Fetches of the four documented machine-readable entry points, `/data/products/manifest.json`, `/data/mtcat.json`, `/data/mtcat.schema.json` and `/data/stations.geojson`, which the portal itself never fetches. An upper bound (a person can click the footer link), counted as documents: a document served both at the data root and under `/data/products/` is one entry point, and both of its published paths count. |
 | Distinct networks per day, peak per month | Masked networks (/24 or /48) seen that day; addresses exist only in memory while the day is folded. One network can be an institution. |
 | Requests by country, Australian requests by state | The masked address resolved to a country, and for Australia to a state or territory, as a request count and a split into downloads, visits, API requests and volume. State is the finest grain. |
-| Client class | The user-agent resolves to crawler, scripted or browser while the day is folded and is never stored. Crawlers are excluded from every figure; scripted clients (`curl`, `wget`, `python-requests`, no user-agent) are counted and their share reported separately. |
+| User-agent split (browser / scripted) | The user-agent resolves to crawler, scripted or browser while the day is folded and is never stored. Crawlers are excluded from every figure; scripted clients (`curl`, `wget`, `python-requests`, no user-agent) are counted and their share reported separately. |
+| Operator requests | From `labels_since`, requests made by the site's own operator and curators, taken out of every other figure and counted on their own line per month and overall (see [Operator requests](#operator-requests)). |
+| Client class | From `labels_since`, tool, portal session, landing page or unknown for each counted request that is not the operator's (see [Client class](#client-class)). |
+| Network type | From `labels_since`, hosting, education or research, access provider, other or unknown for the masked network of each counted request that is not the operator's (see [Network type](#network-type)). |
 | Bulk map exports vs single downloads | The file requests a map export was going to make anyway carry a query flag (`sel=bulk`). Reported as a file count and as an export-event proxy (distinct masked networks per day). |
 | Downloads by collection | The `collection_id` of the survey, from the served catalogue document. |
 | Time-series hand-offs to NCI THREDDS | The `/go/ts/<survey>/<station>/<level>` redirect the front door answers with the archive's own file URL, counted per survey, product level and destination archive. These are **requests, not completed transfers**: AusMT hands the reader off and never sees whether a byte moved, so nothing here can say a file was downloaded. The size beside each figure is the one the verified-resource register records for that file, because a redirect's log line carries only the size of the redirect itself. AusMT hosts none of those bytes and adds nothing in the browser to measure them. The destination breakdown reads as a single row today, because one archive holds every file AusMT hands off; it is recorded per destination anyway, since a breakdown that is missing when a second archive appears cannot be filled in backwards. |
@@ -47,6 +50,8 @@ identification, sessions and funnels are never collected.
   labelled and an unlabelled fetch of the same file are one download. The
   single-station download links in a station drawer carry no flag, which is what makes an unlabelled
   fetch mean single rather than unknown.
+- The operator, client class and network type labels below are a different thing: they are worked
+  out from what the log already holds while each day is folded, and add nothing to any request.
 
 ## Retention of the aggregates
 
@@ -84,13 +89,13 @@ absent the screen shows no state section.
 ## Operator requests
 
 The site's own operator and curators make requests too: checking a release, browsing the curation
-host, running health checks. From a date the operator sets in host configuration, recorded in the
-statistics as `labels_since`, each counted request is first checked for being one of these, while the
-day is folded and without storing anything per request. A request is the operator's when it arrives
-in the curation host's own log (which only the host itself and its private network can reach), when
-its user-agent starts with the client name the site's own checks send (`ausmt-ops/`), when its masked
-address is a loopback or private address, or when its masked network is in the operator's list of
-static networks, which is held on the host and never published. Operator requests are taken out of
+host, running health checks. From the first labelled day folded, recorded in the statistics as
+`labels_since`, each counted request is first checked for being one of these, while the day is
+folded and without storing anything per request. A request is the operator's when it arrives in the
+curation host's own log (which only the host itself and its private network can reach), when its
+user-agent starts with the client name the site's own checks send (`ausmt-ops/`), when its masked
+address is a loopback, private, link-local, shared (100.64.0.0/10) or unspecified address, or when
+its masked network is in the operator's list of static networks, which is held on the host and never published. Operator requests are taken out of
 every figure from that date and counted only in a separate operator total per month and overall,
 never per day. Figures before that date include the operator's own requests and are not revised.
 The `ausmt-ops/` name is public: anyone sending it only moves their own requests into the operator
@@ -115,7 +120,8 @@ A download counted once under the same-day rule takes the class of the request t
 The evidence behind the class is held in memory while the day is folded and is never stored. The
 statistics keep the class at month and cumulative grain, and the permanent daily record keeps only
 a count per class for each day, with no network detail. Declared crawlers stay excluded, as before;
-their requests are now also counted, per month, as excluded crawler requests. The existing browser
+their requests are now also counted, per month and per day in the permanent daily record, as
+excluded crawler requests. The existing browser
 and scripted split of downloads is unchanged.
 
 ## Network type
@@ -126,7 +132,8 @@ research**, **access provider**, **other** or **unknown**. Government, enterpris
 other kind of network fold into other, so that no value points at a single organisation. Unknown
 means the table does not cover the network, or the table was missing or out of date that day. No
 address is sent anywhere for the lookup. The table is rebuilt monthly, and a table whose oldest
-source is more than 45 days old is not used, so every request then reads unknown.
+source is older than an age limit set on the host (45 days by default) is not used, so every request
+then reads unknown. A table that is missing, unreadable or has no valid header is not used either.
 
 By default the table lists hosting networks only, so every other network reads unknown. Network type
 is kept only in the monthly and cumulative statistics, joined with the client class; it is never
@@ -155,8 +162,11 @@ export can add thousands of counted downloads. The screen therefore shows, direc
 headline's download line and in a quarterly row after the station files and bundles row, how many of
 a month's downloads came from selection exports and in how many exports. The export count is
 distinct masked networks per day that took a labelled file, so two exports from one network on one
-day read as one. Both figures are monthly and cumulative only, never crossed with country, state,
-survey or dataset; a month before the selection split began reads "not measured". From
+day read as one: it is a floor, not a count of export actions. Both figures are reported monthly and
+cumulatively only, never crossed with country, state, survey or dataset; the permanent daily record
+keeps each day's export counts beside its other pure counts. A month before the selection split
+began reads "not measured". On a month labelled on only some of its days the headline says that the
+export figures cover the whole month, unlabelled days included. From
 `labels_since` they exclude the operator's own exports, like every other figure.
 
 Labels are reported at month grain only. No audience, client class or network type figure is
@@ -167,8 +177,10 @@ cards include the operator's own requests before that date and exclude them from
 
 Where an input was missing the screen says so rather than letting the split look complete: a
 month whose network-type table or operator list was unavailable on some labelled days names how
-many, and so does a month labelled on only some of its active days. A month folded before labels
-began reads "not measured" on every label row.
+many, and so does a month labelled on only some of its active days. Once any month shown is
+labelled, a month folded before labels began reads "not measured" on every label row; before that
+the label rows are not shown. A labelled month whose only requests so far were the operator's or
+a declared crawler's shows those lines and zero for everything else.
 
 The monthly CSV export carries the same month figures in fixed columns after `detail_days`:
 `label_days`, `nettype_days`, `nettype_full_days` and `operator_list_days`; people, automated and

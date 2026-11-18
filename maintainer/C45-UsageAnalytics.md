@@ -349,8 +349,19 @@ header beyond the user-agent. This section records the switch and the three labe
 labels are off and the fold output is byte-identical to the unlabelled fold across successive folds
 (pinned against golden output of the unlabelled fold). A day D is labelled when D >= that date; every
 other day folds exactly as before. Removing the setting is the soft rollback: labelling stops at the
-next fold and the label blocks already folded are carried forward. `labels_since` is stamped once, at
+next fold and the label blocks already folded are carried forward. A set but rejected value prints
+`labels=off from=invalid` in the journal, without echoing it. `labels_since` is stamped once, at
 the first labelled day folded, and never moved.
+
+The full code revert restores nothing: the unlabelled fold drops `labels_since` and every label block
+at its next run and keeps every other figure. Days folded from `labels_since` keep their exclusion of
+operator requests, and their archive lines keep their label keys. Restoring an earlier `stats.json`
+would lose every figure folded since it, and those days cannot be refolded once their logs rotate.
+
+With labels off, or set for a month not yet reached, each line is parsed and folded in turn and none
+is kept, as before labels, and the log is read as plain lines with no source. Only a fold that
+reaches a labelled day holds its window of parsed records (as slotted objects, not dicts) for the
+pre-pass.
 
 ### Operator
 
@@ -377,7 +388,9 @@ reaches no other figure, day row or archive line. A fault in the label code cost
 labels, never the request or the fold, and is counted as `label_fallbacks`.
 
 Each labelled month carries `label_days` and `operator_list_days`, so a month whose operator list
-was missing on some days says so rather than looking complete.
+was missing on some days says so rather than looking complete. The operator list and the network
+table loaders never raise: a path the fold account cannot reach, including a directory it cannot
+enter, reads `unreadable`.
 
 ### Client class
 
@@ -407,8 +420,8 @@ and the journal says `prepass=failed`.
 
 A deduplicated download takes the class of the counted line. The totals and each month carry
 `labels`, a map per metric (downloads, visits, api, handoffs) of `<client>|<nettype>` counts that
-sums to the counted figure. A labelled archive
-day carries `labelled: true`, `by_client_class` (per metric, by class) and `crawler_excluded`, and no
+sums to the figure counted on labelled days (on a month labelled on only some of its days, the
+month's figure is larger by its unlabelled days). A labelled archive day carries `labelled: true`, `by_client_class` (per metric, by class) and `crawler_excluded`, and no
 network type, operator figure, address or user-agent. The browser and scripted split is unchanged.
 The journal also carries `fold_seconds`, the run time of the fold, for comparison with the unit's
 start timeout.
@@ -450,7 +463,7 @@ network; unknown is automated on hosting and unclassified on every other network
 reading of it (for example hosting overriding portal evidence, or landing pages not counting as
 people) is a renderer change that needs no refold.
 
-The Analytics screen is server-rendered with no script. Its label surfaces are:
+The Analytics screen is server-rendered with no inline script. Its label surfaces are:
 
 - a headline before the cards, built from the latest month carrying `label_days`: people,
   automated and unclassified per metric (hand-offs only when that month carries the hand-off
@@ -464,8 +477,8 @@ The Analytics screen is server-rendered with no script. Its label surfaces are:
   the other label), a note when some days had a hosting-only table, and the attribution line when
   a shown month has `nettype_days > 0` (PeeringDB and iptoasn.com only when `nettype_full_days >
   0`);
-- quarterly rows after the browser and scripted row, reading "not measured" for a month without
-  `label_days` and omitted, like the hand-off row, when no shown month is labelled. Seam notes name
+- quarterly rows after the browser and scripted row, reading "not measured" for a month that was
+  never labelled and omitted, like the hand-off row, when no shown month is labelled. Seam notes name
   partial labelling, a missing network table, a hosting-only table and a missing operator list;
 - a scope line on the survey, top-dataset, country and state tables;
 - selection exports beside the download figures, because one export fetches each selected file
@@ -476,8 +489,16 @@ The Analytics screen is server-rendered with no script. Its label surfaces are:
   and bundles row ("Selection exports: files / exports") read them, and the labels paragraph says
   what one export does to the count. Month rows carry the split densely, so a month counts as
   measured only when the fold has taken the split, the month carries current-rules days, and it is
-  not wholly before `select_since`; otherwise it reads "not measured". The existing bulk export
-  line and its caveat are unchanged.
+  not wholly before `select_since`; otherwise it reads "not measured". On a month labelled on only
+  some of its days the headline line adds that it covers the whole month, unlabelled days and the
+  operator's exports on them included. The existing bulk export line and its caveat are unchanged.
+
+A month counts as labelled when it carries `label_days`, or an `operator` or `crawler_excluded`
+block, which the fold writes only on labelled days. `label_days` counts labelled days with counted
+activity, so a labelled month whose only admitted requests were the operator's or a crawler's has
+the blocks but no counter; it renders those lines as measured and every public label figure as a
+measured zero. The headline and the classification table still describe the latest month with
+`label_days`.
 
 `analytics.csv` gains the fixed label columns after `detail_days`, empty rather than 0 for a month
 without `label_days`, then `downloads_select_bulk`, `downloads_select_single` and
@@ -501,6 +522,16 @@ These are recorded here and are not changed by the labels:
   (`deploy/frontdoor/Caddyfile`) deletes seven named headers and keeps the rest. The labels read
   no header beyond the user-agent either way. Which of the two is binding needs its own reading;
   if D2 holds, the fix is to delete more headers at the edge.
+- The headline's selection exports line is worded as the build specification sets it ("One
+  export is one action by one person"), while `bulk_export_events` is distinct masked networks per
+  day and the existing bulk export caveat on the same page calls it a floor, not a count of actions.
+  The two statements conflict; the wording needs its own reading.
+- Archive day lines carry `by_client_class` beside `by_survey` and `by_dataset`. They are separate
+  marginals, but on a low-traffic day one class or one dataset makes the pair a crossing at day
+  grain, finer than anything rendered. Keeping the class at month grain only would need its own
+  reading.
+- The default operator list path is under `$AUSMT_DATA_DIR`. Whether the host-level backup covers
+  that directory, and so holds the list, is not visible from the repository.
 - The front-door rolls pulled to the box (`deploy/frontdoor/ship-frontdoor-logs.sh`, rsync without
   `--delete`) are not pruned there, which sits against the public statement that raw logs are kept
   for about seven days (`portal/about.html`). The labels do not read them. Listing and pruning them,

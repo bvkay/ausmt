@@ -1958,9 +1958,9 @@ def test_seam_notes_name_partial_inputs(tmp_path):
     for want in (
             "Jul 2026: labels cover 4 of 6 active days; the rest are not labelled and include the "
             "operator's own requests.",
-            "Jul 2026: the network-type table was unavailable on 1 labelled days (missing, or a "
-            "source older than 45 days); those requests read unknown network, so automated is a "
-            "floor.",
+            "Jul 2026: the network-type table was unavailable on 1 labelled days (missing, "
+            "unreadable or out of date; see the fold journal); those requests read unknown network, "
+            "so automated is a floor.",
             "Jul 2026: network type covered hosting only on 2 labelled days.",
             "Jul 2026: the operator list was unavailable on 2 labelled days; operator browsing from "
             "the operator's own networks may be counted on those days.",
@@ -2240,3 +2240,57 @@ def test_export_label_caveat_survives_unchanged(tmp_path):
             "of actions.",
             "The selection split is counted from <b>2026-06-01</b> onward"):
         assert caveat in html, caveat
+
+
+def test_network_type_seam_note_states_no_fixed_cause():
+    """SEAM NOTE PIN. The fold reads a table as unavailable when it is missing, unreadable, without
+    a valid header or older than its configurable age limit, so the note names no single cause and
+    no fixed age. FAILS IF the note claims a fixed number of days."""
+    doc = _label_stats()
+    text = _text(curatorpage._label_seam_notes(doc["monthly"]))                       # noqa: SLF001
+    assert "(missing, unreadable or out of date; see the fold journal)" in text, text
+    assert "45 days" not in text
+
+
+def test_headline_selection_line_says_it_covers_the_whole_month():
+    """HEADLINE PIN. On a month labelled on only some of its days the selection exports line, which
+    counts the whole month, says so beneath the labelled split. FAILS IF a partly labelled month
+    reads as a subset of the labelled downloads, or a fully labelled month carries the sentence."""
+    line = "Selection exports: 33 files in 7 exports. One export is one action by one person."
+    whole = ("This line covers the whole month, including the 2 active days that are not "
+             "labelled, on which the operator's own exports are counted.")
+    part = _select_stats()
+    part["monthly"][2].update(days=6, detail_days=6)
+    text = _text(curatorpage._labels_headline(part))                                  # noqa: SLF001
+    assert line + " " + whole in text, text
+    full = _text(curatorpage._labels_headline(_select_stats()))                       # noqa: SLF001
+    assert line in full and "This line covers the whole month" not in full
+
+
+def _operator_only_month(doc: dict) -> dict:
+    """`doc` with a labelled August that so far holds only an operator visit and a crawler visit:
+    no counted day, so no day counter, but the operator and crawler lines the fold wrote."""
+    doc["monthly"].append({
+        "month": "2026-08", "downloads": 0, "visits": 0, "download_bytes": 0, "days": 0,
+        "operator": {"downloads": 0, "visits": 1, "api": 0, "handoffs": 0, "download_bytes": 0},
+        "crawler_excluded": {"downloads": 0, "visits": 1, "api": 0, "handoffs": 0}})
+    return doc
+
+
+def test_operator_only_month_shows_its_measured_operator_and_crawler_lines(tmp_path):
+    """OPERATOR-ONLY MONTH PIN. A labelled month whose only admitted requests were the operator's or
+    a declared crawler's has no counted day, but its operator and crawler lines are measured and its
+    public figures are measured zeroes. FAILS IF those lines read "not measured" or export empty, or
+    if the month takes the headline from the latest month with labelled days."""
+    doc = _operator_only_month(_label_stats())
+    table = _quarterly(run(_analytics(tmp_path, doc)))
+    assert _row_cells(table, "Operator requests (excluded)")[-1] == "1"
+    assert _row_cells(table, "Declared crawler requests (excluded)")[-1] == "1"
+    assert _row_cells(table, "Downloads: people / automated / unclassified")[-1] == "0 / 0 / 0"
+    assert _row_cells(table, "Labelled days")[-1] == "0"
+    rows = {r["month"]: r for r in csv.DictReader(io.StringIO(curatorpage.analytics_monthly_csv(doc)))}
+    assert rows["2026-08"]["operator_visits"] == "1"
+    assert rows["2026-08"]["crawler_excluded_visits"] == "1"
+    assert rows["2026-08"]["label_days"] == "0"
+    headline = _text(curatorpage._labels_headline(doc))                                # noqa: SLF001
+    assert "Who made these requests, July 2026" in headline, headline
