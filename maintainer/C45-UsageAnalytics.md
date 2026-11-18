@@ -442,6 +442,58 @@ joint `labels` keys at month and cumulative grain: never on a day row or an arch
 crossed with country, state, survey, dataset or collection. The journal prints `nettype=<state>
 nettype_rows=N nettype_sources=<list>`. A fault in the lookup falls under the label guard.
 
+### Audience rule and the page
+
+`audience(client, nettype)` in `gateway/curatorpage.py` is a pure function over the stored joint
+key and is never stored: tool is automated; portal_session and landing_page are people on any
+network; unknown is automated on hosting and unclassified on every other network type. A different
+reading of it (for example hosting overriding portal evidence, or landing pages not counting as
+people) is a renderer change that needs no refold.
+
+The Analytics screen is server-rendered with no script. Its label surfaces are:
+
+- a headline before the cards, built from the latest month carrying `label_days`: people,
+  automated and unclassified per metric (hand-offs only when that month carries the hand-off
+  class), the operator line with `labels_since`, the declared-crawler total, and an "Inputs
+  missing" band in the stale-banner style when `nettype_days` or `operator_list_days` falls short
+  of `label_days`. Before any labelled month it reads "not measured";
+- a note under the cards that the cumulative figures include the operator before `labels_since`;
+- the labels paragraph after the existing intro, and one sentence on the scripted-client
+  paragraph, both only once `labels_since` is set, so an unlabelled box reads exactly as before;
+- a classification table for that month (client classes, then network types, each summed over
+  the other label), a note when some days had a hosting-only table, and the attribution line when
+  a shown month has `nettype_days > 0` (PeeringDB and iptoasn.com only when `nettype_full_days >
+  0`);
+- quarterly rows after the browser and scripted row, reading "not measured" for a month without
+  `label_days` and omitted, like the hand-off row, when no shown month is labelled. Seam notes name
+  partial labelling, a missing network table, a hosting-only table and a missing operator list;
+- a scope line on the survey, top-dataset, country and state tables.
+
+`analytics.csv` gains the fixed label columns after `detail_days`, empty rather than 0 for a month
+without `label_days`. The survey and country exports are unchanged, and no label figure is ever
+crossed with country, state, survey or dataset.
+
+### History
+
+Nothing before `labels_since` is relabelled or backfilled. The only label that retained aggregates
+could support is tool by user-agent, and that is exactly the existing scripted figure already shown
+on the browser and scripted row; the sweep did not exist before, so it is not the same measure and
+the new rows read "not measured". Every earlier month keeps its figures, including the operator's
+own traffic.
+
+### Readings raised separately
+
+These are recorded here and are not changed by the labels:
+
+- D2 says no header beyond the user-agent is logged, while the shipped front-door log filter
+  (`deploy/frontdoor/Caddyfile`) deletes seven named headers and keeps the rest. The labels read
+  no header beyond the user-agent either way. Which of the two is binding needs its own reading;
+  if D2 holds, the fix is to delete more headers at the edge.
+- The front-door rolls pulled to the box (`deploy/frontdoor/ship-frontdoor-logs.sh`, rsync without
+  `--delete`) are not pruned there, which sits against the public statement that raw logs are kept
+  for about seven days (`portal/about.html`). The labels do not read them. Listing and pruning them,
+  or restating the retention, is left to the owner.
+
 ### Operator list custody
 
 `$AUSMT_DATA_DIR/stats-private/operator-networks.txt`, directory 0700 and file 0600, owned by the

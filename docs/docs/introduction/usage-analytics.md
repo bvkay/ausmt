@@ -132,6 +132,43 @@ By default the table lists hosting networks only, so every other network reads u
 is kept only in the monthly and cumulative statistics, joined with the client class; it is never
 written to the permanent daily record and never crossed with country, state, survey or dataset.
 
+## Who made the requests
+
+The workbench Analytics screen turns the client class and the network type into three audiences.
+They are worked out from the stored monthly counts each time the screen is drawn and are never
+stored themselves:
+
+- **people**: portal sessions and landing-page visitors, on any network;
+- **automated**: tools, plus unknown clients on hosting networks;
+- **unclassified**: every other request. It is never guessed, and it may include people.
+
+People is therefore a floor. A person on a commercial VPN, or a university job in a public cloud,
+reads hosting; a script that opens the portal first and fetches 50 files or fewer a day reads as
+people. The screen leads with the latest labelled month split this way for downloads, portal
+visits, API requests and time-series hand-offs, with the operator's requests and declared crawler
+requests on their own lines, and a table of how that month's requests were classified by client
+and by network type. The quarterly table gains the same splits per month and the number of
+labelled days.
+
+Labels are reported at month grain only. No audience, client class or network type figure is
+given for a single day, and none is crossed with country, state, survey or dataset: the survey
+and country exports keep their columns, and the country, state, survey and top-dataset tables
+only say that, from `labels_since`, operator requests are excluded from them. The cumulative
+cards include the operator's own requests before that date and exclude them from it.
+
+Where an input was missing the screen says so rather than letting the split look complete: a
+month whose network-type table or operator list was unavailable on some labelled days names how
+many, and so does a month labelled on only some of its active days. A month folded before labels
+began reads "not measured" on every label row.
+
+The monthly CSV export carries the same month figures in fixed columns after `detail_days`:
+`label_days`, `nettype_days`, `nettype_full_days` and `operator_list_days`; people, automated and
+unclassified for downloads, visits, API requests and hand-offs; the operator's downloads, visits,
+API requests, hand-offs and download bytes; the declared crawler requests per metric; and
+downloads by client class and by network type. Every one of those cells is empty, never 0, for a
+month without labelled days. `downloads_browser` and `downloads_scripted` are unchanged: they are a
+user-agent split only, and a browser-like user-agent is not evidence of a person.
+
 ## Geolocation data attribution
 
 Country resolution uses the IP to Country Lite database by DB-IP (<https://db-ip.com>), and the

@@ -3829,6 +3829,9 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
         at all. Those rows must not read 0 and '0 / 0' for it (see _month_has_no_current_detail)."""
         return lambda c: (_NOT_MEASURED if _month_has_no_current_detail(c) else fn(c))
 
+    # The label rows are omitted, like the hand-off row, when no month shown was labelled.
+    labelled = any(_is_labelled(c) for c in cols)
+    handoff_row = any(isinstance(c.get("handoffs"), dict) for c in cols)
     body = (
         _row("Downloads", lambda c: _esc(_as_int(c.get("downloads"))))
         + _row("Download volume",
@@ -3856,12 +3859,15 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
                _currently_measured(
                    lambda c: (f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("browser")))}'
                               f' / '
-                              f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("scripted")))}')))
+                              f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("scripted")))}')),
+               note=("User-agent only. A browser-like user-agent is not evidence of a person; see "
+                     "the people / automated rows." if labelled else ""))
+        + (_label_rows(cols, _row, handoff_row=handoff_row) if labelled else "")
         # The archive hand-offs (THREDDS). The row is omitted entirely when NO month shown carries
         # the class, exactly as the state table omits itself rather than render a column of refusals.
         + (_row("Time-series hand-offs", _measured(_handoffs),
                 note="requests, not completed transfers")
-           if any(isinstance(c.get("handoffs"), dict) for c in cols) else "")
+           if handoff_row else "")
     )
     partial = [c for c in cols if _as_int(c.get("seeded_days")) > 0]
     note = ""
@@ -3893,6 +3899,7 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
                  f'counted, so one repeated or resumed transfer counted twice, while scripted clients '
                  f'were discarded as robots and ranged transfers were not admitted at all, so those '
                  f'downloads went uncounted. The net of the three is not recoverable.</p>')
+    note += _label_seam_notes(cols)
     table = ('<div style="overflow-x:auto"><table><thead><tr><th>Metric</th>' + heads
              + "</tr></thead><tbody>" + body + "</tbody></table></div>" + note)
     if len(rows) > len(cols):
@@ -4216,6 +4223,322 @@ def _daily_sparkline(daily: list) -> str:
     return f'<div style="overflow-x:auto">{svg}</div>{legend}'
 
 
+# ---- Request labels: operator, client class and network type --------------------------------------
+# The fold stores, per labelled month, joint "<client>|<nettype>" counts per metric, an operator line,
+# a declared-crawler tally and four day counters. People, automated and unclassified are derived here
+# and never stored, so a different reading of the audience rule needs no refold. Labels are rendered
+# at month grain only and are never crossed with country, state, survey or dataset.
+_LABEL_CLIENTS = ("portal_session", "landing_page", "tool", "unknown")
+_LABEL_NETTYPES = ("hosting", "education_research", "access_provider", "other", "unknown")
+_LABEL_METRICS = ("downloads", "visits", "api", "handoffs")
+_AUDIENCES = ("people", "automated", "unclassified")
+_CLIENT_NAMES = (("portal_session", "Portal session"), ("landing_page", "Landing page"),
+                 ("tool", "Tool"), ("unknown", "Unknown client"))
+_NETTYPE_NAMES = (("hosting", "Hosting"), ("education_research", "Education or research"),
+                  ("access_provider", "Access provider"), ("other", "Other"),
+                  ("unknown", "Unknown network"))
+_MONTH_NAMES = ("January", "February", "March", "April", "May", "June", "July", "August",
+                "September", "October", "November", "December")
+
+
+def audience(client: str, nettype: str) -> str:
+    """The audience of one joint label key. Tools are automated; portal sessions and landing-page
+    visitors are people on any network; an unknown client is automated on a hosting network and
+    unclassified on every other, because nothing else about it is evidence either way."""
+    if client == "tool":
+        return "automated"
+    if client in ("portal_session", "landing_page"):
+        return "people"
+    return "automated" if nettype == "hosting" else "unclassified"
+
+
+def _is_labelled(month: dict) -> bool:
+    """True for a month the fold labelled on at least one day. Keyed on the stored day counter, so a
+    month folded before labels began reads as unmeasured rather than as zero."""
+    return isinstance(month, dict) and _as_int(month.get("label_days")) > 0
+
+
+def _latest_labelled(stats: dict) -> dict | None:
+    rows = [m for m in _monthly_rows(stats) if _is_labelled(m)]
+    return rows[-1] if rows else None
+
+
+def _labels_since(stats: dict) -> str | None:
+    since = stats.get("labels_since") if isinstance(stats, dict) else None
+    return since if isinstance(since, str) and since else None
+
+
+def _label_counts(month: dict, metric: str) -> dict[tuple[str, str], int]:
+    """{(client, nettype): n} for one metric of a month, clamped to the closed sets."""
+    raw = (month.get("labels") or {}).get(metric) if isinstance(month.get("labels"), dict) else None
+    out: dict[tuple[str, str], int] = {}
+    for key, n in (raw or {}).items() if isinstance(raw, dict) else ():
+        parts = key.split("|") if isinstance(key, str) else []
+        if len(parts) == 2 and parts[0] in _LABEL_CLIENTS and parts[1] in _LABEL_NETTYPES:
+            out[(parts[0], parts[1])] = out.get((parts[0], parts[1]), 0) + _as_int(n)
+    return out
+
+
+def _audience_split(counts: dict) -> dict[str, int]:
+    split = dict.fromkeys(_AUDIENCES, 0)
+    for (client, nettype), n in counts.items():
+        split[audience(client, nettype)] += n
+    return split
+
+
+def _by_label(counts: dict, index: int, keys) -> dict[str, int]:
+    """One label summed over the other: index 0 gives per client, index 1 per network type."""
+    out = dict.fromkeys(keys, 0)
+    for key, n in counts.items():
+        out[key[index]] += n
+    return out
+
+
+def _has_handoff_class(month: dict) -> bool:
+    return isinstance(month.get("handoffs"), dict)
+
+
+def _block_sum(month: dict, block: str) -> int:
+    raw = month.get(block)
+    return sum(_as_int(raw.get(m)) for m in _LABEL_METRICS) if isinstance(raw, dict) else 0
+
+
+def _month_long(month: str) -> str:
+    """'2026-07' -> 'July 2026'. An unparseable value renders verbatim, never a crash."""
+    try:
+        y, m = month.split("-")
+        return f"{_MONTH_NAMES[int(m) - 1]} {y}"
+    except (ValueError, IndexError):
+        return month
+
+
+def _labels_headline(stats: dict) -> str:
+    """Who made the requests of the latest labelled month: people, automated and unclassified per
+    metric, the operator line and the declared-crawler line apart, and the inputs that were missing.
+    Before any labelled month it says the question is not measured, so the cards beneath cannot be
+    read as answering it."""
+    month = _latest_labelled(stats)
+    if month is None:
+        return ('<p class="sub"><b>Who made these requests: not measured.</b> Request labels have not '
+                'started.</p>')
+    days, labelled = _as_int(month.get("days")), _as_int(month.get("label_days"))
+    generated = stats.get("generated_at")
+    progress = ("; month in progress"
+                if isinstance(generated, str) and generated[:7] == month["month"] else "")
+    lines = []
+    metrics = [("downloads", "Downloads"), ("visits", "Portal visits"), ("api", "API requests")]
+    if _has_handoff_class(month) and isinstance((month.get("labels") or {}).get("handoffs"), dict):
+        metrics.append(("handoffs", "Time-series hand-offs"))
+    for metric, name in metrics:
+        counts = _label_counts(month, metric)
+        split = _audience_split(counts)
+        lines.append(f'{_esc(name)} {sum(counts.values()):,}: people {split["people"]:,}, automated '
+                     f'{split["automated"]:,}, unclassified {split["unclassified"]:,}.')
+    operator = month.get("operator") if isinstance(month.get("operator"), dict) else {}
+    since = _labels_since(stats) or month["month"]
+    excluded = (f'Operator, excluded from every figure on this page since {_esc(since)}: downloads '
+                f'{_as_int(operator.get("downloads")):,}, visits {_as_int(operator.get("visits")):,}, '
+                f'API requests {_as_int(operator.get("api")):,}, hand-offs '
+                f'{_as_int(operator.get("handoffs")):,}.<br>'
+                f'Declared crawlers, excluded as before: {_block_sum(month, "crawler_excluded"):,} '
+                f'requests.')
+    missing = []
+    nettype_short = labelled - _as_int(month.get("nettype_days"))
+    list_short = labelled - _as_int(month.get("operator_list_days"))
+    if nettype_short > 0:
+        missing.append(f'the network-type table was unavailable on {nettype_short} of {labelled} '
+                       f'labelled days')
+    if list_short > 0:
+        missing.append(f'the operator list was unavailable on {list_short} of {labelled} '
+                       f'labelled days')
+    band = ("" if not missing else
+            f'<div class="opsband" style="background:{_PALETTE["warn"]};color:{_PALETTE["bg"]};'
+            f'font-weight:600">Inputs missing: {"; ".join(missing)}.</div>')
+    return (f'<p class="sub"><b>Who made these requests, {_esc(_month_long(month["month"]))}</b> '
+            f'({labelled} of {days} active days labelled{progress})</p>'
+            f'<p class="opsnote">{"<br>".join(lines)}</p>'
+            f'<p class="opsnote">{excluded}</p>'
+            f'<p class="opsnote">People is a floor. Unclassified requests may include people.</p>'
+            + band)
+
+
+def _labels_card_note(stats: dict) -> str:
+    since = _labels_since(stats)
+    if since is None:
+        return ""
+    return (f'<p class="opsnote">Cumulative figures include the operator&#x27;s own requests before '
+            f'{_esc(since)} and exclude them from that day.</p>')
+
+
+def _labels_scope_line(stats: dict) -> str:
+    """The scope of a table that carries no label breakdown: operator requests left it on the day
+    labels began, and nothing finer is reported."""
+    since = _labels_since(stats)
+    if since is None:
+        return ""
+    return f'<p class="opsnote">From {_esc(since)}, operator requests are excluded.</p>'
+
+
+def _labels_intro(stats: dict) -> str:
+    """The intro paragraph that states the three labels and the audience rule. Shown once labels
+    have begun; before that the headline says they have not started."""
+    since = _labels_since(stats)
+    if since is None:
+        return ""
+    return (
+        f'<p class="sub">From {_esc(since)}, each counted request carries three labels, worked out '
+        'when the log is folded and never stored per request. <b>Operator</b>: requests made by the '
+        'site&#x27;s own operator and curators, recognised by the log they arrive in, by a loopback '
+        'or private address, by the client name our own checks send (<code>ausmt-ops</code>), or by '
+        'the operator&#x27;s networks held in host configuration. They are taken out of every figure '
+        'and shown only on the operator line. <b>Client</b>: tool (a documented HTTP client, no '
+        'user-agent, or one client fetching more than 50 different files in a day without the '
+        'export label); portal session (a browser-like client whose network loaded the portal or '
+        'exported a selection that day or the day before); landing page (a browser-like client '
+        'whose network opened a survey or collection page that day or the day before); or unknown. '
+        'Declared crawlers stay excluded, as before. <b>Network type</b>: hosting, education or '
+        'research, access provider, other or unknown, looked up from the masked network in a table '
+        'held on this host; no address is sent anywhere. People are portal sessions and '
+        'landing-page visitors. Automated are tools, plus unknown clients on hosting networks. '
+        'Everything else is unclassified, never guessed. A person on a commercial VPN, or a '
+        'university job in a public cloud, reads hosting. A script that opens the portal first and '
+        'fetches fewer than 51 files a day reads as people. Labels are reported at month grain only '
+        'and are never crossed with country, state, survey or dataset.</p>')
+
+
+def _classification_table(stats: dict) -> str:
+    """How the latest labelled month's requests were classified: one row per client class and one
+    per network type, each summed over the other label. Built from that month alone."""
+    month = _latest_labelled(stats)
+    if month is None:
+        return ""
+    counts = {m: _label_counts(month, m) for m in _LABEL_METRICS}
+    handoffs = _has_handoff_class(month)
+
+    def _rows(index, names):
+        sums = {m: _by_label(counts[m], index, [k for k, _n in names]) for m in _LABEL_METRICS}
+        return "".join(
+            f'<tr><td>{_esc(name)}</td>'
+            + "".join(f'<td class="num">'
+                      f'{_NOT_MEASURED if m == "handoffs" and not handoffs else _esc(sums[m][key])}'
+                      f'</td>' for m in _LABEL_METRICS)
+            + '</tr>' for key, name in names)
+
+    full_short = _as_int(month.get("nettype_days")) - _as_int(month.get("nettype_full_days"))
+    note = ("" if full_short <= 0 else
+            f'<p class="opsnote">Network type covered hosting only on {full_short} days; on those '
+            f'days every other network reads unknown.</p>')
+    shown = _monthly_rows(stats)[-3:]
+    attribution = ""
+    if any(_as_int(m.get("nettype_days")) > 0 for m in shown):
+        attribution = ('<p class="opsnote">Hosting ranges: X4BNet lists_vpn (MIT licence), built in '
+                       'part from IPLocate.io data (CC BY-SA 4.0).')
+        if any(_as_int(m.get("nettype_full_days")) > 0 for m in shown):
+            attribution += ' Network types: PeeringDB. Prefix to network: iptoasn.com.'
+        attribution += '</p>'
+    return (f'<h2>How requests were classified, {_esc(_month_long(month["month"]))}</h2>'
+            '<table><thead><tr><th>Label</th><th class="num">Downloads</th>'
+            '<th class="num">Visits</th><th class="num">API requests</th>'
+            '<th class="num">Hand-offs</th></tr></thead><tbody>'
+            + _rows(0, _CLIENT_NAMES) + _rows(1, _NETTYPE_NAMES)
+            + '</tbody></table>' + note + attribution)
+
+
+def _label_rows(cols: list, row, *, handoff_row: bool) -> str:
+    """The label rows of the quarterly table. A month without labelled days reads "not measured" on
+    every one of them, never zero."""
+    def _lab(fn):
+        return lambda c: (fn(c) if _is_labelled(c) else _NOT_MEASURED)
+
+    def _split(metric):
+        def cell(c):
+            if metric == "handoffs" and not _has_handoff_class(c):
+                return _NOT_MEASURED
+            s = _audience_split(_label_counts(c, metric))
+            return " / ".join(_esc(s[a]) for a in _AUDIENCES)
+        return _lab(cell)
+
+    def _each(index, names):
+        return _lab(lambda c: " / ".join(
+            _esc(v) for v in _by_label(_label_counts(c, "downloads"), index,
+                                       [k for k, _n in names]).values()))
+
+    return (
+        row("Downloads: people / automated / unclassified", _split("downloads"))
+        + row("Portal visits: people / automated / unclassified", _split("visits"))
+        + row("API requests: people / automated / unclassified", _split("api"))
+        + (row("Hand-offs: people / automated / unclassified", _split("handoffs"))
+           if handoff_row else "")
+        + row("Operator requests (excluded)", _lab(lambda c: _esc(_block_sum(c, "operator"))))
+        + row("Declared crawler requests (excluded)",
+              _lab(lambda c: _esc(_block_sum(c, "crawler_excluded"))))
+        + row("Download client: portal session / landing page / tool / unknown",
+              _each(0, _CLIENT_NAMES))
+        + row("Download network: hosting / education and research / access provider / other / "
+              "unknown", _each(1, _NETTYPE_NAMES))
+        + row("Labelled days", _lab(lambda c: _esc(_as_int(c.get("label_days")))))
+    )
+
+
+def _label_seam_notes(cols: list) -> str:
+    """One note per shown month and per input it lacked on some labelled days."""
+    notes = []
+    for c in cols:
+        if not _is_labelled(c):
+            continue
+        name = _esc(_month_label(c["month"]))
+        days, labelled = _as_int(c.get("days")), _as_int(c.get("label_days"))
+        nettype, full = _as_int(c.get("nettype_days")), _as_int(c.get("nettype_full_days"))
+        listed = _as_int(c.get("operator_list_days"))
+        if labelled < days:
+            notes.append(f'{name}: labels cover {labelled} of {days} active days; the rest are not '
+                         f'labelled and include the operator&#x27;s own requests.')
+        if nettype < labelled:
+            notes.append(f'{name}: the network-type table was unavailable on {labelled - nettype} '
+                         f'labelled days (missing, or a source older than 45 days); those requests '
+                         f'read unknown network, so automated is a floor.')
+        if full < nettype:
+            notes.append(f'{name}: network type covered hosting only on {nettype - full} labelled '
+                         f'days.')
+        if listed < labelled:
+            notes.append(f'{name}: the operator list was unavailable on {labelled - listed} labelled '
+                         f'days; operator browsing from the operator&#x27;s own networks may be '
+                         f'counted on those days.')
+    return "".join(f'<p class="opsnote">{n}</p>' for n in notes)
+
+
+def _label_csv_cells(month: dict) -> list:
+    """The fixed label columns of the monthly export, empty for a month without labelled days."""
+    if not _is_labelled(month):
+        return [""] * len(_LABEL_CSV_COLUMNS)
+    cells = [_as_int(month.get(k)) for k in ("label_days", "nettype_days", "nettype_full_days",
+                                             "operator_list_days")]
+    for metric in _LABEL_METRICS:
+        if metric == "handoffs" and not _has_handoff_class(month):
+            cells += ["", "", ""]
+            continue
+        split = _audience_split(_label_counts(month, metric))
+        cells += [split[a] for a in _AUDIENCES]
+    operator = month.get("operator") if isinstance(month.get("operator"), dict) else {}
+    cells += [_as_int(operator.get(k)) for k in _LABEL_METRICS + ("download_bytes",)]
+    crawler = month.get("crawler_excluded")
+    crawler = crawler if isinstance(crawler, dict) else {}
+    cells += [_as_int(crawler.get(k)) for k in _LABEL_METRICS]
+    downloads = _label_counts(month, "downloads")
+    cells += list(_by_label(downloads, 0, _LABEL_CLIENTS).values())
+    cells += list(_by_label(downloads, 1, _LABEL_NETTYPES).values())
+    return cells
+
+
+_LABEL_CSV_COLUMNS = (
+    ["label_days", "nettype_days", "nettype_full_days", "operator_list_days"]
+    + [f"{m}_{a}" for m in _LABEL_METRICS for a in _AUDIENCES]
+    + [f"operator_{m}" for m in _LABEL_METRICS] + ["operator_download_bytes"]
+    + [f"crawler_excluded_{m}" for m in _LABEL_METRICS]
+    + [f"downloads_client_{c}" for c in _LABEL_CLIENTS]
+    + [f"downloads_net_{n}" for n in _LABEL_NETTYPES])
+
+
 def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str:
     """The usage-analytics screen: summary cards, a top-datasets table, a country
     table, and a server-rendered daily sparkline over the aggregator's stats.json. `stats` is the parsed
@@ -4254,6 +4577,11 @@ def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str
              'download header and its download manager refetches) and a resumed transfer logs one per '
              'range, so counting each request double-counted the headline figure. Every request\'s '
              'bytes still sum, so the volume covers what was actually served.</p>')
+    if isinstance(stats, dict) and _labels_since(stats) is not None:
+        intro = (intro.replace('so the volume covers what was actually served.</p>',
+                               'so the volume covers what was actually served. Scripted clients are '
+                               'now reported as tool; see the labels.</p>')
+                 + _labels_intro(stats))
     if not isinstance(stats, dict):
         body = (intro
                 + '<div class="opsband" style="background:' + _PALETTE["panel"] + '">'
@@ -4274,11 +4602,16 @@ def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str
                 f'<span class="dt" title="{_esc(generated_at)}">{_esc(short_utc(generated_at or ""))}</span>'
                 f' · aggregated daily.</p>')
     daily = stats.get("daily") or []
+    scope = _labels_scope_line(stats)
+    state_table = _au_state_table(stats)
     body = (
         intro
         + chip
+        + _labels_headline(stats)
         + _analytics_cards(stats)
+        + _labels_card_note(stats)
         + _format_breakdown(stats)
+        + _classification_table(stats)
         + _collection_line(stats)
         + _detail_caveat(stats)
         + '<h2>Quarterly breakdown</h2>'
@@ -4288,14 +4621,17 @@ def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str
         + _export_links()
         + '<h2>Downloads by survey</h2>'
         + _by_survey_table(stats)
+        + scope
         + '<h2>Daily downloads &amp; visits</h2>'
         + _daily_sparkline(daily)
         + _reach_note(daily)
         + '<h2>Top datasets</h2>'
         + _top_datasets_table(stats)
+        + scope
         + '<h2>By country</h2>'
         + _country_table(stats)
-        + _au_state_table(stats)
+        + scope
+        + (state_table + scope if state_table else "")
     )
     return _shell("AusMT usage analytics", body, nav=nav)
 
@@ -4367,6 +4703,7 @@ def analytics_monthly_csv(stats) -> str:
     header = (["month", "downloads", "download_bytes", "visits", "api_requests", "unattributed",
                "downloads_browser", "downloads_scripted", "networks_peak",
                "countries", "active_days", "days_without_detail", "geo_days", "detail_days"]
+              + _LABEL_CSV_COLUMNS
               + [f"format_{f}" for f in formats] + [f"kind_{k}" for k in kinds])
     if states:
         header += (["au_requests"] + [f"state_{c}" for c in states]
@@ -4388,6 +4725,7 @@ def analytics_monthly_csv(stats) -> str:
                 len([k for k in cc if k and k != "unknown"]),
                 _as_int(r.get("days")), _as_int(r.get("seeded_days")),
                 "" if blank else _as_int(r.get("geo_days")), _as_int(r.get("detail_days"))]
+               + _label_csv_cells(r)
                + [_as_int((r.get("formats") or {}).get(f)) for f in formats]
                + [_as_int((r.get("kinds") or {}).get(k)) for k in kinds])
         if states:

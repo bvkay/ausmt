@@ -1743,3 +1743,378 @@ def test_a_month_folded_before_hand_offs_existed_says_not_measured(tmp_path):
             assert cells.count(curatorpage._NOT_MEASURED) == 2, \
                 f"the two months that predate the class must read not measured: {cells}"
     run(_body())
+
+
+# --------------------------------------------------------------------------------------------------
+# REQUEST LABELS. From `labels_since` the fold stores, per month, joint client|nettype counts, an
+# operator line, a declared-crawler tally and four day counters. The screen derives people, automated
+# and unclassified from those joint counts with a pure audience rule, shows the operator and crawler
+# lines apart from every figure, and says where an input was missing. A month without `label_days`
+# was never labelled and reads "not measured" on every label row, never zero.
+# --------------------------------------------------------------------------------------------------
+def _label_stats(**over) -> dict:
+    """The hand-off fixture with labels from its June month on. June is labelled on every active day
+    with a hosting-only table; July is labelled on all four of its days but had the network-type table
+    on three of them (one built with every source) and the operator list on two. May predates the
+    labels and carries none of their keys."""
+    doc = _v7_stats()
+    doc["labels_since"] = "2026-06-01"
+    june, july = doc["monthly"][1], doc["monthly"][2]
+    june.update({
+        "labels": {"downloads": {"tool|unknown": 40, "unknown|unknown": 15},
+                   "visits": {"portal_session|unknown": 210},
+                   "api": {"tool|unknown": 27}, "handoffs": {}},
+        "operator": {"downloads": 0, "visits": 3, "api": 0, "handoffs": 0, "download_bytes": 0},
+        "crawler_excluded": {"downloads": 1, "visits": 0, "api": 0, "handoffs": 0},
+        "label_days": 29, "nettype_days": 29, "nettype_full_days": 0, "operator_list_days": 29})
+    july.update({
+        "labels": {"downloads": {"tool|hosting": 20, "portal_session|access_provider": 15,
+                                 "landing_page|other": 5, "unknown|hosting": 4,
+                                 "unknown|education_research": 6, "unknown|unknown": 2},
+                   "visits": {"portal_session|hosting": 200, "unknown|hosting": 2,
+                              "unknown|unknown": 10},
+                   "api": {"tool|access_provider": 20, "unknown|other": 2},
+                   "handoffs": {"portal_session|education_research": 12, "tool|hosting": 6,
+                                "unknown|unknown": 3}},
+        "operator": {"downloads": 14, "visits": 51, "api": 6, "handoffs": 4,
+                     "download_bytes": 1_048_576},
+        "crawler_excluded": {"downloads": 2000, "visits": 300, "api": 10, "handoffs": 0},
+        "label_days": 4, "nettype_days": 3, "nettype_full_days": 1, "operator_list_days": 2})
+    doc["totals"]["operator"] = {"downloads": 14, "visits": 54, "api": 6, "handoffs": 4,
+                                 "download_bytes": 1_048_576}
+    doc["totals"]["crawler_excluded"] = {"downloads": 2001, "visits": 300, "api": 10, "handoffs": 0}
+    doc.update(over)
+    return doc
+
+
+def _text(fragment: str) -> str:
+    """The reader-visible text of an HTML fragment: tags dropped, entities decoded, runs of white
+    space collapsed, so a pin reads the sentence a curator reads."""
+    import html as _html
+    return re.sub(r"\s+", " ", _html.unescape(re.sub(r"<[^>]+>", " ", fragment))).replace(" .", ".")
+
+
+def _quarterly(html: str) -> str:
+    return html.split("Quarterly breakdown", 1)[1].split("Downloads by survey", 1)[0]
+
+
+def _row_cells(table: str, label: str) -> list[str]:
+    return _cells(table.split(label, 1)[1].split("</tr>", 1)[0])
+
+
+async def _analytics(tmp_path, doc) -> str:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    async with app_client(tmp_path) as (client, _app, _gw, cfg):
+        await curator_login(client)
+        _write_stats(cfg, doc)
+        r = await client.get("/gateway/curator/analytics")
+        assert r.status_code == 200
+        return r.text
+
+
+def test_headline_not_measured_before_labels(tmp_path):
+    """HEADLINE SEAM PIN. A box whose fold has never labelled a day must say the question is not
+    measured, before the cards, rather than leave the cards to answer it. FAILS IF the line is missing,
+    or sits below the cards, or if any people or automated figure is claimed."""
+    html = run(_analytics(tmp_path, _v7_stats()))
+    text = _text(html)
+    line = "Who made these requests: not measured. Request labels have not started."
+    assert line in text, text[:2000]
+    assert html.index("Who made these requests") < html.index('class="cards"')
+    headline = html.split("Who made these requests", 1)[1].split('class="cards"', 1)[0]
+    assert "people" not in headline and "automated" not in headline, headline
+    assert "Cumulative figures include the operator" not in text
+
+
+def test_headline_separates_people_automated_operator(tmp_path):
+    """HEADLINE PIN. The latest labelled month is split into people, automated and unclassified per
+    metric, the operator line is shown apart with the date it left every figure, and declared crawlers
+    stay a separate excluded line. FAILS IF a split, the operator line, the crawler line or the floor
+    sentence is missing or wrong, or the block is not ahead of the cards."""
+    html = run(_analytics(tmp_path, _label_stats()))
+    text = _text(html)
+    for want in ("Who made these requests, July 2026 (4 of 4 active days labelled)",
+                 "Downloads 52: people 20, automated 24, unclassified 8.",
+                 "Portal visits 212: people 200, automated 2, unclassified 10.",
+                 "API requests 22: people 0, automated 20, unclassified 2.",
+                 "Time-series hand-offs 21: people 12, automated 6, unclassified 3.",
+                 "Operator, excluded from every figure on this page since 2026-06-01: downloads 14, "
+                 "visits 51, API requests 6, hand-offs 4.",
+                 "Declared crawlers, excluded as before: 2,310 requests.",
+                 "People is a floor. Unclassified requests may include people."):
+        assert want in text, f"missing {want!r}"
+    assert html.index("Who made these requests") < html.index('class="cards"')
+    assert "month in progress" not in text
+
+    no_handoff = _label_stats()
+    no_handoff["monthly"][2].pop("handoffs")
+    assert "Time-series hand-offs 21" not in _text(curatorpage._labels_headline(no_handoff))  # noqa: SLF001
+
+    in_progress = _label_stats(generated_at="2026-07-20T03:35:00Z")
+    assert "(4 of 4 active days labelled; month in progress)" in _text(
+        curatorpage._labels_headline(in_progress))                                    # noqa: SLF001
+
+
+def test_audience_rule_from_joint_keys():
+    """AUDIENCE UNIT. The rule is a pure function of the stored joint key, so a later reading of it
+    needs no refold. FAILS IF any pairing maps to the wrong audience."""
+    audience = curatorpage.audience
+    assert audience("tool", "access_provider") == "automated"
+    assert audience("portal_session", "hosting") == "people"
+    assert audience("landing_page", "other") == "people"
+    assert audience("unknown", "hosting") == "automated"
+    assert audience("unknown", "education_research") == "unclassified"
+    assert audience("unknown", "unknown") == "unclassified"
+    assert audience("tool", "unknown") == "automated"
+
+
+def test_inputs_missing_line_when_days_short(tmp_path):
+    """INPUTS PIN. A month whose network-type table or operator list was unavailable on some labelled
+    days must say so beside the split it weakens, in the warning style, naming only the inputs that
+    were short. FAILS IF the line is absent when days are short, names an input that was complete, or
+    appears when nothing was short."""
+    text = _text(run(_analytics(tmp_path, _label_stats())))
+    assert ("Inputs missing: the network-type table was unavailable on 1 of 4 labelled days; the "
+            "operator list was unavailable on 2 of 4 labelled days.") in text
+
+    only_list = _label_stats()
+    only_list["monthly"][2]["nettype_days"] = 4
+    one = _text(curatorpage._labels_headline(only_list))                             # noqa: SLF001
+    assert "Inputs missing: the operator list was unavailable on 2 of 4 labelled days." in one
+    assert "network-type table was unavailable" not in one
+
+    full = _label_stats()
+    full["monthly"][2].update(nettype_days=4, operator_list_days=4)
+    assert "Inputs missing" not in curatorpage._labels_headline(full)                  # noqa: SLF001
+    assert _PALETTE_WARN in curatorpage._labels_headline(_label_stats())               # noqa: SLF001
+
+
+_PALETTE_WARN = curatorpage._PALETTE["warn"]                                           # noqa: SLF001
+
+
+def test_classification_table_from_latest_labelled_month(tmp_path):
+    """CLASSIFICATION TABLE PIN. Built from the latest labelled month alone, after the format
+    breakdown: one row per client class and one per network type, each summed over the other label,
+    across downloads, visits, API requests and hand-offs. FAILS IF the month, a row or a sum is wrong,
+    or the hosting-only note is missing when some days had a hosting-only table."""
+    html = run(_analytics(tmp_path, _label_stats()))
+    assert "How requests were classified, July 2026" in html
+    section = html.split("How requests were classified", 1)[1].split("Quarterly breakdown", 1)[0]
+    assert html.index("whole-survey bundles") < html.index("How requests were classified")
+    assert _row_cells(section, "Portal session") == ["15", "200", "0", "12"]
+    assert _row_cells(section, "Landing page") == ["5", "0", "0", "0"]
+    assert _row_cells(section, "Tool") == ["20", "0", "20", "6"]
+    assert _row_cells(section, "Unknown client") == ["12", "12", "2", "3"]
+    assert _row_cells(section, "Hosting") == ["24", "202", "0", "6"]
+    assert _row_cells(section, "Education or research") == ["6", "0", "0", "12"]
+    assert _row_cells(section, "Access provider") == ["15", "0", "20", "0"]
+    assert _row_cells(section, "Other") == ["5", "0", "2", "0"]
+    assert _row_cells(section, "Unknown network") == ["2", "10", "0", "3"]
+    assert ("Network type covered hosting only on 2 days; on those days every other network reads "
+            "unknown.") in _text(section)
+
+    assert "How requests were classified" not in run(_analytics(tmp_path / "b", _v7_stats()))
+
+
+def test_label_rows_not_measured_before_labels_since(tmp_path):
+    """MONTHLY LABEL ROWS PIN. The label rows follow the browser and scripted row, and a month folded
+    before labels began reads "not measured" on every one of them, never zero. The browser and
+    scripted row stays and says what it is not. FAILS IF a row is missing or out of place, if the
+    unlabelled month renders a figure, or if a labelled month's figure is wrong."""
+    table = _quarterly(run(_analytics(tmp_path, _label_stats())))
+    nm = curatorpage._NOT_MEASURED                                                     # noqa: SLF001
+    expect = {
+        "Downloads: people / automated / unclassified": [nm, "0 / 40 / 15", "20 / 24 / 8"],
+        "Portal visits: people / automated / unclassified": [nm, "210 / 0 / 0", "200 / 2 / 10"],
+        "API requests: people / automated / unclassified": [nm, "0 / 27 / 0", "0 / 20 / 2"],
+        "Hand-offs: people / automated / unclassified": [nm, nm, "12 / 6 / 3"],
+        "Operator requests (excluded)": [nm, "3", "75"],
+        "Declared crawler requests (excluded)": [nm, "1", "2310"],
+        "Download client: portal session / landing page / tool / unknown":
+            [nm, "0 / 0 / 40 / 15", "15 / 5 / 20 / 12"],
+        "Download network: hosting / education and research / access provider / other / unknown":
+            [nm, "0 / 0 / 0 / 0 / 55", "24 / 6 / 15 / 5 / 2"],
+        "Labelled days": [nm, "29", "4"],
+    }
+    for label, cells in expect.items():
+        assert _row_cells(table, label) == cells, label
+    order = [table.index(label) for label in expect]
+    assert table.index("Browser / scripted downloads") < order[0] and order == sorted(order)
+    assert ("User-agent only. A browser-like user-agent is not evidence of a person; see the people "
+            "/ automated rows.") in _text(table)
+
+    plain = _quarterly(run(_analytics(tmp_path / "b", _v7_stats())))
+    assert "Labelled days" not in plain and "people / automated" not in plain
+
+
+def test_seam_notes_name_partial_inputs(tmp_path):
+    """SEAM NOTES PIN. Under the quarterly table each shown month says how much of it was labelled and
+    which inputs it lacked, in exact words. FAILS IF a note is missing for a short month, or written
+    for a month that was not short."""
+    doc = _label_stats()
+    doc["monthly"][2]["days"] = 6
+    doc["monthly"][2]["detail_days"] = 6
+    text = _text(_quarterly(run(_analytics(tmp_path, doc))))
+    for want in (
+            "Jul 2026: labels cover 4 of 6 active days; the rest are not labelled and include the "
+            "operator's own requests.",
+            "Jul 2026: the network-type table was unavailable on 1 labelled days (missing, or a "
+            "source older than 45 days); those requests read unknown network, so automated is a "
+            "floor.",
+            "Jul 2026: network type covered hosting only on 2 labelled days.",
+            "Jul 2026: the operator list was unavailable on 2 labelled days; operator browsing from "
+            "the operator's own networks may be counted on those days.",
+            "Jun 2026: network type covered hosting only on 29 labelled days."):
+        assert want in text, f"missing {want!r}"
+    for absent in ("Jun 2026: labels cover", "Jun 2026: the network-type table",
+                   "Jun 2026: the operator list", "May 2026: labels cover"):
+        assert absent not in text, absent
+
+
+def test_scope_line_on_country_state_survey_tables(tmp_path):
+    """SCOPE PIN. Every table that carries no label breakdown says that operator requests left it on
+    the day labels began, and the cards say their cumulative figures straddle that day. FAILS IF a
+    table lacks the line once labels have begun, or carries it before."""
+    doc = _label_stats()
+    html = run(_analytics(tmp_path, doc))
+    scope = "From 2026-06-01, operator requests are excluded."
+    for start, end in (("<h2>Downloads by survey</h2>", "<h2>Daily downloads"),
+                       ("<h2>Top datasets</h2>", "<h2>By country</h2>"),
+                       ("<h2>By country</h2>", "<h2>Australia by state</h2>"),
+                       ("<h2>Australia by state</h2>", None)):
+        section = html.split(start, 1)[1]
+        section = section if end is None else section.split(end, 1)[0]
+        assert scope in _text(section), start
+    cards = html.split('class="cards"', 1)[1].split("Quarterly breakdown", 1)[0]
+    assert ("Cumulative figures include the operator's own requests before 2026-06-01 and exclude "
+            "them from that day.") in _text(cards)
+
+    plain = _text(run(_analytics(tmp_path / "b", _v7_stats())))
+    assert "operator requests are excluded" not in plain
+
+
+def test_monthly_csv_label_columns_in_order_and_empty_not_zero_before_labels():
+    """CSV LABEL COLUMNS PIN. The fixed label columns sit after detail_days and before the dynamic
+    format and kind columns, in the stated order, and a month without labels leaves every one empty.
+    FAILS IF a column is missing or moved, a value is wrong, or an unlabelled month exports 0."""
+    cols = ["label_days", "nettype_days", "nettype_full_days", "operator_list_days",
+            "downloads_people", "downloads_automated", "downloads_unclassified",
+            "visits_people", "visits_automated", "visits_unclassified",
+            "api_people", "api_automated", "api_unclassified",
+            "handoffs_people", "handoffs_automated", "handoffs_unclassified",
+            "operator_downloads", "operator_visits", "operator_api", "operator_handoffs",
+            "operator_download_bytes",
+            "crawler_excluded_downloads", "crawler_excluded_visits", "crawler_excluded_api",
+            "crawler_excluded_handoffs",
+            "downloads_client_portal_session", "downloads_client_landing_page",
+            "downloads_client_tool", "downloads_client_unknown",
+            "downloads_net_hosting", "downloads_net_education_research",
+            "downloads_net_access_provider", "downloads_net_other", "downloads_net_unknown"]
+    rows = list(csv.reader(io.StringIO(curatorpage.analytics_monthly_csv(_label_stats()))))
+    header = rows[0]
+    at = header.index("detail_days") + 1
+    assert header[at:at + len(cols)] == cols
+    assert header[at + len(cols)].startswith("format_")
+    by_month = {r[0]: dict(zip(header, r)) for r in rows[1:]}
+    assert all(by_month["2026-05"][c] == "" for c in cols), "an unlabelled month exports empty"
+    july = by_month["2026-07"]
+    assert [july[c] for c in cols] == [
+        "4", "3", "1", "2", "20", "24", "8", "200", "2", "10", "0", "20", "2", "12", "6", "3",
+        "14", "51", "6", "4", "1048576", "2000", "300", "10", "0", "15", "5", "20", "12",
+        "24", "6", "15", "5", "2"]
+    june = by_month["2026-06"]
+    assert [june[c] for c in cols[13:16]] == ["", "", ""], "no hand-off class, no hand-off cells"
+    assert june["downloads_unclassified"] == "15" and june["downloads_net_unknown"] == "55"
+    assert by_month["2026-07"]["downloads_browser"] == "30", "the user-agent split is unchanged"
+
+
+def test_no_label_column_in_survey_or_country_csv():
+    """GRAIN PIN. Labels are reported at month grain only and never crossed with survey or country, so
+    neither of those exports gains a column. FAILS IF either header changes."""
+    doc = _label_stats()
+    assert next(csv.reader(io.StringIO(curatorpage.analytics_survey_csv(doc)))) == [
+        "month", "survey", "downloads", "download_bytes", "countries", "files", "bundles"]
+    assert next(csv.reader(io.StringIO(curatorpage.analytics_country_csv(doc)))) == [
+        "month", "country", "requests", "downloads", "visits", "api", "download_bytes", "geo_days"]
+
+
+def test_attribution_present_when_nettype_days(tmp_path):
+    """ATTRIBUTION PIN. The hosting lists are MIT and built in part from CC BY-SA data, so the page
+    that shows a network type credits them, and credits PeeringDB and iptoasn.com only when a shown
+    month used the full table. FAILS IF the credit is missing when a table was used, claims the full
+    sources when none was used, or appears when no table was used."""
+    hosting = ("Hosting ranges: X4BNet lists_vpn (MIT licence), built in part from IPLocate.io data "
+               "(CC BY-SA 4.0).")
+    full = " Network types: PeeringDB. Prefix to network: iptoasn.com."
+    text = _text(run(_analytics(tmp_path, _label_stats())))
+    assert hosting + full in text
+
+    hosting_only = _label_stats()
+    hosting_only["monthly"][2]["nettype_full_days"] = 0
+    text = _text(run(_analytics(tmp_path / "b", hosting_only)))
+    assert hosting in text and "PeeringDB" not in text
+
+    none = _label_stats()
+    for m in none["monthly"][1:]:
+        m.update(nettype_days=0, nettype_full_days=0)
+    assert "X4BNet" not in run(_analytics(tmp_path / "c", none))
+
+
+_RULING_CAVEATS = (
+    "no addresses or user-agents are stored",
+    "the portal renders them client-side with no per-navigation request (record D3)",
+    "the portal marks its own file requests with a query flag (<code>sel=bulk</code>)",
+    "It is a path-class signal and it is an upper bound",
+    "crawlers, previewers and uptime probes are excluded from every figure",
+    "A download is counted <b>once per day per masked network per file</b>",
+    "the countries themselves are not reported per survey",
+    "API requests count toward a country only from the fold that began counting them",
+    "There is deliberately no city breakdown, and no state figure for any single day.",
+    "some days were folded before the current counting rules existed",
+)
+
+
+def test_every_ruling_caveat_survives(tmp_path):
+    """CAVEAT SURVIVAL PIN. The labels add wording; they remove none. Every existing caveat on this
+    screen still renders, word for word, on a labelled box. FAILS IF any of them is reworded or lost."""
+    doc = _label_stats()
+    doc["monthly"][0]["detail_days"] = 0
+    doc["by_country_detail"] = {"AU": {"downloads": 1, "visits": 1, "api": 1, "bytes": 1}}
+    html = run(_analytics(tmp_path, doc))
+    for caveat in _RULING_CAVEATS:
+        assert caveat in html, caveat
+    assert ("Scripted clients are now reported as tool; see the labels.") in _text(html)
+
+
+def test_intro_caveat_paragraph_states_the_three_labels(tmp_path):
+    """INTRO PIN. A labelled box carries the labels paragraph after the existing three, word for word,
+    and an unlabelled box carries neither it nor the sentence on scripted clients. FAILS IF the
+    paragraph is missing, out of place, or shown before labels began."""
+    html = run(_analytics(tmp_path, _label_stats()))
+    text = _text(html)
+    assert ("From 2026-06-01, each counted request carries three labels, worked out when the log is "
+            "folded and never stored per request.") in text
+    assert ("Labels are reported at month grain only and are never crossed with country, state, "
+            "survey or dataset.") in text
+    assert html.index("so the volume covers what was actually served") < html.index(
+        "each counted request carries three labels")
+    plain = _text(run(_analytics(tmp_path / "b", _v7_stats())))
+    assert "three labels" not in plain and "now reported as tool" not in plain
+
+
+def test_new_wording_has_no_dash_characters():
+    """WORDING PIN. The label wording carries no dash character, rendered or as an entity. FAILS IF
+    any label surface contains one."""
+    doc = _label_stats()
+    doc["monthly"][2]["days"] = 6
+    parts = [curatorpage._labels_headline(doc),                                        # noqa: SLF001
+             curatorpage._labels_headline(_v7_stats()),                                # noqa: SLF001
+             curatorpage._classification_table(doc),                                   # noqa: SLF001
+             curatorpage._labels_intro(doc),                                           # noqa: SLF001
+             curatorpage._label_seam_notes(doc["monthly"]),                            # noqa: SLF001
+             curatorpage._labels_scope_line(doc),                                      # noqa: SLF001
+             curatorpage._labels_card_note(doc)]                                       # noqa: SLF001
+    for part in parts:
+        assert part, "every label surface renders for a labelled box"
+        for dash in ("\u2014", "\u2013", "&mdash;", "&ndash;", "&#8212;", "&#8211;"):
+            assert dash not in part, (dash, part)
