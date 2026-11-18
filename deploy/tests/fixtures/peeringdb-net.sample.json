@@ -1,0 +1,16 @@
+{
+  "meta": {},
+  "data": [
+    {"asn": 64500, "name": "Invented Access Provider", "info_types": ["Cable/DSL/ISP"]},
+    {"asn": 64501, "name": "Invented University Network", "info_types": ["Educational/Research"]},
+    {"asn": 64502, "name": "Invented Access Company", "info_types": ["Cable/DSL/ISP"]},
+    {"asn": 64503, "name": "Invented Government Office", "info_types": ["Government"]},
+    {"asn": 64504, "name": "Invented Campus Carrier", "info_types": ["Cable/DSL/ISP", "Educational/Research", "Content"]},
+    {"asn": 64505, "name": "Invented Undisclosed Network", "info_types": ["Not Disclosed"]},
+    {"asn": 64507, "name": "Invented Content Network", "info_types": ["Content"]},
+    {"asn": 64508, "name": "Invented Transit Network", "info_type": "NSP"},
+    {"asn": 64509, "name": "Invented Enterprise Example", "info_types": ["Enterprise"]},
+    {"asn": 64510, "name": "Invented Charity Network", "info_types": ["Non-Profit"]},
+    {"asn": 64511, "name": "Invented Novel Category Network", "info_types": ["Invented Category"]}
+  ]
+}

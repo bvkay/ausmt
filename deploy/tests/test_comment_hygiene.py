@@ -2498,6 +2498,7 @@ RUNNABLE_TOOLS = (
     ("scripts/check_compose_guards.py", ("--self-test",)),
     ("scripts/gen_ts_routes.py", ("--check",)),
     ("scripts/prep_au_states.py", ("--help",)),
+    ("scripts/prep_nettype.py", ("--help",)),
 )
 READ_NOT_RUN = ("scripts/reconcile.sh", "scripts/aggregate_stats.py")
 

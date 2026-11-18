@@ -1221,6 +1221,45 @@ imply they account for every Australian request. An AU prefix the table does not
 its own *"Not in the state table"* row, never dropped, so the breakdown always adds up to the AU
 country figure exactly.
 
+#### Network types: the network-type table (monthly operator chore)
+
+The network-type request label is looked up in a compact table at
+`$AUSMT_DATA_DIR/geoip/nettype.csv`, built by `deploy/scripts/prep_nettype.py` from downloaded
+sources. The script is stdlib only and makes no network call; you download the sources yourself, in a
+scratch directory outside `$AUSMT_DATA_DIR`, and delete them afterwards. The table is never committed,
+served or exported.
+
+The default build is **hosting only**, from the X4BNet `lists_vpn` datacenter lists (MIT licence),
+which are built in part from IPLocate.io data (CC BY-SA 4.0). Every row is then `hosting`, and every
+other network reads unknown. The full build adds the iptoasn.com prefix table (PDDL) and a PeeringDB
+net table, and is used only once the PeeringDB terms have been settled for this use.
+
+```sh
+tmp=$(mktemp -d)
+# Download into "$tmp", from the X4BNet lists_vpn repository: output/datacenter/ipv4.txt,
+#   output/datacenter/ipv6.txt and the repository's LICENSE file. Note the date of its last commit.
+python3 deploy/scripts/prep_nettype.py \
+  --x4bnet-v4 "$tmp/ipv4.txt" --x4bnet-v6 "$tmp/ipv6.txt" \
+  --x4bnet-licence "$tmp/LICENSE" --x4bnet-date YYYY-MM-DD \
+  --out "$AUSMT_DATA_DIR/geoip/nettype.csv"
+rm -rf "$tmp"
+```
+
+For the full build, also download the iptoasn.com combined table (`.tsv` or `.tsv.gz`) and the
+PeeringDB `net` table as JSON into `"$tmp"`, and add
+`--asn-table "$tmp/ip2asn-combined.tsv.gz" --asn-date YYYY-MM-DD --peeringdb "$tmp/net.json"
+--peeringdb-date YYYY-MM-DD`. The two go together; either alone is refused.
+
+The script widens every range to /24 (IPv4) or /48 (IPv6), resolves overlaps (hosting first, then
+education and research, access provider, other), and writes sorted, disjoint
+`start_ip,end_ip,type` rows behind a header that names the build date, the oldest source date and
+the sources, followed by the X4BNet licence text and the attribution lines. No AS number,
+organisation name or domain from the sources is written. It **refuses and writes nothing** when an
+input is unreadable, when the X4BNet IPv4 list holds fewer than 1000 valid CIDRs, when the PeeringDB
+table holds fewer than 5000 net records (`--min-peeringdb-records` overrides), when the licence file
+is not the MIT text, or when any input sits inside the output's directory. Repeat the chore monthly
+beside the db-ip refresh.
+
 #### Install the daily timer
 
 ```sh
@@ -1322,6 +1361,7 @@ labelled fold, revert the code, and start the timer again.
 | Most Australian traffic lands in **Not in the state table** | The state table is stale or was built from a partial CSV. Re-run `prep_au_states.py` over a fresh db-ip City Lite download. The AU country figure is unaffected; the bucket exists so the breakdown still reconciles with it. |
 | **Counted before state data existed** is a large row | Expected on a box that folded days before the state table was installed. Those days carry no state data and are never backfilled (the raw logs have rotated away). The row shrinks in relative terms as new days fold. |
 | `prep_au_states.py` exits non-zero with "no Australian (AU) state ranges" | The input was not db-ip's **IP to City Lite** CSV (the Country Lite CSV has no state column), or the download is truncated. Nothing was written; re-download and re-run. |
+| `prep_nettype.py` exits non-zero | Read its message: a truncated download (too few X4BNet CIDRs or PeeringDB records), half of the iptoasn and PeeringDB pair, a licence file that is not the MIT text, or a download kept in the output's directory. Nothing was written; fix the input and re-run. |
 | Downloads counted but `unattributed` is high | The served `manifest.json` did not resolve those paths (a build/serve skew, or NCI-tier absolute URLs). Confirm `site-data/current/manifest.json` matches what is served. The licence sidecars beside each survey MTH5 (`bundles/*.LICENSE.txt`) are **not** counted, so they no longer inflate this figure. |
 | Quarterly view says "No monthly rollups yet" | The box has not folded a day since the detailed aggregator was installed. Rollups begin at the next daily fold and fill in one month at a time; earlier months are deliberately **not** backfilled. |
 | A month shows downloads but little or no volume | Some of its days were folded before per-month detail existed. The screen flags exactly those months; the counts are complete, the breakdown covers only the later days. |
