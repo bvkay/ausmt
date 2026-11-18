@@ -256,6 +256,14 @@ CLIENT_CRAWLER = "crawler"
 CLIENT_SCRIPTED = "scripted"
 CLIENT_BROWSER = "browser"
 
+# REQUEST LABELS. Closed sets: a stored joint key or block key outside them is dropped on read, so a
+# hand-edited file cannot push an arbitrary label onto the screen. A joint key is "<client>|<nettype>".
+_LABEL_CLIENTS = ("portal_session", "landing_page", "tool", "unknown")
+_LABEL_NETTYPES = ("hosting", "education_research", "access_provider", "other", "unknown")
+_LABEL_METRICS = ("downloads", "visits", "api", "handoffs")
+_OPERATOR_KEYS = _LABEL_METRICS + ("download_bytes",)
+_LABEL_DAY_COUNTERS = ("label_days", "nettype_days", "nettype_full_days", "operator_list_days")
+
 # The append-only daily archive, written beside stats.json in the gateway state dir. See the archive
 # section further down for what it holds and, more importantly, what it deliberately does not.
 _ARCHIVE_FILENAME = "daily_archive.jsonl"
@@ -930,6 +938,29 @@ def _coerce_dataset_map(raw) -> dict[str, dict]:
     return out
 
 
+def _is_label_key(key) -> bool:
+    parts = key.split("|") if isinstance(key, str) else []
+    return len(parts) == 2 and parts[0] in _LABEL_CLIENTS and parts[1] in _LABEL_NETTYPES
+
+
+def _coerce_label_blocks(src: dict, dst: dict, *, counters: bool = False) -> None:
+    """Carry the label blocks (and, on a month row, the label day counters) from `src` into `dst`.
+    Each is carried only when present in its stored shape, so a month or file folded without labels
+    stays without them. Keys are clamped to the closed sets and values read as integers."""
+    labels = src.get("labels")
+    if isinstance(labels, dict):
+        dst["labels"] = {metric: {k: _as_int(v) for k, v in labels[metric].items() if _is_label_key(k)}
+                         for metric in _LABEL_METRICS if isinstance(labels.get(metric), dict)}
+    for block, keys in (("operator", _OPERATOR_KEYS), ("crawler_excluded", _LABEL_METRICS)):
+        raw = src.get(block)
+        if isinstance(raw, dict):
+            dst[block] = {k: _as_int(raw[k]) for k in keys if k in raw}
+    if counters:
+        for k in _LABEL_DAY_COUNTERS:
+            if k in src:
+                dst[k] = _as_int(src[k])
+
+
 def _coerce_month_rows(raw) -> list[dict]:
     """Well-formed monthly rollup rows from a prior file, date-sorted. A malformed row is dropped rather
     than allowed to poison the arithmetic."""
@@ -960,6 +991,7 @@ def _coerce_month_rows(raw) -> list[dict]:
             m["handoffs"] = _coerce_handoffs(row["handoffs"], geo=True)
         else:
             m.pop("handoffs", None)
+        _coerce_label_blocks(row, m, counters=True)
         out.append(m)
     out.sort(key=lambda r: r["month"])
     return out
@@ -1017,6 +1049,10 @@ def _coerce_prev(prev: dict | None) -> dict:
             s["totals"]["downloads_by_client"] = {str(k): _as_int(v)
                                                   for k, v in pt["downloads_by_client"].items()}
         s["totals"]["downloads_by_select"] = _coerce_select(pt.get("downloads_by_select"))
+        _coerce_label_blocks(pt, s["totals"])
+    # Stamped once by the first labelled fold and carried by name, never moved.
+    if isinstance(prev.get("labels_since"), str):
+        s["labels_since"] = prev["labels_since"]
     # The bulk/single split is the one dimension here whose start date IS recorded. `detail_since` marks
     # the v1 hinge and the dimensions after it were left undated on purpose (the fold that added them is
     # written nowhere), but this one is stamped as it begins, so the screen can NAME the day instead of
