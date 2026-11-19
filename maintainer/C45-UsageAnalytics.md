@@ -539,8 +539,8 @@ These are recorded here and are not changed by the labels:
   PeeringDB) remains subject to the PeeringDB terms.
 - The front-door rolls pulled to the box (`deploy/frontdoor/ship-frontdoor-logs.sh`, rsync without
   `--delete`) are not pruned there, which sits against the public statement that raw logs are kept
-  for about seven days (`portal/about.html`). The labels do not read them. Listing and pruning them,
-  or restating the retention, is left to the owner.
+  for about seven days (`portal/about.html`). The labels do not read them. Closed by D10: pulled
+  copies now expire.
 
 ### Operator list custody
 
@@ -582,3 +582,12 @@ and amends the earlier clauses it touches, by pointer.
   never changed. Accepted risk: the gateway uid already owns the state dir and could replace the file
   whatever its mode, and group write also lets the gateway process append to or truncate the file in
   place. Only the never-read pin enforces that it does neither.
+- *Pulled log copies expire.* The front-door copies pulled onto the box are kept no longer than the
+  stated raw-log retention, which closes the reading under "Readings raised separately". After
+  `stats.json` is written, the fold removes a regular file named `access-frontdoor-*` in its log dir
+  when its modification time is more than `AUSMT_STATS_LOG_RETAIN_DAYS` days before the run
+  (default 7; 0 disables; an invalid value reads as the default) and before 00:00 UTC of the day after
+  the new watermark, so no line later than the watermark is lost when the fold stalls. The live
+  `access-frontdoor.json`, the box listener's files, links and directories are never considered. A
+  failed removal is counted and never fails the fold; the journal carries `logs_expired=` and, on
+  failure, `logs_expire_failed=`, with no file name and no address.

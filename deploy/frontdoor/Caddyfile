@@ -94,7 +94,8 @@
 	# Set-Cookie / Referer). Written to a DISTINCT filename (access-frontdoor.json) so that, once
 	# shipped into the box log dir beside the box's own access.json, the aggregator's `access*.json`
 	# glob folds it without collision. VPS-side retention: rotated + kept 7 days (roll_keep_for 168h),
-	# a short debugging tail; the shipped-and-folded copy on the box is the durable record.
+	# a short debugging tail. The copy shipped to the box expires there on the same retention once
+	# folded (AUSMT_STATS_LOG_RETAIN_DAYS); the folded aggregates are the durable record.
 	#
 	# ROLL DEPTH (roll_keep 49): a roll the box has not pulled is gone once the count runs out. 49 is
 	# 7 rolls a day for the 168h age window, a bound rather than a measured peak: the busiest day's

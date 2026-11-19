@@ -57,7 +57,7 @@ identification, sessions and funnels are never collected.
 
 | Record | Kept for | Why |
 | --- | --- | --- |
-| Raw access log (masked) | about 7 days | debugging only |
+| Raw access log (masked) | about 7 days, including the copies the nightly count reads, which are removed once counted | debugging only |
 | Daily aggregate rows | 184 days | the day-by-day charts on the curator Usage page |
 | Monthly rollup rows | indefinitely | pure counts with no address, path or identity; quarterly and year-over-year reporting |
 | Daily aggregate archive | indefinitely | one line of pure counts per folded day, no geography, never served or rendered |

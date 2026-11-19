@@ -2089,6 +2089,194 @@ def test_an_existing_archive_keeps_its_mode(tmp_path, monkeypatch):
     assert _archived_dates(state) == ["2026-07-01", "2026-07-09"]
 
 
+# --------------------------------------------------------------------------------------------------
+# Pulled log copies expire. The front-door copies the box pulls are kept only as long as the stated
+# raw-log retention, and a copy is never removed while it may hold a line the fold has not passed.
+# --------------------------------------------------------------------------------------------------
+_EXPIRY_NOW = "2026-07-14T03:30:00Z"
+
+
+def _epoch(stamp: str) -> float:
+    return dt.datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=dt.timezone.utc).timestamp()
+
+
+def _aged(path: Path, stamp: str, text: str | None = None) -> Path:
+    """`path` written with `text` (kept as it is when None) and its modification time set to `stamp`."""
+    if text is not None:
+        path.write_text(text, encoding="utf-8")
+    os.utime(path, (_epoch(stamp), _epoch(stamp)))
+    return path
+
+
+def _expiry_env(tmp_path, monkeypatch) -> tuple[Path, Path]:
+    state = _archive_env(tmp_path, monkeypatch, ("2026-07-09",))
+    monkeypatch.delenv("AUSMT_STATS_LOG_RETAIN_DAYS", raising=False)
+    return state, state.parent.parent / "logs" / "caddy"
+
+
+def _journal(err: str) -> str:
+    lines = [ln for ln in err.splitlines() if ln.startswith("aggregate_stats: folded up to")]
+    assert len(lines) == 1, err
+    return lines[0]
+
+
+def test_pulled_frontdoor_copies_expire_after_the_fold(tmp_path, monkeypatch, capsys):
+    """A pulled front-door roll, plain or gzipped, and a renamed retired-host copy are removed once
+    their modification time is more than seven days before the run, after their lines have been
+    folded. A younger roll stays. The journal counts the removals and names no file and no address.
+    FAILS IF an old copy survives, a young one goes, an expired copy's lines are not counted, or the
+    journal names a file."""
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    old_roll = _aged(logdir / "access-frontdoor-2026-07-03T00-00-00.000.json", "2026-07-03T00:00:00Z",
+                     _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", date="2026-07-02")
+                     + "\n")
+    old_gz = logdir / "access-frontdoor-2026-07-02T00-00-00.000-size.json.gz"
+    with gzip.open(old_gz, "wt", encoding="utf-8") as fh:
+        fh.write(_line("/data/catalogue.json", "198.51.100.0", date="2026-07-01") + "\n")
+    _aged(old_gz, "2026-07-02T06:00:00Z")
+    retired = _aged(logdir / "access-frontdoor-ausmt-test.json", "2026-07-04T00:00:00Z", "")
+    young = _aged(logdir / "access-frontdoor-2026-07-08T00-00-00.000.json", "2026-07-08T00:00:00Z", "")
+
+    doc = _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    assert doc["last_folded_date"] == "2026-07-13"
+    assert doc["totals"]["downloads"] == 2 and doc["totals"]["visits"] == 2, doc["totals"]
+    for gone in (old_roll, old_gz, retired):
+        assert not os.path.lexists(gone), gone.name
+    assert young.is_file()
+    journal = _journal(capsys.readouterr().err)
+    assert re.search(r"(?:^|\s)logs_expired=3(?:\s|$)", journal), journal
+    assert "logs_expire_failed" not in journal
+    assert "access-frontdoor" not in journal and not _IPV4_RE.search(journal), journal
+
+
+def test_the_live_log_and_the_box_listener_logs_never_expire(tmp_path, monkeypatch, capsys):
+    """The live access-frontdoor.json, the box listener's access.json and its own rolls, and any file
+    not named with the access-frontdoor prefix and a hyphen, are never removed whatever their age. FAILS IF the
+    expiry considers any name outside the pulled-copy family."""
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    ancient = "2020-01-01T00:00:00Z"
+    kept = [_aged(logdir / "access.json", ancient)]
+    for name in ("access-frontdoor.json", "access-frontdoor.json.gz", "access-frontdoor_old.json",
+                 "access-2026-01-01T00-00-00.000.json", "access-2026-01-01T00-00-00.000-size.json.gz",
+                 "access-salvage.json", "access.log", "frontdoor-access-frontdoor-x.json"):
+        kept.append(_aged(logdir / name, ancient, ""))
+    _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    assert [p.name for p in kept if not p.is_file()] == []
+    assert re.search(r"(?:^|\s)logs_expired=0(?:\s|$)", _journal(capsys.readouterr().err))
+
+
+def test_a_stalled_watermark_expires_nothing_later_than_it(tmp_path):
+    """A copy is removed only when its modification time is before 00:00 UTC of the day after the
+    fold watermark, so a stalled fold can never lose a line it has not passed, however old the copy.
+    With no usable watermark nothing is removed. FAILS IF a copy written after the watermark day goes,
+    or one written on or before it stays."""
+    logdir = tmp_path / "logs"
+    logdir.mkdir()
+    run = dt.datetime(2026, 7, 20, 3, 30, tzinfo=dt.timezone.utc)
+    passed = _aged(logdir / "access-frontdoor-a.json", "2026-07-01T23:59:59Z", "")
+    boundary = _aged(logdir / "access-frontdoor-b.json", "2026-07-02T00:00:00Z", "")
+    later = _aged(logdir / "access-frontdoor-c.json", "2026-07-05T00:00:00Z", "")
+    for watermark in (None, "", "2026-07", "2026-02-30", 20260701):
+        assert AGG.expire_pulled_logs(logdir, run, watermark, 7) == (0, 0), watermark
+    assert AGG.expire_pulled_logs(logdir, run, "2026-07-01", 7) == (1, 0)
+    assert not passed.exists() and boundary.is_file() and later.is_file()
+    assert AGG.expire_pulled_logs(logdir, run, "2026-07-12", 7) == (2, 0)
+    assert list(logdir.iterdir()) == []
+
+
+def test_a_link_or_directory_with_a_matching_name_is_left(tmp_path, monkeypatch, capsys):
+    """Only regular files expire. A symbolic link named like a pulled roll, its target, and a
+    directory named like one are left whatever their age. FAILS IF the expiry follows a link,
+    removes a link, or touches a directory."""
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    ancient = "2020-01-01T00:00:00Z"
+    target = _aged(tmp_path / "elsewhere.json", ancient, "")
+    link = logdir / "access-frontdoor-2026-07-01T00-00-00.000.json"
+    link.symlink_to(target)
+    os.utime(link, (_epoch(ancient), _epoch(ancient)), follow_symlinks=False)
+    folder = logdir / "access-frontdoor-2026-07-02T00-00-00.000.json"
+    folder.mkdir()
+    _aged(folder, ancient)
+    _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    assert link.is_symlink() and target.is_file() and folder.is_dir()
+    assert re.search(r"(?:^|\s)logs_expired=0(?:\s|$)", _journal(capsys.readouterr().err))
+
+
+def test_the_retain_setting_zero_disables_and_an_invalid_value_reads_as_seven(tmp_path, monkeypatch,
+                                                                              capsys):
+    """AUSMT_STATS_LOG_RETAIN_DAYS is a whole number of days. 0 disables expiry; a larger value keeps
+    copies longer; anything that is not a whole number of zero or more reads as the default of seven.
+    FAILS IF 0 removes a file, a longer setting is ignored, or an invalid value disables expiry or
+    changes the window."""
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    ten = logdir / "access-frontdoor-ten.json"
+    five = logdir / "access-frontdoor-five.json"
+
+    def lay():
+        _aged(ten, "2026-07-04T03:00:00Z", "")
+        _aged(five, "2026-07-09T03:00:00Z", "")
+
+    lay()
+    monkeypatch.setenv("AUSMT_STATS_LOG_RETAIN_DAYS", "0")
+    _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    assert ten.is_file() and five.is_file()
+    monkeypatch.setenv("AUSMT_STATS_LOG_RETAIN_DAYS", "30")
+    _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    assert ten.is_file() and five.is_file()
+    capsys.readouterr()
+    for bad in ("seven", "-3", "1.5", " "):
+        lay()
+        monkeypatch.setenv("AUSMT_STATS_LOG_RETAIN_DAYS", bad)
+        _fold_at(monkeypatch, state, _EXPIRY_NOW)
+        assert not ten.exists() and five.is_file(), bad
+        assert re.search(r"(?:^|\s)logs_expired=1(?:\s|$)", _journal(capsys.readouterr().err)), bad
+    assert AGG._log_retain_days(None) == AGG._log_retain_days("") == 7
+    assert AGG._log_retain_days("0") == 0 and AGG._log_retain_days(" 3 ") == 3
+
+
+def test_an_unwritable_log_dir_is_tolerated(tmp_path, monkeypatch, capsys):
+    """A removal that fails is counted, the fold still writes stats.json and exits 0, and the journal
+    carries logs_expire_failed with no file name. FAILS IF the failure raises, aborts the fold, goes
+    uncounted, or names the file."""
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        import pytest
+        pytest.skip("root can remove from a read-only directory, so the failure cannot be staged")
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    old = _aged(logdir / "access-frontdoor-2026-07-01T00-00-00.000.json", "2026-07-01T00:00:00Z", "")
+    os.chmod(logdir, 0o555)
+    try:
+        doc = _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    finally:
+        os.chmod(logdir, 0o755)
+    assert doc["last_folded_date"] == "2026-07-13"
+    assert old.is_file()
+    journal = _journal(capsys.readouterr().err)
+    assert re.search(r"(?:^|\s)logs_expired=0 logs_expire_failed=1(?:\s|$)", journal), journal
+    assert "access-frontdoor" not in journal
+
+
+def test_logs_expire_only_after_stats_json_lands(tmp_path, monkeypatch):
+    """The expiry runs only after stats.json has been written, so a fold that could not record its
+    progress keeps every log it read. FAILS IF a failed stats write or a missing state dir still
+    removes a copy."""
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    old = _aged(logdir / "access-frontdoor-2026-07-01T00-00-00.000.json", "2026-07-01T00:00:00Z", "")
+    monkeypatch.setenv("AUSMT_STATS_NOW", _EXPIRY_NOW)
+
+    def refuse(path, stats):
+        raise OSError("read-only file system")
+
+    with monkeypatch.context() as m:
+        m.setattr(AGG, "write_stats_atomic", refuse)
+        assert AGG.main([]) == 0
+    assert old.is_file() and not (state / "stats.json").exists()
+
+    state.rmdir()
+    assert AGG.main([]) == 0
+    assert old.is_file()
+
+
 # ==================================================================================================
 # COUNTRY-CLASS DETAIL and the PER-SURVEY KIND SPLIT.
 #

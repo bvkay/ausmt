@@ -42,3 +42,18 @@ def test_docs_and_settings_state_184_days():
     env = _read(_ENV_EXAMPLE)
     assert "AUSMT_STATS_DAILY_KEEP=184" in env and "default 184" in env
     assert "default 184" in _read(_FOLD)
+
+
+def test_log_expiry_is_documented():
+    """The pulled front-door copies expire, and every place that states the raw-log retention says so
+    and names the setting. FAILS IF the README, the settings example, the docs retention table or the
+    decision record omits it, or a comment still calls the box copy the durable record."""
+    for path in (_README, _ENV_EXAMPLE, _C45, _FOLD):
+        assert "AUSMT_STATS_LOG_RETAIN_DAYS" in _read(path), path.name
+    assert "AUSMT_STATS_LOG_RETAIN_DAYS=7" in _read(_ENV_EXAMPLE)
+    assert "logs_expired=" in _read(_README)
+    row = [ln for ln in _read(_DOCS).splitlines() if ln.startswith("| Raw access log")]
+    assert len(row) == 1 and "copies" in row[0], row
+    assert "*Pulled log copies expire.*" in _read(_C45)
+    caddy = _read(_REPO / "deploy" / "frontdoor" / "Caddyfile")
+    assert "copy on the box is the durable record" not in caddy

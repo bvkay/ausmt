@@ -1047,6 +1047,19 @@ daily series — **never an address (masked or not) and never a user-agent**.
 daily and the raw lines are **not** the database: once a day is folded into `stats.json` the log is no
 longer needed, and the aggregator tolerates an already-rotated / absent log without error.
 
+The front-door copies the box pulls (`access-frontdoor-*`: the timestamped rolls in `.json` or
+`.json.gz`, and any renamed retired-host copy) expire on the box on the same retention. After
+`stats.json` has been written, the fold removes such a copy when it is a regular file whose
+modification time is more than `AUSMT_STATS_LOG_RETAIN_DAYS` days before the run (default 7; 0
+disables; an invalid value reads as 7) and is also before 00:00 UTC of the day after the fold
+watermark, so a stalled fold never loses a line it has not yet counted. The live
+`access-frontdoor.json`, the box's own `access.json` and its rolls, symbolic links and directories are
+never removed. The journal line reports `logs_expired=` and, when a removal failed,
+`logs_expire_failed=`, with no file name. A non-zero failure count means the account the fold runs as
+cannot remove files in the log dir; give it write access to that dir. A copy the serve host still
+holds can be pulled again and expires at the next fold; its lines are not counted twice, because the
+fold never re-reads a day behind its watermark.
+
 **Rolled files stay plain JSON** (`roll_uncompressed`, set in both Caddyfiles). Caddy gzips a rolled
 log by default, and both consumers key on the plain `.json` name: the fold globs `access*.json` and the
 front-door pull filters on `access-frontdoor*.json`. A gzipped roll would therefore be read by neither,

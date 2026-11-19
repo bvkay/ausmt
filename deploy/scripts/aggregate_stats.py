@@ -57,7 +57,11 @@ WHAT IT DOES, once a day:
   * APPENDS one line per newly folded day to a permanent archive beside stats.json, at the finest
     NON-GEOGRAPHIC granularity the fold sees. Nothing reads it and nothing serves it.
 
-RETENTION (aggregates only -- the RAW log keeps its own untouched ~7-day Caddy rotation):
+RAW LOG RETENTION: the box's own log keeps Caddy's ~7-day rotation, and the front-door copies pulled
+onto the box (the access-frontdoor prefix followed by a hyphen) expire after AUSMT_STATS_LOG_RETAIN_DAYS once the
+fold has written stats.json and passed every line they can hold (see expire_pulled_logs).
+
+RETENTION (aggregates only):
   * DAILY rows are a rolling window of AUSMT_STATS_DAILY_KEEP days (default 184, about six months) ending
     at the fold watermark. Older daily rows are pruned.
   * MONTHLY rollup rows are kept INDEFINITELY. They are tiny pure-count records (no address, no path,
@@ -81,6 +85,7 @@ Config (env; every path derives from AUSMT_DATA_DIR, each overridable for tests)
   AUSMT_STATS_FILE          the cumulative stats.json      [default $AUSMT_DATA_DIR/gateway/state/stats.json]
   AUSMT_STATS_DAILY_ARCHIVE the append-only day archive    [default: daily_archive.jsonl beside stats.json]
   AUSMT_STATS_DAILY_KEEP    daily-row retention, in DAYS   [default 184; monthly rollups are never pruned]
+  AUSMT_STATS_LOG_RETAIN_DAYS pulled front-door log copies, in DAYS [default 7; 0 disables expiry]
   AUSMT_STATS_NOW           run instant (ISO %Y-%m-%dT%H:%M:%SZ or %Y-%m-%d) — TEST hook for determinism
 
 Exit code is ALWAYS 0 on the normal path (best-effort, timer-safe); a genuinely broken environment
@@ -280,6 +285,11 @@ _BOX_LOG_NAME = "access.json"
 _BOX_LOG_ROLL = re.compile(
     r"^access-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(\.\d+)?(-[a-z]+)?\.(json|log)(\.gz)?$")
 _FRONTDOOR_LOG_PREFIX = "access-frontdoor"
+# The pulled copies that expire: the front-door name followed by a hyphen, which covers a timestamped
+# roll and a renamed retired-host copy and never the live access-frontdoor.json.
+_EXPIRING_LOG_PREFIX = _FRONTDOOR_LOG_PREFIX + "-"
+# The stated raw-log retention, in days, applied to the pulled copies on the box.
+DEFAULT_LOG_RETAIN_DAYS = 7
 _OPERATOR_UA_PREFIX = "ausmt-ops/"
 _INTERNAL_RANGES = tuple(ipaddress.ip_network(n) for n in (
     "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16",
@@ -2448,6 +2458,51 @@ def _next_archive_through(carried, start_watermark, folded, archived: int, offer
     return folded if carried == start_watermark else carried
 
 
+def _log_retain_days(raw) -> int:
+    """AUSMT_STATS_LOG_RETAIN_DAYS as whole days. 0 disables expiry; anything that is not a whole
+    number of zero or more reads as DEFAULT_LOG_RETAIN_DAYS."""
+    try:
+        days = int(str(raw).strip())
+    except ValueError:
+        return DEFAULT_LOG_RETAIN_DAYS
+    return days if days >= 0 else DEFAULT_LOG_RETAIN_DAYS
+
+
+def expire_pulled_logs(log_dir, run_dt: dt.datetime, last_folded, retain_days: int) -> tuple[int, int]:
+    """Remove the pulled front-door log copies that are past the stated raw-log retention, and
+    return (removed, failed). A file goes only when all of these hold:
+      * it is a regular file (never a symbolic link or a directory) whose name begins with
+        _EXPIRING_LOG_PREFIX, so the live access-frontdoor.json and the box listener's own files are
+        never considered;
+      * its modification time is more than `retain_days` before `run_dt`;
+      * its modification time is before 00:00 UTC of the day after `last_folded`, so a copy that may
+        hold a line later than the watermark stays however old it is.
+    0 days, no usable watermark or an unreadable directory removes nothing. Never raises."""
+    if retain_days <= 0 or not log_dir or not _iso_day(last_folded):
+        return 0, 0
+    try:
+        folded_end = (dt.datetime.strptime(last_folded, "%Y-%m-%d").replace(tzinfo=dt.timezone.utc)
+                      + dt.timedelta(days=1))
+        cutoff = min((run_dt - dt.timedelta(days=retain_days)).timestamp(), folded_end.timestamp())
+        entries = list(os.scandir(log_dir))
+    except (OSError, OverflowError, ValueError):
+        return 0, 0
+    removed = failed = 0
+    for entry in entries:
+        if not entry.name.startswith(_EXPIRING_LOG_PREFIX):
+            continue
+        try:
+            if not entry.is_file(follow_symlinks=False):
+                continue
+            if entry.stat(follow_symlinks=False).st_mtime >= cutoff:
+                continue
+            os.unlink(entry.path)
+            removed += 1
+        except OSError:
+            failed += 1
+    return removed, failed
+
+
 def _cfg(name: str, default: str) -> str:
     v = os.environ.get(name, "").strip()
     return v if v else default
@@ -2563,6 +2618,13 @@ def main(argv=None) -> int:
             except OSError as exc:
                 print(f"aggregate_stats: could not record archive_through in stats.json "
                       f"({type(exc).__name__}); the older date stands", file=sys.stderr)
+        # Only after stats.json has landed, so a fold that could not record its progress keeps every
+        # log it read. Only counts reach the journal, never a file name.
+        expired, expire_failed = expire_pulled_logs(
+            log_dir, run_dt, stats.get("last_folded_date"),
+            _log_retain_days(os.environ.get("AUSMT_STATS_LOG_RETAIN_DAYS", "")))
+        expire_journal = f"logs_expired={expired}" + (
+            f" logs_expire_failed={expire_failed}" if expire_failed else "")
         print(f"aggregate_stats: folded up to {stats.get('last_folded_date')} -- "
               f"downloads={stats['totals']['downloads']} visits={stats['totals']['visits']} "
               f"api={stats['totals']['api_requests']} "
@@ -2572,7 +2634,8 @@ def main(argv=None) -> int:
               f"au_state_rows={au_states.row_count} collections={len(collections)} "
               f"log_lines={len(lines)} files_skipped={len(skipped_logs)} "
               f"archived_days={archived} "
-              f"archive_through={stats.get('archive_through') or 'none'} {label_journal} "
+              f"archive_through={stats.get('archive_through') or 'none'} {expire_journal} "
+              f"{label_journal} "
               f"fold_seconds={time.monotonic() - started:.1f} -> {stats_file}", file=sys.stderr)
     except Exception as exc:  # noqa: BLE001 -- never raise into the timer; note loudly and exit 0
         print(f"aggregate_stats: aborted without writing ({type(exc).__name__}: {exc})", file=sys.stderr)
