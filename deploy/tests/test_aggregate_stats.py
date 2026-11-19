@@ -1852,9 +1852,10 @@ def test_nothing_in_the_gateway_reads_the_daily_archive():
     route, no render path, no export, no browser script. It holds the finest-grained record in the
     pipeline precisely because nothing consumes it, so a reference to it from the serving stack is the
     change that must be caught here rather than in review. The one exception is the count-free date
-    archive_through, which the fold writes into stats.json and only the Usage page renderer may read.
-    FAILS IF any gateway Python source or served script names the archive file, its setting or a
-    .jsonl file, or if any gateway source other than usagepage.py names archive_through."""
+    archive_through, which the fold writes into stats.json and only the Usage page renderer may read;
+    the Usage page test file may name it too, to write it into a fixture. FAILS IF any gateway Python
+    source, test or served script names the archive file, its setting or a .jsonl file, or if any
+    gateway file other than usagepage.py and its test names archive_through."""
     sources = _gateway_sources()
     assert any(p.suffix == ".js" for p in sources), "the served scripts are scanned too"
     offenders = []
@@ -1863,7 +1864,8 @@ def test_nothing_in_the_gateway_reads_the_daily_archive():
         for token in ("daily_archive", "AUSMT_STATS_DAILY_ARCHIVE", ".jsonl"):
             if token in text:
                 offenders.append(f"{p.relative_to(_REPO)}: {token}")
-        if "archive_through" in text and p.name != "usagepage.py":
+        if "archive_through" in text and p.relative_to(_REPO).as_posix() not in (
+                "gateway/usagepage.py", "gateway/tests/test_usage_page.py"):
             offenders.append(f"{p.relative_to(_REPO)}: archive_through")
     assert offenders == [], f"the gateway must not read the daily archive: {offenders}"
 

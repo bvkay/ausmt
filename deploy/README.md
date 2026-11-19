@@ -1032,13 +1032,13 @@ cookies, no cross-site tracking, no per-user identity.
 **masked at write time** — IPv4 → /24, IPv6 → /48 — so a full address never touches disk; the log
 block ships in `deploy/docker/caddy/Caddyfile`). A daily host timer runs a stdlib-Python aggregator
 (`deploy/scripts/aggregate_stats.py`) that folds each **complete** day of the log into a cumulative
-`stats.json` in the gateway state dir, then the workbench **Analytics** screen
+`stats.json` in the gateway state dir, then the curator **Usage** page
 (`/gateway/curator/analytics`) renders it. `stats.json` carries **aggregates only** — counts and a
 daily series — **never an address (masked or not) and never a user-agent**.
 
 > **What it cannot report.** Per-station / per-survey *page views* are **not** server-countable: the
 > portal is a hash-routed SPA that loads the corpus once and renders every station/survey view
-> client-side with zero per-navigation request. This screen reports **downloads** (a real server
+> client-side with zero per-navigation request. The Usage page reports **downloads** (a real server
 > request) and **whole-portal visits** (one `catalogue.json` fetch per SPA boot) — honestly, not page
 > views. Per-dataset views would need a first-party beacon, a separate future decision.
 
@@ -1067,7 +1067,7 @@ and that is a lost day rather than a late one, because the fold advances its wat
 whether or not it saw any lines for it. For the transition window (and for an archive recovered by
 hand) the aggregator also reads `access*.json.gz`, and the front-door pull also includes that family.
 
-#### What the screen reports (funding detail)
+#### What the fold records (funding detail)
 
 Everything below is derived from what the fold already reads: the request **path**, the **masked**
 network, and the response **size**. No beacon exists, no user-agent is inspected for reporting, and no
@@ -1083,13 +1083,13 @@ below: a query flag on file requests the portal was making anyway.
 | **Single-station file vs whole-survey bundle** | The manifest row's kind (`files[]` vs `bundles[]`). |
 | **API requests** | Fetches of the four documented machine-readable entry points the portal's own JavaScript never fetches: `/data/products/manifest.json`, `/data/mtcat.json`, `/data/mtcat.schema.json` (the `$id` every validator resolves) and `/data/stations.geojson` (the vector layer a GIS opens from the URL). A **path class**. Four is a count of **documents, not URLs**: where a document is also served under `/data/products/`, that advertised mirror counts as the same entry point, so a reader who used the mirror is not lost. It is an **upper bound**: the mtcat link is in every page footer, so a human click lands here too. `/data/catalogue.json` stays the visit proxy and `/data/manifest.json` (the SPA's own boot fetch) is deliberately excluded. |
 | **Client class** | The user-agent resolves to crawler, scripted or browser, read transiently and never stored. Crawlers are excluded from every figure. **Scripted** clients (curl, wget, python-requests, and anything sending no user-agent) are **counted**, and their share of downloads is reported: those are the clients the published API examples hand people, so classing them as robots hid scientific use. |
-| **Bulk map exports** | `portal/src/exports.js` appends `sel=bulk` to each file request its **three selection exports** issue (the EDI, EMTF XML and MTH5 zips over a map selection), and nothing else in the portal does; the drawer's single-station downloads stay unlabelled, which is what makes an unlabelled fetch mean *single*. The flag says an archive was taken, not which format was in it: the bulk figure sums all three flows, and stats.json holds no cross-tab that would separate them. The by-format breakdown covers every download, labelled and unlabelled alike, so it is an independent total, not the split of the bulk figure. The fold reads the flag from the **raw** line, before the query strip that produces the attribution path, so a labelled and an unlabelled fetch of the same file still de-duplicate to one download (bulk if **any** of that day's requests for it carried the label). Reported as a file count plus an **event proxy**: distinct masked networks that took at least one labelled download that day, summed into the month. That is a floor, not a count of actions. When the fold upgrades a `stats.json` that predates the split it stamps `select_since` at the day after that file's watermark, so the screen names the day the split begins instead of describing it; a box whose first-ever fold already had the split records no stamp, because nothing predates it. |
+| **Bulk map exports** | `portal/src/exports.js` appends `sel=bulk` to each file request its **three selection exports** issue (the EDI, EMTF XML and MTH5 zips over a map selection), and nothing else in the portal does; the drawer's single-station downloads stay unlabelled, which is what makes an unlabelled fetch mean *single*. The flag says an archive was taken, not which format was in it: the bulk figure sums all three flows, and stats.json holds no cross-tab that would separate them. The by-format breakdown covers every download, labelled and unlabelled alike, so it is an independent total, not the split of the bulk figure. The fold reads the flag from the **raw** line, before the query strip that produces the attribution path, so a labelled and an unlabelled fetch of the same file still de-duplicate to one download (bulk if **any** of that day's requests for it carried the label). Reported as a file count plus an **event proxy**: distinct masked networks that took at least one labelled download that day, summed into the month. That is a floor, not a count of actions. When the fold upgrades a `stats.json` that predates the split it stamps `select_since` at the day after that file's watermark, so the Usage page names the day the split begins instead of describing it; a box whose first-ever fold already had the split records no stamp, because nothing predates it. |
 | **Download counting** | A download counts **once per day per masked network per file**, and admits status 200 or 206. One save action can log two requests (the browser cancels on the download header, its download manager refetches) and a resumed transfer logs one request per range. Every request's **bytes still sum**, so the volume covers what was actually served. |
 | **Release-tier bundles** | `/data/releases/<tag>/bundles/<file>` counts as a download and attributes to its survey by bundle filename against the live manifest. The frozen citable copy keeps its own row; the release metadata JSONs are not counted. |
 | **Distinct networks** per day | The count of distinct masked networks (the /24 or /48 the edge already wrote) seen that day. The addresses live in memory for the one run that folds the day; only the integer is written. One network can be a whole institution, so read it as reach, not as people. |
 | **Downloads by collection** | The `collection_id` the served `mtcat.json` gives a survey (AusLAMP and its siblings), joined on the bundle **slug** first and the survey title second. A collection total is the sum of its member surveys. Optional: no served `mtcat.json`, no collection dimension, no zero. |
 | **Requests by country, split by class** | Beside the combined per-country request count, the same four-way breakdown the state table carries: downloads, visits, API requests and volume per country. Needs no state table (the country lookup is the fold's own). It lives at the **cumulative and monthly grains only**, like the state breakdown and for the same reason: a named country on a named day is the smaller cell. Forward-only, so a country counted before it existed reads *"not measured"*. |
-| **Time-series hand-offs** | The front door's `/go/ts/<survey>/<station>/<level>` route answers **302** with the NCI THREDDS URL for that file, and that redirect is the only trace the request leaves here (it is terminal at the front door and never reaches the box). Counted as **requests, never completed transfers**: AusMT hands the reader off and never learns whether a byte moved, and the line on the screen says so. The **bytes and the destination host come from the served `ts_access.json`**, joined on the route path, because the log can supply neither - a 302's `size` is the redirect body and its `Location` is not logged. The query is stripped before the join, exactly as the front door strips it before its own lookup. Admits 302 alone; a 404 on one of these paths is the route table refusing to resolve, which is how suppression works, and is not a hand-off. A route the served index no longer publishes counts in the family's **own** unattributed bucket with no bytes: that is table-versus-data drift, and it is why the deploy order puts the table out first. `by_survey` is keyed on the survey **slug**, the segment the published route carries. |
+| **Time-series hand-offs** | The front door's `/go/ts/<survey>/<station>/<level>` route answers **302** with the NCI THREDDS URL for that file, and that redirect is the only trace the request leaves here (it is terminal at the front door and never reaches the box). Counted as **requests, never completed transfers**: AusMT hands the reader off and never learns whether a byte moved, and the Usage page says so. The **bytes and the destination host come from the served `ts_access.json`**, joined on the route path, because the log can supply neither - a 302's `size` is the redirect body and its `Location` is not logged. The query is stripped before the join, exactly as the front door strips it before its own lookup. Admits 302 alone; a 404 on one of these paths is the route table refusing to resolve, which is how suppression works, and is not a hand-off. A route the served index no longer publishes counts in the family's **own** unattributed bucket with no bytes: that is table-versus-data drift, and it is why the deploy order puts the table out first. `by_survey` is keyed on the survey **slug**, the segment the published route carries. |
 | **Monthly rollups** | Each calendar month is accumulated as its days fold, never recomputed from the daily tail. |
 
 **Aggregate retention (separate from the raw log).** Daily rows are a rolling **184-day** window
@@ -1124,7 +1124,7 @@ non-zero count there means the fold is missing lines it should have had.
 **How far the archive reaches.** The fold records `archive_through` in `stats.json`: the last fold
 watermark the archive is known to hold. It moves to the new watermark only when every newly folded
 day landed in the file, or when a run had no day to append and the archive was already current. A
-failed append leaves it where it was, so the curator Usage page can warn that the permanent record
+failed append leaves it where it was, so the curator Usage page warns that the permanent record
 has fallen behind. The journal line carries the same date as `archive_through=` (`none` when it has
 never been recorded). The archive is behind when that date is earlier than the `folded up to` date
 beside it, usually with `archived_days=0` and a `could not append` note on stderr. The usual cause is
@@ -1133,10 +1133,10 @@ account's write access to the file (owner or group write) without rewriting its 
 nightly fold appends again and moves the date. Days folded while the archive was behind are not
 backfilled.
 
-**Export.** The Analytics screen offers *Download report data*: `analytics.csv` (one row per retained
+**Export.** The Usage page header offers *Download CSV*: `analytics.csv` (one row per retained
 month), `analytics-surveys.csv` (one row per month and survey, with volume and the file/bundle split)
 and `analytics-countries.csv` (one row per month and country). All three are read-only,
-session-gated, and generated from the same `stats.json` the screen renders. When an Australian state
+session-gated, and generated from the same `stats.json` the page renders. When an Australian state
 breakdown exists (below), `analytics.csv` also gains `au_requests` and one `state_*` column per state
 seen; the `state_*` columns of every row sum to that row's `au_requests` exactly, so a report built
 from the file cannot carry a silent Australian undercount.
@@ -1173,7 +1173,7 @@ one a funding report is built from.
 place on the next fold; there is no migration step and nothing to run by hand. Every existing total,
 format count and dataset row carries forward; the new dimensions simply begin accruing. Monthly
 rollups are seeded from the daily rows already present (downloads and visits only, marked as such),
-and `detail_since` records the day the detailed breakdown actually begins so the screen can say which
+and `detail_since` records the day the detailed breakdown actually begins so the page can say which
 months carry partial detail rather than showing a partial figure as if it were complete. **No earlier
 month is invented.**
 
@@ -1202,16 +1202,16 @@ what db-ip's Lite CSV ships. A small **fixture** CSV lives at
 
 #### Australian state resolution: the compact state table (optional operator chore)
 
-Beneath the AU row of the country table the Analytics screen can also show **Australia by state**
+The state card of the Usage page can also show **Australian visits by state**
 (NSW / VIC / QLD / SA / WA / TAS / NT / ACT). This is **entirely optional**: with no state table in
-place the fold is country-only, silently, and the screen simply omits the section.
+place the fold is country-only, silently, and the card reads *"Not measured yet."*
 
 **State, and deliberately not city.** The address behind these counts is masked at the edge to a /24
 (IPv4) or /48 (IPv6) *before it is written*. A /24 does not place a request in a city reliably
 (carrier and CGNAT pools routinely serve a whole state from one prefix), and in a research community
 this small a city-level cell is quasi-identifying ("3 downloads from Hobart" names a group). State is
 the finest grain that is both defensible from a /24 and non-identifying here. **Do not "improve" this
-to cities.** The rationale is repeated in the aggregator, the prep script, the screen and
+to cities.** The rationale is repeated in the aggregator, the prep script, the Usage page notes and
 `docs/docs/introduction/usage-analytics.md` for exactly that reason.
 
 The state table is **derived** from db-ip's larger **"IP to City Lite"** CSV (same CC-BY-4.0 terms, no
@@ -1241,11 +1241,12 @@ degrades gracefully. A small **fixture** table lives at `deploy/tests/fixtures/d
 for the tests; **do not** use it in production.
 
 **Forward-only, like every other dimension here.** Days folded before the table was in place carry no
-state data at all and are never backfilled (the raw logs are long gone). The screen names that
-residue on its own row (*"Counted before state data existed"*) rather than letting the state rows
-imply they account for every Australian request. An AU prefix the table does not cover is counted in
-its own *"Not in the state table"* row, never dropped, so the breakdown always adds up to the AU
-country figure exactly.
+state data at all and are never backfilled (the raw logs are long gone). In `analytics.csv` that
+residue has its own column (`state_not_counted`) rather than letting the state columns imply they
+account for every Australian request. An AU prefix the table does not cover is counted in its own
+`state_unattributed` column, never dropped, so the state columns always add up to `au_requests`
+exactly. The Usage page shows visits by state, with one *"Not placed in a state"* row for both and an
+Australia total equal to the Australian visits on the countries card.
 
 #### Network types: the network-type table (monthly operator chore)
 
@@ -1315,9 +1316,9 @@ systemctl list-timers ausmt-stats.timer          # confirm the next run (daily, 
 sudo systemctl start ausmt-stats.service         # fold once NOW to test -> writes gateway/state/stats.json
 ```
 
-Then open **Curator → Operations → Analytics**. Before the first fold it shows an honest empty state;
-a `stats.json` older than ~2 aggregation periods (≈ 2 days) shows a **STALE** banner (the timer is not
-running) rather than presenting old figures as live.
+Then open **Curator → Operations → Usage**. Before the first fold it shows an honest empty state;
+a `stats.json` older than ~2 aggregation periods (≈ 2 days) marks the header stale and the health line
+warns (the timer is not running) rather than presenting old figures as live.
 
 #### Request labels: the operator list and the switch
 
@@ -1411,8 +1412,8 @@ Until it is reinstalled, the installed copy keeps sending curl's own user-agent.
 **Rollback.** Soft: remove `AUSMT_STATS_LABELS_FROM` from `deploy/.env`. Labelling stops at the next
 fold, and the label figures already folded are kept. The page then still says that operator requests
 are excluded from every figure since `labels_since`, which no longer holds for the days folded after
-the rollback; the seam note under the quarterly table states how many active days of each month are
-labelled, and is the line to read.
+the rollback; the `label_days` column of `analytics.csv` states how many active days of each month are
+labelled, and is the figure to read.
 
 Full code revert: stop `ausmt-stats.timer`, revert the code, and start the timer again. Restore
 nothing: the unlabelled fold drops `labels_since` and every label block from `stats.json` at its next
@@ -1426,18 +1427,18 @@ those days cannot be folded again once their raw logs have rotated away.
 
 | Symptom | Cause → fix |
 | --- | --- |
-| Analytics screen shows "No usage analytics yet" | The `ausmt-stats` timer has not produced a `stats.json`. Install + start it (above); check `journalctl -u ausmt-stats.service`. |
-| Analytics screen shows a **STALE** banner | The timer stopped, or no complete day has been folded since. Check `systemctl list-timers ausmt-stats.timer` and the service journal. |
+| Usage page shows "No usage figures yet" | The `ausmt-stats` timer has not produced a `stats.json`. Install + start it (above); check `journalctl -u ausmt-stats.service`. |
+| Usage page header reads **stale** and the health line warns that no count has finished | The timer stopped, or no complete day has been folded since. Check `systemctl list-timers ausmt-stats.timer` and the service journal. |
+| Usage health line warns that the archive stops at a date | The daily archive append is failing, usually because the fold account cannot write the file. See "How far the archive reaches" above. |
 | Every country shows as `unknown` | The db-ip CSV is missing/unreadable at `$AUSMT_DATA_DIR/geoip/dbip-country-lite.csv` (or `AUSMT_STATS_DBIP_CSV`). Place/refresh it (above). Counts are still correct; only the country split degrades. |
-| No **Australia by state** section at all | No state table at `$AUSMT_DATA_DIR/geoip/dbip-au-states.csv` (or `AUSMT_STATS_AU_STATES_CSV`), or none has been folded yet. Run `prep_au_states.py` (above); the section appears after the next daily fold. Its absence is deliberate: eight zeroes would read as "no traffic from Victoria" rather than "not measured". |
-| Most Australian traffic lands in **Not in the state table** | The state table is stale or was built from a partial CSV. Re-run `prep_au_states.py` over a fresh db-ip City Lite download. The AU country figure is unaffected; the bucket exists so the breakdown still reconciles with it. |
-| **Counted before state data existed** is a large row | Expected on a box that folded days before the state table was installed. Those days carry no state data and are never backfilled (the raw logs have rotated away). The row shrinks in relative terms as new days fold. |
+| The state card reads **Not measured yet** | No state table at `$AUSMT_DATA_DIR/geoip/dbip-au-states.csv` (or `AUSMT_STATS_AU_STATES_CSV`), or none has been folded yet. Run `prep_au_states.py` (above); states appear after the next daily fold. It is deliberate: eight zeroes would read as "no traffic from Victoria" rather than "not measured". |
+| Most Australian visits land in **Not placed in a state** | Either the state table is stale or was built from a partial CSV (re-run `prep_au_states.py` over a fresh db-ip City Lite download; `state_unattributed` in `analytics.csv` is then large), or the box folded days before the state table was installed (expected; `state_not_counted` is large, those days are never backfilled, and the row shrinks in relative terms as new days fold). The Australia total is unaffected. |
 | `prep_au_states.py` exits non-zero with "no Australian (AU) state ranges" | The input was not db-ip's **IP to City Lite** CSV (the Country Lite CSV has no state column), or the download is truncated. Nothing was written; re-download and re-run. |
 | Journal says `nettype=stale`, `absent` or `unreadable` | The network-type table is older than the maximum age, missing, or not a table `prep_nettype.py` wrote. Every labelled request reads unknown network until it is rebuilt (above); every count is unaffected. |
 | `prep_nettype.py` exits non-zero | Read its message: a truncated download (too few X4BNet CIDRs or PeeringDB records), half of the iptoasn and PeeringDB pair, or a download kept in the output's directory. Nothing was written; fix the input and re-run. |
 | Downloads counted but `unattributed` is high | The served `manifest.json` did not resolve those paths (a build/serve skew, or NCI-tier absolute URLs). Confirm `site-data/current/manifest.json` matches what is served. The licence sidecars beside each survey MTH5 (`bundles/*.LICENSE.txt`) are **not** counted, so they no longer inflate this figure. |
-| Quarterly view says "No monthly rollups yet" | The box has not folded a day since the detailed aggregator was installed. Rollups begin at the next daily fold and fill in one month at a time; earlier months are deliberately **not** backfilled. |
-| A month shows downloads but little or no volume | Some of its days were folded before per-month detail existed. The screen flags exactly those months; the counts are complete, the breakdown covers only the later days. |
+| Month table says "No months yet" | The box has not folded a day since the detailed aggregator was installed. Rollups begin at the next daily fold and fill in one month at a time; earlier months are deliberately **not** backfilled. |
+| A month shows downloads but little or no volume | Some of its days were folded before per-month detail existed. The month table reads not measured for exactly those figures; the counts are complete, the breakdown covers only the later days. |
 | Per-day "distinct networks" is blank for older days | Those days were folded before the reach proxy existed. It is absent, not zero, and is never backfilled (that would need raw logs which are long gone). |
 
 ---

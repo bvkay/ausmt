@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import html
 import json
+import math
 import re
 import time
 from html.parser import HTMLParser
@@ -14,8 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from gateway import curatorpage, serve_state
+from gateway import curatorpage, serve_state, usagepage
 from gateway.tests.conftest import app_client, curator_login, run
+from gateway.tests.usage_helpers import (card, fetch, row_values, sections, table_head, table_rows,
+                                         text, tile)
+
+_REPO = Path(__file__).resolve().parents[2]
 
 # SHA-256 of _head("x") and of _shell("x", "<p>b</p>", nav=_golden_nav()), as rendered before the
 # page could add a style block or a shell class, with the rail label ">Analytics<" replaced by
@@ -89,8 +95,9 @@ def test_other_pages_get_no_usage_theme(tmp_path):
 
 def test_usage_heading_title_and_rail_label(tmp_path):
     """The rail entry for the analytics route reads Usage on every curator page, under Operations,
-    with its key and route unchanged. FAILS IF the label still reads Analytics, the route moves, or a
-    page highlights the entry when it is not the analytics page."""
+    with its key and route unchanged, and the page it leads to is titled AusMT usage with the heading
+    and crumb Usage. FAILS IF the label still reads Analytics, the route moves, a page highlights the
+    entry when it is not the analytics page, or the old title, heading or crumb returns."""
     entries = {key: (group, label, href) for group, items in curatorpage._RAIL
                for key, label, href in items}
     assert entries["analytics"] == ("Operations", "Usage", "/gateway/curator/analytics")
@@ -103,6 +110,9 @@ def test_usage_heading_title_and_rail_label(tmp_path):
             r = await client.get("/gateway/curator/analytics")
             assert r.status_code == 200
             assert '<a class="railitem on" href="/gateway/curator/analytics">Usage</a>' in r.text
+            assert "<title>AusMT usage</title>" in r.text and "<h1>Usage</h1>" in r.text
+            assert '<div class="crumb"><b>Usage</b></div>' in r.text
+            assert "Usage analytics" not in r.text
             r = await client.get("/gateway/curator/serve")
             assert '<a class="railitem" href="/gateway/curator/analytics">Usage</a>' in r.text
             assert ">Analytics<" not in r.text
@@ -613,3 +623,882 @@ def test_state_card_reconciles_with_the_countries_card():
         assert total == 20
     assert usagepage._state_visit_rows(None) == ([], None, None, True)
     assert usagepage._state_visit_rows({"by_state": {"NSW": True}}) == ([], None, None, True)
+
+
+# ------------------------------------------------------------------------------------------------
+# The page, fetched through its route. Fixtures are invented and carry no address, network or name.
+
+def _month(month: str, days: int, n: int, **over) -> dict:
+    """One month row measured under the current rules, its figures scaled by `n`."""
+    row = {"month": month, "downloads": 40 * n, "visits": 10 * n, "download_bytes": 1_048_576 * n,
+           "unattributed": 0, "api_requests": 3 * n, "days": days, "seeded_days": 0,
+           "detail_days": days, "geo_days": days,
+           "formats": {"mth5": 12 * n, "edi": 10 * n, "emtfxml": 8 * n, "edi-zip": 5 * n,
+                       "xml-zip": 3 * n, "unattributed": 2 * n},
+           "kinds": {"file": 30 * n, "bundle": 10 * n},
+           "countries": {"AU": 8 * n, "NZ": n, "unknown": 1},
+           "handoffs": {"requests": 2 * n, "bytes": 4096 * n},
+           "downloads_by_select": {"single": 20 * n, "bulk": 20 * n}, "bulk_export_events": n}
+    row.update(over)
+    return row
+
+
+def _labels(n: int, **over) -> dict:
+    block = {"labels": {"downloads": {"portal_session|access_provider": 20 * n, "tool|hosting": 15 * n,
+                                      "unknown|unknown": 5 * n},
+                        "visits": {"portal_session|unknown": 8 * n, "unknown|hosting": n,
+                                   "unknown|other": n},
+                        "api": {"tool|unknown": 3 * n},
+                        "handoffs": {"portal_session|education_research": n, "tool|hosting": n}},
+             "operator": {"downloads": 2, "visits": 5, "api": 1, "handoffs": 0, "download_bytes": 9},
+             "crawler_excluded": {"downloads": 30, "visits": 4, "api": 0, "handoffs": 0},
+             "label_days": 20, "nettype_days": 15, "nettype_full_days": 10, "operator_list_days": 12}
+    block.update(over)
+    return block
+
+
+_D = dt.date(2026, 11, 18)
+
+
+def _full_stats(**over) -> dict:
+    """The fullest page: twelve months to the month in progress, the last full month labelled with
+    every warning clause, a partly counted month before it, ten surveys, nine countries, seven
+    states, six formats and 184 daily rows that span the label start."""
+    months = []
+    year, mon = 2025, 12
+    for i in range(12):
+        key = f"{year:04d}-{mon:02d}"
+        days = 18 if key == "2026-11" else 30
+        row = _month(key, days, i + 1)
+        if key == "2026-10":
+            row.update(_labels(11, days=31))
+            row["days"] = 31
+        if key == "2026-11":
+            row.update(_labels(12, label_days=18, nettype_days=18, nettype_full_days=18,
+                               operator_list_days=18))
+        months.append(row)
+        year, mon = (year + 1, 1) if mon == 12 else (year, mon + 1)
+    daily = []
+    for i in range(184):
+        day = _D - dt.timedelta(days=183 - i)
+        daily.append({"date": day.isoformat(), "visits": (i * 7) % 23, "downloads": (i * 5) % 40,
+                      "api_requests": i % 4, "kinds": {"file": (i * 11) % 90, "bundle": i % 6},
+                      "handoffs": {"requests": i % 3}})
+    surveys = {f"Survey {chr(65 + i)} {2000 + i}": {"downloads": 500 - 40 * i} for i in range(10)}
+    surveys["Survey K 2010"] = {"downloads": 7}
+    countries = {code: 900 - 90 * i for i, code in
+                 enumerate(("AU", "JP", "US", "NZ", "DE", "GB", "CN", "IT", "SG", "BR"))}
+    countries["unknown"] = 40
+    detail = {code: {"visits": max(1, n // 9), "downloads": n} for code, n in countries.items()}
+    states = ("NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT")
+    doc = {"schema": 2, "timer_period_min": 1440, "generated_at": "2026-11-01T03:39:00Z",
+           "since": "2026-09-10", "last_folded_date": _D.isoformat(), "labels_since": "2026-10-01",
+           "archive_through": "2026-11-12", "detail_since": "2025-12-01",
+           "select_since": "2025-12-01",
+           "totals": {"downloads": 9000, "visits": 900,
+                      "downloads_by_select": {"single": 4000, "bulk": 5000}},
+           "downloads": {"by_survey": surveys}, "countries": countries,
+           "by_country_detail": detail,
+           "by_state": {code: 10 + i for i, code in enumerate(states)},
+           "by_state_detail": {code: {"visits": 5 + i} for i, code in enumerate(states)},
+           "monthly": months, "daily": daily}
+    doc.update(over)
+    return doc
+
+
+def _fresh(doc: dict) -> dict:
+    return dict(doc, generated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                archive_through=doc["last_folded_date"])
+
+
+def _get(tmp_path, doc) -> str:
+    return run(fetch(tmp_path, doc))
+
+
+def _states(tmp_path) -> dict[str, str]:
+    """The page in every state the simplicity rules are held in."""
+    full = _full_stats()
+    before = _fresh(_full_stats(labels_since=None, labels_configured_from="2026-12-01"))
+    for row in before["monthly"]:
+        for key in ("labels", "operator", "crawler_excluded", "label_days"):
+            row.pop(key, None)
+    first = _fresh(_full_stats(labels_since="2026-11-03"))
+    for key in ("labels", "operator", "crawler_excluded", "label_days"):
+        first["monthly"][-2].pop(key, None)
+    early = _fresh(_full_stats(monthly=[_month("2026-11", 18, 1)]))
+    docs = {"full": full, "empty": None, "stale": _full_stats(archive_through=None),
+            "before-labels": before, "first-labelled-month": first, "no-full-month": early,
+            "fresh": _fresh(full)}
+    return {name: _get(tmp_path / name, doc) for name, doc in docs.items()}
+
+
+# ---- The simplicity measure.
+
+_SKIP_TAGS = {"script", "style", "svg", "table", "title", "head"}
+_BLOCKS = {"p", "li", "h1", "h2", "h3", "summary"}
+
+
+class _Words(HTMLParser):
+    """Text of the page body by element, skipping the rail, the context bar, scripts, styles, charts,
+    tables, data-derived names and the collapsed notes. Each recorded run knows whether it sits in
+    the notes card and in which leaf block."""
+
+    def __init__(self, page: str):
+        super().__init__(convert_charrefs=True)
+        self.stack: list[tuple[str, set[str], int]] = []
+        self.blocks: list[dict] = []
+        self.runs: list[tuple[str, bool, bool]] = []
+        self.paras: list[dict] = []
+        self.feed(page)
+
+    def _skipped(self) -> bool:
+        for i, (tag, classes, _b) in enumerate(self.stack):
+            if tag in _SKIP_TAGS or "u-dl" in classes or "rail" in classes or "ctxbar" in classes:
+                return True
+            if tag == "details" and any("u-notes" in c for _t, c, _x in self.stack[:i]):
+                return True
+        return False
+
+    def _in(self, cls: str) -> bool:
+        return any(cls in classes for _t, classes, _b in self.stack)
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("meta", "input", "link", "br", "img"):
+            return
+        classes = set((dict(attrs).get("class") or "").split())
+        block = -1
+        if tag in _BLOCKS or tag in ("div", "span"):
+            self.blocks.append({"tag": tag, "text": "", "leaf": True, "notes": self._in("u-notes"),
+                                "classes": classes})
+            block = len(self.blocks) - 1
+            for _t, _c, b in self.stack:
+                if b >= 0 and tag in _BLOCKS | {"div"}:
+                    self.blocks[b]["leaf"] = False
+        self.stack.append((tag, classes, block))
+
+    def handle_startendtag(self, tag, attrs):
+        if tag in ("meta", "input", "link", "br", "img"):
+            return
+        self.handle_starttag(tag, attrs)
+        self.stack.pop()
+
+    def handle_endtag(self, tag):
+        while self.stack:
+            if self.stack.pop()[0] == tag:
+                break
+
+    def handle_data(self, data):
+        if not self.stack or self._skipped():
+            return
+        health = self._in("u-health") or (self._in("u-notes") and self.stack[-1][0] == "p"
+                                           and "u-warn" in self.stack[-1][1])
+        self.runs.append((data, self._in("u-notes"), health))
+        for _t, _c, b in self.stack:
+            if b >= 0:
+                self.blocks[b]["text"] += data
+
+
+def _letter_words(page: str) -> int:
+    words = _Words(page)
+    counted = " ".join(data for data, notes, health in words.runs if not notes or health)
+    return len([tok for tok in html.unescape(counted).split() if re.search(r"[A-Za-z]", tok)])
+
+
+def _measured_blocks(page: str) -> list[dict]:
+    """Text blocks above the notes card: every p, li, heading and summary, and every div or span
+    with no block child."""
+    return [b for b in _Words(page).blocks if not b["notes"]
+            and (b["tag"] in _BLOCKS or b["leaf"]) and b["text"].strip()]
+
+
+def _sentences(value: str) -> int:
+    return len(re.findall(r"(?<![A-Za-z0-9])?[.!?](?=\s|$)", value.strip()))
+
+
+def test_usage_page_word_ceiling(tmp_path):
+    """At most 300 letter-bearing words above the notes card plus the health line and its
+    warning, on the fullest fixture and in the empty, stale, before-labels, first-labelled-month and
+    no-full-month states. The mockup measured 157 words of page copy by the same method;
+    the itemised budget for what the build adds comes to about 262. FAILS IF any state goes over."""
+    counts = {name: _letter_words(page) for name, page in _states(tmp_path).items()}
+    assert all(n <= 300 for n in counts.values()), counts
+    assert counts["full"] > 150, counts
+
+
+def test_usage_page_no_long_text_block(tmp_path):
+    """No text block above the notes card exceeds 25 tokens. The mockup's longest block was 17
+    tokens and the warnings are capped at 25. FAILS IF any block in any state is longer."""
+    for name, page in _states(tmp_path).items():
+        for block in _measured_blocks(page):
+            tokens = html.unescape(block["text"]).split()
+            assert len(tokens) <= 25, (name, " ".join(tokens))
+
+
+_P_CLASSES = {"u-sofar", "u-sub", "u-foot", "u-warn", "u-empty", "u-who-note", "u-left"}
+
+
+def test_usage_page_no_prose_above_notes(tmp_path):
+    """Every paragraph above the notes card carries exactly one class from the closed list and
+    holds one sentence; the downloads split is a list, not prose. FAILS IF a paragraph is
+    unclassed, carries two classes from the list, or holds more than one sentence."""
+    for name, page in _states(tmp_path).items():
+        paras = [b for b in _Words(page).blocks if b["tag"] == "p" and not b["notes"]]
+        assert paras, name
+        for p in paras:
+            assert len(p["classes"] & _P_CLASSES) == 1 and p["classes"] <= _P_CLASSES, (name, p)
+            assert _sentences(html.unescape(p["text"])) == 1, (name, p["text"])
+    assert '<ul class="u-split">' in _states(tmp_path / "again")["full"]
+
+
+def test_usage_notes_at_most_eight_short_lines(tmp_path):
+    """The notes hold at most eight items, each at most 25 tokens and at most 200 in all, and the
+    card carries exactly one link, to the documentation. The mockup's longest note was 22 tokens.
+    FAILS IF a note is added past eight, grows past 25 tokens, or a second link appears."""
+    for name, page in _states(tmp_path).items():
+        notes = sections(page)["notes"]
+        items = [text(li) for li in re.findall(r"<li>(.*?)</li>", notes, re.S)]
+        assert 1 <= len(items) <= 8, name
+        assert all(len(item.split()) <= 25 for item in items), items
+        assert sum(len(item.split()) for item in items) <= 200
+        assert re.findall(r'<a href="([^"]+)"', notes) == [usagepage._DOCS_URL], name
+
+
+_DASHES = ("\u2014", "\u2013", "&mdash;", "&ndash;", "&#8212;", "&#8211;")
+
+
+def test_usage_page_has_no_dash_characters(tmp_path):
+    """No em dash or en dash, as a character or an entity, in the text or any attribute of the
+    page body in any state, nor anywhere in the page's own sources. The shared head's style comments
+    are not page text and are skipped. FAILS IF a dash appears."""
+    for name, page in _states(tmp_path).items():
+        body = page.split("</head>", 1)[1]
+        body = re.sub(r"<(script|style)\b.*?</\1>", "", body, flags=re.S)
+        for dash in _DASHES:
+            assert dash not in body, (name, dash)
+            assert dash not in html.unescape(body), (name, dash)
+    for source in ("usagepage.py", "countrynames.py"):
+        raw = (Path(curatorpage.__file__).parent / source).read_text(encoding="utf-8")
+        assert not [d for d in _DASHES if d in raw], source
+
+
+# ---- Shell, title and theme.
+
+def test_light_tokens_and_no_dark_variant(tmp_path):
+    """The page carries the light tokens of the mockup once, in its own style block, with no dark
+    variant, no colour-scheme query and no theme switch. FAILS IF a token changes or a dark path
+    appears."""
+    css = usagepage.USAGE_CSS
+    for token in ("--page:#F1F2F1", "--surface:#FFFFFF", "--ink:#231F20", "--ink2:#4d4b47",
+                  "--muted:#6f6d67", "--grid:#E7E7E4", "--axis:#C6C6C1", "--line:#DCDDDA",
+                  "--brand:#282572", "--rail:#282572", "--rail-ink:#FFFFFF", "--rail-on:#59C2AA",
+                  "--link:#206B82", "--s-visits:#3F88C8", "--s-down:#2FA58B", "--track:#EEF0EF",
+                  "--up:#006300", "--down:#B3261E", "--note:#F7F4EC", "--tip:#231F20",
+                  "--tip-ink:#FFFFFF", "--who-auto:#EF7256", "--who-unc:#8E8C86"):
+        assert css.count(token) == 1, token
+    for dark in ("prefers-color-scheme", "data-theme", "#13202B", "Show dark"):
+        assert dark not in css, dark
+    page = _get(tmp_path, _full_stats())
+    assert page.count("<style>" + css + "</style>") == 1
+    assert '<div class="shell usage">' in page and "data-theme" not in page
+
+
+def test_usage_theme_rules_present():
+    """The light page overrides the shared dark element and shell rules under its own scope, and
+    borrows no value from the shared palette or head. FAILS IF a scoped rule is missing, or a dark
+    value from the shared head appears in the page's style block."""
+    css = usagepage.USAGE_CSS
+    for selector in (".shell.usage .rail{", ".shell.usage .rail .grp{", ".shell.usage .rail a{",
+                     ".shell.usage .rail a:hover{", ".shell.usage .rail a.on{",
+                     ".shell.usage .ctxbar{", ".shell.usage .crumb{", ".shell.usage .crumb b{",
+                     ".shell.usage .chip{", ".shell.usage .chip code{", ".shell.usage a{",
+                     ".shell.usage :focus-visible{", ".shell.usage h1{", ".shell.usage h2{",
+                     ".shell.usage h2 small{", ".shell.usage h3{", ".shell.usage table{",
+                     ".shell.usage th,.shell.usage td{",
+                     ".shell.usage th[scope=row],.shell.usage th:first-child{",
+                     ".shell.usage thead th{", ".shell.usage details{", ".shell.usage summary{",
+                     ".shell.usage .k{", ".shell.usage code{", ".u-inner{max-width:1040px",
+                     "body{background:var(--page)"):
+        assert selector in css, selector
+    for value in list(curatorpage._PALETTE.values()) + ["#152430", "#1B2C3A", "#2E4254"]:
+        assert value.lower() not in css.lower(), value
+    assert "Inter" not in css and "system-ui" in css
+
+
+def test_small_screen_and_focus_rules():
+    """Below 900px the rail stacks above the page instead of hiding, tiles fall to two columns and
+    the grid to one; focus is always visible; only the scroll wrappers scroll sideways. FAILS IF the
+    rail is hidden or a rule is missing."""
+    css = usagepage.USAGE_CSS
+    small = css.split("@media (max-width:900px){", 1)[1]
+    for rule in (".shell.usage{display:block}", ".shell.usage .rail{flex-basis:auto",
+                 ".u-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}",
+                 ".u-tile.wide{grid-column:span 2}", ".u-grid2{grid-template-columns:1fr}"):
+        assert rule in small, rule
+    assert "display:none" not in small
+    assert ".shell.usage :focus-visible{outline:2px solid var(--link);outline-offset:2px}" in css
+    assert [m for m in re.findall(r"\.([\w-]+)\{[^}]*overflow-x:auto", css)] == ["u-scroll"]
+
+
+# ---- Sections.
+
+def test_usage_sections_render_in_order(tmp_path):
+    """Header, last full month tiles, month in progress, who card, day by day, month by month, what
+    and where, then the notes. FAILS IF a section is missing or out of order."""
+    page = _get(tmp_path, _full_stats())
+    assert list(sections(page)) == ["header", "tiles", "sofar", "who", "days", "months", "where",
+                                    "notes"]
+    assert "<h2>October 2026 <small>last full month</small></h2>" in page
+
+
+def test_header_carries_the_three_csv_links(tmp_path):
+    """The header offers the three exports in every state, the empty one included. FAILS IF a link
+    is missing or moves off the header."""
+    for name, doc in (("full", _full_stats()), ("empty", None)):
+        header = sections(_get(tmp_path / name, doc))["header"]
+        assert text(header).endswith("Download CSV: by month · by survey · by country"), name
+        for href in ("analytics.csv", "analytics-surveys.csv", "analytics-countries.csv"):
+            assert f'href="/gateway/curator/{href}"' in header, (name, href)
+
+
+def test_tiles_use_the_last_full_month(tmp_path):
+    """The tiles describe the last full month: the month before the data date's month, or the data
+    date's month when it is a month end. FAILS IF a tile reads the month in progress."""
+    page = _get(tmp_path, _full_stats())
+    assert text(tile(page, "Portal visits")).startswith("Portal visits 110")
+    assert text(tile(page, "Downloads")).startswith("Downloads 440")
+    end = _get(tmp_path / "end", _full_stats(last_folded_date="2026-10-31"))
+    assert "<h2>October 2026 <small>last full month</small></h2>" in end
+    assert "u-sofar" not in end.split("</style>")[-1]
+
+
+def test_tile_change_states(tmp_path):
+    """The change line compares with the month before in every state: up and down in whole percent
+    with a hidden word for the arrow, no change, up from 0, not measured, no row, nothing when the
+    tile itself is not measured, and the partly counted note. FAILS IF a state reads wrongly."""
+    doc = _full_stats()
+    page = _get(tmp_path / "a", doc)
+    visits = tile(page, "Portal visits")
+    assert '<span aria-hidden="true">&#9650;</span><span class="u-vh">up</span> 10% on September' in visits
+    assert "(from 10 Sep)" in text(visits)
+    doc["monthly"][-2]["visits"] = 50
+    assert "down 50% on September" in text(tile(_get(tmp_path / "b", doc), "Portal visits"))
+    doc["monthly"][-2]["visits"] = doc["monthly"][-3]["visits"]
+    assert "no change on September" in text(tile(_get(tmp_path / "c", doc), "Portal visits"))
+    doc["monthly"][-3]["visits"] = 0
+    assert "up from 0 in September" in text(tile(_get(tmp_path / "d", doc), "Portal visits"))
+    doc["monthly"][-3].pop("handoffs")
+    assert "September not measured" in text(tile(_get(tmp_path / "e", doc), "Time-series hand-offs"))
+    doc["monthly"][-2].pop("handoffs")
+    assert 'class="u-t-d' not in tile(_get(tmp_path / "f", doc), "Time-series hand-offs")
+    gap = _full_stats()
+    del gap["monthly"][-3]
+    assert "no row for September" in text(tile(_get(tmp_path / "g", gap), "Portal visits"))
+
+
+def test_downloads_tile_split_wording(tmp_path):
+    """The downloads tile lists selection-export files with the floor wording, whole-survey bundles
+    and single files, as three list items. FAILS IF the wording or a figure is wrong."""
+    split = tile(_get(tmp_path, _full_stats()), "Downloads").split('<ul class="u-split">', 1)[1]
+    items = [text(li) for li in re.findall(r"<li>(.*?)</li>", split)]
+    assert items == ["220 files in at least 11 selection exports", "110 whole-survey bundles",
+                     "110 single files"]
+
+
+def test_split_not_measured_before_select_since(tmp_path):
+    """A last full month wholly before the selection split began reads not measured for the export
+    files and for single files, which derive from them; bundles stay measured. FAILS IF a zero is
+    shown or bundles are swallowed."""
+    split = text(tile(_get(tmp_path, _full_stats(select_since="2026-11-01")), "Downloads"))
+    assert "Selection exports: not measured" in split and "Single files: not measured" in split
+    assert "110 whole-survey bundles" in split
+
+
+def test_single_files_not_measured_when_negative_or_missing(tmp_path):
+    """Single files are station files less export files and read not measured when the difference is
+    negative or the station file count is missing. FAILS IF a negative or invented figure shows."""
+    doc = _full_stats()
+    doc["monthly"][-2]["downloads_by_select"]["bulk"] = 9999
+    assert "Single files: not measured" in text(tile(_get(tmp_path / "a", doc), "Downloads"))
+    doc = _full_stats()
+    doc["monthly"][-2]["kinds"] = {"bundle": 4}
+    assert "Single files: not measured" in text(tile(_get(tmp_path / "b", doc), "Downloads"))
+    doc["monthly"][-2].pop("kinds")
+    page = text(tile(_get(tmp_path / "c", doc), "Downloads"))
+    assert "Single files: not measured" in page and "Whole-survey bundles: not measured" in page
+
+
+def test_month_in_progress_line(tmp_path):
+    """The month in progress reads its visits, downloads and export files to the data date's day;
+    a measured zero reads no selection exports; no row reads no counted requests yet. FAILS IF the
+    line is wrong."""
+    page = _get(tmp_path / "a", _full_stats())
+    assert text(sections(page)["sofar"]) == ("November so far, to the 18th: 120 visits, 480 "
+                                             "downloads, 240 selection-export files.")
+    doc = _full_stats()
+    doc["monthly"][-1]["downloads_by_select"]["bulk"] = 0
+    assert "480 downloads, no selection exports." in text(_get(tmp_path / "b", doc))
+    doc["monthly"].pop()
+    assert "November so far: no counted requests yet." in text(_get(tmp_path / "c", doc))
+
+
+def test_no_month_in_progress_on_a_month_end(tmp_path):
+    """On a month end the data date's month is the last full month and nothing is in progress.
+    FAILS IF a month in progress line or row suffix appears."""
+    page = _get(tmp_path, _full_stats(last_folded_date="2026-10-31"))
+    assert "so far" not in text(page.split('<div class="u-inner">', 1)[1]) and "(to " not in page
+
+
+def test_no_full_month_yet_state(tmp_path):
+    """With only the month in progress held, its heading says so, a short line says there is no
+    full month yet, and the month in progress line follows. FAILS IF a tile is drawn."""
+    page = _get(tmp_path, _fresh(_full_stats(monthly=[_month("2026-11", 18, 1)])))
+    assert "<h2>November 2026 <small>month in progress</small></h2>" in page
+    assert "No full month yet." in text(page) and 'class="u-tiles"' not in page
+    assert "November so far, to the 18th" in text(page)
+
+
+def test_month_with_no_downloads_state(tmp_path):
+    """A last full month with no downloads shows a measured 0 and no split. FAILS IF a split or a
+    not measured appears for a measured zero."""
+    doc = _full_stats()
+    doc["monthly"][-2]["downloads"] = 0
+    downloads = tile(_get(tmp_path, doc), "Downloads")
+    assert text(downloads).startswith("Downloads 0") and "u-split" not in downloads
+
+
+# ---- Who made the requests.
+
+def _unlabelled(doc: dict) -> dict:
+    for row in doc["monthly"]:
+        for key in ("labels", "operator", "crawler_excluded", "label_days"):
+            row.pop(key, None)
+    doc.pop("labels_since", None)
+    return doc
+
+
+def test_who_card_placeholder_with_and_without_configured_date(tmp_path):
+    """Before any labelled month the who card shows the three audiences as pills and one note: the
+    configured start date when the fold recorded one, otherwise not measured yet. FAILS IF a figure
+    is shown or the note is wrong."""
+    who = sections(_get(tmp_path / "a", _unlabelled(_full_stats(
+        labels_configured_from="2026-12-01"))))["who"]
+    assert text(who) == ("Who made the requests People Automated Unclassified Measured from 1 "
+                         "December, when each figure above splits three ways with your own "
+                         "requests left out.")
+    who = sections(_get(tmp_path / "b", _unlabelled(_full_stats())))["who"]
+    assert text(who).endswith("Not measured yet; each figure above splits three ways once labels "
+                              "start.")
+
+
+def test_who_card_after_labels_start_before_a_full_month(tmp_path):
+    """When the last full month is not labelled but the month in progress carries labelled days, the
+    card describes the month in progress under its own heading, with the same rows; the tiles stay
+    on the last full month. FAILS IF the card stays a placeholder or reads the wrong month."""
+    doc = _full_stats(labels_since="2026-11-03")
+    for key in ("labels", "operator", "crawler_excluded", "label_days"):
+        doc["monthly"][-2].pop(key)
+    page = _get(tmp_path, doc)
+    who = sections(page)["who"]
+    assert "<h3>Who made the requests, November so far</h3>" in who
+    assert "Downloads People 240 · Automated 180 · Unclassified 60" in text(who)
+    assert "November 2026, requests by label" in text(who)
+    assert "<h2>October 2026 <small>last full month</small></h2>" in page
+
+
+def test_who_card_rows_print_numbers_beside_bars(tmp_path):
+    """Each of the four rows prints People, Automated and Unclassified beside its bar, the bar is an
+    image with the same figures in its label, and a hand-off row without the class reads not
+    measured with an empty track. FAILS IF a figure is only in colour."""
+    who = sections(_get(tmp_path / "a", _full_stats()))["who"]
+    rows = re.findall(r'<div class="u-who-row">(.*?)</div>', who)
+    assert [text(r).split(" People")[0] for r in rows] == [
+        "Downloads", "Portal visits", "API requests", "Time-series hand-offs"]
+    assert 'role="img" aria-label="People 220, automated 165, unclassified 55"' in rows[0]
+    assert text(rows[3]) == "Time-series hand-offs People 11 · Automated 11 · Unclassified 0"
+    doc = _full_stats()
+    doc["monthly"][-2].pop("handoffs")
+    who = sections(_get(tmp_path / "b", doc))["who"]
+    last = re.findall(r'<div class="u-who-row">(.*?)</div>', who)[3]
+    assert text(last) == "Time-series hand-offs not measured" and "u-seg" not in last
+
+
+def test_who_bar_totals_equal_label_counts(tmp_path):
+    """The segments of every bar sum to the month's label counts for that measure, and each segment's
+    width is its share. FAILS IF a bar drops or invents requests."""
+    doc = _full_stats()
+    who = sections(_get(tmp_path, doc))["who"]
+    month = doc["monthly"][-2]
+    for row, metric in zip(re.findall(r'<div class="u-who-row">(.*?)</div>', who),
+                           ("downloads", "visits", "api", "handoffs")):
+        segs = [(float(w), int(n)) for w, n in
+                re.findall(r'style="width:([\d.]+)%;min-width:2px" data-n="(\d+)"', row)]
+        total = sum(month["labels"][metric].values())
+        assert sum(n for _w, n in segs) == total, metric
+        assert all(abs(w - n * 100 / total) < 0.06 for w, n in segs), metric
+
+
+def test_who_warning_clauses(tmp_path):
+    """One warning line holds the clauses in order, labelled days, network type, operator list,
+    hosting only; the four-clause worst case is at most 25 words and never truncated. FAILS IF a
+    clause is missing, out of order, or the line is too long."""
+    who = sections(_get(tmp_path, _full_stats()))["who"]
+    warning = text(who.split('<p class="u-warn">', 1)[1].split("</p>", 1)[0])
+    assert warning == ("Warning: labels on 20 of 31 days, rest include your requests; no network "
+                       "type 5 days; no operator list 8 days; hosting-only 5 days.")
+    assert len(warning.split()) <= 25
+
+
+def test_who_card_without_network_table(tmp_path):
+    """With no month that used the network table the detail lists client classes only under 'By
+    client', the warning names no network clause, no credit line appears, and the words network type
+    appear nowhere above the notes. FAILS IF a network figure or wording leaks onto such a page."""
+    doc = _full_stats()
+    for row in doc["monthly"]:
+        row.update(nettype_days=0, nettype_full_days=0)
+    page = _get(tmp_path, doc)
+    above = text(page.split('<div class="u-card u-notes">', 1)[0].split("</style>")[-1])
+    assert "network type" not in above.lower() and "X4BNet" not in above
+    who = sections(page)["who"]
+    assert "<summary>By client</summary>" in who
+    assert [r[0] for r in table_rows(who)] == ["Portal session", "Landing page", "Tool",
+                                               "Unknown client"]
+    assert "hosting-only" not in who and "Warning: labels on 20 of 31 days" in text(who)
+
+
+def _channel(c: float) -> float:
+    c /= 255
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _lab(rgb) -> tuple[float, float, float]:
+    x = 0.4124 * rgb[0] + 0.3576 * rgb[1] + 0.1805 * rgb[2]
+    y = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+    z = 0.0193 * rgb[0] + 0.1192 * rgb[1] + 0.9505 * rgb[2]
+
+    def f(t):
+        return t ** (1 / 3) if t > (6 / 29) ** 3 else t / (3 * (6 / 29) ** 2) + 4 / 29
+    fx, fy, fz = f(x / 0.95047), f(y), f(z / 1.08883)
+    return 116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)
+
+
+# Machado, Oliveira and Fernandes (2009) simulation matrices at full severity, in linear RGB.
+_CVD = {"normal": ((1, 0, 0), (0, 1, 0), (0, 0, 1)),
+        "protanopia": ((0.152286, 1.052583, -0.204868), (0.114503, 0.786281, 0.099216),
+                       (-0.003882, -0.048116, 1.051998)),
+        "deuteranopia": ((0.367322, 0.860646, -0.227968), (0.280085, 0.672501, 0.047413),
+                         (-0.011820, 0.042940, 0.968881)),
+        "tritanopia": ((1.255528, -0.076749, -0.178779), (-0.078411, 0.930809, 0.147602),
+                       (0.004733, 0.691367, 0.303900))}
+
+
+def test_who_colours_are_distinct_under_colour_vision_deficiency():
+    """People, automated and unclassified stay at least 20 apart in CIE Lab under normal vision and
+    each simulated dichromacy, and the page uses exactly those three colours. FAILS IF a colour
+    changes to one that two audiences would share."""
+    css = usagepage.USAGE_CSS
+    colours = {"people": "#3F88C8", "automated": "#EF7256", "unclassified": "#8E8C86"}
+    assert "--s-visits:#3F88C8" in css and "--who-auto:#EF7256" in css and "--who-unc:#8E8C86" in css
+    for name, matrix in _CVD.items():
+        labs = []
+        for value in colours.values():
+            lin = [_channel(int(value[i:i + 2], 16)) for i in (1, 3, 5)]
+            sim = [min(1.0, max(0.0, sum(matrix[r][c] * lin[c] for c in range(3)))) for r in range(3)]
+            labs.append(_lab(sim))
+        for i in range(3):
+            for j in range(i + 1, 3):
+                assert math.dist(labs[i], labs[j]) >= 20, (name, i, j)
+
+
+def test_no_label_beside_place_survey_dataset_or_day(tmp_path):
+    """Label figures appear only in the who card: the tiles, charts, table twin, month table and what
+    and where carry no audience, client class or network type figure. FAILS IF a label figure sits
+    beside a place, a survey, a dataset or a day."""
+    page = _get(tmp_path, _full_stats())
+    for name, part in sections(page).items():
+        if name in ("who", "notes"):
+            continue
+        for word in ("People", "Automated", "Unclassified", "Portal session", "Landing page",
+                     "Hosting", "Access provider", "u-who", "u-seg"):
+            assert word not in text(part) and word not in part.replace("u-who-", ""), (name, word)
+
+
+# ---- Day by day and month by month.
+
+def test_day_chart_small_names_the_labels_seam(tmp_path):
+    """The day by day heading names the drawn span and, when labels began inside it, the day your own
+    requests were left out from; otherwise it adds nothing. FAILS IF the seam is hidden or invented."""
+    page = _get(tmp_path / "a", _full_stats())
+    assert ("<h2>Day by day <small>19 May 2026 to 18 Nov 2026; your own requests left out from 1 "
+            "Oct</small></h2>") in page
+    plain = _get(tmp_path / "b", _full_stats(labels_since=None))
+    assert "<h2>Day by day <small>19 May 2026 to 18 Nov 2026</small></h2>" in plain
+
+
+def test_each_chart_has_a_collapsed_table_twin_with_every_value(tmp_path):
+    """The three charts sit in one card with one collapsed table twin that lists every daily row,
+    newest first, with each chart's value for that day. FAILS IF the twin is open, missing a row, or
+    disagrees with a chart's titles."""
+    doc = _full_stats()
+    days = sections(_get(tmp_path, doc))["days"]
+    assert days.count("<svg") == 3 and days.count('<details class="u-twin">') == 1
+    assert "<details open" not in days
+    rows = table_rows(days)
+    assert len(rows) == 184 and rows[0][0] == "18 Nov 2026"
+    titles = {}
+    for chart, column in (("visits", 1), ("bundles", 2), ("files", 3)):
+        svg = days.split(f'data-u-chart="{chart}"', 1)[1].split("</svg>", 1)[0]
+        titles = dict(re.findall(r'data-label="([^"]+)" data-v="([^"]+)"', svg))
+        for row in rows:
+            day = row[0].rsplit(" ", 1)[0]
+            assert titles[day] == row[column], (chart, row)
+
+
+def test_month_table_columns_and_order(tmp_path):
+    """The month table has the eleven columns in order and every held month, newest first, with the
+    month in progress and a partly counted month marked by their day. FAILS IF a column or month is
+    missing or out of order."""
+    months = sections(_get(tmp_path, _full_stats()))["months"]
+    assert table_head(months) == ["Month", "Visits", "Downloads", "Export files", "Exports at least",
+                                  "Bundles", "Single files", "API", "Hand-offs", "Countries",
+                                  "Volume"]
+    labels = [r[0] for r in table_rows(months)]
+    assert labels[:3] == ["November 2026 (to 18th)", "October 2026", "September 2026 (from 10th)"]
+    assert len(labels) == 12 and labels[-1] == "December 2025"
+    assert table_rows(months)[1][1:] == ["110", "440", "220", "11", "110", "110", "33", "22", "2",
+                                         "11.0 MB"]
+
+
+def test_tables_have_header_scope(tmp_path):
+    """Every header cell on the page carries a scope. FAILS IF a th lacks one."""
+    for name, page in _states(tmp_path).items():
+        for th in re.findall(r"<th\b[^>]*>", page):
+            assert re.search(r'scope="(col|row)"', th), (name, th)
+
+
+# ---- What and where.
+
+def test_what_and_where_cards(tmp_path):
+    """Four cards: the ten most downloaded surveys of all attributed, the countries, the Australian
+    states and the formats of the last full month, each a ranked list with the value printed beside
+    every bar. FAILS IF a card is missing, a value is unprinted, or a survey is ranked wrongly."""
+    page = _get(tmp_path, _full_stats())
+    where = sections(page)["where"]
+    assert re.findall(r"<h3>(.*?)</h3>", where) == ["Most downloaded surveys", "Countries",
+                                                    "Australian visits by state", "Formats"]
+    surveys = card(page, "Most downloaded surveys")
+    assert "files and bundles, top 10 of 11" in text(surveys)
+    rows = row_values(surveys)
+    assert rows[0] == ("Survey A 2000", "500") and len(rows) == 10
+    assert where.count('class="u-rk-b') == where.count("u-rk-b ")
+    assert "downloads in October 2026" in text(card(page, "Formats"))
+
+
+def test_what_and_where_scope_caption(tmp_path):
+    """The what and where heading names when counting began and, once, whether your own requests are
+    left out and from when. FAILS IF the scope line is missing, repeated, or wrong."""
+    page = _get(tmp_path / "a", _full_stats())
+    assert ("<h2>What and where <small>since counting began in September 2026; your own requests "
+            "left out from 1 Oct 2026</small></h2>") in page
+    assert text(page).count("your own requests left out from 1 Oct 2026") == 1
+    plain = _get(tmp_path / "b", _full_stats(labels_since=None))
+    assert "since counting began in September 2026; your own requests included" in plain
+
+
+def test_countries_card_rows_and_rest_line(tmp_path):
+    """The countries card ranks the top eight by name with visits and downloads, says how many there
+    are and Australia's share of visits, and sums the rest, unknown included, in one line. FAILS IF
+    a code shows instead of a name, unknown is ranked, or the rest line is wrong."""
+    doc = _full_stats()
+    countries = card(_get(tmp_path, doc), "Countries")
+    names = re.findall(r'<span class="u-dl">(.*?)</span>', countries)
+    assert names == ["Australia", "Japan", "United States", "New Zealand", "Germany",
+                     "United Kingdom", "China", "Italy"]
+    detail = doc["by_country_detail"]
+    share = round(detail["AU"]["visits"] * 100 / sum(r["visits"] for r in detail.values()))
+    assert f"top 8 of 10; Australia is {share}% of visits" in text(countries)
+    rest = [code for code in detail if code not in ("AU", "JP", "US", "NZ", "DE", "GB", "CN", "IT")]
+    v, d = (sum(detail[c][k] for c in rest) for k in ("visits", "downloads"))
+    assert f"The other 2 countries and unplaced requests: {v:,} visits, {d:,} downloads." in text(
+        countries)
+
+
+def test_state_card_page_total_equals_the_countries_card(tmp_path):
+    """On the page, the state card's named rows plus 'Not placed in a state' equal its Australia
+    total, which is the Australian visits the countries card prints. FAILS IF the two cards
+    disagree or the card does not add up."""
+    page = _get(tmp_path / "a", _full_stats())
+    rows = row_values(card(page, "Australian visits by state"))
+    values = {name: int(v.replace(",", "")) for name, v in rows}
+    total = values.pop("Australia")
+    assert sum(values.values()) == total
+    countries = card(page, "Countries")
+    au = countries.split("Australia</span>", 1)[1].split('<div class="u-cr">', 1)[0]
+    assert text(au).split()[0].replace(",", "") == str(total)
+    doc = _full_stats()
+    doc["by_country_detail"]["AU"]["visits"] = 1
+    state = card(_get(tmp_path / "b", doc), "Australian visits by state")
+    assert "Not reconciled with the Australian total; the CSV carries the state figures." in text(state)
+    assert row_values(state) == []
+
+
+def test_formats_card_display_names(tmp_path):
+    """Format keys read as their display names, xml-zip and unattributed included, biggest first; an
+    unknown key reads as stored. FAILS IF a key shows raw or a name is wrong."""
+    doc = _full_stats()
+    doc["monthly"][-2]["formats"]["newfmt"] = 1
+    rows = row_values(card(_get(tmp_path, doc), "Formats"))
+    assert [name for name, _v in rows] == ["MTH5", "EDI", "EMTF XML", "EDI zip", "XML zip",
+                                           "Unattributed", "newfmt"]
+
+
+# ---- Notes and health.
+
+def test_usage_notes_text(tmp_path):
+    """The notes are the eight agreed lines, collapsed by default, with the labels line following the
+    label start. FAILS IF a note is reworded, dropped or open by default."""
+    notes = sections(_get(tmp_path / "a", _full_stats()))["notes"]
+    assert "<details><summary>How these numbers are counted</summary>" in notes
+    items = [text(li) for li in re.findall(r"<li>(.*?)</li>", notes)]
+    assert items == usagepage._notes(_full_stats())
+    assert items[2] == ("A selection export fetches each station's file separately, so one export "
+                        "can be thousands of files; the export count is a floor.")
+    assert items[3] == ("Declared crawlers are left out, and your own requests are left out from 1 "
+                        "Oct 2026.")
+    before = sections(_get(tmp_path / "b", _full_stats(labels_since=None)))["notes"]
+    assert ("Declared crawlers are left out; your own requests are counted until labels start."
+            in text(before))
+
+
+def test_notes_link_targets_the_docs_section(tmp_path):
+    """The notes link to the documentation section that holds every counting rule, and that anchor
+    exists in the documentation. FAILS IF the link or the heading moves."""
+    notes = sections(_get(tmp_path, _full_stats()))["notes"]
+    assert ('<a href="https://ausmt.readthedocs.io/en/latest/introduction/usage-analytics/'
+            '#reading-the-curator-usage-page">Full method and every counting rule</a>') in notes
+    docs = (_REPO / "docs" / "docs" / "introduction" / "usage-analytics.md").read_text("utf-8")
+    assert "\n## Reading the curator Usage page\n" in docs
+
+
+def _health(page: str) -> tuple[str, str]:
+    notes = sections(page)["notes"]
+    line = text(notes.split('<div class="u-health">', 1)[1].split("</div>", 1)[0])
+    warn = notes.split('<p class="u-warn">', 1)
+    return line, text(warn[1].split("</p>", 1)[0]) if len(warn) > 1 else ""
+
+
+def test_health_line_fresh(tmp_path):
+    """A fresh file whose archive reaches the data date reads the data date, the last count and the
+    archive date, with a fresh dot and no warning. FAILS IF a warning shows or a date is wrong."""
+    doc = _fresh(_full_stats())
+    page = _get(tmp_path, doc)
+    line, warning = _health(page)
+    stamp = dt.datetime.strptime(doc["generated_at"], "%Y-%m-%dT%H:%M:%SZ")
+    assert line == (f"Data to 18 Nov 2026 · last count {stamp.day} {stamp:%b %Y, %H:%M} UTC · "
+                    "archive written to 18 Nov 2026")
+    assert warning == "" and '<span class="u-dot"></span>' in page
+
+
+def test_health_line_stale(tmp_path):
+    """A stale file with its archive current warns that no count finished for over two timer periods
+    and names the timer. FAILS IF the warning is missing or wrong."""
+    doc = _full_stats(archive_through=_D.isoformat())
+    line, warning = _health(_get(tmp_path, doc))
+    assert line.startswith("Data to 18 Nov 2026 · last count 1 Nov 2026, 03:39 UTC")
+    assert warning == "Warning: no count has finished for over 48 hours; check the ausmt-stats timer."
+
+
+def test_health_line_stale_without_timer_period(tmp_path):
+    """Without a recorded timer period the warning names no hours, so no default cadence is
+    claimed; with no stats file it reads the same. FAILS IF a number of hours is guessed."""
+    doc = _full_stats(archive_through=_D.isoformat())
+    del doc["timer_period_min"]
+    _line, warning = _health(_get(tmp_path / "a", doc))
+    assert warning == "Warning: no count has finished yet; check the ausmt-stats timer."
+    line, warning = _health(_get(tmp_path / "b", None))
+    assert line == "Data to: none · last count: never"
+    assert warning == "Warning: no count has finished yet; check the ausmt-stats timer."
+
+
+def test_health_line_archive_behind(tmp_path):
+    """An archive date before the data date warns that later days are not in the permanent record;
+    with the file also stale both are said in one line. FAILS IF the warning is missing or doubled."""
+    _line, warning = _health(_get(tmp_path / "a", _fresh(_full_stats()) | {
+        "archive_through": "2026-11-12"}))
+    assert warning == ("Warning: the archive stops at 12 Nov 2026; later days are not in the "
+                       "permanent record, see the fold journal.")
+    _line, warning = _health(_get(tmp_path / "b", _full_stats()))
+    assert warning == "Warning: no count on time, and the archive stops at 12 Nov 2026."
+
+
+def test_health_line_archive_not_recorded(tmp_path):
+    """Without an archive date the line says not recorded and warns; with the file stale too the one
+    warning says both. FAILS IF an absent date reads as current."""
+    line, warning = _health(_get(tmp_path / "a", _fresh(_full_stats()) | {"archive_through": None}))
+    assert line.endswith("archive written to: not recorded")
+    assert warning == "Warning: the archive date is not recorded; see the fold journal."
+    _line, warning = _health(_get(tmp_path / "b", _full_stats(archive_through=None)))
+    assert warning == "Warning: no count on time, and the archive date is not recorded."
+
+
+def test_the_gateway_reads_only_the_archive_date(tmp_path):
+    """The gateway names archive_through only in the Usage page renderer, and renders it only when
+    it is a real YYYY-MM-DD day; any other value reads not recorded. FAILS IF another gateway source
+    names it, or a malformed value reaches the page."""
+    gateway = Path(curatorpage.__file__).parent
+    named = sorted(p.name for p in gateway.rglob("*.py")
+                   if "archive_through" in p.read_text(encoding="utf-8") and "tests" not in p.parts)
+    assert named == ["usagepage.py"], named
+    for i, value in enumerate(("2026-11-31", "<b>x</b>", "2026-11-12T00:00:00Z", 20261112, "")):
+        line, _w = _health(_get(tmp_path / str(i), _fresh(_full_stats()) | {"archive_through": value}))
+        assert line.endswith("archive written to: not recorded"), value
+
+
+def test_human_bytes_scales_without_a_dash():
+    """Byte counts render in a sensible unit, and a value that is not a number reads not measured,
+    never a dash. FAILS IF a dash or an invented size appears."""
+    assert curatorpage._human_bytes(512) == "512 B"
+    assert curatorpage._human_bytes(5_242_880) == "5.0 MB"
+    assert curatorpage._human_bytes(None) == curatorpage._human_bytes("x") == "not measured"
+
+
+# Header rows of the three exports for a labelled, selection-split fixture. They are a guard: the
+# Usage page leaves the exports exactly as they were.
+_MONTHLY_HEAD = (
+    "month,downloads,download_bytes,visits,api_requests,unattributed,downloads_browser,"
+    "downloads_scripted,networks_peak,countries,active_days,days_without_detail,geo_days,"
+    "detail_days,label_days,nettype_days,nettype_full_days,operator_list_days,downloads_people,"
+    "downloads_automated,downloads_unclassified,visits_people,visits_automated,visits_unclassified,"
+    "api_people,api_automated,api_unclassified,handoffs_people,handoffs_automated,"
+    "handoffs_unclassified,operator_downloads,operator_visits,operator_api,operator_handoffs,"
+    "operator_download_bytes,crawler_excluded_downloads,crawler_excluded_visits,"
+    "crawler_excluded_api,crawler_excluded_handoffs,downloads_client_portal_session,"
+    "downloads_client_landing_page,downloads_client_tool,downloads_client_unknown,"
+    "downloads_net_hosting,downloads_net_education_research,downloads_net_access_provider,"
+    "downloads_net_other,downloads_net_unknown,downloads_select_bulk,downloads_select_single,"
+    "bulk_export_events,format_edi,format_edi-zip,format_emtfxml,format_mth5,format_unattributed,"
+    "format_xml-zip,kind_bundle,kind_file")
+
+
+def test_csv_routes_and_headers_unchanged(tmp_path):
+    """The three export routes still answer with the same header rows, session gated. FAILS IF a
+    route moves or a header changes."""
+    doc = _full_stats()
+
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            r = await client.get("/gateway/curator/analytics.csv", follow_redirects=False)
+            assert r.status_code != 200
+            await curator_login(client)
+            cfg.state_dir.mkdir(parents=True, exist_ok=True)
+            (cfg.state_dir / serve_state.STATS_FILENAME).write_text(json.dumps(doc), "utf-8")
+            heads = {}
+            for path in ("analytics.csv", "analytics-surveys.csv", "analytics-countries.csv"):
+                r = await client.get(f"/gateway/curator/{path}")
+                assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+                heads[path] = r.text.splitlines()[0]
+            return heads
+    heads = run(_body())
+    assert heads["analytics.csv"] == _MONTHLY_HEAD
+    assert heads["analytics-surveys.csv"] == "month,survey,downloads,download_bytes,countries,files,bundles"
+    assert heads["analytics-countries.csv"] == ("month,country,requests,downloads,visits,api,"
+                                                "download_bytes,geo_days")

@@ -57,3 +57,90 @@ def test_log_expiry_is_documented():
     assert "*Pulled log copies expire.*" in _read(_C45)
     caddy = _read(_REPO / "deploy" / "frontdoor" / "Caddyfile")
     assert "copy on the box is the durable record" not in caddy
+
+
+# One row per caveat that left the Usage page: (row, phrase that states it, heading it lives under).
+# The phrase must appear exactly once in the whole documentation page, so each caveat has one home.
+_CAVEAT_HOMES = (
+    (1, "IP addresses are masked at the edge", "Privacy design"),
+    (2, "An upper bound (a person can click the footer link)", "What is measured"),
+    (3, "A download is counted once per day, per masked network, per file", "What is measured"),
+    (4, "The tool class includes what earlier versions of the", "Client class"),
+    (5, "each counted request is first checked for being one of these", "Operator requests"),
+    (6, "Before the first nightly count has written its file the page says so", "Operating it"),
+    (7, "A count is late when none has finished for two timer periods", "Health line"),
+    (8, "Before any labelled month the card reads \"not measured\"", "Who made the requests"),
+    (9, "it is a floor, not a count of export actions", "Who made the requests"),
+    (10, "People is therefore a floor.", "Who made the requests"),
+    (11, "leaves unknown out of every country count", "The figures on the page"),
+    (12, "The cumulative figures include the", "Who made the requests"),
+    (13, "Single files are the station files less the selection export files",
+     "The figures on the page"),
+    (14, "The\ncitation pack is a separate export", "Who made the requests"),
+    (15, "is register drift", "The figures on the page"),
+    (16, "The publisher of the X4BNet lists states no licence for them.",
+     "Network type data attribution"),
+    (17, "counted forward only from the fold that began reading collections", "What is measured"),
+    (18, "The first is\n`detail_since`", "Seams in the record"),
+    (19, "| Daily aggregate rows | 184 days |", "Retention of the aggregates"),
+    (20, "a browser-like user-agent is not evidence of a person", "Who made the requests"),
+    (21, "These are **requests, not completed transfers**", "What is measured"),
+    (22, "a month folded before the detailed breakdown existed", "Seams in the record"),
+    (23, "Its bias runs in both directions", "Seams in the record"),
+    (24, "so there is no single fixed cause", "Who made the requests"),
+    (25, "every export carries\nevery retained month too", "What the page leaves to the CSV exports"),
+    (26, "describes each export column by\ncolumn", "What the page leaves to the CSV exports"),
+    (27, "Only the count: a named survey beside a named country", "What is measured"),
+    (28, "operator requests are excluded from them", "Who made the requests"),
+    (29, "the\nreach figure and `networks_peak`", "What the page leaves to the CSV exports"),
+    (30, "API requests count toward a country only from the fold that began counting them",
+     "Seams in the record"),
+    (31, "\"Not placed in a state\"", "Australian traffic by state, and why not by city"),
+    (32, "an older day carries no\nnetwork count (absent, not zero)", "Retention of the aggregates"),
+)
+
+
+def _heading_at(doc: str, index: int) -> str:
+    headings = re.findall(r"^#{1,3} (.+)$", doc[:index], re.M)
+    return headings[-1] if headings else ""
+
+
+def test_every_moved_caveat_has_one_docs_home():
+    """Every caveat that left the curator Usage page has exactly one home in the public usage
+    documentation, under the heading its move names, so the page can stay short without losing a
+    rule. FAILS IF a caveat is missing, stated twice, or filed under another heading."""
+    doc = _read(_DOCS)
+    assert [row for row, _p, _h in _CAVEAT_HOMES] == list(range(1, 33))
+    misplaced = []
+    for row, phrase, heading in _CAVEAT_HOMES:
+        count = doc.count(phrase)
+        where = _heading_at(doc, doc.find(phrase)) if count else None
+        if count != 1 or where != heading:
+            misplaced.append(f"row {row}: {count} found, under {where!r}, want {heading!r}")
+    assert misplaced == [], "\n".join(misplaced)
+
+
+def test_docs_name_the_usage_page():
+    """The public documentation and the operator guide call the page the curator Usage page and its
+    month table the month table. FAILS IF the old screen name or the quarterly table survives."""
+    for path in (_DOCS, _README):
+        body = _read(path)
+        for old in ("Analytics screen", "Analytics** screen", "quarterly table", "Quarterly view",
+                    "Operations → Analytics"):
+            assert old not in body, (path.name, old)
+    assert "curator Usage page" in _read(_DOCS) and "Usage page" in _read(_README)
+
+
+def test_decision_record_says_caveats_live_in_the_docs():
+    """The decision record states that the caveats live in the public documentation and that the
+    page carries eight notes and a link, and that each earlier clause whose screen surface went
+    points to it. FAILS IF that record or a pointer is missing."""
+    c45 = _read(_C45)
+    d10 = " ".join(c45.split("## D10. The Usage page", 1)[1].split())
+    assert "*Caveats live in the documentation.*" in d10
+    assert "eight notes" in d10 and "Reading the curator Usage page" in d10
+    for pointer in ("D4 amended", "D7 amended", "D7.1 amended", "D8 amended", "D9 amended (the page)",
+                    "*Day grain.*", "*Light page.*", "*Lost archive days.*"):
+        assert pointer in d10, pointer
+    audience = c45.split("### Audience rule and the page", 1)[1].split("### History", 1)[0]
+    assert "See D10." in audience and "Analytics screen" not in audience

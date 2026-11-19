@@ -464,42 +464,12 @@ network; unknown is automated on hosting and unclassified on every other network
 reading of it (for example hosting overriding portal evidence, or landing pages not counting as
 people) is a renderer change that needs no refold.
 
-The Analytics screen is server-rendered with no inline script. Its label surfaces are:
-
-- a headline before the cards, built from the latest month carrying `label_days`: people,
-  automated and unclassified per metric (hand-offs only when that month carries the hand-off
-  class), the operator line with `labels_since`, the declared-crawler total, and an "Inputs
-  missing" band in the stale-banner style when `nettype_days` or `operator_list_days` falls short
-  of `label_days`. Before any labelled month it reads "not measured";
-- a note under the cards that the cumulative figures include the operator before `labels_since`;
-- the labels paragraph after the existing intro, and one sentence on the scripted-client
-  paragraph, both only once `labels_since` is set, so an unlabelled box reads exactly as before;
-- a classification table for that month (client classes, then network types, each summed over
-  the other label), a note when some days had a hosting-only table, and the attribution line when
-  a shown month has `nettype_days > 0` (PeeringDB and iptoasn.com only when `nettype_full_days >
-  0`);
-- quarterly rows after the browser and scripted row, reading "not measured" for a month that was
-  never labelled and omitted, like the hand-off row, when no shown month is labelled. Seam notes name
-  partial labelling, a missing network table, a hosting-only table and a missing operator list;
-- a scope line on the survey, top-dataset, country and state tables;
-- selection exports beside the download figures, because one export fetches each selected file
-  separately and can add thousands of counted downloads. The month row already holds
-  `downloads_by_select` and `bulk_export_events`, both excluding operator requests on labelled days,
-  so no fold change is needed. A headline line under Downloads ("Selection exports: F files in at
-  least E exports.") and a quarterly row after the station files and bundles row ("Selection
-  exports: files / exports (at least)") read them, and the labels paragraph says what one export
-  does to the count. Month rows carry the split densely, so a month counts as
-  measured only when the fold has taken the split, the month carries current-rules days, and it is
-  not wholly before `select_since`; otherwise it reads "not measured". On a month labelled on only
-  some of its days the headline line adds that it covers the whole month, unlabelled days and the
-  operator's exports on them included. The existing bulk export line and its caveat are unchanged.
-
-A month counts as labelled when it carries `label_days`, or an `operator` or `crawler_excluded`
-block, which the fold writes only on labelled days. `label_days` counts labelled days with counted
-activity, so a labelled month whose only admitted requests were the operator's or a crawler's has
-the blocks but no counter; it renders those lines as measured and every public label figure as a
-measured zero. The headline and the classification table still describe the latest month with
-`label_days`.
+The page surfaces of the labels are recorded in D10 (the Usage page), which replaces the screen
+this section first described. See D10. A month counts as labelled when it carries `label_days`, or an
+`operator` or `crawler_excluded` block, which the fold writes only on labelled days. `label_days`
+counts labelled days with counted activity, so a labelled month whose only admitted requests were the
+operator's or a crawler's has the blocks but no counter; the page renders those lines as measured and
+every public label figure as none.
 
 `analytics.csv` gains the fixed label columns after `detail_days`, empty rather than 0 for a month
 without `label_days`, then `downloads_select_bulk`, `downloads_select_single` and
@@ -526,7 +496,8 @@ These are recorded here and are not changed by the labels:
 - The page states the selection export figure as a floor. `bulk_export_events` is distinct masked
   networks per day, so two exports from one network on one day read as one; the headline line reads
   "in at least E exports", the quarterly row is labelled "(at least)", and no line presents the
-  figure as a count of export actions.
+  figure as a count of export actions. Closed by D10: the downloads tile reads "files in at least E
+  selection exports" and the month table heads the column "Exports at least".
 - Archive day lines carry `by_client_class` beside `by_survey` and `by_dataset`. They are separate
   marginals, but on a low-traffic day one class or one dataset makes the pair a crossing at day
   grain, finer than anything rendered. Keeping the class at month grain only would need its own
@@ -591,3 +562,43 @@ and amends the earlier clauses it touches, by pointer.
   `access-frontdoor.json`, the box listener's files, links and directories are never considered. A
   failed removal is counted and never fails the fold; the journal carries `logs_expired=` and, on
   failure, `logs_expire_failed=`, with no file name and no address.
+- *D4 amended.* The summary cards, the top datasets table, the country table and the daily sparkline
+  are replaced by the last full month tiles, the what and where cards and the day-by-day charts. The
+  route, the session gate, the empty state and the stale band are unchanged; a stale file renders in
+  full under a stale header marker and one health warning.
+- *D7 amended.* The scripted share leaves the page for the monthly CSV (`downloads_browser`,
+  `downloads_scripted`) and, from `labels_since`, the who card's tool class. The reach note and the
+  network peak leave the page for the CSV. The countries tile keeps the rule that unknown is not a
+  country and says so in its label, "Countries, unknown left out".
+- *D7.1 amended.* The "N of M served" ratio leaves the page; the served-survey count stays in the
+  data. The surveys card reads "top k of N" over the surveys the fold attributed downloads to, so N is
+  never smaller than the rows shown.
+- *D8 amended.* The collection line leaves the page; the collection rollup stays in `stats.json` and
+  the archive for whichever report wants it.
+- *D9 amended (the page).* The classification table becomes the collapsed detail of the who card;
+  the quarterly label rows go to the monthly CSV; the operator scope line appears once, on the what
+  and where heading; and the bulk export line becomes the downloads tile split with the floor
+  wording. The who card describes the last full month when it is labelled; when it is not and the
+  month in progress carries labelled days, it describes the month in progress so far; otherwise it
+  is a placeholder that gives `labels_configured_from` when the fold recorded one. Network type rows,
+  the two network clauses of the warning and the hosting range credit appear only when a month held
+  in `stats.json` has `nettype_days` above zero, so a box that never built the network table prints
+  no network wording. The credit keeps the labels wording and names no licence for the hosting lists.
+- *Light page.* The Usage page carries its own style block, with light tokens on `:root` and every
+  shell and element override scoped under `.shell.usage`. The shared head and palette are unchanged,
+  and every other curator page is byte-identical except the rail label, which reads Usage everywhere
+  (pinned by golden digests).
+- *No script needed.* The charts are server-drawn SVG, every value is also in a title and in a
+  collapsed table, and every ranked bar prints its value, so the page is complete without any script.
+- *Day grain.* The day-by-day charts and their table twin show day-grain visits, whole-survey
+  bundles, station files, API requests and hand-off requests only. No place, label, survey, dataset
+  or format reaches the day grain, which the daily rows do not carry anyway; the archive already holds
+  day grain (D8).
+- *Caveats live in the documentation.* Every caveat the screen carried has one home in
+  `docs/docs/introduction/usage-analytics.md`, and the section "Reading the curator Usage page" links
+  to the existing homes and adds only what is particular to the page. The page itself carries eight
+  notes in a collapsed block and one link to that section. Single files are derived as station files
+  less selection export files and read not measured when either is missing or the result is negative.
+- *Lost archive days.* Days the fold failed to append to the archive before its write access was
+  restored are not backfilled, as D8 rules for every lost day. `archive_through` records the last
+  successful write, so the page's warning clears once appends succeed while the gap stays.
