@@ -927,13 +927,13 @@ def test_usage_theme_rules_present():
 
 
 def test_small_screen_and_focus_rules():
-    """Below 900px the rail stacks above the page instead of hiding, tiles fall to two columns and
+    """Below 900px the rail stacks above the page instead of hiding, tiles fall to three columns and
     the grid to one; focus is always visible; only the scroll wrappers scroll sideways. FAILS IF the
     rail is hidden or a rule is missing."""
     css = usagepage.USAGE_CSS
-    small = css.split("@media (max-width:900px){", 1)[1]
+    small = _media(css, "max-width:900px")
     for rule in (".shell.usage{display:block}", ".shell.usage .rail{flex-basis:auto",
-                 ".u-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}",
+                 ".u-tiles{grid-template-columns:repeat(3,minmax(0,1fr))}",
                  ".u-tile.wide{grid-column:span 2}", ".u-grid2{grid-template-columns:1fr}"):
         assert rule in small, rule
     assert "display:none" not in small
@@ -947,31 +947,106 @@ def _rule(block: str, selector: str) -> str:
     return found[-1]
 
 
+def _media(css: str, query: str) -> str:
+    """The rules inside the one @media block for `query`, without the block's own braces."""
+    opener = f"@media ({query}){{"
+    assert css.count(opener) == 1, query
+    return css.split(opener, 1)[1].split("@media", 1)[0][:-1]
+
+
+def _tracks(value: str) -> list[str]:
+    """The top-level tracks of a grid-template-columns value, with repeat() expanded."""
+    tracks, depth, word = [], 0, ""
+    for ch in value.strip() + " ":
+        depth += (ch == "(") - (ch == ")")
+        if ch == " " and depth == 0:
+            if word:
+                tracks.append(word)
+            word = ""
+        else:
+            word += ch
+    expanded = []
+    for track in tracks:
+        rep = re.fullmatch(r"repeat\((\d+),(.*)\)", track)
+        expanded += [rep.group(2)] * int(rep.group(1)) if rep else [track]
+    return expanded
+
+
+def _floor(track: str) -> str:
+    found = re.fullmatch(r"minmax\(([^,]+),[^)]*\)", track)
+    return found.group(1) if found else track
+
+
+def _columns(rule: str) -> list[str]:
+    return _tracks(re.search(r"grid-template-columns:([^;]*)", rule).group(1))
+
+
+_POSITIVE_LENGTH = r"[1-9]\d*(\.\d+)?(px|em|rem)"
+
+
 def test_who_track_column_has_a_floor_at_every_width():
     """The bar track column of a who row has a minimum above zero, so the bars stay visible however
-    wide the name and the figures are. FAILS IF the track column can shrink to 0 px."""
-    rows = _rule(usagepage.USAGE_CSS.split("@media", 1)[0], ".u-who-row")
-    columns = re.search(r"grid-template-columns:([^;]*)", rows).group(1)
-    track = re.findall(r"minmax\(([^,]+),[^)]*\)|(\S+)", columns)[1]
-    floor = track[0] or track[1]
-    assert re.fullmatch(r"[1-9]\d*(\.\d+)?(px|em|rem)", floor), columns
-
-
-def test_narrow_screen_who_rows_and_tiles():
-    """At 600px or less a who row keeps the name and the figures on its first line and the bar track
-    on its own full-width line below, and the five tiles stack in one column so no row is half
-    empty, in document order. FAILS IF the narrow block is missing, the track can reach 0 px, or
-    the tiles are reordered."""
+    wide the name and the figures are: the middle column above 600px, the one column at 600px or
+    less. FAILS IF the track column can shrink to 0 px at any width."""
     css = usagepage.USAGE_CSS
-    assert css.count("@media (max-width:600px){") == 1
-    small = css.split("@media (max-width:600px){", 1)[1]
+    wide = _columns(_rule(css.split("@media", 1)[0], ".u-who-row"))
+    assert re.fullmatch(_POSITIVE_LENGTH, _floor(wide[1])), wide
+    narrow = _columns(_rule(_media(css, "max-width:600px"), ".u-who-row"))
+    assert all(re.fullmatch(_POSITIVE_LENGTH, _floor(track)) for track in narrow), narrow
+
+
+def test_narrow_screen_who_rows_are_one_column_and_tiles_stack(tmp_path):
+    """At 600px or less a who row is one column in document order: the name, then the bar track,
+    then the figures, each at the full row width; and the five tiles stack in one column in
+    document order. FAILS IF a narrow who row has more than one column, a narrow rule places a
+    row's parts out of document order, or the tiles are reordered."""
+    css = usagepage.USAGE_CSS
     assert css.index("@media (max-width:900px){") < css.index("@media (max-width:600px){")
-    assert "grid-template-columns:minmax(0,1fr) auto" in _rule(small, ".u-who-row")
-    track = _rule(small, ".u-who-t")
-    assert "grid-column:1/-1" in track and "grid-row:2" in track
-    assert "grid-template-columns:minmax(0,1fr)" in _rule(small, ".u-tiles")
+    small = _media(css, "max-width:600px")
+    assert len(_columns(_rule(small, ".u-who-row"))) == 1
+    assert not re.search(r"\.u-who-[ntv]\{[^}]*grid-(column|row|area)", small)
+    assert "grid-template-areas" not in small and "grid-auto-flow" not in small
+    page = _get(tmp_path, _fresh(_full_stats()))
+    rows = re.findall(r'<div class="u-who-row">(.*?)</div>', page)
+    assert rows
+    for row in rows:
+        parts = re.findall(r'<span class="(u-who-[ntv])"', row)
+        assert parts == ["u-who-n", "u-who-t", "u-who-v"], parts
+    assert len(_columns(_rule(small, ".u-tiles"))) == 1
     assert "grid-column:auto" in _rule(small, ".u-tile.wide")
     assert "dense" not in css and not re.search(r"(?:^|[;{])order:", css)
+
+
+def _tile_rows(spans: list[int], columns: int) -> list[int]:
+    """How full each row is when the tiles flow into `columns` in document order without dense
+    packing: a tile that does not fit on the current row starts the next one."""
+    rows = [0]
+    for span in spans:
+        if rows[-1] + min(span, columns) > columns:
+            rows.append(0)
+        rows[-1] += min(span, columns)
+    return rows
+
+
+def test_tiles_leave_no_half_empty_row_at_any_width(tmp_path):
+    """The five tiles, flowed in document order into the columns each width band sets (wider than
+    900px, 601px to 900px, 600px or less), fill every row they start. FAILS IF any band leaves a
+    tile row part empty, as two columns with the wide tile spanning both does from 601px to 900px."""
+    css = usagepage.USAGE_CSS
+    page = _get(tmp_path, _fresh(_full_stats()))
+    classes = re.findall(r'<div class="(u-tile(?: wide)?)">', sections(page)["tiles"])
+    assert len(classes) == 5 and classes.count("u-tile wide") == 1, classes
+    cascade = [css.split("@media", 1)[0], _media(css, "max-width:900px"),
+               _media(css, "max-width:600px")]
+    for band in (1, 2, 3):
+        blocks = cascade[:band]
+        tiles = [b for b in blocks if re.search(r"(?:^|\})\.u-tiles\{[^}]*grid-template-columns", b)]
+        columns = len(_columns(_rule(tiles[-1], ".u-tiles")))
+        wide = [_rule(b, ".u-tile.wide") for b in blocks if ".u-tile.wide{" in b][-1]
+        span = re.search(r"grid-column:span (\d+)", wide)
+        spans = [int(span.group(1)) if span and c.endswith("wide") else 1 for c in classes]
+        rows = _tile_rows(spans, columns)
+        assert all(filled == columns for filled in rows), (band, columns, rows)
 
 
 def _token(css: str, name: str) -> tuple[int, int, int]:

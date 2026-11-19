@@ -454,13 +454,12 @@ USAGE_CSS = (
     ".u-dot.u-dot-warn{background:var(--down)}"
     "@media (max-width:900px){.shell.usage{display:block}"
     ".shell.usage .rail{flex-basis:auto;border-bottom:1px solid var(--line)}"
-    ".u-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}"
+    ".u-tiles{grid-template-columns:repeat(3,minmax(0,1fr))}"
     ".u-tile.wide{grid-column:span 2}"
     ".u-grid2{grid-template-columns:1fr}}"
     "@media (max-width:600px){.u-tiles{grid-template-columns:minmax(0,1fr)}"
     ".u-tile.wide{grid-column:auto}"
-    ".u-who-row{grid-template-columns:minmax(0,1fr) auto;row-gap:4px;align-items:start}"
-    ".u-who-t{grid-column:1/-1;grid-row:2}}"
+    ".u-who-row{grid-template-columns:minmax(4em,1fr);gap:4px}}"
 )
 
 
