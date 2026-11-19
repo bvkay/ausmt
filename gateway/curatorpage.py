@@ -3853,7 +3853,7 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
         + _row("Station files / bundles",
                _measured(lambda c: (f'{_esc(_as_int((c.get("kinds") or {}).get("file")))}'
                                     f' / {_esc(_as_int((c.get("kinds") or {}).get("bundle")))}')))
-        + (_row("Selection exports: files / exports", _select_cell) if select_row else "")
+        + (_row("Selection exports: files / exports (at least)", _select_cell) if select_row else "")
         + _row("Top survey",
                _measured(lambda c: (_esc(_survey_rows(c.get("surveys") or {})[0]["survey"])
                                     if (c.get("surveys") or {}) else "&mdash;")))
@@ -4354,8 +4354,7 @@ def _labels_headline(stats: dict) -> str:
         if metric == "downloads" and _has_select_split(stats):
             if _select_measured(stats, month):
                 files, events = _select_figures(month)
-                lines.append(f'Selection exports: {files:,} files in {events:,} exports. One export '
-                             f'is one action by one person.'
+                lines.append(f'Selection exports: {files:,} files in at least {events:,} exports.'
                              + ('' if labelled >= days else
                                 f' This line covers the whole month, including the '
                                 f'{days - labelled} active days that are not labelled, on which '

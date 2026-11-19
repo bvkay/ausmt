@@ -484,10 +484,10 @@ The Analytics screen is server-rendered with no inline script. Its label surface
 - selection exports beside the download figures, because one export fetches each selected file
   separately and can add thousands of counted downloads. The month row already holds
   `downloads_by_select` and `bulk_export_events`, both excluding operator requests on labelled days,
-  so no fold change is needed. A headline line under Downloads ("Selection exports: F files in E
-  exports. One export is one action by one person.") and a quarterly row after the station files
-  and bundles row ("Selection exports: files / exports") read them, and the labels paragraph says
-  what one export does to the count. Month rows carry the split densely, so a month counts as
+  so no fold change is needed. A headline line under Downloads ("Selection exports: F files in at
+  least E exports.") and a quarterly row after the station files and bundles row ("Selection
+  exports: files / exports (at least)") read them, and the labels paragraph says what one export
+  does to the count. Month rows carry the split densely, so a month counts as
   measured only when the fold has taken the split, the month carries current-rules days, and it is
   not wholly before `select_since`; otherwise it reads "not measured". On a month labelled on only
   some of its days the headline line adds that it covers the whole month, unlabelled days and the
@@ -522,10 +522,10 @@ These are recorded here and are not changed by the labels:
   (`deploy/frontdoor/Caddyfile`) deletes seven named headers and keeps the rest. The labels read
   no header beyond the user-agent either way. Which of the two is binding needs its own reading;
   if D2 holds, the fix is to delete more headers at the edge.
-- The headline's selection exports line is worded as the build specification sets it ("One
-  export is one action by one person"), while `bulk_export_events` is distinct masked networks per
-  day and the existing bulk export caveat on the same page calls it a floor, not a count of actions.
-  The two statements conflict; the wording needs its own reading.
+- The page states the selection export figure as a floor. `bulk_export_events` is distinct masked
+  networks per day, so two exports from one network on one day read as one; the headline line reads
+  "in at least E exports", the quarterly row is labelled "(at least)", and no line presents the
+  figure as a count of export actions.
 - Archive day lines carry `by_client_class` beside `by_survey` and `by_dataset`. They are separate
   marginals, but on a low-traffic day one class or one dataset makes the pair a crossing at day
   grain, finer than anything rendered. Keeping the class at month grain only would need its own

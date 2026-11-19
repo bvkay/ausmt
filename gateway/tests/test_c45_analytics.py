@@ -2146,13 +2146,13 @@ def test_selection_exports_row_follows_station_files_row(tmp_path):
     wrong, or renders a zero for an unmeasured month."""
     table = _quarterly(run(_analytics(tmp_path, _select_stats())))
     nm = curatorpage._NOT_MEASURED                                                     # noqa: SLF001
-    assert _row_cells(table, "Selection exports: files / exports") == [nm, "5 / 1", "33 / 7"]
+    assert _row_cells(table, "Selection exports: files / exports (at least)") == [nm, "5 / 1", "33 / 7"]
     after = table.split("Station files / bundles", 1)[1].split("</tr>", 1)[1]
-    assert after.lstrip().startswith("<tr><td>Selection exports: files / exports"), after[:120]
+    assert after.lstrip().startswith("<tr><td>Selection exports: files / exports (at least)</td>"), after[:120]
 
     unstamped = _select_stats(select_since=None)
     cells = _row_cells(_quarterly(run(_analytics(tmp_path / "b", unstamped))),
-                       "Selection exports: files / exports")
+                       "Selection exports: files / exports (at least)")
     assert cells == ["0 / 0", "5 / 1", "33 / 7"], "no stamp: the split counts from the first fold"
 
     never = _select_stats()
@@ -2166,8 +2166,9 @@ def test_headline_selection_exports_line_under_downloads(tmp_path):
     place, wrong, or claims a figure for a month the split did not cover."""
     text = _text(run(_analytics(tmp_path, _select_stats())))
     downloads = "Downloads 52: people 20, automated 24, unclassified 8."
-    line = "Selection exports: 33 files in 7 exports. One export is one action by one person."
+    line = "Selection exports: 33 files in at least 7 exports."
     assert downloads + " " + line + " Portal visits 212" in text, text[text.find(downloads) - 5:][:400]
+    assert "one action" not in text, "the export figure is a floor, never a count of actions"
 
     late = _text(curatorpage._labels_headline(_select_stats(select_since="2026-08-01")))  # noqa: SLF001
     assert "Selection exports: not measured." in late and "33 files" not in late
@@ -2256,7 +2257,7 @@ def test_headline_selection_line_says_it_covers_the_whole_month():
     """HEADLINE PIN. On a month labelled on only some of its days the selection exports line, which
     counts the whole month, says so beneath the labelled split. FAILS IF a partly labelled month
     reads as a subset of the labelled downloads, or a fully labelled month carries the sentence."""
-    line = "Selection exports: 33 files in 7 exports. One export is one action by one person."
+    line = "Selection exports: 33 files in at least 7 exports."
     whole = ("This line covers the whole month, including the 2 active days that are not "
              "labelled, on which the operator's own exports are counted.")
     part = _select_stats()
