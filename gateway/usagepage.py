@@ -361,6 +361,7 @@ USAGE_CSS = (
     ".shell.usage a{color:var(--link)}"
     ".shell.usage .rail a{color:var(--rail-ink)}"
     ".shell.usage :focus-visible{outline:2px solid var(--link);outline-offset:2px}"
+    ".shell.usage .rail a:focus-visible{outline-color:var(--rail-on)}"
     ".shell.usage h1{font-size:24px;font-weight:600;margin:0;color:var(--brand)}"
     ".shell.usage h2{font-size:16px;font-weight:600;margin:26px 0 10px;color:var(--brand)}"
     ".shell.usage h2 small{font-weight:400;color:var(--muted);font-size:13px;margin-left:6px}"
@@ -416,6 +417,7 @@ USAGE_CSS = (
     ".u-seg:last-child{border-right:0}"
     ".u-who-v{font-variant-numeric:tabular-nums;color:var(--ink2);font-size:12.5px}"
     ".u-scroll{overflow-x:auto;min-width:0}"
+    ".u-twin .u-scroll{max-height:280px;overflow-y:auto}"
     ".u-mult{margin-top:10px}.u-mult:first-child{margin-top:4px}"
     ".u-chart{display:block;height:auto}"
     ".u-chart .u-grid{stroke:var(--grid);stroke-width:1}"
@@ -704,9 +706,12 @@ def _months_head(frame: _Frame) -> str:
         return ""
     if frame.t_row is not None:
         return _tiles(frame) + _so_far(frame)
-    month = frame.c or frame.t
-    return (f'<h2>{_esc(_month_long(month))} <small>month in progress</small></h2>'
-            '<p class="u-empty">No full month yet.</p>' + _so_far(frame))
+    empty = '<p class="u-empty">No full month yet.</p>'
+    if frame.c is None:
+        # The data date closes its month, so nothing is in progress to name in a heading.
+        return empty
+    return (f'<h2>{_esc(_month_long(frame.c))} <small>month in progress</small></h2>'
+            + empty + _so_far(frame))
 
 
 # ---- Section 4: who made the requests.
@@ -871,17 +876,19 @@ def _month_table(frame: _Frame) -> str:
                     + "".join(f"<td>{_esc(cell)}</td>" for cell in cells) + "</tr>")
     caption = ""
     if unmeasured:
+        # A seam is named only when a shown month falls before it.
         clauses = []
         detail = _iso_day(stats.get("detail_since"))
-        if detail is not None:
+        if detail is not None and any(_month_has_no_detail(row) for row in frame.rows):
             clauses.append(f"detail from {_date_long(detail)}")
         select_since = _iso_day(stats.get("select_since"))
-        if select_since is not None:
+        if select_since is not None and not all(_select_measured(stats, row) for row in frame.rows):
             clauses.append(f"selection split from {_date_long(select_since)}")
         caption = ("Not measured means counted before that figure existed"
                    + (": " + ", ".join(clauses) if clauses else "") + ".")
         caption = f'<p class="u-sub">{_esc(caption)}</p>'
     return ('<h2>Month by month</h2><div class="u-card u-scroll"><table>'
+            '<caption class="u-vh">Every retained month, newest first</caption>'
             f'<thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table></div>' + caption)
 
 

@@ -812,7 +812,9 @@ def _measured_blocks(page: str) -> list[dict]:
 
 
 def _sentences(value: str) -> int:
-    return len(re.findall(r"(?<![A-Za-z0-9])?[.!?](?=\s|$)", value.strip()))
+    """Sentence ends: a full stop, question or exclamation mark followed by white space or the end.
+    A dot inside a word or a number, as in IPLocate.io or 1.5, is followed by neither."""
+    return len(re.findall(r"[.!?](?=\s|$)", value.strip()))
 
 
 def test_usage_page_word_ceiling(tmp_path):
@@ -939,6 +941,34 @@ def test_small_screen_and_focus_rules():
     assert [m for m in re.findall(r"\.([\w-]+)\{[^}]*overflow-x:auto", css)] == ["u-scroll"]
 
 
+def _token(css: str, name: str) -> tuple[int, int, int]:
+    value = re.search(rf"{re.escape(name)}:#([0-9A-Fa-f]{{6}})", css).group(1)
+    return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _contrast(a, b) -> float:
+    lum = [0.2126 * _channel(c[0]) + 0.7152 * _channel(c[1]) + 0.0722 * _channel(c[2]) for c in (a, b)]
+    hi, lo = max(lum), min(lum)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_focus_ring_is_visible_on_the_rail_and_the_page():
+    """The focus ring on the navy rail uses the rail's own highlight, and every ring colour clears
+    3:1 against what it sits on. FAILS IF a rail link's ring keeps the page link colour, which is
+    about 2.2:1 on the rail."""
+    css = usagepage.USAGE_CSS
+    assert ".shell.usage .rail a:focus-visible{outline-color:var(--rail-on)}" in css
+    assert _contrast(_token(css, "--rail-on"), _token(css, "--rail")) >= 3
+    for ground in ("--surface", "--page"):
+        assert _contrast(_token(css, "--link"), _token(css, ground)) >= 3, ground
+
+
+def test_day_twin_scrolls_inside_a_short_box():
+    """The day twin opens into a box about 280 px tall that scrolls, so six months of rows do not
+    push the rest of the page down. FAILS IF the twin opens to its full length."""
+    assert ".u-twin .u-scroll{max-height:280px;overflow-y:auto}" in usagepage.USAGE_CSS
+
+
 # ---- Sections.
 
 def test_usage_sections_render_in_order(tmp_path):
@@ -1055,6 +1085,17 @@ def test_no_full_month_yet_state(tmp_path):
     assert "<h2>November 2026 <small>month in progress</small></h2>" in page
     assert "No full month yet." in text(page) and 'class="u-tiles"' not in page
     assert "November so far, to the 18th" in text(page)
+
+
+def test_a_finished_month_without_a_row_is_not_called_in_progress(tmp_path):
+    """When the data date is a month end and that month has no row, nothing is in progress, so no
+    heading may call that finished month in progress; the short no-full-month line still shows.
+    FAILS IF the page labels a finished month as in progress or draws a tile."""
+    doc = _fresh(_full_stats(last_folded_date="2026-10-31"))
+    doc["monthly"] = [row for row in doc["monthly"] if row["month"] < "2026-10"]
+    page = _get(tmp_path, doc)
+    assert "month in progress" not in page and "so far" not in text(page)
+    assert "No full month yet." in text(page) and 'class="u-tiles"' not in page
 
 
 def test_month_with_no_downloads_state(tmp_path):
@@ -1266,6 +1307,40 @@ def test_month_table_columns_and_order(tmp_path):
     assert len(labels) == 12 and labels[-1] == "December 2025"
     assert table_rows(months)[1][1:] == ["110", "440", "220", "11", "110", "110", "33", "22", "2",
                                          "11.0 MB"]
+
+
+def _month_caption(page: str) -> str:
+    months = sections(page)["months"]
+    return text(months.split('<p class="u-sub">', 1)[1]) if '<p class="u-sub">' in months else ""
+
+
+def test_month_caption_names_only_the_seams_that_apply(tmp_path):
+    """The caption under the month table names the detail seam only when a shown month was folded
+    wholly before detail existed, and the selection split seam only when a shown month predates the
+    split. FAILS IF the caption blames a seam for a month it does not touch."""
+    doc = _fresh(_full_stats())
+    doc["monthly"][-3].pop("handoffs")
+    caption = _month_caption(_get(tmp_path / "a", doc))
+    assert caption == "Not measured means counted before that figure existed.", caption
+
+    seeded = _fresh(_full_stats())
+    seeded["monthly"][0]["seeded_days"] = seeded["monthly"][0]["days"]
+    caption = _month_caption(_get(tmp_path / "b", seeded))
+    assert "detail from 1 Dec 2025" in caption and "selection split" not in caption, caption
+
+    late = _fresh(_full_stats(select_since="2026-03-01"))
+    caption = _month_caption(_get(tmp_path / "c", late))
+    assert "selection split from 1 Mar 2026" in caption and "detail from" not in caption, caption
+
+
+def test_month_table_has_an_accessible_name(tmp_path):
+    """The month table, like the day twin and the who detail, carries a caption, kept visually
+    hidden because the heading above it already says what it is. FAILS IF a table on the page has
+    no caption."""
+    page = _get(tmp_path, _full_stats())
+    months = sections(page)["months"]
+    assert '<table><caption class="u-vh">Every retained month, newest first</caption>' in months
+    assert page.count("<table>") == page.count("<table><caption")
 
 
 def test_tables_have_header_scope(tmp_path):
