@@ -941,6 +941,39 @@ def test_small_screen_and_focus_rules():
     assert [m for m in re.findall(r"\.([\w-]+)\{[^}]*overflow-x:auto", css)] == ["u-scroll"]
 
 
+def _rule(block: str, selector: str) -> str:
+    found = re.findall(rf"(?:^|\}}){re.escape(selector)}\{{([^}}]*)\}}", block)
+    assert found, selector
+    return found[-1]
+
+
+def test_who_track_column_has_a_floor_at_every_width():
+    """The bar track column of a who row has a minimum above zero, so the bars stay visible however
+    wide the name and the figures are. FAILS IF the track column can shrink to 0 px."""
+    rows = _rule(usagepage.USAGE_CSS.split("@media", 1)[0], ".u-who-row")
+    columns = re.search(r"grid-template-columns:([^;]*)", rows).group(1)
+    track = re.findall(r"minmax\(([^,]+),[^)]*\)|(\S+)", columns)[1]
+    floor = track[0] or track[1]
+    assert re.fullmatch(r"[1-9]\d*(\.\d+)?(px|em|rem)", floor), columns
+
+
+def test_narrow_screen_who_rows_and_tiles():
+    """At 600px or less a who row keeps the name and the figures on its first line and the bar track
+    on its own full-width line below, and the five tiles stack in one column so no row is half
+    empty, in document order. FAILS IF the narrow block is missing, the track can reach 0 px, or
+    the tiles are reordered."""
+    css = usagepage.USAGE_CSS
+    assert css.count("@media (max-width:600px){") == 1
+    small = css.split("@media (max-width:600px){", 1)[1]
+    assert css.index("@media (max-width:900px){") < css.index("@media (max-width:600px){")
+    assert "grid-template-columns:minmax(0,1fr) auto" in _rule(small, ".u-who-row")
+    track = _rule(small, ".u-who-t")
+    assert "grid-column:1/-1" in track and "grid-row:2" in track
+    assert "grid-template-columns:minmax(0,1fr)" in _rule(small, ".u-tiles")
+    assert "grid-column:auto" in _rule(small, ".u-tile.wide")
+    assert "dense" not in css and not re.search(r"(?:^|[;{])order:", css)
+
+
 def _token(css: str, name: str) -> tuple[int, int, int]:
     value = re.search(rf"{re.escape(name)}:#([0-9A-Fa-f]{{6}})", css).group(1)
     return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))

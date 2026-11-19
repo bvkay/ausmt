@@ -409,7 +409,7 @@ USAGE_CSS = (
     ".u-sw-p,.u-seg-p{background:var(--s-visits)}"
     ".u-sw-a,.u-seg-a{background:var(--who-auto)}"
     ".u-sw-u,.u-seg-u{background:var(--who-unc)}"
-    ".u-who-row{display:grid;grid-template-columns:minmax(0,11em) minmax(0,1fr) auto;gap:10px;"
+    ".u-who-row{display:grid;grid-template-columns:minmax(0,11em) minmax(4em,1fr) auto;gap:10px;"
     "align-items:center;padding:4px 0;font-size:13px}"
     ".u-who-n{color:var(--ink2)}"
     ".u-who-t{display:flex;height:10px;background:var(--track);border-radius:2px;overflow:hidden}"
@@ -457,6 +457,10 @@ USAGE_CSS = (
     ".u-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}"
     ".u-tile.wide{grid-column:span 2}"
     ".u-grid2{grid-template-columns:1fr}}"
+    "@media (max-width:600px){.u-tiles{grid-template-columns:minmax(0,1fr)}"
+    ".u-tile.wide{grid-column:auto}"
+    ".u-who-row{grid-template-columns:minmax(0,1fr) auto;row-gap:4px;align-items:start}"
+    ".u-who-t{grid-column:1/-1;grid-row:2}}"
 )
 
 
