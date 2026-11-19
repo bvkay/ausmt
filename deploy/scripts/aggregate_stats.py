@@ -276,7 +276,9 @@ _LABEL_DAY_COUNTERS = ("label_days", "nettype_days", "nettype_full_days", "opera
 #   * the masked address is inside an entry of the host operator list (OperatorNetworks).
 # Otherwise it is no when that list was read, and unknown when it is absent or unreadable.
 _BOX_LOG_NAME = "access.json"
-_BOX_LOG_ROLL = re.compile(r"^access-\d{4}-\d{2}-\d{2}T[0-9.-]+\.(json|log)(\.gz)?$")
+# A roll is the timestamp, an optional fraction, then the roll's optional lowercase reason word.
+_BOX_LOG_ROLL = re.compile(
+    r"^access-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(\.\d+)?(-[a-z]+)?\.(json|log)(\.gz)?$")
 _FRONTDOOR_LOG_PREFIX = "access-frontdoor"
 _OPERATOR_UA_PREFIX = "ausmt-ops/"
 _INTERNAL_RANGES = tuple(ipaddress.ip_network(n) for n in (

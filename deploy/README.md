@@ -1299,8 +1299,10 @@ unlabelled output, and the operator list is not opened.
 A request on a labelled day is operator when the first of these holds:
 
 1. it is in the box listener's own log, `access.json` or a Caddy roll of it
-   (`access-<date>T<time>.json`, `.log` or `.json.gz`). That listener is published on loopback only,
-   so curators browsing the box over the tailnet are operator. Front-door files start with
+   (`access-<date>T<time>-<reason>.json`, `.log` or `.json.gz`, where the reason is the lowercase
+   word Caddy writes for why it rolled, such as `size` or `time`, as in
+   `access-2026-11-14T18-40-46.272-size.json`). That listener is published on loopback only, so
+   curators browsing the box over the tailnet are operator. Front-door files start with
    `access-frontdoor`. A file of any other name, such as a hand-placed salvage archive, is read as
    front door and never as operator, and the journal counts such files as `other_files=N`;
 2. its user-agent starts with `ausmt-ops/` (any case). The three doctors send

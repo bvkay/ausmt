@@ -255,7 +255,7 @@ def _identity_scenario(root: Path) -> dict:
          _line("/data/edi/label-survey/L1.edi", "127.0.0.0", date=days[1]),
          _line("/data/catalogue.json", "192.0.2.0", date=days[2], ua="ausmt-ops/1-manual")]
         + _box_day(days[3])) + "\n", encoding="utf-8")
-    (logs / "access-2026-07-11T00-00-00.000.json").write_text(
+    (logs / "access-2026-07-11T00-00-00.000-size.json").write_text(
         "\n".join(_box_day(days[1])) + "\n", encoding="utf-8")
     (logs / "access-frontdoor.json").write_text(
         "\n".join(ln for d in days for ln in _mixed_day(d)) + "\n", encoding="utf-8")
@@ -375,6 +375,55 @@ def test_box_roll_names_match_positively_other_names_are_public(tmp_path):
     stats, _ = _fold(pairs, labels_from="2026-07-01", operator_nets=_nets())
     assert stats["totals"]["visits"] == 3
     assert stats["totals"]["operator"]["visits"] == 1
+
+
+# The name forms a box log directory holds: the box listener's live file and its rolls, which carry
+# a lowercase reason word after the timestamp, beside the live and pulled front-door files.
+_REAL_BOX_NAMES = ("access.json", "access-2026-11-14T18-40-46.272-size.json",
+                   "access-2026-11-18T09-23-12.465-size.json")
+_REAL_FRONTDOOR_NAMES = ("access-frontdoor.json", "access-frontdoor-ausmt-test.json",
+                         "access-frontdoor-2026-07-28T13-27-02.022-size.json.gz",
+                         "access-frontdoor-2026-11-12T01-00-00.000-size.json")
+
+
+def test_real_box_roll_names_are_the_box():
+    """A box roll with a reason word after the timestamp is the box, with or without the fractional
+    part, as .json, .log or .json.gz. Fails if the roll pattern stops at the timestamp, which reads
+    every real box roll as other and so as front door."""
+    src = AGG._log_source
+    for name in _REAL_BOX_NAMES + (
+            "access-2026-11-14T18-40-46.272-time.json", "access-2026-11-14T18-40-46-size.json",
+            "access-2026-11-14T18-40-46.272-size.log", "access-2026-11-14T18-40-46.272-size.json.gz",
+            "access-2026-11-14T18-40-46.272.json"):
+        assert src(name) == "box", name
+    for name in _REAL_FRONTDOOR_NAMES:
+        assert src(name) == "frontdoor", name
+    for name in ("access-2026-11-14T18-40-46.272-Size.json", "access-2026-11-14T18-40-46.272-.json",
+                 "access-2026-11-14T18-40-46.272-size.json.bak", "access-2026-11-14-size.json",
+                 "access-2026-11-14T18-40.json", "access-2026-11-14T18-40-46.272-size-2.json",
+                 "access-salvage-size.json"):
+        assert src(name) == "other", name
+
+
+def test_real_box_roll_lines_are_operator(tmp_path):
+    """Lines read from a directory of the real name forms carry the box source for the box files,
+    so a public address in a box roll is operator while the same line in a front-door file is not."""
+    logs = tmp_path / "caddy"
+    logs.mkdir()
+    line = _line("/data/catalogue.json", "203.0.113.0") + "\n"
+    for name in _REAL_BOX_NAMES + _REAL_FRONTDOOR_NAMES:
+        if name.endswith(".gz"):
+            with gzip.open(logs / name, "wt", encoding="utf-8") as fh:
+                fh.write(line)
+        else:
+            (logs / name).write_text(line, encoding="utf-8")
+    other: list = []
+    pairs = AGG.read_log_lines(logs, with_source=True, other_files=other)
+    assert sorted(s for s, _ in pairs) == ["box"] * 3 + ["frontdoor"] * 4
+    assert other == []
+    stats, _ = _fold(pairs, labels_from="2026-07-01", operator_nets=_nets())
+    assert stats["totals"]["visits"] == 4
+    assert stats["totals"]["operator"]["visits"] == 3
 
 
 # ---- the client name and the internal ranges -----------------------------------------------------
