@@ -1933,6 +1933,17 @@ def test_archive_through_follows_a_successful_append(tmp_path, monkeypatch, caps
     assert "archive_through=2026-07-13" in capsys.readouterr().err
 
 
+def test_archive_through_never_passes_a_partial_append():
+    """archive_through moves only when every offered day landed in the archive, so a partial append
+    leaves the carried date however many lines did land. FAILS IF any landed line is enough to move
+    it past days that are not in the archive."""
+    step = AGG._next_archive_through
+    assert step("2026-07-10", "2026-07-10", "2026-07-13", archived=1, offered=2) == "2026-07-10"
+    assert step("2026-07-10", "2026-07-10", "2026-07-13", archived=2, offered=3) == "2026-07-10"
+    assert step(None, None, "2026-07-13", archived=1, offered=2) is None
+    assert step("2026-07-10", "2026-07-10", "2026-07-13", archived=2, offered=2) == "2026-07-13"
+
+
 def test_archive_through_stays_put_when_the_append_fails(tmp_path, monkeypatch, capsys):
     """A failed append leaves archive_through where it was, so the page can say the archive is behind.
     A failed second stats write leaves the older date on disk, the conservative direction. FAILS IF a

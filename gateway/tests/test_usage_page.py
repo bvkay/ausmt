@@ -1206,6 +1206,30 @@ def test_who_card_without_network_table(tmp_path):
     assert "hosting-only" not in who and "Warning: labels on 20 of 31 days" in text(who)
 
 
+def _network_only_in(months: tuple[str, ...]) -> dict:
+    doc = _full_stats()
+    for row in doc["monthly"]:
+        if row["month"] in months:
+            row.update(nettype_days=4, nettype_full_days=0)
+        else:
+            row.update(nettype_days=0, nettype_full_days=0)
+    return doc
+
+
+def test_network_rows_follow_any_held_month_not_only_the_shown_ones(tmp_path):
+    """The network rows, the network clauses and the hosting range credit appear when any month held
+    in the stats file used the network table, whether that is an older month or the newest. FAILS IF
+    the gate looks only at the months the card or tiles show."""
+    for name, months in (("older", ("2026-03",)), ("newest", ("2026-11",))):
+        who = sections(_get(tmp_path / name, _network_only_in(months)))["who"]
+        assert "<summary>By client and network</summary>" in who, name
+        assert [r[0] for r in table_rows(who)][4:] == ["Hosting", "Education or research",
+                                                       "Access provider", "Other",
+                                                       "Unknown network"], name
+        assert "Hosting ranges: X4BNet lists_vpn" in text(who), name
+        assert "no network type" in text(who), name
+
+
 def _channel(c: float) -> float:
     c /= 255
     return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
@@ -1642,6 +1666,142 @@ def test_usage_js_reads_only_data_attributes():
     for selector in re.findall(r"\[(data-[a-z-]+)", js):
         assert selector in _JS_READS, selector
     assert [g for g in _JS_GEOMETRY if g in js] == []
+
+
+# What the script may create, set and attach. Anything else could load a resource or touch a figure.
+_JS_ELEMENTS = {"div", "b"}
+_JS_SET_ATTRIBUTES = {"x1", "x2", "visibility"}
+_JS_ASSIGNED = {"hidden", "textContent", "left", "top", "exports"}
+_JS_PARENTS = {"div", "tip"}
+_JS_NEVER = ("navigator", "location", "Image(", "open(", "document.head", "document.body",
+             "createElementNS", "setAttributeNS", "insertBefore", "replaceChild", "replaceWith",
+             ".append(", ".prepend(", ".before(", ".after(", "cloneNode", "importNode", "cssText",
+             "Reflect", "defineProperty", "Object.assign", "srcset", "postMessage")
+
+
+def test_usage_js_writes_only_its_own_elements():
+    """The script may create only div and b elements, set only the crosshair attributes, assign only
+    the tip's text, visibility and position, and attach only to the tip and its own lines; it names no
+    resource-bearing property and no API that could reach the network. FAILS IF it creates any other
+    element, sets any other attribute or property, or attaches anywhere else, such as an image whose
+    source would make a request."""
+    js = _USAGE_JS.read_text(encoding="utf-8")
+    code = re.sub(r"/\*.*?\*/", " ", js, flags=re.S)
+    created = re.findall(r"createElement\s*\(([^)]*)\)", code)
+    assert created, "the script creates no element, so this would pass over nothing"
+    for arg in created:
+        m = re.fullmatch(r"""\s*["']([a-z]+)["']\s*""", arg)
+        assert m and m.group(1) in _JS_ELEMENTS, arg
+    for arg in re.findall(r"setAttribute\s*\(([^,)]*)", code):
+        m = re.fullmatch(r"""\s*["']([a-z0-9]+)["']\s*""", arg)
+        assert m and m.group(1) in _JS_SET_ATTRIBUTES, arg
+    assigned = re.findall(r"\.([A-Za-z_$][\w$]*)\s*=(?!=)", code)
+    assert assigned, "the script assigns no property, so this would pass over nothing"
+    assert set(assigned) <= _JS_ASSIGNED, set(assigned) - _JS_ASSIGNED
+    for line in re.findall(r"^.*\]\s*=(?!=).*$", code, re.M):
+        assert line.strip().startswith("byKey["), line
+    assert set(re.findall(r"(\w+)\.appendChild\b", code)) <= _JS_PARENTS
+    assert not re.findall(r"\.(src|href|action|data|rel|poster|style)\s*=(?!=)", code)
+    assert [t for t in _JS_NEVER if t in code] == []
+    assert not re.findall(r"\bnew\s+(?!Array\b)\w+", code)
+
+
+_DOM_STUB = r"""
+const fs = require("fs");
+const vm = require("vm");
+function el(tag, attrs) {
+  const node = {tag, attrs: Object.assign({}, attrs || {}), children: [], hidden: false,
+    style: {}, textContent: "", offsetWidth: 80, offsetHeight: 40, listeners: {},
+    classes: new Set(String((attrs || {}).class || "").split(" ").filter(Boolean)),
+    getAttribute(n) { return n in this.attrs ? String(this.attrs[n]) : null; },
+    setAttribute(n, v) { this.attrs[n] = String(v); },
+    addEventListener(n, f) { this.listeners[n] = f; },
+    appendChild(c) { this.children.push(c); return c; },
+    removeChild(c) { this.children.splice(this.children.indexOf(c), 1); return c; },
+    get firstChild() { return this.children[0] || null; },
+    querySelectorAll(sel) {
+      const cls = sel.slice(1);
+      const out = [];
+      (function walk(n) { for (const c of n.children) { if (c.classes.has(cls)) out.push(c); walk(c); } })(this);
+      return out;
+    },
+    querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
+    closest(sel) { return this.classes.has(sel.slice(1)) ? this : null; }};
+  node.classList = {add: (c) => node.classes.add(c), remove: (c) => node.classes.delete(c)};
+  return node;
+}
+const spec = JSON.parse(process.argv[3]);
+const svgs = spec.charts.map((c) => {
+  const svg = el("svg", {"data-u-chart": c.key, "data-u-name": c.name});
+  svg.children.push(el("line", {class: "u-cross", x1: "0", x2: "0", visibility: "hidden"}));
+  for (const s of c.slots) {
+    svg.children.push(el("path", {class: "u-bar", "data-i": s.i}));
+    svg.children.push(el("rect", {class: "u-hit", "data-i": s.i, "data-day": s.day,
+      "data-label": s.label, "data-v": s.v, "data-cx": s.cx}));
+  }
+  return svg;
+});
+const tip = el("div", {id: "u-tip"});
+tip.hidden = true;
+const document = {readyState: "complete",
+  querySelectorAll: (sel) => (sel === "svg[data-u-chart]" ? svgs : []),
+  getElementById: (id) => (id === "u-tip" ? tip : null),
+  createElement: (tag) => el(tag), addEventListener() {}};
+const window = {innerWidth: 1200, innerHeight: 800};
+vm.runInNewContext(fs.readFileSync(process.argv[2], "utf8"), {document, window});
+function snap() {
+  return {hidden: tip.hidden,
+    lines: tip.children.map((d) => (d.children.length ? d.children[0].textContent : d.textContent)),
+    heads: tip.children.map((d) => (d.children.length ? d.children[0].tag : "")),
+    cross: svgs.map((s) => { const c = s.querySelector(".u-cross");
+      return [c.attrs.x1, c.attrs.x2, c.attrs.visibility]; }),
+    dim: svgs.map((s) => s.querySelectorAll(".u-bar").filter((b) => b.classes.has("u-dim"))
+      .map((b) => b.attrs["data-i"]))};
+}
+const target = svgs[0].querySelectorAll(".u-hit")[spec.hover];
+svgs[0].listeners.pointermove({target, clientX: 100, clientY: 100});
+const over = snap();
+svgs[0].listeners.pointerleave({});
+process.stdout.write(JSON.stringify({over, left: snap()}));
+"""
+
+
+def test_usage_js_hover_reads_the_day_label_and_moves_every_crosshair(tmp_path):
+    """Driven over a stub of the chart markup, a pointer on one slot shows the tip with that slot's
+    day label as its bold heading and one line per chart in order with the chart name and its own
+    value, moves each chart's crosshair to that chart's own slot centre, dims every other column,
+    and clears all of it when the pointer leaves. FAILS IF the heading comes from any attribute
+    other than the day label, a value or position is taken from the wrong chart, or the leave does
+    not clear the read-out. An absent Node fails, never skips."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    assert node, "node is required to run the read-out script's executable pin"
+    slots = [{"i": "0", "day": "2026-06-27", "label": "27 Jun", "cx": "48.5"},
+             {"i": "1", "day": "2026-06-28", "label": "28 Jun", "cx": "53.5"}]
+    charts = [{"key": key, "name": name,
+               "slots": [dict(s, v=f"{k}{s['i']}", cx=str(float(s["cx"]) + k)) for s in slots]}
+              for k, (key, name) in enumerate((("files", "Station files downloaded"),
+                                               ("visits", "Portal visits"),
+                                               ("bundles", "Whole-survey bundles downloaded")))]
+    driver = tmp_path / "dom_driver.js"
+    driver.write_text(_DOM_STUB, encoding="utf-8")
+    out = subprocess.run([node, str(driver), str(_USAGE_JS),
+                          json.dumps({"charts": charts, "hover": 1})],
+                         capture_output=True, text=True, timeout=30, check=False)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    over = got["over"]
+    assert over["hidden"] is False
+    assert over["lines"] == ["28 Jun", "Portal visits: 11", "Whole-survey bundles downloaded: 21",
+                             "Station files downloaded: 01"]
+    assert over["heads"] == ["b", "", "", ""]
+    assert over["cross"] == [["53.5", "53.5", "visible"], ["54.5", "54.5", "visible"],
+                             ["55.5", "55.5", "visible"]]
+    assert over["dim"] == [["0"], ["0"], ["0"]]
+    left = got["left"]
+    assert left["hidden"] is True and left["dim"] == [[], [], []]
+    assert [c[2] for c in left["cross"]] == ["hidden"] * 3
 
 
 def test_usage_js_readout_copies_only_given_values(tmp_path):
