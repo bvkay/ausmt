@@ -10,6 +10,8 @@ from __future__ import annotations
 import datetime as dt
 import html
 
+from .curatorpage import _AU_STATE_NAMES
+
 _NOT_MEASURED = "not measured"
 _NO_ROW = "no row"
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -265,3 +267,38 @@ def _day_table(rows, monthly, first: dt.date, last: dt.date, *, labels_since=Non
     return ('<details class="u-twin"><summary>Show as a table</summary><div class="u-scroll">'
             f'<table><caption>{_esc(caption)}</caption><thead><tr>{head}</tr></thead>'
             f'<tbody>{"".join(body)}</tbody></table></div></details>')
+
+
+def _state_visit_rows(stats) -> tuple[list[tuple[str, str, int | None]], int | None, int | None, bool]:
+    """(rows, remainder, total, ok) for the state card, all in visits over all time.
+
+    rows holds each named state or territory the fold counted, as (code, name, visits), biggest
+    visits first; a state with no detail row has visits None and follows the measured ones. total is
+    the Australian visits of the country detail, the figure the countries card prints. remainder is
+    total less the named visits, so it covers the unattributed bucket and every day counted before
+    the state table was loaded. ok is false when the named visits exceed total, or when state detail
+    exists with no Australian detail; the card then withholds its rows. rows is empty when the fold
+    counted no named state."""
+    stats = stats if isinstance(stats, dict) else {}
+    country = stats.get("by_country_detail")
+    au = country.get("AU") if isinstance(country, dict) else None
+    total = _count(au.get("visits")) if isinstance(au, dict) else None
+    by_state = stats.get("by_state")
+    by_state = by_state if isinstance(by_state, dict) else {}
+    detail = stats.get("by_state_detail")
+    detail = detail if isinstance(detail, dict) else {}
+    order = [code for code, _name in _AU_STATE_NAMES]
+    rows = []
+    for code, name in _AU_STATE_NAMES:
+        if not _count(by_state.get(code)):
+            continue
+        row = detail.get(code)
+        rows.append((code, name, _count(row.get("visits")) if isinstance(row, dict) else None))
+    if not rows:
+        return [], None, total, True
+    rows.sort(key=lambda r: (r[2] is None, -(r[2] or 0), order.index(r[0])))
+    named = [v for _code, _name, v in rows if v is not None]
+    if total is None:
+        return rows, None, None, not named
+    remainder = total - sum(named)
+    return rows, remainder, total, remainder >= 0

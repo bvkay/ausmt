@@ -543,3 +543,73 @@ def test_day_grain_carries_only_its_five_measures():
     data_keys = {k for e in _Tree(out).els for k in e["attrs"] if k.startswith("data-")}
     assert data_keys == {"data-u-chart", "data-u-name", "data-i", "data-day", "data-label",
                          "data-v", "data-cx"}
+
+
+# ------------------------------------------------------------------------------------------------
+# The state card's visit figures, reconciled with the Australian visits of the countries card.
+
+def _state_stats(au_visits=20, **over):
+    stats = {"countries": {"AU": 40, "NZ": 3, "unknown": 2},
+             "by_country_detail": {"AU": {"visits": au_visits, "downloads": 9},
+                                   "NZ": {"visits": 3}},
+             "by_state": {"NSW": 10, "VIC": 5, "TAS": 3, "QLD": 0, "unattributed": 2},
+             "by_state_detail": {"NSW": {"visits": 6, "downloads": 1}, "VIC": {"visits": 9},
+                                 "unattributed": {"visits": 1}}}
+    if au_visits is None:
+        del stats["by_country_detail"]["AU"]
+    stats.update(over)
+    return stats
+
+
+def test_state_card_reconciles_with_the_countries_card():
+    """The state rows name only the eight states and territories the fold counted, biggest visits
+    first, with a state that has no detail row reading not measured after them. The remainder 'Not
+    placed in a state' is the Australian visits less the named state visits, and the total is the
+    Australian visits of the country detail, the same figure the countries card prints. When the
+    named states exceed that total, or state detail exists with no Australian detail, the rows are
+    withheld as not reconciled. FAILS IF named rows plus the remainder do not equal the total, the
+    total is not the country detail figure, the unattributed bucket or a zero state becomes a row,
+    or a figure that cannot reconcile is shown."""
+    from gateway import usagepage
+
+    stats = _state_stats()
+    rows, remainder, total, ok = usagepage._state_visit_rows(stats)
+    assert ok is True
+    assert rows == [("VIC", "Victoria", 9), ("NSW", "New South Wales", 6), ("TAS", "Tasmania", None)]
+    assert total == stats["by_country_detail"]["AU"]["visits"] == 20
+    assert remainder == 5
+    assert sum(v for _c, _n, v in rows if v is not None) + remainder == total
+
+    rows, remainder, total, ok = usagepage._state_visit_rows(_state_stats(au_visits=15))
+    assert (remainder, total, ok) == (0, 15, True)
+    _rows, _rem, _total, ok = usagepage._state_visit_rows(_state_stats(au_visits=14))
+    assert ok is False
+    _rows, _rem, _total, ok = usagepage._state_visit_rows(_state_stats(au_visits=None))
+    assert ok is False
+    _rows, _rem, _total, ok = usagepage._state_visit_rows(
+        _state_stats(by_country_detail={"AU": {"downloads": 4}}))
+    assert ok is False
+
+    tied = _state_stats(by_state={"WA": 1, "SA": 1, "ACT": 1},
+                        by_state_detail={"WA": {"visits": 2}, "SA": {"visits": 2},
+                                         "ACT": {"visits": "2"}})
+    rows, remainder, total, ok = usagepage._state_visit_rows(tied)
+    assert [code for code, _n, _v in rows] == ["SA", "WA", "ACT"]
+    assert rows[2] == ("ACT", "Australian Capital Territory", None)
+    assert (remainder, total, ok) == (16, 20, True)
+
+    no_detail = _state_stats(by_state_detail={})
+    rows, remainder, total, ok = usagepage._state_visit_rows(no_detail)
+    assert [v for _c, _n, v in rows] == [None, None, None]
+    assert (remainder, total, ok) == (20, 20, True)
+    rows, remainder, total, ok = usagepage._state_visit_rows(
+        _state_stats(au_visits=None, by_state_detail={}))
+    assert len(rows) == 3 and (remainder, total, ok) == (None, None, True)
+
+    for by_state in (None, {}, {"NSW": 0, "unattributed": 0}, {"unattributed": 4}, "NSW",
+                     {"Hobart": 5, "nsw": 2}):
+        rows, remainder, total, ok = usagepage._state_visit_rows(_state_stats(by_state=by_state))
+        assert rows == [] and remainder is None and ok is True, by_state
+        assert total == 20
+    assert usagepage._state_visit_rows(None) == ([], None, None, True)
+    assert usagepage._state_visit_rows({"by_state": {"NSW": True}}) == ([], None, None, True)
