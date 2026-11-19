@@ -6,7 +6,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
+from pathlib import Path
+
+import pytest
 
 from gateway import curatorpage, serve_state
 from gateway.tests.conftest import app_client, curator_login, run
@@ -101,3 +105,47 @@ def test_usage_heading_title_and_rail_label(tmp_path):
             assert '<a class="railitem" href="/gateway/curator/analytics">Usage</a>' in r.text
             assert ">Analytics<" not in r.text
     run(_body())
+
+
+# The system copy of the officially assigned ISO 3166-1 alpha-2 codes, shipped with the time zone
+# database. XK is user-assigned, so it is never in that list but does appear in the country data.
+_ISO3166_TAB = Path("/usr/share/zoneinfo/iso3166.tab")
+_USER_ASSIGNED = {"XK"}
+
+
+def test_country_names_resolve_and_unknown_codes_show_as_stored():
+    """A stored country code reads as its English name, and any value the table does not hold reads
+    exactly as stored, so the unknown bucket and an unexpected code are never renamed or dropped.
+    Every entry is a two-letter upper-case code with a plain, unique name. FAILS IF a fixture code
+    does not resolve, an unknown value is altered, or an entry is malformed."""
+    from gateway import countrynames
+
+    for code, name in (("AU", "Australia"), ("NZ", "New Zealand"), ("US", "United States"),
+                       ("GB", "United Kingdom"), ("DE", "Germany"), ("JP", "Japan"),
+                       ("CD", "Democratic Republic of the Congo"), ("XK", "Kosovo")):
+        assert countrynames.country_name(code) == name, code
+    for stored in ("unknown", "", "ZZ", "au", "A1", "AUS", " AU"):
+        assert countrynames.country_name(stored) == stored, repr(stored)
+
+    names = countrynames.COUNTRY_NAMES
+    assert all(re.fullmatch(r"[A-Z]{2}", code) for code in names), sorted(names)
+    assert all(isinstance(n, str) and n and n == n.strip() for n in names.values())
+    assert len(set(names.values())) == len(names), "two codes share one name"
+    assert not [n for n in names.values() if re.search("[\u2013\u2014]", n)]
+
+
+def test_country_names_cover_every_assigned_iso_code():
+    """The table holds every officially assigned ISO 3166-1 alpha-2 code in the system list, plus the
+    user-assigned XK, and nothing else. FAILS IF an assigned code is missing or an unassigned code is
+    present."""
+    if not _ISO3166_TAB.is_file():
+        pytest.skip(f"{_ISO3166_TAB} is not present on this host, so there is no list to compare with")
+    from gateway import countrynames
+
+    assigned = {ln.split("\t", 1)[0] for ln in _ISO3166_TAB.read_text(encoding="utf-8").splitlines()
+                if ln.strip() and not ln.startswith("#")}
+    assert len(assigned) >= 249
+    held = set(countrynames.COUNTRY_NAMES)
+    assert sorted(assigned - held) == [], "assigned codes with no name"
+    assert sorted(held - assigned - _USER_ASSIGNED) == [], "codes that are not assigned"
+    assert _USER_ASSIGNED <= held
