@@ -286,7 +286,8 @@ measured absence.
   those days fold again next run, so they must not already be in the file. The reverse failure loses
   a day from the archive, which is the tolerable direction and is why it is warned about loudly.
 - *Never read.* No gateway route, no render path, no export opens it. It lives in the gateway state
-  dir, outside `site-data/`, so nothing can serve it. Both facts are pinned in `deploy/tests`.
+  dir, outside `site-data/`, so nothing can serve it. Both facts are pinned in `deploy/tests`. The
+  gateway reads one count-free date about it, `archive_through`, from `stats.json` (see D10).
 - *Never pruned, never rewritten.* It is the durable record; that is its whole purpose.
 - *Never fatal.* A write failure warns and the fold still counts as done.
 
@@ -549,3 +550,31 @@ gateway mounts, and outside every compose volume source, so no route can read it
 to /24 or /48, the grain of the masked address. No entry, count or line number is written to
 `stats.json`, the archive or the journal; the journal prints only the list state. If the fold moves to
 another host the file moves by hand, never through git.
+
+## D10. The Usage page
+
+The curator analytics screen becomes the Usage page. This section records the fold changes it needs
+and amends the earlier clauses it touches, by pointer.
+
+- *Daily window.* Daily rows in `stats.json` are kept 184 days by default (about six months), which
+  the day-by-day charts show. `AUSMT_STATS_DAILY_KEEP` still overrides it. Nothing is backfilled; the
+  window fills forward.
+- *archive_through.* The fold writes `archive_through`, a count-free ISO day, into `stats.json`: the
+  last fold watermark the daily archive (D8) is known to hold. It moves to the new watermark only
+  when every newly folded day was appended, or when a run had nothing to append and the archive
+  already stood at the old watermark; otherwise it stays, so the page can warn that the archive is
+  behind. It is carried by name only as an ISO day. A second `stats.json` write records it only when
+  it changes; no watermark moves with it, so the append-after-stats rule of D8 still holds, and a
+  failed second write leaves the older date, which warns rather than hides. The journal line carries
+  `archive_through=`.
+- *Never read, amended.* D8's never-read rule gains one explicit exception: the gateway may read
+  `stats["archive_through"]`, and only the Usage page renderer may name it. No gateway source or
+  served script may name the archive file, its setting or a `.jsonl` file. Pinned in `deploy/tests`.
+- *D9 amended (the switch and rollback).* With `AUSMT_STATS_LABELS_FROM` absent, malformed or
+  mid-month, the fold output is byte-identical to the unlabelled fold except for the count-free key
+  `archive_through`. The labels-off goldens were regenerated for that key alone, and the pin asserts
+  their key set literally, so a label key reaching an unlabelled fold still fails it.
+- *Archive mode.* A daily archive file the fold creates is mode 0664; an existing file's mode is
+  never changed. Accepted risk: the gateway uid already owns the state dir and could replace the file
+  whatever its mode, and group write also lets the gateway process append to or truncate the file in
+  place. Only the never-read pin enforces that it does neither.

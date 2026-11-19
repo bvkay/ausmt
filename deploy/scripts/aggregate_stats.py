@@ -292,6 +292,8 @@ OPERATOR_UNKNOWN = "unknown"
 _OPERATOR_LIST_PARTS = ("stats-private", "operator-networks.txt")
 # The switch is the first day of a month, so a labelled month is labelled from its first day.
 _LABELS_FROM_RE = re.compile(r"^\d{4}-\d{2}-01$")
+# A bare ISO day, the only form a count-free date key in stats.json may take.
+_ISO_DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # THE CLIENT CLASS, for a non-operator request on a labelled day. Precedence:
 #   * a declared crawler is not a class: it stays excluded and is tallied in crawler_excluded;
@@ -1211,6 +1213,17 @@ def _as_int(v, default: int = 0) -> int:
         return default
 
 
+def _iso_day(value) -> str | None:
+    """`value` when it is a bare, real ISO day, else None."""
+    if not isinstance(value, str) or not _ISO_DAY_RE.match(value):
+        return None
+    try:
+        dt.date.fromisoformat(value)
+    except ValueError:
+        return None
+    return value
+
+
 def _next_day(date_str) -> str | None:
     """The ISO day after `date_str`, or None if it is not an ISO date. It stamps `detail_since` when
     a v1 file is upgraded: the richer dimensions begin the day AFTER that file's fold watermark."""
@@ -1416,6 +1429,10 @@ def _coerce_prev(prev: dict | None) -> dict:
     # Stamped once by the first labelled fold and carried by name, never moved.
     if isinstance(prev.get("labels_since"), str):
         s["labels_since"] = prev["labels_since"]
+    # The last watermark the daily archive is known to hold: carried by name, and only as an ISO day,
+    # so nothing but a count-free date can ever ride under it.
+    if _iso_day(prev.get("archive_through")):
+        s["archive_through"] = prev["archive_through"]
     # The bulk/single split is the one dimension here whose start date IS recorded. `detail_since` marks
     # the v1 hinge and the dimensions after it were left undated on purpose (the fold that added them is
     # written nowhere), but this one is stamped as it begins, so the screen can NAME the day instead of
@@ -2400,6 +2417,7 @@ def append_daily_archive(archive_file, rows) -> int:
     counts as done."""
     if not archive_file or not rows:
         return 0
+    existed = os.path.exists(archive_file)
     try:
         with open(archive_file, "a", encoding="utf-8") as fh:
             for row in rows:
@@ -2409,7 +2427,25 @@ def append_daily_archive(archive_file, rows) -> int:
               f"{archive_file} ({type(exc).__name__}: {exc}) -- stats.json is unaffected, but those "
               f"days are not in the permanent archive", file=sys.stderr)
         return 0
+    # A file this call created is group-writable so the state dir's group can keep appending; the
+    # mode of a file that already existed is never changed.
+    if not existed:
+        try:
+            os.chmod(archive_file, 0o664)
+        except OSError:
+            pass
     return len(rows)
+
+
+def _next_archive_through(carried, start_watermark, folded, archived: int, offered: int):
+    """The archive_through a run leaves behind. It moves to the new watermark `folded` only when the
+    archive is known to hold every folded day: every offered line landed, or nothing was offered and
+    the archive already stood at the watermark the run started from. Otherwise it stays `carried`."""
+    if not _iso_day(folded):
+        return carried
+    if offered:
+        return folded if archived == offered else carried
+    return folded if carried == start_watermark else carried
 
 
 def _cfg(name: str, default: str) -> str:
@@ -2460,6 +2496,8 @@ def main(argv=None) -> int:
         # Absent, hand-offs still count as requests and carry no bytes -- see `aggregate`.
         ts_access = _load_json(served_dir / "ts_access.json") or {}
         prev = _load_json(stats_file)
+        start_watermark = (prev.get("last_folded_date") if isinstance(prev, dict)
+                           and isinstance(prev.get("last_folded_date"), str) else None)
         # The labels switch. Absent or malformed, labels are off, the operator list is not opened,
         # and the fold is exactly the unlabelled fold; removing the setting is the rollback.
         labels_raw = os.environ.get("AUSMT_STATS_LABELS_FROM") or ""
@@ -2508,6 +2546,17 @@ def main(argv=None) -> int:
         # AFTER the stats write, deliberately: a failed stats write leaves the watermark where it was,
         # so those days fold again next run and must not already sit in the append-only archive.
         archived = append_daily_archive(archive_file, archive_rows)
+        through = _next_archive_through(stats.get("archive_through"), start_watermark,
+                                        stats.get("last_folded_date"), archived, len(archive_rows))
+        if through != stats.get("archive_through"):
+            # A second write only when the date moves. No watermark moves with it, so the
+            # append-after-stats rule still holds; a failed write leaves the older date on disk.
+            try:
+                write_stats_atomic(stats_file, {**stats, "archive_through": through})
+                stats["archive_through"] = through
+            except OSError as exc:
+                print(f"aggregate_stats: could not record archive_through in stats.json "
+                      f"({type(exc).__name__}); the older date stands", file=sys.stderr)
         print(f"aggregate_stats: folded up to {stats.get('last_folded_date')} -- "
               f"downloads={stats['totals']['downloads']} visits={stats['totals']['visits']} "
               f"api={stats['totals']['api_requests']} "
@@ -2516,7 +2565,8 @@ def main(argv=None) -> int:
               f"manifest_rows={len(reverse_map)} geoip_rows={geoip.row_count} "
               f"au_state_rows={au_states.row_count} collections={len(collections)} "
               f"log_lines={len(lines)} files_skipped={len(skipped_logs)} "
-              f"archived_days={archived} {label_journal} "
+              f"archived_days={archived} "
+              f"archive_through={stats.get('archive_through') or 'none'} {label_journal} "
               f"fold_seconds={time.monotonic() - started:.1f} -> {stats_file}", file=sys.stderr)
     except Exception as exc:  # noqa: BLE001 -- never raise into the timer; note loudly and exit 0
         print(f"aggregate_stats: aborted without writing ({type(exc).__name__}: {exc})", file=sys.stderr)

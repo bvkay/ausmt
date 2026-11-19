@@ -1096,7 +1096,8 @@ unanswerable, and unanswerable retroactively.
 | Contents | Pure counts for one day: downloads, visits, API requests, distinct networks, bulk-export events, volume, unattributed, and the by-format / by-kind / by-client / by-select / by-survey (with its file/bundle split) / by-dataset / by-collection maps, plus the served build id when the tree carries one. Sparse at the row level: only touched datasets and surveys are written, while inside a written row the class splits (files/bundles, single/bulk) keep their zeros so each split sums to its row's downloads |
 | Never | No country, no state, no address, no user-agent, and no per-network datum beyond the scalar count. **No geography below the monthly grain, retained or rendered** |
 | Retention | Indefinite. Never pruned, never rewritten, append-only, one line per day, written after `stats.json` lands so a failed fold cannot duplicate a day |
-| Read by | **Nothing.** No gateway route, no render path, no export. A pin in `deploy/tests` fails the lane if a gateway source ever names it |
+| Mode | A file the fold creates is `0664`, so the state dir's group can keep appending. An existing file keeps its mode, and it must be writable by the account the fold runs as, or every append fails |
+| Read by | **Nothing.** No gateway route, no render path, no export. A pin in `deploy/tests` fails the lane if a gateway source ever names it. The curator Usage page reads only one count-free date about it, `archive_through`, from `stats.json`, never the file |
 | Backups | **Include it.** `backup.sh` copies every non-secret flat file in the state dir, so it rides along already, but verify it is in your snapshots, because it is the one file there whose loss is permanent: once the logs have rotated, nothing can rebuild it. The snapshot scheme keeps 14 copies, so the archive is duplicated into each; at roughly a hundred bytes per active dataset per day that stays trivial for years, but it is the one state file that only grows |
 
 A write failure is warned about on stderr and does **not** break the fold: `stats.json` still lands,
@@ -1106,6 +1107,18 @@ glob matched but could not open, each one named on stderr. `files_skipped` is no
 2026-07-30 the box's `access.json` was `root:root 0600`, every open failed silently, and the fold ran
 for days on the shipped front-door file alone while writing a complete-looking `stats.json`. A
 non-zero count there means the fold is missing lines it should have had.
+
+**How far the archive reaches.** The fold records `archive_through` in `stats.json`: the last fold
+watermark the archive is known to hold. It moves to the new watermark only when every newly folded
+day landed in the file, or when a run had no day to append and the archive was already current. A
+failed append leaves it where it was, so the curator Usage page can warn that the permanent record
+has fallen behind. The journal line carries the same date as `archive_through=` (`none` when it has
+never been recorded). The archive is behind when that date is earlier than the `folded up to` date
+beside it, usually with `archived_days=0` and a `could not append` note on stderr. The usual cause is
+a file the fold account cannot write, for example one created by another account. Restore the fold
+account's write access to the file (owner or group write) without rewriting its bytes; the next
+nightly fold appends again and moves the date. Days folded while the archive was behind are not
+backfilled.
 
 **Export.** The Analytics screen offers *Download report data*: `analytics.csv` (one row per retained
 month), `analytics-surveys.csv` (one row per month and survey, with volume and the file/bundle split)

@@ -283,14 +283,31 @@ def _identity_outputs(monkeypatch, root: Path) -> dict[str, bytes]:
             "archive.jsonl": (state / "daily_archive.jsonl").read_bytes()}
 
 
+# The top-level keys of an unlabelled stats.json before labels existed, plus the one count-free date
+# the fold has written since: archive_through, the watermark the daily archive is known to hold.
+_UNLABELLED_KEYS = frozenset({
+    "by_collection", "by_country_detail", "by_state", "by_state_detail", "countries", "daily",
+    "detail_since", "downloads", "generated_at", "handoffs", "last_folded_date", "monthly", "schema",
+    "select_since", "since", "timer_period_min", "total_served_surveys", "totals",
+}) | {"archive_through"}
+
+
 def test_labels_off_by_default_output_identical(tmp_path, monkeypatch, capsys):
     """With AUSMT_STATS_LABELS_FROM unset, two successive folds write stats.json and the archive
-    byte for byte as the fold did before labels existed. The golden files under
-    fixtures/traffic-labels-off are that fold's output for this same scenario. Fails if any label
-    code path reaches an unlabelled fold, including a box-log, internal-range or operator-named line."""
+    byte for byte as the fold did before labels existed, except for the one count-free key
+    archive_through. The golden files under fixtures/traffic-labels-off are that fold's output for
+    this same scenario; the archive golden is unchanged, and each stats golden holds exactly the
+    unlabelled key set plus archive_through, with no label key such as labels_since or
+    labels_configured_from. Fails if any label code path reaches an unlabelled fold, including a
+    box-log, internal-range or operator-named line, or if a regenerated golden gains any other key."""
     got = _identity_outputs(monkeypatch, tmp_path)
     for name, data in got.items():
         assert data == (_GOLDEN / name).read_bytes(), name
+    for name in ("stats-1.json", "stats-2.json"):
+        doc = json.loads((_GOLDEN / name).read_bytes())
+        assert set(doc) == _UNLABELLED_KEYS, (name, sorted(set(doc) ^ _UNLABELLED_KEYS))
+        assert "labels_configured_from" not in doc and "labels_since" not in doc
+        assert doc["archive_through"] == doc["last_folded_date"], name
     err = capsys.readouterr().err
     assert "labels=off" in err
     assert "operator_list=" not in err
