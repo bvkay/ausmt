@@ -2377,12 +2377,17 @@ def _dt_html(ts: str) -> str:
     return f'<span class="dt" title="{_esc(ts)}">{_esc(short_utc(ts))}</span>'
 
 
-def _head(title: str) -> str:
-    return Template(_HEAD).substitute(
+def _head(title: str, extra_head: str = "") -> str:
+    """The shared head. `extra_head`, when given, is placed once directly before the end of the head,
+    after the shared style block; with none the head is byte-identical for every page."""
+    head = Template(_HEAD).substitute(
         title=_esc(title), bg=_PALETTE["bg"], ink=_PALETTE["ink"], muted=_PALETTE["muted"],
         accent=_PALETTE["accent"], panel=_PALETTE["panel"], ok=_PALETTE["ok"],
         warn=_PALETTE["warn"], bad=_PALETTE["bad"], info=_PALETTE["info"],
     )
+    if extra_head:
+        head = head.replace("</style></head>", "</style>" + extra_head + "</head>", 1)
+    return head
 
 
 def _page(title: str, body: str) -> str:
@@ -2410,11 +2415,11 @@ _RAIL = (
     # Security sits under Operations beside Serve state: it is an operator-facing account
     # concern — enrolling the authenticator that gates the destructive workbench actions — not a
     # per-survey editing surface, so Operations is its home rather than Surveys/Intake.
-    # Analytics sits under Operations beside Serve state: it is a read-only, operator/reporting
-    # surface over the box's own usage aggregates (downloads/visits/countries), the same trust class as
-    # the ops floor — not a per-survey editing surface.
+    # Usage sits under Operations beside Serve state: it is a read-only reporting surface over the
+    # box's own usage aggregates, the same trust class as the ops floor, not a per-survey editing
+    # surface. Its key and route stay "analytics".
     ("Operations", (("serve", "Serve state", "/gateway/curator/serve"),
-                    ("analytics", "Analytics", "/gateway/curator/analytics"),
+                    ("analytics", "Usage", "/gateway/curator/analytics"),
                     ("security", "Security", "/gateway/curator/security"))),
 )
 
@@ -2487,7 +2492,8 @@ def _context_bar(nav: "NavContext") -> str:
     )
 
 
-def _shell(title: str, body: str, *, nav: "NavContext", wide: bool = True) -> str:
+def _shell(title: str, body: str, *, nav: "NavContext", wide: bool = True, extra_head: str = "",
+           page_class: str = "") -> str:
     """Wrap a page body in the Stage-1 nav shell: left rail + context bar + main content. The external
     context-bar script (drift chip served-build half) loads at the tail, joining ui.js. Chrome-less
     pages (login, terminal confirms) use _page instead.
@@ -2496,10 +2502,14 @@ def _shell(title: str, body: str, *, nav: "NavContext", wide: bool = True) -> st
     viewport; a page that wants the centred reading measure passes wide=False (none do today — the
     only narrow survivors are the login page and the terminal confirm pages, which are chrome-less
     _page users). Pages that want a comfortable FORM measure inside the wide page cap the field column
-    locally (e.g. the Metadata TOC form, the uploader create form) rather than narrowing the shell."""
+    locally (e.g. the Metadata TOC form, the uploader create form) rather than narrowing the shell.
+
+    `extra_head` and `page_class` let one page add its own style block and a class on the shell div
+    to scope it; a page that passes neither renders exactly the shared shell."""
+    shell_open = f'<div class="shell {_esc(page_class)}">' if page_class else '<div class="shell">'
     return (
-        _head(title)
-        + '<div class="shell">'
+        _head(title, extra_head)
+        + shell_open
         + _rail_html(nav.active)
         + '<div class="main">'
         + _context_bar(nav)

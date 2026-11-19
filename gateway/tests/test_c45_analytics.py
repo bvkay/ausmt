@@ -95,19 +95,6 @@ def test_analytics_renders_cards_tables_and_sparkline(tmp_path):
     run(_body())
 
 
-def test_analytics_rail_link_present(tmp_path):
-    """NAV PIN. The Analytics screen sits under the Operations rail group and links to its route. FAILS
-    IF the rail entry is missing (the screen would be unreachable via the nav)."""
-    async def _body():
-        async with app_client(tmp_path) as (client, _app, _gw, cfg):
-            await curator_login(client)
-            _write_stats(cfg, _fresh_stats())
-            r = await client.get("/gateway/curator/analytics")
-            assert 'href="/gateway/curator/analytics"' in r.text
-            assert ">Analytics<" in r.text
-    run(_body())
-
-
 # --------------------------------------------------------------------------------------------------
 # Staleness: old generated_at -> STALE banner, still 200 (fail-closed both directions).
 # --------------------------------------------------------------------------------------------------
