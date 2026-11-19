@@ -847,7 +847,7 @@ def test_state_data_is_forward_only_and_never_backfills_a_folded_day():
 
 def test_state_table_rejects_anything_that_is_not_one_of_the_eight_codes():
     """VOCABULARY PIN. The fold accepts only the eight state/territory codes from the table file, so a
-    hand-edited or mangled table cannot push an arbitrary label onto the analytics screen. FAILS IF a
+    hand-edited or mangled table cannot push an arbitrary label onto the curator Usage page. FAILS IF a
     junk code, a city name, or a lowercase stray is accepted as a state."""
     assert set(AGG.AU_STATE_CODES) == {"NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT"}
     t = _FIXTURES.parent / "_junk-states.csv"

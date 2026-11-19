@@ -69,7 +69,8 @@ _CAVEAT_HOMES = (
     (5, "each counted request is first checked for being one of these", "Operator requests"),
     (6, "Before the first nightly count has written its file the page says so", "Operating it"),
     (7, "A count is late when none has finished for two timer periods", "Health line"),
-    (8, "Before any labelled month the card reads \"not measured\"", "Who made the requests"),
+    (8, "Before any labelled month the card gives the configured start date",
+     "Who made the requests"),
     (9, "it is a floor, not a count of export actions", "Who made the requests"),
     (10, "People is therefore a floor.", "Who made the requests"),
     (11, "leaves unknown out of every country count", "The figures on the page"),
@@ -92,7 +93,8 @@ _CAVEAT_HOMES = (
     (26, "describes each export column by\ncolumn", "What the page leaves to the CSV exports"),
     (27, "Only the count: a named survey beside a named country", "What is measured"),
     (28, "operator requests are excluded from them", "Who made the requests"),
-    (29, "the\nreach figure and `networks_peak`", "What the page leaves to the CSV exports"),
+    (29, "export carries the reach figure, `networks_peak`",
+     "What the page leaves to the CSV exports"),
     (30, "API requests count toward a country only from the fold that began counting them",
      "Seams in the record"),
     (31, "\"Not placed in a state\"", "Australian traffic by state, and why not by city"),
@@ -156,3 +158,96 @@ def test_decision_record_names_the_read_out_script():
     for phrase in ("/gateway/curator/usage.js", "same origin", "data attributes",
                    "complete without it"):
         assert phrase in record, phrase
+
+
+def _section(doc: str, heading: str) -> str:
+    body = doc.split(f"\n{heading}\n", 1)[1]
+    return re.split(r"\n#{2,3} ", body, maxsplit=1)[0]
+
+
+def _export_headers() -> set[str]:
+    """Every column the three curator exports can write, from a month that carries every optional
+    breakdown, including states, collections, datasets, hand-off volume and a served-survey count."""
+    from gateway import curatorpage
+    month = {"month": "2026-10", "downloads": 5, "visits": 2, "days": 31, "detail_days": 31,
+             "geo_days": 31, "formats": {"edi": 5}, "kinds": {"file": 5},
+             "countries": {"AU": 5}, "by_state": {"NSW": 3},
+             "handoffs": {"requests": 2, "bytes": 4096}, "by_collection": {"c": 5},
+             "downloads_by_select": {"single": 3, "bulk": 2}, "bulk_export_events": 1}
+    stats = {"monthly": [month], "total_served_surveys": 9,
+             "downloads": {"by_dataset": {"d": 5}, "by_collection": {"c": 5}}}
+    columns = set()
+    for build in (curatorpage.analytics_monthly_csv, curatorpage.analytics_survey_csv,
+                  curatorpage.analytics_country_csv):
+        columns |= set(build(stats).splitlines()[0].split(","))
+    return columns
+
+
+def test_figures_named_as_exported_are_export_columns():
+    """The docs name a figure as exported only when an export has a column for it, and say plainly
+    that the figures kept in stats.json alone are in no export. FAILS IF the docs name a column no
+    export writes, or claim an export for the top datasets, the collection rollup, hand-off volume
+    or the served-survey count."""
+    doc = _read(_DOCS)
+    section = _section(doc, "### What the page leaves to the CSV exports")
+    exported, kept = [p for p in section.split("\n\n") if p.strip()][:2]
+    columns = _export_headers()
+    named = re.findall(r"`([a-z_*]+)`", exported)
+    assert len(named) >= 9, named
+    missing = [n for n in named if not (n in columns or (n.endswith("*")
+                                                         and any(c.startswith(n[:-1]) for c in columns)))]
+    assert missing == [], missing
+    kept = " ".join(kept.split())
+    assert "kept in `stats.json` only" in kept and "neither shown nor exported" in kept
+    for figure in ("top datasets", "downloads by collection", "hand-off volume",
+                   "count of served surveys"):
+        assert figure in kept, figure
+    for fragment in ("dataset", "collection", "served", "handoffs_bytes", "handoff_bytes"):
+        assert not [c for c in columns if fragment in c], fragment
+    flat = " ".join(doc.split())
+    assert "lives in the monthly CSV" not in flat
+    assert "country rows in the monthly country export (`analytics-countries.csv`)" in flat
+    assert "unattributed hand-offs, a figure kept in `stats.json` only" in flat
+
+
+def test_the_page_section_states_each_rule_once_and_as_rendered():
+    """The page section links the general no-backfill rule rather than restating it, the who card
+    section says what a partly labelled month means for the figures above it, the health line
+    section describes each archive warning the page prints, and the retention row says when pulled
+    copies expire. FAILS IF a rule gains a second home or a passage says what the page does not."""
+    doc = _read(_DOCS)
+    flat = " ".join(doc.split())
+    assert flat.lower().count("nothing is backfilled") == 1
+    seams = " ".join(_section(doc, "### Seams in the record").split())
+    assert seams.startswith("The general rule is in [retention](#retention-of-the-aggregates). Two")
+    who = " ".join(_section(doc, "## Who made the requests").split())
+    assert ("every figure above the who card, the selection export figures included, also counts "
+            "the operator's requests on the unlabelled days") in who
+    assert 'otherwise reads "Not measured yet"' in who
+    health = " ".join(_section(doc, "### Health line").split())
+    for warning in ("the archive stops at that date", "the date is not recorded",
+                    "one warning names both"):
+        assert warning in health, warning
+    row = [ln for ln in doc.splitlines() if ln.startswith("| Raw access log")][0]
+    assert "removed once counted and more than 7 days old" in row
+
+
+# Operator-facing files that describe the page the fold feeds.
+_OPERATOR_FILES = ("deploy/scripts/aggregate_stats.py", "deploy/systemd/ausmt-stats.service",
+                   "deploy/frontdoor/RUNBOOK.md", "gateway/serve_state.py")
+
+
+def test_operator_comments_name_the_usage_page():
+    """Comments and docstrings an operator reads call the page the curator Usage page. FAILS IF the
+    old screen name survives in any of them, including across a wrapped comment line."""
+    for name in _OPERATOR_FILES:
+        flat = " ".join(re.sub(r"(?m)^\s*#", " ", _read(_REPO / name)).split())
+        assert not re.search(r"analytics screen", flat, re.I), name
+
+
+def test_readme_explains_the_archive_date_not_recorded_warning():
+    """The operator guide's troubleshooting table has a row for the health warning that the archive
+    date is not recorded, which is expected after an upgrade until the first nightly append. FAILS IF
+    that warning has no row."""
+    rows = [ln for ln in _read(_README).splitlines() if ln.startswith("| Usage health line")]
+    assert any("not recorded" in ln and "first nightly append" in ln for ln in rows), rows

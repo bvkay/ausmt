@@ -442,7 +442,7 @@ sudo getfacl -p /var/log/caddy/access-frontdoor.json
 # on the box: ship once now, then confirm the file arrived where the aggregator reads it
 sudo systemctl start ausmt-frontdoor-logs.service
 ls -l "$AUSMT_DATA_DIR/logs/caddy/"            # access-frontdoor*.json present
-# fold once and confirm the public counts appear in stats.json (the Analytics screen reads it)
+# fold once and confirm the public counts appear in stats.json (the curator Usage page reads it)
 sudo systemctl start ausmt-stats.service
 ```
 

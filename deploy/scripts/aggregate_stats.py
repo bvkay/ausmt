@@ -2,7 +2,7 @@
 """Usage-analytics aggregator.
 
 A host-side, STDLIB-ONLY daily job (deploy/systemd/ausmt-stats.timer fires it) that folds the Caddy
-access log into a cumulative `stats.json` the workbench Analytics screen reads. It is the same
+access log into a cumulative `stats.json` the curator Usage page reads. It is the same
 trust class as alert.sh's ops-status writer: it NEVER raises into the timer (main() catches
 everything and exits 0), writes atomically (tmp -> chmod 0644 -> os.replace), and stamps the shared
 UTC timestamp so the gateway's staleness clock parses it identically.
@@ -461,7 +461,7 @@ class GeoIP(_RangeTable):
 
 # The eight Australian states and territories, in the conventional listing order. This tuple is the
 # WHOLE vocabulary the fold will accept from the state table, so a hand-edited or mangled table cannot
-# push an arbitrary label onto the analytics screen.
+# push an arbitrary label onto the curator Usage page.
 AU_STATE_CODES = ("NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT")
 
 # The bucket an AU request lands in when the state table IS present but its prefix resolves to no

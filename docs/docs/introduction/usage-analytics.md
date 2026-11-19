@@ -57,7 +57,7 @@ identification, sessions and funnels are never collected.
 
 | Record | Kept for | Why |
 | --- | --- | --- |
-| Raw access log (masked) | about 7 days, including the copies the nightly count reads, which are removed once counted | debugging only |
+| Raw access log (masked) | about 7 days, including the copies the nightly count pulls, which are removed once counted and more than 7 days old | debugging only |
 | Daily aggregate rows | 184 days | the day-by-day charts on the curator Usage page |
 | Monthly rollup rows | indefinitely | pure counts with no address, path or identity; quarterly and year-over-year reporting |
 | Daily aggregate archive | indefinitely | one line of pure counts per folded day, no geography, never served or rendered |
@@ -162,8 +162,8 @@ describes the month in progress so far. It shows four rows, downloads, portal vi
 and time-series hand-offs, each as a bar split three ways with the numbers printed beside it, then
 one line with the operator's own requests and declared crawler requests left out. A collapsed table
 under it gives that month's requests by client class and, where a network table was used, by network
-type. Before any labelled month the card reads "not measured" and gives the configured start date
-when one is set.
+type. Before any labelled month the card gives the configured start date when one is set, and
+otherwise reads "Not measured yet".
 
 A selection export fetches each selected station's file separately under the export label, so one
 export can add thousands of counted downloads. The page therefore shows, under the downloads figure
@@ -184,7 +184,8 @@ operator's own requests before that date and exclude them from it.
 
 Where an input was missing the page says so rather than letting the split look complete: one warning
 line names a month labelled on only some of its active days, and how many labelled days lacked the
-operator list or, where a network table is used, the network-type table or its full sources. A table
+operator list or, where a network table is used, the network-type table or its full sources. On such a month every figure above the who card, the
+selection export figures included, also counts the operator's requests on the unlabelled days. A table
 counts as unavailable when it is missing, unreadable, without a valid header or older than its age
 limit, so there is no single fixed cause; the fold journal names it. A month folded before labels
 began shows no label figure. A labelled month whose only requests so far were the operator's or a
@@ -242,19 +243,19 @@ says so when that month has no row, was not measured, or was only partly counted
 began inside it. The month in progress gets one line of its own, to the data date.
 
 The country count on the tile and on the countries card leaves unknown out of every country count,
-so it can read one lower than the number of country rows in the monthly export. The served-survey
-denominator the earlier screen printed beside the survey count lives in the monthly CSV.
+so it can read one lower than the number of country rows in the monthly country export
+(`analytics-countries.csv`). The count of served surveys the earlier screen printed beside the
+survey count is kept in `stats.json` only and is in no export.
 
 Single files are the station files less the selection export files. The fold does not cross the two,
 so the figure reads "not measured" when either input is missing or the difference would be negative.
 
-Hand-offs the register no longer lists are counted as unattributed hand-offs; a non-zero figure there
-is register drift, the route table and the served data out of step, not lost requests.
+Hand-offs the register no longer lists are counted as unattributed hand-offs, a figure kept in
+`stats.json` only; a non-zero figure there is register drift, the route table and the served data out of step, not lost requests.
 
 ### Seams in the record
 
-The general rule is in [retention](#retention-of-the-aggregates): nothing is backfilled, and a figure
-counted before its rule existed reads "not measured". Two seams are named. The first is
+The general rule is in [retention](#retention-of-the-aggregates). Two seams are named. The first is
 `detail_since`: a month folded before the detailed breakdown existed carries real downloads and
 visits and nothing finer, so its volume, formats, kinds, API requests and countries read "not
 measured", and the month table's caption names that date. The second has no recorded date: the
@@ -275,19 +276,30 @@ day the permanent daily archive was last written through. The page reads the arc
 that one date in `stats.json`. A count is late when none has finished for two timer periods, 48 hours
 at the shipped daily cadence; a file stamped in the future also reads late. The page then marks the
 header stale and warns, and still shows every figure as it was at that time. When the archive date is
-missing or earlier than the data date the page warns that later days are not in the permanent
-record; the fold journal says why, and the operator guide describes how to restore the archive. Days
+earlier than the data date the page warns that the archive stops at that date, so later days are not
+in the permanent record. When no archive date is recorded it warns that the date is not recorded;
+a file written before the fold began recording the date reads that way until the first nightly
+append after the upgrade. When the count is also late, one warning names both. The fold journal says
+why, and the operator guide describes how to restore the archive. Days
 the archive missed are not backfilled, so the warning clears once appends succeed again while the gap
 stays.
 
 ### What the page leaves to the CSV exports
 
-These figures were on the earlier curator screen and are now in the exports only: the top datasets,
-downloads by collection (see the collection row under [what is measured](#what-is-measured)), the
-reach figure and `networks_peak`, the browser and scripted split, the per-month label rows,
-unattributed downloads, the per-survey country count and file and bundle split, the per-country
-request, API and volume columns, the per-state request column, hand-off volume, and the
-served-survey denominator. The month table shows every retained month, and every export carries
+These figures were on the earlier curator screen and are now in the CSV exports only. The monthly
+export carries the reach figure, `networks_peak`; the browser and scripted split, `downloads_browser`
+and `downloads_scripted`; the per-month label columns; unattributed downloads, `unattributed`; and the
+per-state request columns, `state_*`. The survey export carries each survey's country count and file
+and bundle split, `countries`, `files` and `bundles`. The country export carries each country's
+`requests`, `api` and `download_bytes`.
+
+Four figures the earlier screen showed are kept in `stats.json` only, and are neither shown nor
+exported: the top datasets, downloads by collection (see the collection row under
+[what is measured](#what-is-measured)), hand-off volume, and the count of served surveys. Monthly
+hand-off requests are shown in the month table; the monthly export carries them only as the label
+split of a labelled month.
+
+The month table shows every retained month, and every export carries
 every retained month too. The operator guide (`deploy/README.md`) describes each export column by
 column.
 

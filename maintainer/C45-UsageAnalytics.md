@@ -542,8 +542,10 @@ and amends the earlier clauses it touches, by pointer.
   `stats["archive_through"]`, and only the Usage page renderer may name it. No gateway source or
   served script may name the archive file, its setting or a `.jsonl` file. Pinned in `deploy/tests`.
 - *D9 amended (the switch and rollback).* With `AUSMT_STATS_LABELS_FROM` absent, malformed or
-  mid-month, the fold output is byte-identical to the unlabelled fold except for the count-free key
-  `archive_through`. The labels-off goldens were regenerated for that key alone, and the pin asserts
+  mid-month, the fold output for any span of logs inside the daily window is byte-identical to the
+  unlabelled fold except for the count-free key `archive_through`. Two changes made by their own
+  records sit outside that statement: the daily window itself is longer, so a longer span keeps more
+  daily rows, and pulled log copies now expire whether or not labels are on. The labels-off goldens were regenerated for that key alone, and the pin asserts
   their key set literally, so a label key reaching an unlabelled fold still fails it.
 - *labels_configured_from.* While `AUSMT_STATS_LABELS_FROM` is valid, including a month not yet
   reached, the fold writes it into `stats.json` as `labels_configured_from`, a count-free date, so
@@ -564,7 +566,7 @@ and amends the earlier clauses it touches, by pointer.
   failure, `logs_expire_failed=`, with no file name and no address.
 - *D4 amended.* The summary cards, the top datasets table, the country table and the daily sparkline
   are replaced by the last full month tiles, the what and where cards and the day-by-day charts. The
-  route, the session gate, the empty state and the stale band are unchanged; a stale file renders in
+  route and the session gate are unchanged; the empty state is one line, and a stale file renders in
   full under a stale header marker and one health warning.
 - *D7 amended.* The scripted share leaves the page for the monthly CSV (`downloads_browser`,
   `downloads_scripted`) and, from `labels_since`, the who card's tool class. The reach note and the

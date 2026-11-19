@@ -293,9 +293,11 @@ _UNLABELLED_KEYS = frozenset({
 
 
 def test_labels_off_by_default_output_identical(tmp_path, monkeypatch, capsys):
-    """With AUSMT_STATS_LABELS_FROM unset, two successive folds write stats.json and the archive
-    byte for byte as the fold did before labels existed, except for the one count-free key
-    archive_through. The golden files under fixtures/traffic-labels-off are that fold's output for
+    """With AUSMT_STATS_LABELS_FROM unset, two successive folds over a span of logs inside the daily
+    window write stats.json and the archive byte for byte as the fold did before labels existed,
+    except for the one count-free key archive_through. A longer span is outside this statement,
+    because the daily window itself is longer, and pulled log copies now expire whatever the
+    labels setting. The golden files under fixtures/traffic-labels-off are that fold's output for
     this same scenario; the archive golden is unchanged, and each stats golden holds exactly the
     unlabelled key set plus archive_through, with no label key such as labels_since or
     labels_configured_from. Fails if any label code path reaches an unlabelled fold, including a
