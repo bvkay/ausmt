@@ -527,7 +527,7 @@ def test_analytics_omits_the_state_table_when_the_fold_produced_none(tmp_path):
 def test_analytics_tolerates_a_stats_file_that_still_carries_legacy_day_states(tmp_path):
     """LEGACY-DAY-STATES PIN. The daily state grain was dropped (it is the finest cell in the file, and
     the small-cell argument that rules out a city rules it out too), but a box that folded before the
-    drop still has a `states` map on its day rows until they age out of the 92-day window. The screen
+    drop still has a `states` map on its day rows until they age out of the daily window. The screen
     reads day rows for the sparkline and the reach note only, so that residue must be INERT. FAILS IF
     such a file 500s the screen, or if a day-level state figure reaches the page."""
     async def _body():
@@ -937,8 +937,8 @@ def test_the_by_survey_table_reports_how_many_countries_reached_each_survey(tmp_
 
 
 def test_the_quarterly_table_carries_the_reach_peak_and_the_client_split(tmp_path):
-    """QUARTERLY REACH AND CLIENT PIN. The reach proxy lived only on daily rows, which expire after 92
-    days, so it could never appear in a quarterly report; and the browser-versus-scripted split is the
+    """QUARTERLY REACH AND CLIENT PIN. The reach proxy lived only on daily rows, which expire with the
+    daily window, so it could never appear in a quarterly report; and the browser-versus-scripted split is the
     evidence that scripted scientific use exists at all. Both must appear per month. FAILS IF either
     row is missing, or if a month with no measured detail claims a figure for them."""
     async def _body():

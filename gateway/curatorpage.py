@@ -3857,7 +3857,7 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
         + _row("Top survey",
                _measured(lambda c: (_esc(_survey_rows(c.get("surveys") or {})[0]["survey"])
                                     if (c.get("surveys") or {}) else "&mdash;")))
-        # A reach proxy on daily rows alone would expire with them after 92 days and could never
+        # A reach proxy on daily rows alone would expire with the daily window and could never
         # appear in a quarterly report. The month keeps the peak of its own folded days.
         + _row("Peak networks in a day",
                _currently_measured(lambda c: _esc(_as_int(c.get("networks_peak")))))
@@ -4680,7 +4680,7 @@ def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str
         + _detail_caveat(stats)
         + '<h2>Quarterly breakdown</h2>'
         + '<p class="sub">The last three calendar months side by side. Monthly rollups are kept '
-          'permanently (they are pure counts); the daily rows behind them roll off after 92 days.</p>'
+          'permanently (they are pure counts); the daily rows behind them roll off after the daily window.</p>'
         + _monthly_table(stats)
         + _export_links()
         + '<h2>Downloads by survey</h2>'

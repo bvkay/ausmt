@@ -58,7 +58,7 @@ identification, sessions and funnels are never collected.
 | Record | Kept for | Why |
 | --- | --- | --- |
 | Raw access log (masked) | about 7 days | debugging only |
-| Daily aggregate rows | 92 days | a rolling operational view |
+| Daily aggregate rows | 184 days | the day-by-day charts on the curator Usage page |
 | Monthly rollup rows | indefinitely | pure counts with no address, path or identity; quarterly and year-over-year reporting |
 | Daily aggregate archive | indefinitely | one line of pure counts per folded day, no geography, never served or rendered |
 | Time-series hand-off counts | with the aggregate row that carries them | request counts and register byte totals per survey, product level and destination archive; the by-country figure for them exists at the monthly and cumulative grains only, exactly like every other country figure here |

@@ -58,7 +58,7 @@ WHAT IT DOES, once a day:
     NON-GEOGRAPHIC granularity the fold sees. Nothing reads it and nothing serves it.
 
 RETENTION (aggregates only -- the RAW log keeps its own untouched ~7-day Caddy rotation):
-  * DAILY rows are a rolling window of AUSMT_STATS_DAILY_KEEP days (default 92, i.e. a quarter) ending
+  * DAILY rows are a rolling window of AUSMT_STATS_DAILY_KEEP days (default 184, about six months) ending
     at the fold watermark. Older daily rows are pruned.
   * MONTHLY rollup rows are kept INDEFINITELY. They are tiny pure-count records (no address, no path,
     no identity) and they are what makes year-over-year funding reporting possible. Each month is
@@ -80,7 +80,7 @@ Config (env; every path derives from AUSMT_DATA_DIR, each overridable for tests)
                             (produced by deploy/scripts/prep_au_states.py; absent => country only)
   AUSMT_STATS_FILE          the cumulative stats.json      [default $AUSMT_DATA_DIR/gateway/state/stats.json]
   AUSMT_STATS_DAILY_ARCHIVE the append-only day archive    [default: daily_archive.jsonl beside stats.json]
-  AUSMT_STATS_DAILY_KEEP    daily-row retention, in DAYS   [default 92; monthly rollups are never pruned]
+  AUSMT_STATS_DAILY_KEEP    daily-row retention, in DAYS   [default 184; monthly rollups are never pruned]
   AUSMT_STATS_NOW           run instant (ISO %Y-%m-%dT%H:%M:%SZ or %Y-%m-%d) — TEST hook for determinism
 
 Exit code is ALWAYS 0 on the normal path (best-effort, timer-safe); a genuinely broken environment
@@ -118,12 +118,12 @@ TIMER_PERIOD_MIN = 1440
 # empty. Bumping the version would gate nothing and would only invite a migration step that is not
 # needed. That also covers the reverse case: a file folded by a build that briefly wrote a `states` map
 # onto each DAY row reads back fine here -- the key is simply carried forward untouched and ages out
-# with the 92-day daily window (see _count_geo for why no day-by-state cell is written any more).
+# with the daily window (see _count_geo for why no day-by-state cell is written any more).
 SCHEMA_VERSION = 2
 
-# The rolling window (in DAYS) of daily rows kept in stats.json. 92 days is one quarter, which is what
-# the quarterly funding view needs. Monthly rollups are NOT subject to this -- they are kept forever.
-DEFAULT_DAILY_KEEP_DAYS = 92
+# The rolling window (in DAYS) of daily rows kept in stats.json, about six months, which the day-by-day
+# charts show. Monthly rollups are NOT subject to this; they are kept forever.
+DEFAULT_DAILY_KEEP_DAYS = 184
 
 # The served download families (path prefixes under /data/) and the visit proxy. `h5` was excluded here
 # for as long as `/data/h5/*` was a latent Caddy force-download matcher with NO producer.
@@ -1183,7 +1183,7 @@ def _empty_month(month: str) -> dict:
     `geo_days` counts the days that actually contributed a country, which is what makes the forward-only
     country seam MACHINE-visible rather than a matter of reading the prose beside the table;
     `networks_peak` is the largest distinct-network count any of its folded days saw. That figure on
-    daily rows alone expires with the 92-day window and can never reach a quarterly report, which is
+    daily rows alone expires with the daily window and can never reach a quarterly report, which is
     exactly the horizon a funding report asks about. It accumulates as each day folds and is never
     recomputed from a tail that is about to be pruned.
 
@@ -1454,7 +1454,7 @@ def _coerce_prev(prev: dict | None) -> dict:
     # back-filled -- those days hold no hand-off because there was no route to request.
     s["handoffs"] = _coerce_handoffs(prev.get("handoffs"), geo=True)
     # Day rows are carried forward WHOLE, unknown keys and all. A row written by a build that briefly
-    # recorded a per-day `states` map keeps it and simply ages out of the 92-day window; it is not
+    # recorded a per-day `states` map keeps it and simply ages out of the daily window; it is not
     # stripped, because rewriting history on upgrade is the one thing this file never does.
     if isinstance(prev.get("daily"), list):
         s["daily"] = [d for d in prev["daily"] if isinstance(d, dict) and isinstance(d.get("date"), str)]
@@ -1582,7 +1582,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     # is what lets the export state that rather than look self-consistent while under-reporting.
     geo_days_seen: dict[str, str] = {}
     # date -> the ARCHIVE row for that day, built only for the days THIS call folds. The daily rows in
-    # stats.json are a 92-day window that the render path reads; these are the permanent, never-read
+    # stats.json are the daily window that the render path reads; these are the permanent, never-read
     # record, so they carry the finer per-survey / per-dataset / per-collection detail that has no
     # place on a rendered day row. Geography is deliberately absent from them (see _archive_line).
     archive_index: dict[str, dict] = {}
@@ -1811,7 +1811,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                 _bump_survey(month["surveys"], survey, size, counted=counted, country=cc,
                              kind=kind_key)
                 # The archive's per-survey row takes the SPLIT too (it is a day fact with no geography
-                # in it), so once the 92-day window has dropped the day, "file by file or taken whole"
+                # in it), so once the daily window has dropped the day, "file by file or taken whole"
                 # is still answerable for it. The collection rows below take no split: a collection is
                 # a programme rollup, and the manifest kind belongs to the artifact, not the programme.
                 _bump_volume(arc["by_survey"], survey, size, counted=counted, kind=kind_key)
@@ -2174,10 +2174,11 @@ def _month_row(index: dict, monthly: list, month: str) -> dict:
 # The APPEND-ONLY DAILY ARCHIVE: capture maximal non-geo granularity at day
 # grain now, so a report nobody has asked for yet can still be derived later.
 #
-# WHY IT EXISTS. The raw log rotates in about a week and the daily rows in stats.json roll off after 92
-# days, so today the only permanent record is the calendar-month rollup. Every question finer than a
-# month becomes unanswerable the moment the window passes, and it becomes unanswerable RETROACTIVELY:
-# the data existed, we folded it, and we threw the detail away. This file is the durable aggregate.
+# WHY IT EXISTS. The raw log rotates in about a week and the daily rows in stats.json roll off after
+# the daily window, so today the only permanent record is the calendar-month rollup. Every question
+# finer than a month becomes unanswerable the moment the window passes, and it becomes unanswerable
+# RETROACTIVELY: the data existed, we folded it, and we threw the detail away. This file is the
+# durable aggregate.
 #
 # WHAT IT IS NOT. It is not read by anything. The gateway never opens it, no route serves it, and it
 # lives in the gateway state dir, outside the published site-data tree. It is not pruned, and it is
@@ -2201,7 +2202,7 @@ def _archive_day(index: dict, date: str) -> dict:
                "by_kind": {}, "by_client": {}, "by_select": {}, "by_survey": {}, "by_dataset": {},
                "by_collection": {}, "handoffs": _empty_handoffs()}
         # The hand-off family's STATION-GRAIN cell, keyed on <survey>/<station>/<level>: the by_dataset
-        # of this family, and archive-only for the same reason. The 92-day window is exactly what
+        # of this family, and archive-only for the same reason. The daily window is exactly what
         # otherwise loses "which station, on which day" forever, and this file is never served.
         row["handoffs"]["by_route"] = {}
         index[date] = row
@@ -2236,7 +2237,7 @@ def _archive_line(row: dict, *, served_build: str | None = None) -> dict:
 
     `by_select` and `bulk_events` belong here for the same reason the format and client splits do: they
     are day facts with no geography in them, and the day grain is exactly what is otherwise lost once
-    the 92-day window drops the row."""
+    the daily window drops the row."""
     out: dict = {"date": row["date"]}
     for key in ("downloads", "visits", "api", "networks", "bulk_events", "download_bytes",
                 "unattributed"):

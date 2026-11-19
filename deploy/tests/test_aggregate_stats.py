@@ -554,6 +554,61 @@ def test_daily_window_keeps_92_days_and_drops_the_93rd():
     assert sum(m["visits"] for m in stats["monthly"]) == 2
 
 
+def _window_main(tmp_path, monkeypatch, keep_days: int,
+                 keep_env: str | None) -> tuple[list[str], str, str]:
+    """The daily dates main() keeps for one visit on the oldest day inside a `keep_days` window and
+    one on the day before it, with AUSMT_STATS_DAILY_KEEP set to `keep_env` (unset when None), plus
+    those two dates."""
+    data = tmp_path / "data"
+    logdir = data / "logs" / "caddy"
+    state = data / "gateway" / "state"
+    logdir.mkdir(parents=True)
+    state.mkdir(parents=True)
+    inside = (dt.date(2026, 7, 11) - dt.timedelta(days=keep_days - 1)).isoformat()
+    outside = (dt.date(2026, 7, 11) - dt.timedelta(days=keep_days)).isoformat()
+    (logdir / "access.json").write_text("\n".join([
+        _line("/data/catalogue.json", "203.0.113.5", date=outside),
+        _line("/data/catalogue.json", "203.0.113.5", date=inside),
+    ]) + "\n", encoding="utf-8")
+    monkeypatch.setenv("AUSMT_DATA_DIR", str(data))
+    monkeypatch.setenv("AUSMT_STATS_MANIFEST", str(_MANIFEST))
+    monkeypatch.setenv("AUSMT_STATS_DBIP_CSV", str(_DBIP))
+    monkeypatch.setenv("AUSMT_STATS_FILE", str(state / "stats.json"))
+    monkeypatch.setenv("AUSMT_STATS_NOW", "2026-07-12T03:30:00Z")
+    if keep_env is None:
+        monkeypatch.delenv("AUSMT_STATS_DAILY_KEEP", raising=False)
+    else:
+        monkeypatch.setenv("AUSMT_STATS_DAILY_KEEP", keep_env)
+    assert AGG.main([]) == 0
+    doc = json.loads((state / "stats.json").read_text(encoding="utf-8"))
+    assert doc["totals"]["visits"] == 2, "a pruned day still counts in the totals"
+    dates = [d["date"] for d in doc["daily"]]
+    return dates, inside, outside
+
+
+def test_default_daily_window_is_184_days(tmp_path, monkeypatch):
+    """DEFAULT WINDOW PIN. With no setting, the daily rows cover about six months: 184 days ending at
+    the fold watermark, so the oldest of those days is kept and the day before it is dropped. FAILS IF
+    the default is any other number of days, in the constant, in aggregate() or in main()."""
+    assert AGG.DEFAULT_DAILY_KEEP_DAYS == 184
+    dates, inside, outside = _window_main(tmp_path, monkeypatch, 184, None)
+    assert inside in dates and outside not in dates, dates
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    lines = [_line("/data/catalogue.json", "203.0.113.5", date=outside),
+             _line("/data/catalogue.json", "203.0.113.5", date=inside)]
+    stats = AGG.aggregate(None, lines, rmap, AGG.GeoIP.load(_DBIP), _RUN)
+    assert [d["date"] for d in stats["daily"]] == [inside]
+
+
+def test_daily_keep_setting_still_overrides_the_default(tmp_path, monkeypatch):
+    """OVERRIDE PIN. AUSMT_STATS_DAILY_KEEP still sets the window in days, and a value that is not a
+    number falls back to the default. FAILS IF the setting is ignored or a bad value breaks the run."""
+    dates, inside, outside = _window_main(tmp_path / "a", monkeypatch, 30, "30")
+    assert inside in dates and outside not in dates, dates
+    dates, inside, outside = _window_main(tmp_path / "b", monkeypatch, 184, "not-a-number")
+    assert inside in dates and outside not in dates, dates
+
+
 def test_v1_stats_file_upgrades_in_place_without_losing_or_inventing_anything():
     """MIGRATION PIN. A LIVE schema-1 stats.json must be read tolerantly and upgraded in place: every v1
     total/format/dataset carries forward, by_survey grows a volume field WITHOUT inventing historical
@@ -695,7 +750,7 @@ def test_no_day_row_ever_records_a_state_breakdown():
 def test_a_prior_file_carrying_legacy_day_states_folds_and_is_left_to_age_out():
     """TOLERANT-READ PIN. A box that folded with the build which briefly wrote a per-day `states` map has
     those keys sitting in its stats.json already. The next fold must read that file without a murmur:
-    the legacy key is carried forward EXACTLY as written and ages out with the 92-day daily window
+    the legacy key is carried forward EXACTLY as written and ages out with the daily window
     (rewriting history on upgrade is the one thing this file never does), while no new day row gains
     one. FAILS IF such a file raises, if the legacy key is stripped or mutated, or if the daily grain
     starts being written again."""
@@ -1302,7 +1357,7 @@ def test_the_honesty_lane_still_leaks_nothing():
 # The existing by_state map answers "how many requests from each state" and the reconciliation rows
 # depend on it, so it is untouched. Beside it now sits a PARALLEL detail map answering "how many
 # DOWNLOADS, how many visits, how much VOLUME", plus the per-survey country count behind the custodian
-# promise ("downloaded N times from M countries"), a monthly reach figure that can survive the 92-day
+# promise ("downloaded N times from M countries"), a monthly reach figure that can survive the daily
 # daily window, and the denominator that turns "12 surveys downloaded" into "12 of 40 served".
 #
 # All of it forward-only, all of it at the two grains that are kept, and none of it at day-by-state or
@@ -1427,7 +1482,7 @@ def test_a_survey_map_written_before_the_country_list_reads_back_and_starts_accr
 
 def test_each_month_records_its_peak_daily_network_count():
     """MONTHLY REACH PIN. The distinct-network reach proxy lived only on daily rows, so it died with the
-    92-day window and could never reach a quarterly report, which is exactly the horizon a funding
+    daily window and could never reach a quarterly report, which is exactly the horizon a funding
     report asks about. Each month must record the PEAK of its folded days' network counts, accumulated
     as each day folds and never recomputed from a tail that is about to be pruned. FAILS IF the peak is
     absent, if it is an average or a sum, if it is recomputed from the daily rows, or if pruning those
@@ -1495,7 +1550,7 @@ def test_the_state_and_funding_detail_still_leaks_nothing():
 # ==================================================================================================
 # The APPEND-ONLY DAILY ARCHIVE workflow.
 #
-# The raw log rotates in a week and the daily rows roll off after 92 days, so the only permanent
+# The raw log rotates in a week and the daily rows roll off after the daily window, so the only permanent
 # record was the calendar month. Every question finer than a month became unanswerable RETROACTIVELY:
 # we had the data, we folded it, and we discarded the detail. The archive is one JSON line per folded
 # day at maximal NON-GEO granularity, appended beside stats.json, read by nothing and served by
@@ -1921,7 +1976,7 @@ def test_each_survey_splits_its_downloads_into_station_files_and_whole_survey_bu
     month = stats["monthly"][0]["surveys"]["CI Sample Survey"]
     assert (month["files"], month["bundles"]) == (2, 1), month
     # The archive's own per-survey row carries it too: it is a NON-GEO day fact, exactly the kind of
-    # detail the archive exists to keep once the 92-day window has dropped the day it came from.
+    # detail the archive exists to keep once the daily window has dropped the day it came from.
     assert rows[0]["by_survey"]["CI Sample Survey"] == {"downloads": 3, "bytes": 1250,
                                                         "files": 2, "bundles": 1}
     assert stats["downloads"]["by_kind"] == {"file": 2, "bundle": 1}, "the global split is unchanged"
@@ -2101,7 +2156,7 @@ def test_the_select_split_accumulates_across_folds_and_is_never_backfilled():
 
 def test_the_archive_carries_the_select_split_and_the_event_count_and_still_no_geography():
     """ARCHIVE SELECT PIN. The split and the event count are NON-GEO day facts, which is exactly the
-    class of detail the archive exists to keep once the 92-day window has dropped the day. They must
+    class of detail the archive exists to keep once the daily window has dropped the day. They must
     ride the archive line, and the geographic boundary must not move an inch to let them. FAILS IF the
     archive loses them, if a day with no bulk download carries a fabricated zero pair, or if any
     geography arrives alongside."""
@@ -2354,7 +2409,7 @@ def test_hand_offs_ride_every_grain_with_by_survey_by_level_and_by_destination()
     calendar month, day row and the permanent archive line -- and by_destination rides beside them
     (cardinality is one today, and that is exactly when a missing breakdown is cheap to add).
     The archive additionally keeps the station-grain cell, the by_dataset of this family, because the
-    92-day window is what otherwise loses "which station, on which day" forever.
+    daily window is what otherwise loses "which station, on which day" forever.
 
     FAILS IF a grain is missing a dimension, if the four disagree on a figure, or if the archive
     stops carrying the route detail."""

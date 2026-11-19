@@ -1079,15 +1079,15 @@ below: a query flag on file requests the portal was making anyway.
 | **Time-series hand-offs** | The front door's `/go/ts/<survey>/<station>/<level>` route answers **302** with the NCI THREDDS URL for that file, and that redirect is the only trace the request leaves here (it is terminal at the front door and never reaches the box). Counted as **requests, never completed transfers**: AusMT hands the reader off and never learns whether a byte moved, and the line on the screen says so. The **bytes and the destination host come from the served `ts_access.json`**, joined on the route path, because the log can supply neither - a 302's `size` is the redirect body and its `Location` is not logged. The query is stripped before the join, exactly as the front door strips it before its own lookup. Admits 302 alone; a 404 on one of these paths is the route table refusing to resolve, which is how suppression works, and is not a hand-off. A route the served index no longer publishes counts in the family's **own** unattributed bucket with no bytes: that is table-versus-data drift, and it is why the deploy order puts the table out first. `by_survey` is keyed on the survey **slug**, the segment the published route carries. |
 | **Monthly rollups** | Each calendar month is accumulated as its days fold, never recomputed from the daily tail. |
 
-**Aggregate retention (separate from the raw log).** Daily rows are a rolling **92-day** window
-(`AUSMT_STATS_DAILY_KEEP`, in days). Monthly rollup rows are kept **indefinitely**: they are tiny
-pure-count records with no address, path or identity in them, and they are what makes year-over-year
+**Aggregate retention (separate from the raw log).** Daily rows are a rolling **184-day** window
+(about six months; `AUSMT_STATS_DAILY_KEEP`, in days). Monthly rollup rows are kept **indefinitely**:
+they are tiny pure-count records with no address, path or identity in them, and they are what makes year-over-year
 funding reporting possible. Pruning a day never loses the month it belonged to.
 
 **The daily aggregate archive.** Beside `stats.json`, the fold appends one JSON line per newly folded
 day to `${AUSMT_DATA_DIR}/gateway/state/daily_archive.jsonl` (override with
 `AUSMT_STATS_DAILY_ARCHIVE`). It is the durable day-grain record: the raw log rotates in a week and
-the daily rows roll off after a quarter, so without it any question finer than a month becomes
+the daily rows roll off after about six months, so without it any question finer than a month becomes
 unanswerable, and unanswerable retroactively.
 
 | Property | Value |

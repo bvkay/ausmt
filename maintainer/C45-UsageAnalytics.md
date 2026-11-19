@@ -205,7 +205,7 @@ forward-only and read `not measured` where they were not.
 
 Three further figures a report needs and could not get: a per-survey country **count** (the custodian
 sentence, with the list held at country grain and never rendered or exported), a per-month
-`networks_peak` so the reach proxy outlives the 92-day daily window, and `total_served_surveys` as
+`networks_peak` so the reach proxy outlives the daily window, and `total_served_surveys` as
 the denominator for "N surveys downloaded". The monthly export gains `geo_days`, `networks_peak` and
 the client split; the per-survey export gains the country count.
 
@@ -264,8 +264,8 @@ Owner ruling: capture maximal non-geographic granularity at day grain now, so a 
 asked for yet can still be derived later. "We do not want to limit ourselves."
 
 The problem it closes is retroactive. The raw log rotates in about a week; the daily rows in
-`stats.json` roll off after 92 days; only the calendar-month rollup is permanent. Every question
-finer than a month therefore becomes unanswerable once the window passes, and it becomes
+`stats.json` roll off after the daily window (184 days by default); only the calendar-month rollup
+is permanent. Every question finer than a month therefore becomes unanswerable once the window passes, and it becomes
 unanswerable about days we *did* fold: the data existed, the fold read it, and the detail was
 discarded. Monthly rollups were built to survive daily pruning; this is the same argument one grain
 down.
