@@ -588,8 +588,13 @@ and amends the earlier clauses it touches, by pointer.
   shell and element override scoped under `.shell.usage`. The shared head and palette are unchanged,
   and every other curator page is byte-identical except the rail label, which reads Usage everywhere
   (pinned by golden digests).
-- *No script needed.* The charts are server-drawn SVG, every value is also in a title and in a
-  collapsed table, and every ranked bar prints its value, so the page is complete without any script.
+- *One read-out script.* The charts are server-drawn SVG, every value is also in a title and in a
+  collapsed table, and every ranked bar prints its value, so the page is complete without it. One
+  script, served from the same origin at `/gateway/curator/usage.js` behind the curator session and
+  never cached, adds a hover read-out. It reads only the data attributes the server wrote on the
+  charts, copies their values without computing any, changes only the crosshairs, the dimmed columns
+  and the read-out box, makes no request and stores nothing. The page renders the same bytes whether
+  or not it loads. This amends the zero-script rule the screen carried.
 - *Day grain.* The day-by-day charts and their table twin show day-grain visits, whole-survey
   bundles, station files, API requests and hand-off requests only. No place, label, survey, dataset
   or format reaches the day grain, which the daily rows do not carry anyway; the archive already holds

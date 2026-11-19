@@ -144,3 +144,15 @@ def test_decision_record_says_caveats_live_in_the_docs():
         assert pointer in d10, pointer
     audience = c45.split("### Audience rule and the page", 1)[1].split("### History", 1)[0]
     assert "See D10." in audience and "Analytics screen" not in audience
+
+
+def test_decision_record_names_the_read_out_script():
+    """The decision record states that the page loads one same-origin read-out script that reads only
+    the data attributes the server wrote, and that the page is complete without it. FAILS IF that
+    record is missing or the record still says the page carries no script."""
+    d10 = " ".join(_read(_C45).split("## D10. The Usage page", 1)[1].split())
+    assert "*One read-out script.*" in d10 and "*No script needed.*" not in d10
+    record = d10.split("*One read-out script.*", 1)[1].split("- *", 1)[0]
+    for phrase in ("/gateway/curator/usage.js", "same origin", "data attributes",
+                   "complete without it"):
+        assert phrase in record, phrase

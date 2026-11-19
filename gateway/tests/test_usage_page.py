@@ -876,7 +876,7 @@ def test_usage_page_has_no_dash_characters(tmp_path):
         for dash in _DASHES:
             assert dash not in body, (name, dash)
             assert dash not in html.unescape(body), (name, dash)
-    for source in ("usagepage.py", "countrynames.py"):
+    for source in ("usagepage.py", "countrynames.py", "static/usage.js"):
         raw = (Path(curatorpage.__file__).parent / source).read_text(encoding="utf-8")
         assert not [d for d in _DASHES if d in raw], source
 
@@ -1502,3 +1502,204 @@ def test_csv_routes_and_headers_unchanged(tmp_path):
     assert heads["analytics-surveys.csv"] == "month,survey,downloads,download_bytes,countries,files,bundles"
     assert heads["analytics-countries.csv"] == ("month,country,requests,downloads,visits,api,"
                                                 "download_bytes,geo_days")
+
+
+# ---- The hover read-out script.
+
+_USAGE_JS = Path(curatorpage.__file__).parent / "static" / "usage.js"
+_JS_ROUTE = "/gateway/curator/usage.js"
+_JS_TAG = f'<script src="{_JS_ROUTE}" defer></script>'
+_JS_READS = {"data-u-chart", "data-u-name", "data-i", "data-day", "data-label", "data-v", "data-cx"}
+_JS_FORBIDDEN = ("fetch", "XMLHttpRequest", "WebSocket", "EventSource", "sendBeacon", "import(",
+                 "Worker", "eval", "Function(", "setInterval", "innerHTML", "outerHTML",
+                 "insertAdjacentHTML", "document.write", "localStorage", "sessionStorage",
+                 "indexedDB", "document.cookie", "://", "http:", "https:")
+_JS_GEOMETRY = ("getBBox", "getCTM", "getScreenCTM", "getBoundingClientRect", "getAttributeNS",
+                ".attributes", "getComputedStyle")
+
+
+def test_usage_js_route_session_gated_and_no_store(tmp_path):
+    """The read-out script is served from its own same-origin route, only to a signed-in curator, as
+    raw JavaScript that is never cached, byte for byte the bundled file. FAILS IF the route answers
+    without a session, is cached, wraps the script, or serves other bytes."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, _cfg):
+            anon = await client.get(_JS_ROUTE, follow_redirects=False)
+            assert anon.status_code == 303
+            await curator_login(client)
+            r = await client.get(_JS_ROUTE)
+            return r.status_code, dict(r.headers), r.text
+    status, headers, body = run(_body())
+    assert status == 200
+    assert headers["content-type"] == "application/javascript; charset=utf-8"
+    assert headers["cache-control"] == "no-store"
+    assert "<script" not in body
+    assert body == usagepage.USAGE_JS == _USAGE_JS.read_text(encoding="utf-8")
+
+
+def test_usage_js_has_no_forbidden_token():
+    """The script makes no request, stores nothing, writes no markup and names no other origin.
+    FAILS IF any banned token or URL form appears in it, a string literal included."""
+    js = _USAGE_JS.read_text(encoding="utf-8")
+    assert js.strip()
+    assert [t for t in _JS_FORBIDDEN if t in js] == []
+    assert re.findall(r"""["'`]//""", js) == []
+    assert not [d for d in _DASHES if d in js]
+
+
+def test_usage_js_reads_only_data_attributes():
+    """Every attribute the script reads is one of the data attributes the server wrote for it, named
+    as a literal; it reads no geometry. FAILS IF it reads any other attribute, reads one through a
+    computed name, or measures the chart."""
+    js = _USAGE_JS.read_text(encoding="utf-8")
+    calls = re.findall(r"getAttribute\s*\(([^)]*)\)", js)
+    assert calls, "the script reads no attribute, so this would pass over nothing"
+    names = []
+    for arg in calls:
+        m = re.fullmatch(r"""\s*["']([a-z-]+)["']\s*""", arg)
+        assert m, f"attribute read through a computed name: {arg}"
+        names.append(m.group(1))
+    assert set(names) <= _JS_READS, set(names) - _JS_READS
+    for key in re.findall(r"\.dataset\.(\w+)", js):
+        kebab = "data-" + re.sub(r"[A-Z]", lambda c: "-" + c.group(0).lower(), key)
+        assert kebab in _JS_READS, kebab
+    assert "dataset[" not in js
+    for selector in re.findall(r"\[(data-[a-z-]+)", js):
+        assert selector in _JS_READS, selector
+    assert [g for g in _JS_GEOMETRY if g in js] == []
+
+
+def test_usage_js_readout_copies_only_given_values(tmp_path):
+    """formatReadout, run under Node, returns the day label then one line per chart holding the
+    chart name and the value exactly as given, in the order given; it computes, rounds or invents
+    nothing and drops an entry it cannot read. FAILS IF a value is altered, reordered or invented, or
+    Node is absent (an absent Node must fail, never skip)."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    assert node, "node is required to run the read-out script's executable pin"
+    vectors = [
+        ["18 Nov", [["Portal visits", "1,234"], ["Whole-survey bundles downloaded", "not measured"],
+                    ["Station files downloaded", "no row"]]],
+        ["1 Oct", [["Portal visits", "0"], ["Station files downloaded", "0012"]]],
+        ["2 Oct", [["Portal visits", "<b>7</b>"], ["Station files downloaded", "1.50"]]],
+        ["3 Oct", [["Portal visits", 5], [None, "4"], ["Station files downloaded", "9"], "x"]],
+        ["4 Oct", []],
+    ]
+    expected = [
+        ["18 Nov", "Portal visits: 1,234", "Whole-survey bundles downloaded: not measured",
+         "Station files downloaded: no row"],
+        ["1 Oct", "Portal visits: 0", "Station files downloaded: 0012"],
+        ["2 Oct", "Portal visits: <b>7</b>", "Station files downloaded: 1.50"],
+        ["3 Oct", "Station files downloaded: 9"],
+        ["4 Oct"],
+    ]
+    driver = tmp_path / "readout_driver.js"
+    driver.write_text(
+        "const m = require(process.argv[2]);\n"
+        "const v = JSON.parse(process.argv[3]);\n"
+        "process.stdout.write(JSON.stringify(v.map(([l, e]) => m.formatReadout(l, e))));\n",
+        encoding="utf-8")
+    out = subprocess.run([node, str(driver), str(_USAGE_JS), json.dumps(vectors)],
+                         capture_output=True, text=True, timeout=30, check=False)
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout) == expected
+
+
+def _hits(svg: str) -> list[dict]:
+    return [dict(zip(("i", "day", "label", "v", "cx", "title"), m)) for m in re.findall(
+        r'<rect class="u-hit" [^>]*data-i="(\d+)" data-day="([^"]+)" data-label="([^"]+)" '
+        r'data-v="([^"]+)" data-cx="([^"]+)"><title>(.*?)</title></rect>', svg)]
+
+
+def test_hover_values_match_table_twin(tmp_path):
+    """For every day slot the read-out shows exactly what the table twin and the slot's own title
+    show, and one index names the same day and the same crosshair position in all three charts.
+    FAILS IF a hover value, a title and the twin disagree, or the charts' slots are out of step."""
+    doc = _full_stats()
+    doc["daily"] = [row for row in doc["daily"] if row["date"] not in ("2026-10-02", "2026-10-03")]
+    doc["daily"][5].pop("kinds")
+    days = sections(_get(tmp_path, doc))["days"]
+    twin = {row[0]: row for row in table_rows(days)}
+    slots: dict[str, list[dict]] = {}
+    for chart, column in (("visits", 1), ("bundles", 2), ("files", 3)):
+        svg = days.split(f'data-u-chart="{chart}"', 1)[1].split("</svg>", 1)[0]
+        hits = _hits(svg)
+        assert len(hits) == 184, chart
+        slots[chart] = hits
+        for hit in hits:
+            assert html.unescape(hit["title"]) == f'{hit["label"]}: {html.unescape(hit["v"])}'
+            day = dt.date.fromisoformat(hit["day"])
+            row = twin.get(f"{day.day} {usagepage._MONTHS[day.month - 1]} {day.year}")
+            if row is None:
+                assert hit["v"] == "no row", hit
+            else:
+                assert html.unescape(hit["v"]) == row[column], (chart, hit)
+        bars = dict(re.findall(r'<path class="u-bar [^"]*" data-i="(\d+)"[^>]*><title>(.*?)</title>',
+                               svg))
+        by_i = {h["i"]: h for h in hits}
+        for i, title in bars.items():
+            assert title == by_i[i]["title"], (chart, i)
+    assert {h["v"] for h in slots["visits"]} >= {"no row"}
+    assert "not measured" in {h["v"] for h in slots["files"]}
+    for a, b, c in zip(slots["visits"], slots["bundles"], slots["files"]):
+        assert (a["i"], a["day"], a["label"], a["cx"]) == (b["i"], b["day"], b["label"], b["cx"]) \
+            == (c["i"], c["day"], c["label"], c["cx"])
+
+
+def test_usage_page_has_one_own_script_and_no_inline_script(tmp_path):
+    """In every state the page loads exactly one script of its own, the read-out, as the last element
+    of the body, beside the shell's shared scripts; no script is inline and no data island is
+    embedded. FAILS IF the tag is missing, doubled or misplaced, a script has no src, or the
+    script's text is embedded in the page."""
+    body_js = usagepage.USAGE_JS.strip()
+    for name, page in _states(tmp_path).items():
+        tags = re.findall(r"<script\b[^>]*>(.*?)</script>", page, re.S)
+        assert all(inner == "" for inner in tags), name
+        srcs = re.findall(r'<script\b[^>]*\bsrc="([^"]+)"[^>]*>', page)
+        assert len(srcs) == len(re.findall(r"<script\b", page)), name
+        assert srcs.count(_JS_ROUTE) == 1, name
+        assert set(srcs) == {"/gateway/curator/context-bar.js", "/gateway/curator/ui.js", _JS_ROUTE}
+        assert page.rstrip().endswith(_JS_TAG + "</body></html>"), name
+        assert body_js[:80] not in page, name
+        assert 'type="application/json"' not in page and "<template" not in page, name
+
+
+def test_usage_page_requests_no_other_origin(tmp_path):
+    """Every script, stylesheet, image and frame the page loads comes from this origin, and the only
+    absolute link is the navigation link to the counting rules. FAILS IF any resource names another
+    origin or a protocol-relative path, or a second absolute link appears."""
+    for name, page in _states(tmp_path).items():
+        for attr, value in re.findall(r'\b(src|srcset|data|poster|action)="([^"]*)"', page):
+            assert value.startswith("/") and not value.startswith("//"), (name, attr, value)
+        for tag in re.findall(r"<link\b[^>]*>", page):
+            href = re.search(r'href="([^"]*)"', tag)
+            if href:
+                assert href.group(1).startswith("/") and not href.group(1).startswith("//"), tag
+        absolute = [h for h in re.findall(r'href="([^"]*)"', page)
+                    if "://" in h or h.startswith("//")]
+        assert absolute == [usagepage._DOCS_URL], (name, absolute)
+        assert re.findall(r"url\(\s*['\"]?(?:[a-z]+:|//)", page, re.I) == [], name
+        assert "@import" not in page, name
+
+
+def test_usage_page_renders_same_figures_without_script(monkeypatch):
+    """The page is the same bytes whether or not the read-out script is available, so every figure in
+    the tiles, tables and titles is server-rendered. FAILS IF the page depends on the script's
+    content, or a figure is left for the script to fill."""
+    nav = _golden_nav()
+    for doc in (_full_stats(), None, _fresh(_full_stats())):
+        with_js = usagepage.render_usage_page(stats=doc, stats_stale=doc is None, nav=nav)
+        monkeypatch.setattr(usagepage, "USAGE_JS", "")
+        without = usagepage.render_usage_page(stats=doc, stats_stale=doc is None, nav=nav)
+        monkeypatch.undo()
+        assert with_js == without
+    page = usagepage.render_usage_page(stats=_full_stats(), stats_stale=False, nav=nav)
+    parts = sections(page)
+    assert text(tile(page, "Portal visits")).startswith("Portal visits 110")
+    days = parts["days"]
+    assert len(table_rows(days)) == 184
+    assert len(table_rows(parts["months"])) == 12
+    hits = _hits(days.split('data-u-chart="visits"', 1)[1].split("</svg>", 1)[0])
+    assert hits and all(h["title"].endswith(h["v"]) for h in hits)
+    assert '<div class="u-tip" id="u-tip" hidden aria-hidden="true"></div>' in days

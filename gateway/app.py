@@ -658,7 +658,9 @@ class Gateway:
         stale one (old or future generated_at, the serve_state band) renders under a stale marker and
         a health warning; the page never 500s and never renders a stale file as current. No inline
         script: the charts are server-rendered SVG and every figure is printed or tabled, so the page
-        is complete without any script. `def` (blocking file read, Starlette threadpool)."""
+        is complete without any script. One external read-out script (/gateway/curator/usage.js)
+        adds hover values copied from data attributes the server wrote. `def` (blocking file read,
+        Starlette threadpool)."""
         name = self._require_session(request)
         if isinstance(name, Response):
             return name
@@ -1081,6 +1083,19 @@ class Gateway:
         if not isinstance(name, str):
             return name
         return Response(curatorpage.DOI_HARVEST_JS,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
+    def handle_usage_js(self, request: Request) -> Response:
+        """GET /gateway/curator/usage.js - the Usage page's hover read-out as a same-origin EXTERNAL
+        script (script-src 'self' blocks inline). It reads only data attributes the server wrote and
+        changes only the crosshairs, the dimmed columns and the read-out box. Session-gated for
+        consistency with the page; the content is a public-repo constant. DEGRADES: without it every
+        value is still printed in a title and in the table twin."""
+        name = self._require_session(request)
+        if not isinstance(name, str):
+            return name
+        return Response(usagepage.USAGE_JS,
                         media_type="application/javascript; charset=utf-8",
                         headers={"Cache-Control": "no-store"})
 
@@ -3267,6 +3282,12 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/doi-harvest.js")
     def curator_doi_harvest_js(request: Request):
         return gw.handle_doi_harvest_js(request)
+
+    # The Usage page's hover read-out - EXTERNAL for the same CSP reason. The page is complete
+    # without it.
+    @app.get("/gateway/curator/usage.js")
+    def curator_usage_js(request: Request):
+        return gw.handle_usage_js(request)
 
     # The nav-shell context bar's drift chip served-build half - EXTERNAL for the same CSP reason;
     # every shelled curator page loads it via a same-origin external script URL. Degrades gracefully.

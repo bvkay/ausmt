@@ -2264,6 +2264,24 @@ def test_gateway_comments_state_constraints_only():
     )
 
 
+def test_usage_js_comment_hygiene():
+    """The gateway's bundled browser scripts state constraints only, read with the same vocabulary as
+    the gateway's Python: gateway_tree() globs *.py, so a script under gateway/static/ sat outside
+    every class. The Usage page's read-out script is among them and writes only block comments.
+    FAILS IF a comment in any of them carries provenance, or the read-out script is missing or uses
+    a line comment."""
+    files = sorted((GATEWAY / "static").glob("*.js"))
+    assert "usage.js" in [p.name for p in files], "the read-out script is missing from the class"
+    hits = offences(files, root=ROOT)
+    assert not hits, (
+        f"{len(hits)} comment(s) in gateway/static carry provenance rather than a constraint:\n"
+        + "\n".join(hits)
+    )
+    usage = GATEWAY / "static" / "usage.js"
+    found = comments(usage, source_text(usage))
+    assert found and all(body.startswith("/*") for _, body in found), found
+
+
 def test_gateway_configuration_comments_state_constraints_only():
     hits = offences([p for p in gateway_config() if "tests" not in p.parts], root=ROOT)
     assert not hits, (

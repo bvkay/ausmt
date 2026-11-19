@@ -1,7 +1,9 @@
 """The curator Usage page.
 
 Every figure comes from stats.json as read by serve_state.read_stats. The page is server-rendered and
-complete without any script: charts are SVG, every value is also printed or listed in a table.
+complete without any script: charts are SVG, every value is also printed or listed in a table. One
+same-origin script, gateway/static/usage.js, adds a hover read-out that copies values the server
+already wrote into data attributes, so the page renders the same bytes whether or not it loads.
 
 The day-by-day charts and their table twin are pure functions of the daily rows. A daily row may
 carry more than the page shows; only its date, visits, bundles, station files, API requests and
@@ -13,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 import html
+from pathlib import Path
 
 from . import countrynames
 from .curatorpage import (_AU_STATE_NAMES, _CLIENT_NAMES, _MONTH_NAMES, _NETTYPE_NAMES,
@@ -316,6 +319,12 @@ def _state_visit_rows(stats) -> tuple[list[tuple[str, str, int | None]], int | N
 # The page.
 
 _TITLE = "AusMT usage"
+
+# The hover read-out, served at its own same-origin route. The page carries only the tag, as the
+# last element of the body, never the script's text.
+USAGE_JS = (Path(__file__).resolve().parent / "static" / "usage.js").read_text(encoding="utf-8")
+_USAGE_JS_TAG = '<script src="/gateway/curator/usage.js" defer></script>'
+_BODY_END = "</body></html>"
 _DOCS_URL = ("https://ausmt.readthedocs.io/en/latest/introduction/usage-analytics/"
              "#reading-the-curator-usage-page")
 _FORMAT_NAMES = {"mth5": "MTH5", "edi": "EDI", "emtfxml": "EMTF XML", "edi-zip": "EDI zip",
@@ -1109,5 +1118,9 @@ def render_usage_page(*, stats, stats_stale: bool, nav) -> str:
         body = (_header(stats, stats_stale) + _months_head(frame) + _who_card(frame)
                 + _day_by_day(frame) + _month_table(frame) + _what_and_where(frame)
                 + _notes_card(stats, stats_stale))
-    return _shell(_TITLE, f'<div class="u-inner">{body}</div>', nav=nav,
+    page = _shell(_TITLE, f'<div class="u-inner">{body}</div>', nav=nav,
                   extra_head=f"<style>{USAGE_CSS}</style>", page_class="usage")
+    head, end, tail = page.rpartition(_BODY_END)
+    if not end or tail.strip():
+        return page
+    return head + _USAGE_JS_TAG + _BODY_END + tail
