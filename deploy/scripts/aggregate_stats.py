@@ -2524,6 +2524,12 @@ def main(argv=None) -> int:
                           ts_access=ts_access, labels_from=labels_from,
                           operator_nets=operator_nets, nettypes=nettypes,
                           label_stats_out=label_stats)
+        # The configured label start date, count-free, written only while the setting is valid and
+        # never carried from a previous file, so an unset or invalid setting writes no such key.
+        if labels_from is not None:
+            stats["labels_configured_from"] = labels_from
+        else:
+            stats.pop("labels_configured_from", None)
         if labels_from is None:
             # A set but rejected switch is named, never echoed.
             label_journal = "labels=off" + (" from=invalid" if labels_raw.strip() else "")

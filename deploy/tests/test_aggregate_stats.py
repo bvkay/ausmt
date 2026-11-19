@@ -2029,6 +2029,38 @@ def test_an_old_file_without_archive_through_gains_it_only_on_a_successful_appen
     assert doc["archive_through"] == "2026-07-12"
 
 
+def test_labels_configured_from_is_stamped_from_the_setting(tmp_path, monkeypatch):
+    """labels_configured_from is the configured label start date, written on every run whose
+    AUSMT_STATS_LABELS_FROM is valid, including a month not yet reached. Unset or invalid, the key is
+    absent, and it is never carried from a previous file, so removing the setting removes it. It is a
+    date, never a count. FAILS IF a valid setting is not stamped, an unset or invalid one leaves the
+    key, or the pure fold writes it on its own."""
+    state = _archive_env(tmp_path, monkeypatch, ("2026-07-09",))
+    monkeypatch.setenv("AUSMT_STATS_LABELS_FROM", "2026-09-01")
+    doc = _fold_at(monkeypatch, state, "2026-07-10T03:30:00Z")
+    assert doc["labels_configured_from"] == "2026-09-01"
+    assert "labels_since" not in doc, "a month not yet reached labels nothing"
+
+    monkeypatch.setenv("AUSMT_STATS_LABELS_FROM", "2026-07-01")
+    assert _fold_at(monkeypatch, state, "2026-07-11T03:30:00Z")["labels_configured_from"] == \
+        "2026-07-01"
+
+    for bad in ("2026-09-02", "2026-9-01", "yes", "   "):
+        monkeypatch.setenv("AUSMT_STATS_LABELS_FROM", bad)
+        assert "labels_configured_from" not in _fold_at(monkeypatch, state, "2026-07-11T09:00:00Z"), bad
+    monkeypatch.setenv("AUSMT_STATS_LABELS_FROM", "2026-07-01")
+    _fold_at(monkeypatch, state, "2026-07-11T09:00:00Z")
+    monkeypatch.delenv("AUSMT_STATS_LABELS_FROM")
+    assert "labels_configured_from" not in _fold_at(monkeypatch, state, "2026-07-11T09:00:00Z")
+
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    prior = AGG.aggregate(None, [], rmap, AGG.GeoIP.load(_DBIP), _RUN)
+    prior["labels_configured_from"] = "2026-07-01"
+    for labels_from in (None, "2026-07-01"):
+        out = AGG.aggregate(prior, [], rmap, AGG.GeoIP.load(_DBIP), _RUN, labels_from=labels_from)
+        assert "labels_configured_from" not in out, labels_from
+
+
 def test_a_new_archive_file_is_group_writable(tmp_path, monkeypatch):
     """An archive file the fold creates is mode 0664 whatever the umask, so the fold account and the
     state dir's group can both keep appending to it. FAILS IF a new file has any other mode."""

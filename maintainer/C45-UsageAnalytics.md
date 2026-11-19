@@ -574,6 +574,10 @@ and amends the earlier clauses it touches, by pointer.
   mid-month, the fold output is byte-identical to the unlabelled fold except for the count-free key
   `archive_through`. The labels-off goldens were regenerated for that key alone, and the pin asserts
   their key set literally, so a label key reaching an unlabelled fold still fails it.
+- *labels_configured_from.* While `AUSMT_STATS_LABELS_FROM` is valid, including a month not yet
+  reached, the fold writes it into `stats.json` as `labels_configured_from`, a count-free date, so
+  the page can say when labels will start. Unset or invalid, the key is absent; it is never carried
+  from a previous file, so removing the setting removes it at the next fold.
 - *Archive mode.* A daily archive file the fold creates is mode 0664; an existing file's mode is
   never changed. Accepted risk: the gateway uid already owns the state dir and could replace the file
   whatever its mode, and group write also lets the gateway process append to or truncate the file in
