@@ -6,14 +6,13 @@ It reads the downloaded sources once and writes a compact `start_ip,end_ip,type`
 of hosting, education_research, access_provider or other. An address in no row is the fold's miss.
 
     python3 deploy/scripts/prep_nettype.py \\
-        --x4bnet-v4 "$tmp/ipv4.txt" --x4bnet-v6 "$tmp/ipv6.txt" \\
-        --x4bnet-licence "$tmp/LICENSE" --x4bnet-date YYYY-MM-DD \\
+        --x4bnet-v4 "$tmp/ipv4.txt" --x4bnet-v6 "$tmp/ipv6.txt" --x4bnet-date YYYY-MM-DD \\
         --out "$AUSMT_DATA_DIR/geoip/nettype.csv"
 
 SOURCES
-  * X4BNet lists_vpn, output/datacenter ipv4.txt and ipv6.txt (MIT): one CIDR per line, every range
-    hosting. Required, with the repository's LICENSE file, whose text is copied into the table header
-    because the MIT terms require the notice to travel with the data.
+  * X4BNet lists_vpn, output/datacenter ipv4.txt and ipv6.txt: one CIDR per line, every range
+    hosting. Required. The publisher states no licence for these lists; they are built in part from
+    IPLocate.io data (CC BY-SA 4.0), and the header says both.
   * Optional, both or neither: the iptoasn.com combined table (PDDL; range_start, range_end,
     AS_number, country_code, AS_description; tab separated, gzip accepted) with a PeeringDB net
     table (the whole `net` object as JSON). Each prefix takes its ASN's PeeringDB type.
@@ -78,9 +77,9 @@ DEFAULT_MIN_PEERINGDB_RECORDS = 5000
 _HOST_BITS = {4: 8, 6: 80}
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_MIT_GRANT = "Permission is hereby granted, free of charge"
 
-_NOTICE_IPLOCATE = "Hosting ranges built in part from IPLocate.io data (CC BY-SA 4.0)"
+_NOTICE_HOSTING = "Hosting ranges from X4BNet lists_vpn. The publisher states no licence."
+_NOTICE_IPLOCATE = "Built in part from IPLocate.io data (CC BY-SA 4.0)."
 _NOTICE_PEERINGDB = "Network types from PeeringDB"
 _NOTICE_IPTOASN = "Prefix to AS from iptoasn.com (PDDL)"
 
@@ -209,12 +208,10 @@ def resolve(ranges: list[tuple[int, int, str]]) -> list[tuple[int, int, str]]:
 
 
 def render(rows: dict[int, list[tuple[int, int, str]]], *, built: str, oldest: str,
-           sources: list[str], licence: str) -> str:
+           sources: list[str]) -> str:
     lines = [f"# ausmt-nettype v1 built={built} oldest_source={oldest} sources={','.join(sources)}",
              "# Columns: start_ip,end_ip,type (hosting, education_research, access_provider, other).",
-             "# Hosting ranges from X4BNet lists_vpn, output/datacenter, under the MIT licence:"]
-    lines += [f"# {ln}".rstrip() for ln in licence.strip().splitlines()]
-    lines.append(f"# {_NOTICE_IPLOCATE}")
+             f"# {_NOTICE_HOSTING}", f"# {_NOTICE_IPLOCATE}"]
     if "peeringdb" in sources:
         lines += [f"# {_NOTICE_PEERINGDB}", f"# {_NOTICE_IPTOASN}"]
     for version, cls in ((4, ipaddress.IPv4Address), (6, ipaddress.IPv6Address)):
@@ -255,7 +252,7 @@ def build(args) -> tuple[str, dict]:
     if with_asn != (args.peeringdb is not None):
         raise Refused("--asn-table and --peeringdb go together: give both or neither")
     dates = {"x4bnet": _date(args.x4bnet_date, "--x4bnet-date")}
-    inputs = [args.x4bnet_v4, args.x4bnet_v6, args.x4bnet_licence]
+    inputs = [args.x4bnet_v4, args.x4bnet_v6]
     if with_asn:
         if not args.asn_date or not args.peeringdb_date:
             raise Refused("--asn-table needs --asn-date and --peeringdb needs --peeringdb-date")
@@ -266,9 +263,6 @@ def build(args) -> tuple[str, dict]:
     for p in inputs:
         if out_dir in Path(p).resolve().parents:
             raise Refused(f"{p} is inside {out_dir}; keep the downloads in a scratch directory")
-    licence = _read_text(Path(args.x4bnet_licence))
-    if _MIT_GRANT not in licence:
-        raise Refused(f"{args.x4bnet_licence} is not the MIT licence text")
     v4 = read_x4bnet(Path(args.x4bnet_v4), 4)
     if len(v4) < MIN_X4BNET_V4_CIDRS:
         raise Refused(f"{args.x4bnet_v4} holds {len(v4)} valid IPv4 CIDRs, fewer than "
@@ -282,7 +276,7 @@ def build(args) -> tuple[str, dict]:
     ranges[6] += [(s, e, "hosting") for s, e in v6]
     rows = {ver: resolve(ranges[ver]) for ver in (4, 6)}
     text = render(rows, built=dt.datetime.now(dt.timezone.utc).date().isoformat(),
-                  oldest=min(dates.values()), sources=list(dates), licence=licence)
+                  oldest=min(dates.values()), sources=list(dates))
     return text, {"v4": len(rows[4]), "v6": len(rows[6]), "sources": ",".join(dates),
                   "oldest": min(dates.values())}
 
@@ -293,7 +287,6 @@ def main(argv=None) -> int:
                     "from X4BNet by default; with iptoasn and PeeringDB, the full four types.")
     ap.add_argument("--x4bnet-v4", required=True, help="X4BNet output/datacenter/ipv4.txt")
     ap.add_argument("--x4bnet-v6", required=True, help="X4BNet output/datacenter/ipv6.txt")
-    ap.add_argument("--x4bnet-licence", required=True, help="the X4BNet repository's LICENSE file")
     ap.add_argument("--x4bnet-date", required=True, help="the source's last commit date, YYYY-MM-DD")
     ap.add_argument("--asn-table", help="iptoasn.com combined TSV (.tsv or .tsv.gz)")
     ap.add_argument("--asn-date", help="the iptoasn download date, YYYY-MM-DD")

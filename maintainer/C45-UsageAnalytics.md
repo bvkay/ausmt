@@ -437,10 +437,10 @@ every other source type fold into other, so that no value points at a single age
 The table is built by `deploy/scripts/prep_nettype.py`: stdlib only, no network call, ranges widened
 to /24 and /48, overlaps resolved hosting first, rows sorted and disjoint because the lookup tests a
 single bisect candidate. No AS number, organisation name or domain is written. The default build is
-hosting only, from the X4BNet datacenter lists (MIT; built in part from IPLocate.io data, CC BY-SA
-4.0); the full build adds iptoasn.com (PDDL) prefixes typed from a PeeringDB net table, and waits on
-a reading of the PeeringDB terms for a stored snapshot. The X4BNet licence text is copied into the
-table header.
+hosting only, from the X4BNet datacenter lists (the publisher states no licence; built in part
+from IPLocate.io data, CC BY-SA 4.0); the full build adds iptoasn.com (PDDL) prefixes typed from a
+PeeringDB net table, and waits on a reading of the PeeringDB terms for a stored snapshot. The table
+header carries the attribution lines.
 
 The first line, `# ausmt-nettype v1 built=... oldest_source=... sources=...`, gates the table. States:
 absent; unreadable (an error reading it, or no valid row); stale (header missing or unparseable, or
@@ -532,6 +532,10 @@ These are recorded here and are not changed by the labels:
   reading.
 - The default operator list path is under `$AUSMT_DATA_DIR`. Whether the host-level backup covers
   that directory, and so holds the list, is not visible from the repository.
+- The hosting range source, the X4BNet `lists_vpn` datacenter lists, has no stated licence. Its use
+  is an owner decision not yet made. The network-type table is optional: while it is absent every
+  network reads unknown and the other labels are unaffected. The full build (iptoasn.com and
+  PeeringDB) remains subject to the PeeringDB terms.
 - The front-door rolls pulled to the box (`deploy/frontdoor/ship-frontdoor-logs.sh`, rsync without
   `--delete`) are not pruned there, which sits against the public statement that raw logs are kept
   for about seven days (`portal/about.html`). The labels do not read them. Listing and pruning them,

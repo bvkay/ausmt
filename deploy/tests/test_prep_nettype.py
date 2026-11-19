@@ -25,7 +25,6 @@ _AGG_SCRIPT = _REPO / "deploy" / "scripts" / "aggregate_stats.py"
 _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 _V4 = _FIXTURES / "x4bnet-dc-v4.sample.txt"
 _V6 = _FIXTURES / "x4bnet-dc-v6.sample.txt"
-_LICENCE = _FIXTURES / "x4bnet-licence.sample.txt"
 _ASN = _FIXTURES / "iptoasn.sample.tsv"
 _PDB = _FIXTURES / "peeringdb-net.sample.json"
 _TYPES = ("hosting", "education_research", "access_provider", "other")
@@ -81,7 +80,7 @@ def prep(monkeypatch):
 
 def _hosting_args(out: Path, *, v4=_V4, v6=_V6, date="2026-06-20") -> list[str]:
     return ["--x4bnet-v4", str(v4), "--x4bnet-v6", str(v6), "--x4bnet-date", date,
-            "--x4bnet-licence", str(_LICENCE), "--out", str(out)]
+            "--out", str(out)]
 
 
 def _full_args(out: Path, *, pdb=_PDB, min_records="1") -> list[str]:
@@ -225,13 +224,29 @@ def test_header_carries_oldest_source_date(prep, tmp_path):
     assert _HEADER_RE.match(hosting.splitlines()[0]).group(2) == "2026-06-20"
 
 
-def test_x4bnet_licence_copied_into_header(prep, tmp_path):
-    """The X4BNet MIT notice, copyright line included, is carried in the table's header from the
-    licence file given, so the notice travels with the derived data."""
-    text = _build(prep, tmp_path, _hosting_args)
+_NOTICE_HOSTING = "# Hosting ranges from X4BNet lists_vpn. The publisher states no licence."
+_NOTICE_IPLOCATE = "# Built in part from IPLocate.io data (CC BY-SA 4.0)."
+
+
+@pytest.mark.parametrize("args_fn", [_hosting_args, _full_args])
+def test_header_states_no_licence_for_the_hosting_lists(prep, tmp_path, args_fn):
+    """The builder runs with no licence file for the hosting lists, the header carries the two
+    hosting notice lines exactly, and no line of the table names the MIT licence."""
+    text = _build(prep, tmp_path, args_fn)
     head = [ln for ln in text.splitlines() if ln.startswith("#")]
-    assert "# Copyright (c) Invented Example Holder" in head
-    assert any("Permission is hereby granted, free of charge" in ln for ln in head)
+    assert _NOTICE_HOSTING in head
+    assert _NOTICE_IPLOCATE in head
+    assert "MIT" not in text
+    assert not any("permission is hereby granted" in ln.lower() for ln in head)
+
+
+def test_licence_file_argument_is_gone(prep, tmp_path, capsys):
+    """The builder takes no licence file for the hosting lists: the argument is refused as unknown
+    and nothing is written."""
+    out = tmp_path / "out" / "nettype.csv"
+    assert prep.main(_hosting_args(out) + ["--x4bnet-licence", str(_V4)]) != 0
+    assert "unrecognized arguments: --x4bnet-licence" in capsys.readouterr().err
+    _nothing_written(out)
 
 
 def test_makes_no_network_call(prep, tmp_path, monkeypatch):
@@ -258,12 +273,11 @@ def _nothing_written(out: Path) -> None:
 
 
 @pytest.mark.parametrize("case", ["short_x4bnet", "truncated_peeringdb", "missing_input",
-                                  "unreadable_peeringdb", "licence_not_mit", "bad_date"])
+                                  "unreadable_peeringdb", "bad_date"])
 def test_refuses_short_x4bnet_and_truncated_peeringdb_and_writes_nothing(tmp_path, monkeypatch,
                                                                         case):
     """The X4BNet floor (1000 valid IPv4 CIDRs) and the PeeringDB floor (5000 net records) refuse a
-    truncated download, and an unreadable input, a licence file that is not the MIT grant or a
-    malformed source date refuse too. Each exits non-zero and leaves no file behind."""
+    truncated download, and an unreadable input or a malformed source date refuse too. Each exits non-zero and leaves no file behind."""
     prep = _prep()
     out = tmp_path / "out" / "nettype.csv"
     if case == "short_x4bnet":
@@ -279,10 +293,6 @@ def test_refuses_short_x4bnet_and_truncated_peeringdb_and_writes_nothing(tmp_pat
         bad = tmp_path / "pdb.json"
         bad.write_text('{"data": [', encoding="utf-8")
         args = _full_args(out, pdb=bad)
-    elif case == "licence_not_mit":
-        monkeypatch.setattr(prep, "MIN_X4BNET_V4_CIDRS", 1)
-        args = _hosting_args(out)
-        args[args.index("--x4bnet-licence") + 1] = str(_V4)
     else:
         monkeypatch.setattr(prep, "MIN_X4BNET_V4_CIDRS", 1)
         args = _hosting_args(out, date="2026-6-20")

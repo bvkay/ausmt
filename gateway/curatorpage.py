@@ -4460,7 +4460,7 @@ def _classification_table(stats: dict) -> str:
     shown = _monthly_rows(stats)[-3:]
     attribution = ""
     if any(_as_int(m.get("nettype_days")) > 0 for m in shown):
-        attribution = ('<p class="opsnote">Hosting ranges: X4BNet lists_vpn (MIT licence), built in '
+        attribution = ('<p class="opsnote">Hosting ranges: X4BNet lists_vpn, built in '
                        'part from IPLocate.io data (CC BY-SA 4.0).')
         if any(_as_int(m.get("nettype_full_days")) > 0 for m in shown):
             attribution += ' Network types: PeeringDB. Prefix to network: iptoasn.com.'

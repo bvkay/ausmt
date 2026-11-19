@@ -208,9 +208,11 @@ the DB-IP attribution in its own header, because a file outlives the terminal it
 
 ## Network type data attribution
 
-Hosting ranges come from the X4BNet `lists_vpn` datacenter lists, used under the MIT licence, whose
-notice is carried in the header of the derived table. Hosting ranges are built in part from
-IPLocate.io data (CC BY-SA 4.0). When the full table is built, network types also come from PeeringDB,
+Hosting ranges: X4BNet lists_vpn, built in part from IPLocate.io data (CC BY-SA 4.0).
+
+The publisher of the X4BNet lists states no licence for them. Without the derived table every network
+reads unknown and the other figures are unaffected. The attribution is also carried in the header of
+the derived table. When the full table is built, network types also come from PeeringDB,
 and prefix to network from iptoasn.com (PDDL). The derived table holds IP ranges and a type only: no
 network number, organisation name or domain.
 

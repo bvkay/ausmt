@@ -2040,15 +2040,17 @@ def test_no_label_column_in_survey_or_country_csv():
 
 
 def test_attribution_present_when_nettype_days(tmp_path):
-    """ATTRIBUTION PIN. The hosting lists are MIT and built in part from CC BY-SA data, so the page
-    that shows a network type credits them, and credits PeeringDB and iptoasn.com only when a shown
-    month used the full table. FAILS IF the credit is missing when a table was used, claims the full
-    sources when none was used, or appears when no table was used."""
-    hosting = ("Hosting ranges: X4BNet lists_vpn (MIT licence), built in part from IPLocate.io data "
+    """ATTRIBUTION PIN. The hosting lists are built in part from CC BY-SA data, so the page that
+    shows a network type credits them, and credits PeeringDB and iptoasn.com only when a shown month
+    used the full table. The publisher states no licence for the lists, so no licence is named for
+    them. FAILS IF the credit is missing when a table was used, claims the full sources when none
+    was used, appears when no table was used, or the page names the MIT licence."""
+    hosting = ("Hosting ranges: X4BNet lists_vpn, built in part from IPLocate.io data "
                "(CC BY-SA 4.0).")
     full = " Network types: PeeringDB. Prefix to network: iptoasn.com."
     text = _text(run(_analytics(tmp_path, _label_stats())))
     assert hosting + full in text
+    assert not re.search(r"\bMIT\b", text)
 
     hosting_only = _label_stats()
     hosting_only["monthly"][2]["nettype_full_days"] = 0
