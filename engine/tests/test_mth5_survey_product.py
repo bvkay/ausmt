@@ -8,6 +8,7 @@ coord-access integration of the same producer is covered by test_manifest.py / t
 test_coord_access.py. Requires the mt_metadata/mth5 build stack; skips cleanly otherwise.
 """
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -170,6 +171,22 @@ def test_producer_withholds_survey_when_gate_fails(tmp_path, monkeypatch):
     rel, hp, n = bp.emit_survey_mth5(_stations(), "withheld", "Withheld", tmp_path, smeta=None)
     assert (rel, hp, n) == (None, None, 0), "a survey failing the gate yields no bundle"
     assert not (tmp_path / "bundles" / "withheld-tf.h5").exists(), "the withheld h5 must be deleted, not served"
+
+
+def test_an_id_the_summary_table_cannot_address_is_recorded_and_skipped(tmp_path, capsys):
+    """Fails if a transfer function id longer than the summary table's tf_id column is written:
+    the gate cannot find it again and withholds the whole bundle, the other station with it."""
+    edis = example_edis()
+    long_id = tmp_path / "long.edi"
+    long_id.write_text(re.sub(r'DATAID\s*=\s*"?[^"\n]*"?', 'DATAID="EXAMPLE01_MERGED_WITH_EXAMPLE02_REMOTE"',
+                              edis[0].read_text(encoding="latin-1"), count=1), encoding="latin-1")
+    rows = []
+    rel, hp, n = bp.emit_survey_mth5([(long_id, {"id": "LONG"}), (edis[1], {"id": edis[1].stem})],
+                                     "long-id", "Long id", tmp_path, failure_rows=rows)
+    assert [(r["file"], r["error"]) for r in rows] == [("long.edi", "ValueError")], rows
+    assert "summary table" in rows[0]["message"], rows
+    assert n == 1 and hp.exists(), "the bundle keeps the station mth5 can find again"
+    assert "WITHHOLD" not in capsys.readouterr().err, "the station is skipped, not caught by the gate"
 
 
 # --------------------------------------------------------------------- tier 3 collection (designed, disabled)

@@ -4536,6 +4536,17 @@ def _tensor_max_abs_diff(a, b):
     return float(np.nanmax(diff)) if diff.size else 0.0
 
 
+def _mth5_require_addressable(tf) -> None:
+    """Raise when mth5 could not find this transfer function again. Its summary table keeps tf_id
+    in a fixed-width column and a lookup goes by that value, so a longer id is stored, missed by
+    the round-trip gate and costs the whole file."""
+    from mth5 import TF_DTYPE  # noqa: PLC0415
+    width = TF_DTYPE["tf_id"].itemsize
+    if len(str(tf.tf_id).encode("utf-8")) > width:
+        raise ValueError(f"the transfer function id is longer than the {width} bytes the MTH5 "
+                         f"summary table keeps: {tf.tf_id!r}")
+
+
 def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
     """Blocking round-trip gate. Reopen a built survey MTH5 and compare every stored TF's impedance tensor
     (and tipper) + coordinates to a FRESH parse of its source EDI, exact-or-tolerance. Also asserts the
@@ -4688,6 +4699,7 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None, failure_rows=None,
             try:
                 tf = TF(fn=str(p))
                 tf.read()
+                _mth5_require_addressable(tf)
                 _apply_mth5_survey_metadata(tf.survey_metadata, smeta, slug, label)
                 tf.station_metadata.id = _sanitise_station_id(r["id"])
                 _stamp_mth5_source_provenance(tf.station_metadata, r)
@@ -5152,6 +5164,7 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
                 try:
                     tf = TF(fn=str(p))
                     tf.read()
+                    _mth5_require_addressable(tf)
                     _apply_mth5_survey_metadata(tf.survey_metadata, smeta_by_slug.get(slug), slug, label)
                     tf.station_metadata.id = _sanitise_station_id(r["id"])
                     _stamp_mth5_source_provenance(tf.station_metadata, r)
