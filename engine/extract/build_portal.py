@@ -6394,8 +6394,8 @@ def _main_build(argv=None):
                                                         custodian=_custodian))
                 _bundle_formats.setdefault(slug, {})["xml-zip"] = _xrel
             if flags["survey_h5_enabled"]:
-                # emit_survey_mth5 rebuilds the bundle by RE-READING the RAW source files
-                # (TF(fn=...)), bypassing the masked record entirely — an unfiltered station list served
+                # emit_survey_mth5 rebuilds the bundle by RE-READING the RAW source files,
+                # bypassing the masked record entirely: an unfiltered station list served
                 # a withheld station's exact lat/lon/elev inside the h5 while every JSON surface was
                 # correctly null (the leak-sweep's HDF5 leg pins this). Filter to the byte-gated
                 # exact-only set (the same per-station predicate as the EDI copy loop above): the
