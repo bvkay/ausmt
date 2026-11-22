@@ -222,6 +222,23 @@ def test_a_normalised_id_the_summary_table_cannot_address_is_recorded_and_skippe
     assert "WITHHOLD" not in capsys.readouterr().err, "the station is skipped, not caught by the gate"
 
 
+def test_a_collection_skips_a_member_the_summary_table_cannot_address(tmp_path, capsys):
+    """Fails if the collection writer stores an id longer than the summary table's tf_id column,
+    as the source carries it or as the engine reader normalises it: the gate cannot find it again
+    and withholds the whole collection."""
+    carried = _with_dataid(tmp_path / "carried.edi", SINGLE, "VULCAN_A1_MERGED_WITH_VULCAN_A2_REMOTE")
+    normalised = _with_dataid(tmp_path / "normalised.edi", SINGLE,
+                              "P=A1 M=A2 R=REMOTE REFERENCE SITE (H)")
+    members = [("survey-a", "Survey A", [(carried, {"id": "A1"}), (OTHER, {"id": "A2"})]),
+               ("survey-b", "Survey B", [(normalised, {"id": "B1"}), (SINGLE, {"id": "B2"})])]
+    _rel, hp, n = bp.emit_collection_mth5(members, "collx", tmp_path)
+    err = capsys.readouterr().err
+    assert "WITHHOLD" not in err, "the members are skipped, not caught by the gate"
+    assert "WARN carried.edi: ValueError" in err and "WARN normalised.edi: ValueError" in err, err
+    assert n == 2 and hp and hp.exists()
+    assert sorted(_stored(hp)) == [("survey-a", "A2"), ("survey-b", "B2")]
+
+
 # --------------------------------------------------------------------------- the round-trip gate
 
 def test_the_gate_passes_a_file_holding_the_section_of_record(tmp_path):
