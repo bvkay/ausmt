@@ -1,0 +1,13 @@
+192.0.2.10	192.0.2.20	64509	ZZ	Invented Enterprise Example
+198.51.100.0	198.51.100.255	64501	ZZ	Invented University Network
+203.0.113.0	203.0.113.127	64502	ZZ	Invented Access Company
+2001:db8:100::	2001:db8:1ff:ffff:ffff:ffff:ffff:ffff	64500	ZZ	Invented Access Provider
+2001:db8:200::	2001:db8:27f:ffff:ffff:ffff:ffff:ffff	64503	ZZ	Invented Government Office
+2001:db8:280::	2001:db8:2ff:ffff:ffff:ffff:ffff:ffff	64508	ZZ	Invented Transit Network
+2001:db8:300::	2001:db8:3ff:ffff:ffff:ffff:ffff:ffff	64504	ZZ	Invented Campus Carrier
+2001:db8:400::	2001:db8:4ff:ffff:ffff:ffff:ffff:ffff	64505	ZZ	Invented Undisclosed Network
+2001:db8:500::	2001:db8:5ff:ffff:ffff:ffff:ffff:ffff	64506	ZZ	Invented Unlisted Network
+2001:db8:600::	2001:db8:6ff:ffff:ffff:ffff:ffff:ffff	64507	ZZ	Invented Content Network
+2001:db8:800::	2001:db8:8ff:ffff:ffff:ffff:ffff:ffff	0	None	Not routed
+2001:db8:900:1::	2001:db8:900:2:ffff:ffff:ffff:ffff	64510	ZZ	Invented Charity Network
+2001:db8:a00::	2001:db8:aff:ffff:ffff:ffff:ffff:ffff	64511	ZZ	Invented Novel Category Network

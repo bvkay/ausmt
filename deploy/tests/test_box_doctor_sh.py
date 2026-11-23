@@ -37,6 +37,7 @@ case "$*" in
 esac
 """
 _CURL_STUB = """#!/bin/sh
+[ -n "${CURL_LOG:-}" ] && printf '%s\\n' "$*" >> "$CURL_LOG"
 for a in "$@"; do url="$a"; done
 case "$url" in
   *"/gateway/curator/queue") echo "${CURATOR_CODE:-404}" ;;
@@ -432,3 +433,17 @@ def test_kernel_slab_leg_warns_on_a_leak_and_never_blocks_a_deploy(tmp_path):
     r2 = _run(_env(healthy, data, AUSMT_ALERT_MEMINFO=str(_FIXTURES / "proc-meminfo.healthy")))
     assert any(ln.startswith("PASS kernel-memory:") and "270" in ln
                for ln in r2.stdout.splitlines()), r2.stdout
+
+
+def test_doctor_stub_receives_client_name_when_curl_overridden(tmp_path):
+    """With AUSMT_DOCTOR_CURL set to a stub, every probe still sends the doctor's client name, so
+    the usage fold counts the doctor as the operator. Fails if the override drops the name."""
+    data = _make_tree(tmp_path)
+    env = _env(tmp_path, data, CURL_LOG=str(tmp_path / "curl.log"))
+    assert env["AUSMT_DOCTOR_CURL"].endswith("/curl")
+    r = _run(env)
+    assert r.returncode == 0, r.stdout
+    calls = Path(env["CURL_LOG"]).read_text(encoding="utf-8").splitlines()
+    assert calls
+    for call in calls:
+        assert call.startswith("-A ausmt-ops/1-doctor-box "), call

@@ -1,0 +1,6 @@
+# Invented operator list for the label tests: documentation ranges only.
+# One network per line; blank lines and lines opening with a hash are ignored.
+
+192.0.2.0/24
+198.51.100.7/32
+2001:db8:1:2::/64

@@ -13,7 +13,9 @@ import datetime as dt
 import gzip
 import importlib.util
 import json
+import os
 import re
+import stat
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -50,7 +52,8 @@ _IPV4_RE = re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b")
 _IPV6_RE = re.compile(r"[0-9a-fA-F]{1,4}::[0-9a-fA-F:]*|::[0-9a-fA-F]{1,4}|"
                       r"(?:[0-9a-fA-F]{1,4}:){3,}[0-9a-fA-F]{1,4}")
 # A UA fingerprint the leak sweep hunts (the exact strings the synthetic lines carry).
-_UA_MARKERS = ("Mozilla", "Chrome", "Safari", "AppleWebKit", "Googlebot", "curl/", "python-requests")
+_UA_MARKERS = ("Mozilla", "Chrome", "Safari", "AppleWebKit", "Googlebot", "curl/", "python-requests",
+               "ausmt-ops")
 
 
 def _load_agg():
@@ -553,6 +556,61 @@ def test_daily_window_keeps_92_days_and_drops_the_93rd():
     assert sum(m["visits"] for m in stats["monthly"]) == 2
 
 
+def _window_main(tmp_path, monkeypatch, keep_days: int,
+                 keep_env: str | None) -> tuple[list[str], str, str]:
+    """The daily dates main() keeps for one visit on the oldest day inside a `keep_days` window and
+    one on the day before it, with AUSMT_STATS_DAILY_KEEP set to `keep_env` (unset when None), plus
+    those two dates."""
+    data = tmp_path / "data"
+    logdir = data / "logs" / "caddy"
+    state = data / "gateway" / "state"
+    logdir.mkdir(parents=True)
+    state.mkdir(parents=True)
+    inside = (dt.date(2026, 7, 11) - dt.timedelta(days=keep_days - 1)).isoformat()
+    outside = (dt.date(2026, 7, 11) - dt.timedelta(days=keep_days)).isoformat()
+    (logdir / "access.json").write_text("\n".join([
+        _line("/data/catalogue.json", "203.0.113.5", date=outside),
+        _line("/data/catalogue.json", "203.0.113.5", date=inside),
+    ]) + "\n", encoding="utf-8")
+    monkeypatch.setenv("AUSMT_DATA_DIR", str(data))
+    monkeypatch.setenv("AUSMT_STATS_MANIFEST", str(_MANIFEST))
+    monkeypatch.setenv("AUSMT_STATS_DBIP_CSV", str(_DBIP))
+    monkeypatch.setenv("AUSMT_STATS_FILE", str(state / "stats.json"))
+    monkeypatch.setenv("AUSMT_STATS_NOW", "2026-07-12T03:30:00Z")
+    if keep_env is None:
+        monkeypatch.delenv("AUSMT_STATS_DAILY_KEEP", raising=False)
+    else:
+        monkeypatch.setenv("AUSMT_STATS_DAILY_KEEP", keep_env)
+    assert AGG.main([]) == 0
+    doc = json.loads((state / "stats.json").read_text(encoding="utf-8"))
+    assert doc["totals"]["visits"] == 2, "a pruned day still counts in the totals"
+    dates = [d["date"] for d in doc["daily"]]
+    return dates, inside, outside
+
+
+def test_default_daily_window_is_184_days(tmp_path, monkeypatch):
+    """DEFAULT WINDOW PIN. With no setting, the daily rows cover about six months: 184 days ending at
+    the fold watermark, so the oldest of those days is kept and the day before it is dropped. FAILS IF
+    the default is any other number of days, in the constant, in aggregate() or in main()."""
+    assert AGG.DEFAULT_DAILY_KEEP_DAYS == 184
+    dates, inside, outside = _window_main(tmp_path, monkeypatch, 184, None)
+    assert inside in dates and outside not in dates, dates
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    lines = [_line("/data/catalogue.json", "203.0.113.5", date=outside),
+             _line("/data/catalogue.json", "203.0.113.5", date=inside)]
+    stats = AGG.aggregate(None, lines, rmap, AGG.GeoIP.load(_DBIP), _RUN)
+    assert [d["date"] for d in stats["daily"]] == [inside]
+
+
+def test_daily_keep_setting_still_overrides_the_default(tmp_path, monkeypatch):
+    """OVERRIDE PIN. AUSMT_STATS_DAILY_KEEP still sets the window in days, and a value that is not a
+    number falls back to the default. FAILS IF the setting is ignored or a bad value breaks the run."""
+    dates, inside, outside = _window_main(tmp_path / "a", monkeypatch, 30, "30")
+    assert inside in dates and outside not in dates, dates
+    dates, inside, outside = _window_main(tmp_path / "b", monkeypatch, 184, "not-a-number")
+    assert inside in dates and outside not in dates, dates
+
+
 def test_v1_stats_file_upgrades_in_place_without_losing_or_inventing_anything():
     """MIGRATION PIN. A LIVE schema-1 stats.json must be read tolerantly and upgraded in place: every v1
     total/format/dataset carries forward, by_survey grows a volume field WITHOUT inventing historical
@@ -694,7 +752,7 @@ def test_no_day_row_ever_records_a_state_breakdown():
 def test_a_prior_file_carrying_legacy_day_states_folds_and_is_left_to_age_out():
     """TOLERANT-READ PIN. A box that folded with the build which briefly wrote a per-day `states` map has
     those keys sitting in its stats.json already. The next fold must read that file without a murmur:
-    the legacy key is carried forward EXACTLY as written and ages out with the 92-day daily window
+    the legacy key is carried forward EXACTLY as written and ages out with the daily window
     (rewriting history on upgrade is the one thing this file never does), while no new day row gains
     one. FAILS IF such a file raises, if the legacy key is stripped or mutated, or if the daily grain
     starts being written again."""
@@ -789,7 +847,7 @@ def test_state_data_is_forward_only_and_never_backfills_a_folded_day():
 
 def test_state_table_rejects_anything_that_is_not_one_of_the_eight_codes():
     """VOCABULARY PIN. The fold accepts only the eight state/territory codes from the table file, so a
-    hand-edited or mangled table cannot push an arbitrary label onto the analytics screen. FAILS IF a
+    hand-edited or mangled table cannot push an arbitrary label onto the curator Usage page. FAILS IF a
     junk code, a city name, or a lowercase stray is accepted as a state."""
     assert set(AGG.AU_STATE_CODES) == {"NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT"}
     t = _FIXTURES.parent / "_junk-states.csv"
@@ -1301,7 +1359,7 @@ def test_the_honesty_lane_still_leaks_nothing():
 # The existing by_state map answers "how many requests from each state" and the reconciliation rows
 # depend on it, so it is untouched. Beside it now sits a PARALLEL detail map answering "how many
 # DOWNLOADS, how many visits, how much VOLUME", plus the per-survey country count behind the custodian
-# promise ("downloaded N times from M countries"), a monthly reach figure that can survive the 92-day
+# promise ("downloaded N times from M countries"), a monthly reach figure that can survive the daily
 # daily window, and the denominator that turns "12 surveys downloaded" into "12 of 40 served".
 #
 # All of it forward-only, all of it at the two grains that are kept, and none of it at day-by-state or
@@ -1426,7 +1484,7 @@ def test_a_survey_map_written_before_the_country_list_reads_back_and_starts_accr
 
 def test_each_month_records_its_peak_daily_network_count():
     """MONTHLY REACH PIN. The distinct-network reach proxy lived only on daily rows, so it died with the
-    92-day window and could never reach a quarterly report, which is exactly the horizon a funding
+    daily window and could never reach a quarterly report, which is exactly the horizon a funding
     report asks about. Each month must record the PEAK of its folded days' network counts, accumulated
     as each day folds and never recomputed from a tail that is about to be pruned. FAILS IF the peak is
     absent, if it is an average or a sum, if it is recomputed from the daily rows, or if pruning those
@@ -1494,7 +1552,7 @@ def test_the_state_and_funding_detail_still_leaks_nothing():
 # ==================================================================================================
 # The APPEND-ONLY DAILY ARCHIVE workflow.
 #
-# The raw log rotates in a week and the daily rows roll off after 92 days, so the only permanent
+# The raw log rotates in a week and the daily rows roll off after the daily window, so the only permanent
 # record was the calendar month. Every question finer than a month became unanswerable RETROACTIVELY:
 # we had the data, we folded it, and we discarded the detail. The archive is one JSON line per folded
 # day at maximal NON-GEO granularity, appended beside stats.json, read by nothing and served by
@@ -1783,16 +1841,453 @@ def test_an_unwritable_archive_warns_and_still_lets_stats_json_land(tmp_path, mo
     assert doc["totals"]["visits"] == 1, "stats.json still lands in full"
 
 
-def test_nothing_in_the_gateway_reads_the_daily_archive():
-    """NEVER-SERVED PIN. The archive is written by the host timer and read by NOTHING: no gateway
-    route, no render path, no export. It holds the finest-grained record in the pipeline precisely
-    because nothing consumes it, so a reference to it from the serving stack is the change that must
-    be caught here rather than in review. FAILS IF any gateway source names the archive file."""
+def _gateway_sources() -> list[Path]:
     gateway = _REPO / "gateway"
     assert gateway.is_dir(), "this pin runs from a full checkout, never skipped"
-    offenders = [str(p.relative_to(_REPO)) for p in sorted(gateway.rglob("*.py"))
-                 if "daily_archive" in p.read_text(encoding="utf-8", errors="replace")]
+    return sorted(gateway.rglob("*.py")) + sorted((gateway / "static").glob("*.js"))
+
+
+def test_nothing_in_the_gateway_reads_the_daily_archive():
+    """NEVER-SERVED PIN. The archive is written by the host timer and read by NOTHING: no gateway
+    route, no render path, no export, no browser script. It holds the finest-grained record in the
+    pipeline precisely because nothing consumes it, so a reference to it from the serving stack is the
+    change that must be caught here rather than in review. The one exception is the count-free date
+    archive_through, which the fold writes into stats.json and only the Usage page renderer may read;
+    the Usage page test file may name it too, to write it into a fixture. FAILS IF any gateway Python
+    source, test or served script names the archive file, its setting or a .jsonl file, or if any
+    gateway file other than usagepage.py and its test names archive_through."""
+    sources = _gateway_sources()
+    assert any(p.suffix == ".js" for p in sources), "the served scripts are scanned too"
+    offenders = []
+    for p in sources:
+        text = p.read_text(encoding="utf-8", errors="replace")
+        for token in ("daily_archive", "AUSMT_STATS_DAILY_ARCHIVE", ".jsonl"):
+            if token in text:
+                offenders.append(f"{p.relative_to(_REPO)}: {token}")
+        if "archive_through" in text and p.relative_to(_REPO).as_posix() not in (
+                "gateway/usagepage.py", "gateway/tests/test_usage_page.py"):
+            offenders.append(f"{p.relative_to(_REPO)}: archive_through")
     assert offenders == [], f"the gateway must not read the daily archive: {offenders}"
+
+
+# --------------------------------------------------------------------------------------------------
+# archive_through: the last fold watermark the archive is known to hold, written into stats.json so
+# the Usage page can warn when the permanent record has fallen behind. It is a date, never a count.
+# --------------------------------------------------------------------------------------------------
+_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _archive_env(tmp_path, monkeypatch, days: tuple[str, ...]) -> Path:
+    """A data dir whose live log holds one download and one visit on each of `days`; returns the
+    state dir. The archive takes its default path beside stats.json."""
+    data = tmp_path / "data"
+    logdir = data / "logs" / "caddy"
+    state = data / "gateway" / "state"
+    logdir.mkdir(parents=True, exist_ok=True)
+    state.mkdir(parents=True, exist_ok=True)
+    _archive_log(tmp_path, days)
+    monkeypatch.setenv("AUSMT_DATA_DIR", str(data))
+    monkeypatch.setenv("AUSMT_STATS_MANIFEST", str(_MANIFEST))
+    monkeypatch.setenv("AUSMT_STATS_DBIP_CSV", str(_DBIP))
+    monkeypatch.setenv("AUSMT_STATS_FILE", str(state / "stats.json"))
+    monkeypatch.delenv("AUSMT_STATS_DAILY_ARCHIVE", raising=False)
+    monkeypatch.delenv("AUSMT_STATS_DAILY_KEEP", raising=False)
+    monkeypatch.delenv("AUSMT_STATS_LABELS_FROM", raising=False)
+    return state
+
+
+def _archive_log(tmp_path, days: tuple[str, ...]) -> None:
+    (tmp_path / "data" / "logs" / "caddy" / "access.json").write_text("".join(
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", date=d) + "\n"
+        + _line("/data/catalogue.json", "198.51.100.0", date=d) + "\n" for d in days),
+        encoding="utf-8")
+
+
+def _fold_at(monkeypatch, state: Path, now: str) -> dict:
+    monkeypatch.setenv("AUSMT_STATS_NOW", now)
+    assert AGG.main([]) == 0
+    return json.loads((state / "stats.json").read_text(encoding="utf-8"))
+
+
+def _archived_dates(state: Path) -> list[str]:
+    text = (state / "daily_archive.jsonl").read_text(encoding="utf-8")
+    return [json.loads(ln)["date"] for ln in text.splitlines() if ln.strip()]
+
+
+def test_archive_through_follows_a_successful_append(tmp_path, monkeypatch, capsys):
+    """When every newly folded day lands in the archive, archive_through is the new fold watermark,
+    and the journal line names it. FAILS IF the date is missing, lags the watermark after a complete
+    append, or is left out of the journal."""
+    state = _archive_env(tmp_path, monkeypatch, ("2026-07-09", "2026-07-10"))
+    doc = _fold_at(monkeypatch, state, "2026-07-12T03:30:00Z")
+    assert doc["last_folded_date"] == "2026-07-11"
+    assert doc["archive_through"] == "2026-07-11"
+    assert _archived_dates(state) == ["2026-07-09", "2026-07-10"]
+    assert "archive_through=2026-07-11" in capsys.readouterr().err
+
+    _archive_log(tmp_path, ("2026-07-09", "2026-07-10", "2026-07-12"))
+    doc = _fold_at(monkeypatch, state, "2026-07-14T03:30:00Z")
+    assert doc["last_folded_date"] == "2026-07-13"
+    assert doc["archive_through"] == "2026-07-13"
+    assert _archived_dates(state) == ["2026-07-09", "2026-07-10", "2026-07-12"]
+    assert "archive_through=2026-07-13" in capsys.readouterr().err
+
+
+def test_archive_through_never_passes_a_partial_append():
+    """archive_through moves only when every offered day landed in the archive, so a partial append
+    leaves the carried date however many lines did land. FAILS IF any landed line is enough to move
+    it past days that are not in the archive."""
+    step = AGG._next_archive_through
+    assert step("2026-07-10", "2026-07-10", "2026-07-13", archived=1, offered=2) == "2026-07-10"
+    assert step("2026-07-10", "2026-07-10", "2026-07-13", archived=2, offered=3) == "2026-07-10"
+    assert step(None, None, "2026-07-13", archived=1, offered=2) is None
+    assert step("2026-07-10", "2026-07-10", "2026-07-13", archived=2, offered=2) == "2026-07-13"
+
+
+def test_archive_through_stays_put_when_the_append_fails(tmp_path, monkeypatch, capsys):
+    """A failed append leaves archive_through where it was, so the page can say the archive is behind.
+    A failed second stats write leaves the older date on disk, the conservative direction. FAILS IF a
+    failed append moves the date, or a failed second write costs the run or the first write."""
+    state = _archive_env(tmp_path, monkeypatch, ("2026-07-09",))
+    assert _fold_at(monkeypatch, state, "2026-07-10T03:30:00Z")["archive_through"] == "2026-07-09"
+
+    (state / "daily_archive.jsonl").unlink()
+    (state / "daily_archive.jsonl").mkdir()           # a directory in the archive's place
+    _archive_log(tmp_path, ("2026-07-09", "2026-07-10", "2026-07-11"))
+    doc = _fold_at(monkeypatch, state, "2026-07-12T03:30:00Z")
+    assert doc["last_folded_date"] == "2026-07-11"
+    assert doc["archive_through"] == "2026-07-09", "a failed append must not move the date"
+    err = capsys.readouterr().err
+    assert "daily archive" in err and "archive_through=2026-07-09" in err
+
+    (state / "daily_archive.jsonl").rmdir()
+    real_write = AGG.write_stats_atomic
+    calls = []
+
+    def second_write_fails(path, stats):
+        calls.append(stats.get("archive_through"))
+        if len(calls) > 1:
+            raise OSError("no space left on device")
+        real_write(path, stats)
+
+    monkeypatch.setattr(AGG, "write_stats_atomic", second_write_fails)
+    _archive_log(tmp_path, ("2026-07-12",))
+    doc = _fold_at(monkeypatch, state, "2026-07-13T03:30:00Z")
+    assert calls == ["2026-07-09", "2026-07-12"], calls
+    assert doc["last_folded_date"] == "2026-07-12"
+    assert doc["archive_through"] == "2026-07-09", "the file keeps the older date"
+    assert _archived_dates(state) == ["2026-07-12"]
+    err = capsys.readouterr().err
+    assert "aborted" not in err and "archive_through=2026-07-09" in err, err
+
+
+def test_archive_through_on_an_empty_run_advances_only_when_current(tmp_path, monkeypatch):
+    """A run that folds days with no traffic has nothing to append. archive_through then moves to the
+    new watermark only when it already stood at the old one; an archive that was behind stays behind.
+    A run that folds no day at all writes nothing new. FAILS IF an empty run lets a behind archive look
+    current, or leaves a current archive looking behind."""
+    state = _archive_env(tmp_path, monkeypatch, ("2026-07-09",))
+    assert _fold_at(monkeypatch, state, "2026-07-10T03:30:00Z")["archive_through"] == "2026-07-09"
+    doc = _fold_at(monkeypatch, state, "2026-07-14T03:30:00Z")
+    assert doc["last_folded_date"] == "2026-07-13"
+    assert doc["archive_through"] == "2026-07-13", "a quiet run keeps a current archive current"
+    assert _archived_dates(state) == ["2026-07-09"]
+    assert _fold_at(monkeypatch, state, "2026-07-14T09:00:00Z")["archive_through"] == "2026-07-13"
+
+    behind = json.loads((state / "stats.json").read_text(encoding="utf-8"))
+    behind["archive_through"] = "2026-07-11"
+    (state / "stats.json").write_text(json.dumps(behind), encoding="utf-8")
+    doc = _fold_at(monkeypatch, state, "2026-07-16T03:30:00Z")
+    assert doc["last_folded_date"] == "2026-07-15"
+    assert doc["archive_through"] == "2026-07-11", "a behind archive stays behind on a quiet run"
+
+
+def test_archive_through_is_a_date_and_nothing_else(tmp_path, monkeypatch):
+    """archive_through is an ISO day or absent. A prior file carrying anything else under that name
+    has it dropped rather than carried, and the fold never writes a count, a list or a timestamp there.
+    FAILS IF a malformed value survives a fold, or a written value is not a bare ISO day."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    good = AGG.aggregate(None, [], rmap, geoip, _RUN)
+    good["archive_through"] = "2026-07-09"
+    assert AGG.aggregate(good, [], rmap, geoip, _RUN)["archive_through"] == "2026-07-09"
+    for bad in (5, None, "", "yes", "2026-7-09", "2026-13-01", "2026-07-09T00:00:00Z",
+                ["2026-07-09"], {"date": "2026-07-09"}):
+        prior = AGG.aggregate(None, [], rmap, geoip, _RUN)
+        prior["archive_through"] = bad
+        assert "archive_through" not in AGG.aggregate(prior, [], rmap, geoip, _RUN), bad
+    assert "archive_through" not in AGG._empty_stats()
+
+    state = _archive_env(tmp_path, monkeypatch, ("2026-07-09", "2026-07-10"))
+    doc = _fold_at(monkeypatch, state, "2026-07-12T03:30:00Z")
+    assert isinstance(doc["archive_through"], str) and _ISO_DAY.match(doc["archive_through"])
+
+
+def test_an_old_file_without_archive_through_gains_it_only_on_a_successful_append(tmp_path,
+                                                                                   monkeypatch):
+    """A stats.json written before archive_through existed says nothing about the archive, so a quiet
+    run must not claim the archive is current; the first complete append is what stamps the date.
+    FAILS IF an old file gains the date without an append, or does not gain it after one."""
+    state = _archive_env(tmp_path, monkeypatch, ("2026-07-09",))
+    doc = _fold_at(monkeypatch, state, "2026-07-10T03:30:00Z")
+    doc.pop("archive_through")
+    (state / "stats.json").write_text(json.dumps(doc), encoding="utf-8")
+
+    doc = _fold_at(monkeypatch, state, "2026-07-12T03:30:00Z")
+    assert doc["last_folded_date"] == "2026-07-11"
+    assert "archive_through" not in doc, "a quiet run on an old file says nothing about the archive"
+
+    _archive_log(tmp_path, ("2026-07-12",))
+    doc = _fold_at(monkeypatch, state, "2026-07-13T03:30:00Z")
+    assert doc["archive_through"] == "2026-07-12"
+
+
+def test_labels_configured_from_is_stamped_from_the_setting(tmp_path, monkeypatch):
+    """labels_configured_from is the configured label start date, written on every run whose
+    AUSMT_STATS_LABELS_FROM is valid, including a month not yet reached. Unset or invalid, the key is
+    absent, and it is never carried from a previous file, so removing the setting removes it. It is a
+    date, never a count. FAILS IF a valid setting is not stamped, an unset or invalid one leaves the
+    key, or the pure fold writes it on its own."""
+    state = _archive_env(tmp_path, monkeypatch, ("2026-07-09",))
+    monkeypatch.setenv("AUSMT_STATS_LABELS_FROM", "2026-09-01")
+    doc = _fold_at(monkeypatch, state, "2026-07-10T03:30:00Z")
+    assert doc["labels_configured_from"] == "2026-09-01"
+    assert "labels_since" not in doc, "a month not yet reached labels nothing"
+
+    monkeypatch.setenv("AUSMT_STATS_LABELS_FROM", "2026-07-01")
+    assert _fold_at(monkeypatch, state, "2026-07-11T03:30:00Z")["labels_configured_from"] == \
+        "2026-07-01"
+
+    for bad in ("2026-09-02", "2026-9-01", "yes", "   "):
+        monkeypatch.setenv("AUSMT_STATS_LABELS_FROM", bad)
+        assert "labels_configured_from" not in _fold_at(monkeypatch, state, "2026-07-11T09:00:00Z"), bad
+    monkeypatch.setenv("AUSMT_STATS_LABELS_FROM", "2026-07-01")
+    _fold_at(monkeypatch, state, "2026-07-11T09:00:00Z")
+    monkeypatch.delenv("AUSMT_STATS_LABELS_FROM")
+    assert "labels_configured_from" not in _fold_at(monkeypatch, state, "2026-07-11T09:00:00Z")
+
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    prior = AGG.aggregate(None, [], rmap, AGG.GeoIP.load(_DBIP), _RUN)
+    prior["labels_configured_from"] = "2026-07-01"
+    for labels_from in (None, "2026-07-01"):
+        out = AGG.aggregate(prior, [], rmap, AGG.GeoIP.load(_DBIP), _RUN, labels_from=labels_from)
+        assert "labels_configured_from" not in out, labels_from
+
+
+def test_a_new_archive_file_is_group_writable(tmp_path, monkeypatch):
+    """An archive file the fold creates is mode 0664 whatever the umask, so the fold account and the
+    state dir's group can both keep appending to it. FAILS IF a new file has any other mode."""
+    old_umask = os.umask(0o077)
+    try:
+        state = _archive_env(tmp_path, monkeypatch, ("2026-07-09",))
+        _fold_at(monkeypatch, state, "2026-07-10T03:30:00Z")
+    finally:
+        os.umask(old_umask)
+    assert stat.S_IMODE((state / "daily_archive.jsonl").stat().st_mode) == 0o664
+
+    direct = tmp_path / "direct.jsonl"
+    assert AGG.append_daily_archive(direct, [{"date": "2026-07-09"}]) == 1
+    assert stat.S_IMODE(direct.stat().st_mode) == 0o664
+
+
+def test_an_existing_archive_keeps_its_mode(tmp_path, monkeypatch):
+    """The fold never changes the mode of an archive file that already exists; it only appends.
+    FAILS IF an append to an existing file changes its mode or rewrites its earlier lines."""
+    state = _archive_env(tmp_path, monkeypatch, ("2026-07-09",))
+    archive = state / "daily_archive.jsonl"
+    archive.write_text('{"date": "2026-07-01"}\n', encoding="utf-8")
+    os.chmod(archive, 0o640)
+    _fold_at(monkeypatch, state, "2026-07-10T03:30:00Z")
+    assert stat.S_IMODE(archive.stat().st_mode) == 0o640
+    assert _archived_dates(state) == ["2026-07-01", "2026-07-09"]
+
+
+# --------------------------------------------------------------------------------------------------
+# Pulled log copies expire. The front-door copies the box pulls are kept only as long as the stated
+# raw-log retention, and a copy is never removed while it may hold a line the fold has not passed.
+# --------------------------------------------------------------------------------------------------
+_EXPIRY_NOW = "2026-07-14T03:30:00Z"
+
+
+def _epoch(stamp: str) -> float:
+    return dt.datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=dt.timezone.utc).timestamp()
+
+
+def _aged(path: Path, stamp: str, text: str | None = None) -> Path:
+    """`path` written with `text` (kept as it is when None) and its modification time set to `stamp`."""
+    if text is not None:
+        path.write_text(text, encoding="utf-8")
+    os.utime(path, (_epoch(stamp), _epoch(stamp)))
+    return path
+
+
+def _expiry_env(tmp_path, monkeypatch) -> tuple[Path, Path]:
+    state = _archive_env(tmp_path, monkeypatch, ("2026-07-09",))
+    monkeypatch.delenv("AUSMT_STATS_LOG_RETAIN_DAYS", raising=False)
+    return state, state.parent.parent / "logs" / "caddy"
+
+
+def _journal(err: str) -> str:
+    lines = [ln for ln in err.splitlines() if ln.startswith("aggregate_stats: folded up to")]
+    assert len(lines) == 1, err
+    return lines[0]
+
+
+def test_pulled_frontdoor_copies_expire_after_the_fold(tmp_path, monkeypatch, capsys):
+    """A pulled front-door roll, plain or gzipped, and a renamed retired-host copy are removed once
+    their modification time is more than seven days before the run, after their lines have been
+    folded. A younger roll stays. The journal counts the removals and names no file and no address.
+    FAILS IF an old copy survives, a young one goes, an expired copy's lines are not counted, or the
+    journal names a file."""
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    old_roll = _aged(logdir / "access-frontdoor-2026-07-03T00-00-00.000.json", "2026-07-03T00:00:00Z",
+                     _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", date="2026-07-02")
+                     + "\n")
+    old_gz = logdir / "access-frontdoor-2026-07-02T00-00-00.000-size.json.gz"
+    with gzip.open(old_gz, "wt", encoding="utf-8") as fh:
+        fh.write(_line("/data/catalogue.json", "198.51.100.0", date="2026-07-01") + "\n")
+    _aged(old_gz, "2026-07-02T06:00:00Z")
+    retired = _aged(logdir / "access-frontdoor-ausmt-test.json", "2026-07-04T00:00:00Z", "")
+    young = _aged(logdir / "access-frontdoor-2026-07-08T00-00-00.000.json", "2026-07-08T00:00:00Z", "")
+
+    doc = _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    assert doc["last_folded_date"] == "2026-07-13"
+    assert doc["totals"]["downloads"] == 2 and doc["totals"]["visits"] == 2, doc["totals"]
+    for gone in (old_roll, old_gz, retired):
+        assert not os.path.lexists(gone), gone.name
+    assert young.is_file()
+    journal = _journal(capsys.readouterr().err)
+    assert re.search(r"(?:^|\s)logs_expired=3(?:\s|$)", journal), journal
+    assert "logs_expire_failed" not in journal
+    assert "access-frontdoor" not in journal and not _IPV4_RE.search(journal), journal
+
+
+def test_the_live_log_and_the_box_listener_logs_never_expire(tmp_path, monkeypatch, capsys):
+    """The live access-frontdoor.json, the box listener's access.json and its own rolls, and any file
+    not named with the access-frontdoor prefix and a hyphen, are never removed whatever their age. FAILS IF the
+    expiry considers any name outside the pulled-copy family."""
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    ancient = "2020-01-01T00:00:00Z"
+    kept = [_aged(logdir / "access.json", ancient)]
+    for name in ("access-frontdoor.json", "access-frontdoor.json.gz", "access-frontdoor_old.json",
+                 "access-2026-01-01T00-00-00.000.json", "access-2026-01-01T00-00-00.000-size.json.gz",
+                 "access-salvage.json", "access.log", "frontdoor-access-frontdoor-x.json"):
+        kept.append(_aged(logdir / name, ancient, ""))
+    _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    assert [p.name for p in kept if not p.is_file()] == []
+    assert re.search(r"(?:^|\s)logs_expired=0(?:\s|$)", _journal(capsys.readouterr().err))
+
+
+def test_a_stalled_watermark_expires_nothing_later_than_it(tmp_path):
+    """A copy is removed only when its modification time is before 00:00 UTC of the day after the
+    fold watermark, so a stalled fold can never lose a line it has not passed, however old the copy.
+    With no usable watermark nothing is removed. FAILS IF a copy written after the watermark day goes,
+    or one written on or before it stays."""
+    logdir = tmp_path / "logs"
+    logdir.mkdir()
+    run = dt.datetime(2026, 7, 20, 3, 30, tzinfo=dt.timezone.utc)
+    passed = _aged(logdir / "access-frontdoor-a.json", "2026-07-01T23:59:59Z", "")
+    boundary = _aged(logdir / "access-frontdoor-b.json", "2026-07-02T00:00:00Z", "")
+    later = _aged(logdir / "access-frontdoor-c.json", "2026-07-05T00:00:00Z", "")
+    for watermark in (None, "", "2026-07", "2026-02-30", 20260701):
+        assert AGG.expire_pulled_logs(logdir, run, watermark, 7) == (0, 0), watermark
+    assert AGG.expire_pulled_logs(logdir, run, "2026-07-01", 7) == (1, 0)
+    assert not passed.exists() and boundary.is_file() and later.is_file()
+    assert AGG.expire_pulled_logs(logdir, run, "2026-07-12", 7) == (2, 0)
+    assert list(logdir.iterdir()) == []
+
+
+def test_a_link_or_directory_with_a_matching_name_is_left(tmp_path, monkeypatch, capsys):
+    """Only regular files expire. A symbolic link named like a pulled roll, its target, and a
+    directory named like one are left whatever their age. FAILS IF the expiry follows a link,
+    removes a link, or touches a directory."""
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    ancient = "2020-01-01T00:00:00Z"
+    target = _aged(tmp_path / "elsewhere.json", ancient, "")
+    link = logdir / "access-frontdoor-2026-07-01T00-00-00.000.json"
+    link.symlink_to(target)
+    os.utime(link, (_epoch(ancient), _epoch(ancient)), follow_symlinks=False)
+    folder = logdir / "access-frontdoor-2026-07-02T00-00-00.000.json"
+    folder.mkdir()
+    _aged(folder, ancient)
+    _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    assert link.is_symlink() and target.is_file() and folder.is_dir()
+    assert re.search(r"(?:^|\s)logs_expired=0(?:\s|$)", _journal(capsys.readouterr().err))
+
+
+def test_the_retain_setting_zero_disables_and_an_invalid_value_reads_as_seven(tmp_path, monkeypatch,
+                                                                              capsys):
+    """AUSMT_STATS_LOG_RETAIN_DAYS is a whole number of days. 0 disables expiry; a larger value keeps
+    copies longer; anything that is not a whole number of zero or more reads as the default of seven.
+    FAILS IF 0 removes a file, a longer setting is ignored, or an invalid value disables expiry or
+    changes the window."""
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    ten = logdir / "access-frontdoor-ten.json"
+    five = logdir / "access-frontdoor-five.json"
+
+    def lay():
+        _aged(ten, "2026-07-04T03:00:00Z", "")
+        _aged(five, "2026-07-09T03:00:00Z", "")
+
+    lay()
+    monkeypatch.setenv("AUSMT_STATS_LOG_RETAIN_DAYS", "0")
+    _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    assert ten.is_file() and five.is_file()
+    monkeypatch.setenv("AUSMT_STATS_LOG_RETAIN_DAYS", "30")
+    _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    assert ten.is_file() and five.is_file()
+    capsys.readouterr()
+    for bad in ("seven", "-3", "1.5", " "):
+        lay()
+        monkeypatch.setenv("AUSMT_STATS_LOG_RETAIN_DAYS", bad)
+        _fold_at(monkeypatch, state, _EXPIRY_NOW)
+        assert not ten.exists() and five.is_file(), bad
+        assert re.search(r"(?:^|\s)logs_expired=1(?:\s|$)", _journal(capsys.readouterr().err)), bad
+    assert AGG._log_retain_days(None) == AGG._log_retain_days("") == 7
+    assert AGG._log_retain_days("0") == 0 and AGG._log_retain_days(" 3 ") == 3
+
+
+def test_an_unwritable_log_dir_is_tolerated(tmp_path, monkeypatch, capsys):
+    """A removal that fails is counted, the fold still writes stats.json and exits 0, and the journal
+    carries logs_expire_failed with no file name. FAILS IF the failure raises, aborts the fold, goes
+    uncounted, or names the file."""
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        import pytest
+        pytest.skip("root can remove from a read-only directory, so the failure cannot be staged")
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    old = _aged(logdir / "access-frontdoor-2026-07-01T00-00-00.000.json", "2026-07-01T00:00:00Z", "")
+    os.chmod(logdir, 0o555)
+    try:
+        doc = _fold_at(monkeypatch, state, _EXPIRY_NOW)
+    finally:
+        os.chmod(logdir, 0o755)
+    assert doc["last_folded_date"] == "2026-07-13"
+    assert old.is_file()
+    journal = _journal(capsys.readouterr().err)
+    assert re.search(r"(?:^|\s)logs_expired=0 logs_expire_failed=1(?:\s|$)", journal), journal
+    assert "access-frontdoor" not in journal
+
+
+def test_logs_expire_only_after_stats_json_lands(tmp_path, monkeypatch):
+    """The expiry runs only after stats.json has been written, so a fold that could not record its
+    progress keeps every log it read. FAILS IF a failed stats write or a missing state dir still
+    removes a copy."""
+    state, logdir = _expiry_env(tmp_path, monkeypatch)
+    old = _aged(logdir / "access-frontdoor-2026-07-01T00-00-00.000.json", "2026-07-01T00:00:00Z", "")
+    monkeypatch.setenv("AUSMT_STATS_NOW", _EXPIRY_NOW)
+
+    def refuse(path, stats):
+        raise OSError("read-only file system")
+
+    with monkeypatch.context() as m:
+        m.setattr(AGG, "write_stats_atomic", refuse)
+        assert AGG.main([]) == 0
+    assert old.is_file() and not (state / "stats.json").exists()
+
+    state.rmdir()
+    assert AGG.main([]) == 0
+    assert old.is_file()
 
 
 # ==================================================================================================
@@ -1920,7 +2415,7 @@ def test_each_survey_splits_its_downloads_into_station_files_and_whole_survey_bu
     month = stats["monthly"][0]["surveys"]["CI Sample Survey"]
     assert (month["files"], month["bundles"]) == (2, 1), month
     # The archive's own per-survey row carries it too: it is a NON-GEO day fact, exactly the kind of
-    # detail the archive exists to keep once the 92-day window has dropped the day it came from.
+    # detail the archive exists to keep once the daily window has dropped the day it came from.
     assert rows[0]["by_survey"]["CI Sample Survey"] == {"downloads": 3, "bytes": 1250,
                                                         "files": 2, "bundles": 1}
     assert stats["downloads"]["by_kind"] == {"file": 2, "bundle": 1}, "the global split is unchanged"
@@ -2100,7 +2595,7 @@ def test_the_select_split_accumulates_across_folds_and_is_never_backfilled():
 
 def test_the_archive_carries_the_select_split_and_the_event_count_and_still_no_geography():
     """ARCHIVE SELECT PIN. The split and the event count are NON-GEO day facts, which is exactly the
-    class of detail the archive exists to keep once the 92-day window has dropped the day. They must
+    class of detail the archive exists to keep once the daily window has dropped the day. They must
     ride the archive line, and the geographic boundary must not move an inch to let them. FAILS IF the
     archive loses them, if a day with no bulk download carries a fabricated zero pair, or if any
     geography arrives alongside."""
@@ -2353,7 +2848,7 @@ def test_hand_offs_ride_every_grain_with_by_survey_by_level_and_by_destination()
     calendar month, day row and the permanent archive line -- and by_destination rides beside them
     (cardinality is one today, and that is exactly when a missing breakdown is cheap to add).
     The archive additionally keeps the station-grain cell, the by_dataset of this family, because the
-    92-day window is what otherwise loses "which station, on which day" forever.
+    daily window is what otherwise loses "which station, on which day" forever.
 
     FAILS IF a grain is missing a dimension, if the four disagree on a figure, or if the archive
     stops carrying the route detail."""

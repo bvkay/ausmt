@@ -1,7 +1,7 @@
 # AusMT usage-analytics aggregator. A oneshot unit the ausmt-stats.timer fires once a day:
 # it runs deploy/scripts/aggregate_stats.py, which folds the Caddy access log (masked-at-edge IPs, from
-# the 2b-ii log block) into a cumulative stats.json in the gateway state dir. The workbench Analytics
-# screen reads that file. The aggregator is STDLIB-only (no maxminddb, no new dependency), never raises
+# the 2b-ii log block) into a cumulative stats.json in the gateway state dir. The curator Usage page
+# reads that file. The aggregator is STDLIB-only (no maxminddb, no new dependency), never raises
 # into the timer, writes atomically (tmp -> 0644 -> rename), and discards the raw log lines after
 # folding. See deploy/README.md "Usage analytics".
 #
@@ -43,7 +43,9 @@ WorkingDirectory=__DEPLOY_DIR__
 # One pass: read the log(s), fold each complete day into stats.json, exit. Invoked via `python3` (no
 # reliance on the file's exec bit) — stdlib only, so the system python3 is sufficient. The aggregator
 # ALWAYS exits 0 on the normal path (best-effort, timer-safe); a broken input degrades a metric, it does
-# not abort the run.
+# not abort the run. With AUSMT_STATS_LABELS_FROM set it also reads the operator list in
+# $AUSMT_DATA_DIR/stats-private, which must be owned by the User= above with mode 0700 on the
+# directory and 0600 on the file, because no other account may read it.
 ExecStart=/usr/bin/env python3 __DEPLOY_DIR__/scripts/aggregate_stats.py
 # The fold is quick (read a few log files, one manifest, one CSV, one JSON write); bound a wedged run
 # well under the daily cadence.

@@ -50,7 +50,8 @@
 #                                   sourced, for AUSMT_PUBLIC_NAME and AUSMT_GATEWAY_UPSTREAM
 #   AUSMT_DOCTOR_FRONTDOOR          the front-door doctor command (default: sh deploy/frontdoor/doctor.sh)
 #   AUSMT_DOCTOR_DOCKER             docker command (default: docker)
-#   AUSMT_DOCTOR_CURL               curl command (default: curl)
+#   AUSMT_DOCTOR_CURL               curl command (default: curl); every probe also sends
+#                                   -A ausmt-ops/1-doctor-serve so the usage fold counts it as the operator
 #   AUSMT_DOCTOR_MOUNTPOINT         mountpoint command (default: mountpoint)
 #   AUSMT_DOCTOR_PYTHON             python command (default: python3)
 #   AUSMT_DOCTOR_DISK_WARN_PCT      disk use percent that trips a WARN (default: 85)
@@ -73,7 +74,7 @@ FD_COMPOSE_FILE="${AUSMT_DOCTOR_FRONTDOOR_COMPOSE:-$DEPLOY_DIR/frontdoor/compose
 FD_ENV_FILE="${AUSMT_DOCTOR_FRONTDOOR_ENV:-$DEPLOY_DIR/frontdoor/.env}"
 FRONTDOOR="${AUSMT_DOCTOR_FRONTDOOR:-sh $DEPLOY_DIR/frontdoor/doctor.sh}"
 DOCKER="${AUSMT_DOCTOR_DOCKER:-docker}"
-CURL="${AUSMT_DOCTOR_CURL:-curl}"
+CURL="${AUSMT_DOCTOR_CURL:-curl} -A ausmt-ops/1-doctor-serve"
 MOUNTPOINT="${AUSMT_DOCTOR_MOUNTPOINT:-mountpoint}"
 PYTHON="${AUSMT_DOCTOR_PYTHON:-python3}"
 DISK_WARN_PCT="${AUSMT_DOCTOR_DISK_WARN_PCT:-85}"

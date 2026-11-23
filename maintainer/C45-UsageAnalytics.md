@@ -205,7 +205,7 @@ forward-only and read `not measured` where they were not.
 
 Three further figures a report needs and could not get: a per-survey country **count** (the custodian
 sentence, with the list held at country grain and never rendered or exported), a per-month
-`networks_peak` so the reach proxy outlives the 92-day daily window, and `total_served_surveys` as
+`networks_peak` so the reach proxy outlives the daily window, and `total_served_surveys` as
 the denominator for "N surveys downloaded". The monthly export gains `geo_days`, `networks_peak` and
 the client split; the per-survey export gains the country count.
 
@@ -264,8 +264,8 @@ Owner ruling: capture maximal non-geographic granularity at day grain now, so a 
 asked for yet can still be derived later. "We do not want to limit ourselves."
 
 The problem it closes is retroactive. The raw log rotates in about a week; the daily rows in
-`stats.json` roll off after 92 days; only the calendar-month rollup is permanent. Every question
-finer than a month therefore becomes unanswerable once the window passes, and it becomes
+`stats.json` roll off after the daily window (184 days by default); only the calendar-month rollup
+is permanent. Every question finer than a month therefore becomes unanswerable once the window passes, and it becomes
 unanswerable about days we *did* fold: the data existed, the fold read it, and the detail was
 discarded. Monthly rollups were built to survive daily pruning; this is the same argument one grain
 down.
@@ -286,7 +286,8 @@ measured absence.
   those days fold again next run, so they must not already be in the file. The reverse failure loses
   a day from the archive, which is the tolerable direction and is why it is warned about loudly.
 - *Never read.* No gateway route, no render path, no export opens it. It lives in the gateway state
-  dir, outside `site-data/`, so nothing can serve it. Both facts are pinned in `deploy/tests`.
+  dir, outside `site-data/`, so nothing can serve it. Both facts are pinned in `deploy/tests`. The
+  gateway reads one count-free date about it, `archive_through`, from `stats.json` (see D10).
 - *Never pruned, never rewritten.* It is the durable record; that is its whole purpose.
 - *Never fatal.* A write failure warns and the fold still counts as done.
 
@@ -336,3 +337,275 @@ The July 2026 rotation-loss window (27 Jul 00:00 to 28 Jul 13:27 UTC, dropped be
 accepted as-is by owner ruling: the site is not publicly launched, so pre-DNS numbers are not a
 reporting baseline. No backfill machinery exists and none was built. **"Nothing is backfilled" stays
 absolute.** The salvaged raw files remain on the box at zero cost.
+
+## D9. Request labels
+
+Three labels per admitted request, derived at fold time from fields the fold already reads plus the
+name of the log file a line came from: operator, client class and network type. No edge change and no
+header beyond the user-agent. This section records the switch and the three labels.
+
+### The switch and rollback
+
+`AUSMT_STATS_LABELS_FROM` in the host `.env`, a first-of-month date. Absent, malformed or mid-month,
+labels are off and the fold output is byte-identical to the unlabelled fold across successive folds
+(pinned against golden output of the unlabelled fold). A day D is labelled when D >= that date; every
+other day folds exactly as before. Removing the setting is the soft rollback: labelling stops at the
+next fold and the label blocks already folded are carried forward. A set but rejected value prints
+`labels=off from=invalid` in the journal, without echoing it. `labels_since` is stamped once, at
+the first labelled day folded, and never moved.
+
+The full code revert restores nothing: the unlabelled fold drops `labels_since` and every label block
+at its next run and keeps every other figure. Days folded from `labels_since` keep their exclusion of
+operator requests, and their archive lines keep their label keys. Restoring an earlier `stats.json`
+would lose every figure folded since it, and those days cannot be refolded once their logs rotate.
+
+With labels off, or set for a month not yet reached, each line is parsed and folded in turn and none
+is kept, as before labels, and the log is read as plain lines with no source. Only a fold that
+reaches a labelled day holds its window of parsed records (as slotted objects, not dicts) for the
+pre-pass.
+
+### Operator
+
+Closed set yes, no, unknown; unknown counts as not operator. The first match is yes:
+
+1. the line came from the box listener's own log, matched positively by name (`access.json` or a
+   Caddy roll of it). That listener is published on loopback only, so curators browsing the box over
+   the tailnet are operator. A file of any other name is read as front door and counted in the
+   journal as `other_files`;
+2. the user-agent opens with `ausmt-ops/`. The repository's jobs send `ausmt-ops/1-<job>`: the
+   three doctors append `-A ausmt-ops/1-doctor-frontdoor`, `-doctor-serve` or `-doctor-box` after
+   the `AUSMT_DOCTOR_CURL` override, so a stub or wrapper keeps it, and both `make smoke` curls
+   send `ausmt-ops/1-smoke`. The token has no space because `$CURL` expands unquoted at every call
+   site. The name is public: a third party sending it only moves its own requests onto the
+   operator line;
+3. the masked address is in a fixed in-code list of loopback, private, link-local, shared and
+   unspecified ranges. It is never `is_private`, which also covers the documentation ranges;
+4. the masked address is inside an entry of the host operator list.
+
+Otherwise no when the list was read (loaded, empty or partial), and unknown when it is absent or
+unreadable. An operator request is counted on the operator line (downloads, visits, API requests,
+hand-offs, download bytes; request counts, not de-duplicated) in the totals and its month, and
+reaches no other figure, day row or archive line. A fault in the label code costs that request its
+labels, never the request or the fold, and is counted as `label_fallbacks`.
+
+Each labelled month carries `label_days` and `operator_list_days`, so a month whose operator list
+was missing on some days says so rather than looking complete. The operator list and the network
+table loaders never raise: a path the fold account cannot reach, including a directory it cannot
+enter, reads `unreadable`.
+
+### Client class
+
+Non-operator requests only. Closed set portal_session, landing_page, tool, unknown. Precedence:
+
+1. a declared crawler (classify_client) has no class: it stays excluded and each admitted crawler
+   request on a labelled day is tallied, not de-duplicated, in `crawler_excluded` at cumulative,
+   month and archive grain (the archive tally only on a day with counted activity);
+2. tool: classify_client returns scripted (a scripted token or an empty user-agent);
+3. tool, downloads only: the triple (day, masked network, exact user-agent) fetched more than
+   `SWEEP_DISTINCT_FILES` = 50 distinct download paths without the export label that day. Every
+   download of that triple that day is tool. Its visits, API requests and hand-offs, and other
+   user-agents on the same network, are not swept;
+4. portal_session: the network had an admitted catalogue load (200 or 304), or a request carrying the
+   export label answered 200 or 206, that day or the day before;
+5. landing_page: the network had a `/surveys/` or `/collections/` page answered 200 or 304 that day
+   or the day before;
+6. unknown.
+
+The evidence (4, 5) and the sweep (3) come from a pre-pass over non-operator, browser-like records
+from the day before labels start, or the day before the first new day if later, to the cutoff. Each
+log line is parsed once into a reduced record that both passes read; the records keep the day of the
+prior watermark so it can serve as evidence, and the fold still skips it. The sets are built from the
+masked address and the transient user-agent, are never written, and die with the process. If the
+pre-pass raises, the sets are emptied, every browser-like request reads unknown, counting continues,
+and the journal says `prepass=failed`.
+
+A deduplicated download takes the class of the counted line. The totals and each month carry
+`labels`, a map per metric (downloads, visits, api, handoffs) of `<client>|<nettype>` counts that
+sums to the figure counted on labelled days (on a month labelled on only some of its days, the
+month's figure is larger by its unlabelled days). A labelled archive day carries `labelled: true`, `by_client_class` (per metric, by class) and `crawler_excluded`, and no
+network type, operator figure, address or user-agent. The browser and scripted split is unchanged.
+The journal also carries `fold_seconds`, the run time of the fold, for comparison with the unit's
+start timeout.
+
+### Network type
+
+Non-operator requests only. Closed set hosting, education_research, access_provider, other,
+unknown. `NetTypes` (a `_RangeTable`) looks up the masked address in
+`$AUSMT_DATA_DIR/geoip/nettype.csv` (`AUSMT_STATS_NETTYPE_CSV`); its value hook accepts only the
+four stored types, so unknown is the miss and is never stored. Government, enterprise, transit and
+every other source type fold into other, so that no value points at a single agency.
+
+The table is built by `deploy/scripts/prep_nettype.py`: stdlib only, no network call, ranges widened
+to /24 and /48, overlaps resolved hosting first, rows sorted and disjoint because the lookup tests a
+single bisect candidate. No AS number, organisation name or domain is written. The default build is
+hosting only, from the X4BNet datacenter lists (the publisher states no licence; built in part
+from IPLocate.io data, CC BY-SA 4.0); the full build adds iptoasn.com (PDDL) prefixes typed from a
+PeeringDB net table, and waits on a reading of the PeeringDB terms for a stored snapshot. The table
+header carries the attribution lines.
+
+The first line, `# ausmt-nettype v1 built=... oldest_source=... sources=...`, gates the table. States:
+absent; unreadable (an error reading it, or no valid row); stale (header missing or unparseable, or
+oldest_source more than `AUSMT_STATS_NETTYPE_MAX_AGE_DAYS`, default 45, days before the run date);
+aging (in date but past half that age, a journal warning only); loaded. Only loaded and aging tables
+are used; otherwise every request reads unknown. Staleness is judged on the oldest source, never the
+build date. The table is opened only while labels are on.
+
+Each labelled month carries `nettype_days` (days with a usable table) and `nettype_full_days` (days
+whose table names peeringdb among its sources), beside `label_days`. Network type exists only in the
+joint `labels` keys at month and cumulative grain: never on a day row or an archive line, and never
+crossed with country, state, survey, dataset or collection. The journal prints `nettype=<state>
+nettype_rows=N nettype_sources=<list>`. A fault in the lookup falls under the label guard.
+
+### Audience rule and the page
+
+`audience(client, nettype)` in `gateway/curatorpage.py` is a pure function over the stored joint
+key and is never stored: tool is automated; portal_session and landing_page are people on any
+network; unknown is automated on hosting and unclassified on every other network type. A different
+reading of it (for example hosting overriding portal evidence, or landing pages not counting as
+people) is a renderer change that needs no refold.
+
+The page surfaces of the labels are recorded in D10 (the Usage page), which replaces the screen
+this section first described. See D10. A month counts as labelled when it carries `label_days`, or an
+`operator` or `crawler_excluded` block, which the fold writes only on labelled days. `label_days`
+counts labelled days with counted activity, so a labelled month whose only admitted requests were the
+operator's or a crawler's has the blocks but no counter; the page renders those lines as measured and
+every public label figure as none.
+
+`analytics.csv` gains the fixed label columns after `detail_days`, empty rather than 0 for a month
+without `label_days`, then `downloads_select_bulk`, `downloads_select_single` and
+`bulk_export_events`, empty where the selection split did not cover the month. The survey and
+country exports are unchanged, and no label figure is ever
+crossed with country, state, survey or dataset.
+
+### History
+
+Nothing before `labels_since` is relabelled or backfilled. The only label that retained aggregates
+could support is tool by user-agent, and that is exactly the existing scripted figure already shown
+on the browser and scripted row; the sweep did not exist before, so it is not the same measure and
+the new rows read "not measured". Every earlier month keeps its figures, including the operator's
+own traffic.
+
+### Readings raised separately
+
+These are recorded here and are not changed by the labels:
+
+- D2 says no header beyond the user-agent is logged, while the shipped front-door log filter
+  (`deploy/frontdoor/Caddyfile`) deletes seven named headers and keeps the rest. The labels read
+  no header beyond the user-agent either way. Which of the two is binding needs its own reading;
+  if D2 holds, the fix is to delete more headers at the edge.
+- The page states the selection export figure as a floor. `bulk_export_events` is distinct masked
+  networks per day, so two exports from one network on one day read as one; the headline line reads
+  "in at least E exports", the quarterly row is labelled "(at least)", and no line presents the
+  figure as a count of export actions. Closed by D10: the downloads tile reads "files in at least E
+  selection exports" and the month table heads the column "Exports at least".
+- Archive day lines carry `by_client_class` beside `by_survey` and `by_dataset`. They are separate
+  marginals, but on a low-traffic day one class or one dataset makes the pair a crossing at day
+  grain, finer than anything rendered. Keeping the class at month grain only would need its own
+  reading.
+- The default operator list path is under `$AUSMT_DATA_DIR`. Whether the host-level backup covers
+  that directory, and so holds the list, is not visible from the repository.
+- The hosting range source, the X4BNet `lists_vpn` datacenter lists, has no stated licence. Its use
+  is an owner decision not yet made. The network-type table is optional: while it is absent every
+  network reads unknown and the other labels are unaffected. The full build (iptoasn.com and
+  PeeringDB) remains subject to the PeeringDB terms.
+- The front-door rolls pulled to the box (`deploy/frontdoor/ship-frontdoor-logs.sh`, rsync without
+  `--delete`) are not pruned there, which sits against the public statement that raw logs are kept
+  for about seven days (`portal/about.html`). The labels do not read them. Closed by D10: pulled
+  copies now expire.
+
+### Operator list custody
+
+`$AUSMT_DATA_DIR/stats-private/operator-networks.txt`, directory 0700 and file 0600, owned by the
+account the fold runs as. It is outside the gateway state dir that `backup.sh` snapshots and the
+gateway mounts, and outside every compose volume source, so no route can read it. Entries are widened
+to /24 or /48, the grain of the masked address. No entry, count or line number is written to
+`stats.json`, the archive or the journal; the journal prints only the list state. If the fold moves to
+another host the file moves by hand, never through git.
+
+## D10. The Usage page
+
+The curator analytics screen becomes the Usage page. This section records the fold changes it needs
+and amends the earlier clauses it touches, by pointer.
+
+- *Daily window.* Daily rows in `stats.json` are kept 184 days by default (about six months), which
+  the day-by-day charts show. `AUSMT_STATS_DAILY_KEEP` still overrides it. Nothing is backfilled; the
+  window fills forward.
+- *archive_through.* The fold writes `archive_through`, a count-free ISO day, into `stats.json`: the
+  last fold watermark the daily archive (D8) is known to hold. It moves to the new watermark only
+  when every newly folded day was appended, or when a run had nothing to append and the archive
+  already stood at the old watermark; otherwise it stays, so the page can warn that the archive is
+  behind. It is carried by name only as an ISO day. A second `stats.json` write records it only when
+  it changes; no watermark moves with it, so the append-after-stats rule of D8 still holds, and a
+  failed second write leaves the older date, which warns rather than hides. The journal line carries
+  `archive_through=`.
+- *Never read, amended.* D8's never-read rule gains one explicit exception: the gateway may read
+  `stats["archive_through"]`, and only the Usage page renderer may name it. No gateway source or
+  served script may name the archive file, its setting or a `.jsonl` file. Pinned in `deploy/tests`.
+- *D9 amended (the switch and rollback).* With `AUSMT_STATS_LABELS_FROM` absent, malformed or
+  mid-month, the fold output for any span of logs inside the daily window is byte-identical to the
+  unlabelled fold except for the count-free key `archive_through`. Two changes made by their own
+  records sit outside that statement: the daily window itself is longer, so a longer span keeps more
+  daily rows, and pulled log copies now expire whether or not labels are on. The labels-off goldens were regenerated for that key alone, and the pin asserts
+  their key set literally, so a label key reaching an unlabelled fold still fails it.
+- *labels_configured_from.* While `AUSMT_STATS_LABELS_FROM` is valid, including a month not yet
+  reached, the fold writes it into `stats.json` as `labels_configured_from`, a count-free date, so
+  the page can say when labels will start. Unset or invalid, the key is absent; it is never carried
+  from a previous file, so removing the setting removes it at the next fold.
+- *Archive mode.* A daily archive file the fold creates is mode 0664; an existing file's mode is
+  never changed. Accepted risk: the gateway uid already owns the state dir and could replace the file
+  whatever its mode, and group write also lets the gateway process append to or truncate the file in
+  place. Only the never-read pin enforces that it does neither.
+- *Pulled log copies expire.* The front-door copies pulled onto the box are kept no longer than the
+  stated raw-log retention, which closes the reading under "Readings raised separately". After
+  `stats.json` is written, the fold removes a regular file named `access-frontdoor-*` in its log dir
+  when its modification time is more than `AUSMT_STATS_LOG_RETAIN_DAYS` days before the run
+  (default 7; 0 disables; an invalid value reads as the default) and before 00:00 UTC of the day after
+  the new watermark, so no line later than the watermark is lost when the fold stalls. The live
+  `access-frontdoor.json`, the box listener's files, links and directories are never considered. A
+  failed removal is counted and never fails the fold; the journal carries `logs_expired=` and, on
+  failure, `logs_expire_failed=`, with no file name and no address.
+- *D4 amended.* The summary cards, the top datasets table, the country table and the daily sparkline
+  are replaced by the last full month tiles, the what and where cards and the day-by-day charts. The
+  route and the session gate are unchanged; the empty state is one line, and a stale file renders in
+  full under a stale header marker and one health warning.
+- *D7 amended.* The scripted share leaves the page for the monthly CSV (`downloads_browser`,
+  `downloads_scripted`) and, from `labels_since`, the who card's tool class. The reach note and the
+  network peak leave the page for the CSV. The countries tile keeps the rule that unknown is not a
+  country and says so in its label, "Countries, unknown left out".
+- *D7.1 amended.* The "N of M served" ratio leaves the page; the served-survey count stays in the
+  data. The surveys card reads "top k of N" over the surveys the fold attributed downloads to, so N is
+  never smaller than the rows shown.
+- *D8 amended.* The collection line leaves the page; the collection rollup stays in `stats.json` and
+  the archive for whichever report wants it.
+- *D9 amended (the page).* The classification table becomes the collapsed detail of the who card;
+  the quarterly label rows go to the monthly CSV; the operator scope line appears once, on the what
+  and where heading; and the bulk export line becomes the downloads tile split with the floor
+  wording. The who card describes the last full month when it is labelled; when it is not and the
+  month in progress carries labelled days, it describes the month in progress so far; otherwise it
+  is a placeholder that gives `labels_configured_from` when the fold recorded one. Network type rows,
+  the two network clauses of the warning and the hosting range credit appear only when a month held
+  in `stats.json` has `nettype_days` above zero, so a box that never built the network table prints
+  no network wording. The credit keeps the labels wording and names no licence for the hosting lists.
+- *Light page.* The Usage page carries its own style block, with light tokens on `:root` and every
+  shell and element override scoped under `.shell.usage`. The shared head and palette are unchanged,
+  and every other curator page is byte-identical except the rail label, which reads Usage everywhere
+  (pinned by golden digests).
+- *One read-out script.* The charts are server-drawn SVG, every value is also in a title and in a
+  collapsed table, and every ranked bar prints its value, so the page is complete without it. One
+  script, served from the same origin at `/gateway/curator/usage.js` behind the curator session and
+  never cached, adds a hover read-out. It reads only the data attributes the server wrote on the
+  charts, copies their values without computing any, changes only the crosshairs, the dimmed columns
+  and the read-out box, makes no request and stores nothing. The page renders the same bytes whether
+  or not it loads. This amends the zero-script rule the screen carried.
+- *Day grain.* The day-by-day charts and their table twin show day-grain visits, whole-survey
+  bundles, station files, API requests and hand-off requests only. No place, label, survey, dataset
+  or format reaches the day grain, which the daily rows do not carry anyway; the archive already holds
+  day grain (D8).
+- *Caveats live in the documentation.* Every caveat the screen carried has one home in
+  `docs/docs/introduction/usage-analytics.md`, and the section "Reading the curator Usage page" links
+  to the existing homes and adds only what is particular to the page. The page itself carries eight
+  notes in a collapsed block and one link to that section. Single files are derived as station files
+  less selection export files and read not measured when either is missing or the result is negative.
+- *Lost archive days.* Days the fold failed to append to the archive before its write access was
+  restored are not backfilled, as D8 rules for every lost day. `archive_through` records the last
+  successful write, so the page's warning clears once appends succeed while the gap stays.

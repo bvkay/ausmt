@@ -37,8 +37,8 @@ STATUS_FILENAME = "reconcile-status.json"
 # seam - no new mount, the existing trust boundary intact). The gateway never writes it.
 OPS_STATUS_FILENAME = "ops-status.json"
 # Usage analytics. The host aggregator (deploy/scripts/aggregate_stats.py, a daily timer) folds the
-# Caddy access log into this cumulative stats.json in the SAME state dir; the Analytics screen reads
-# it SERVER-side (the ops-status.json seam - no new mount, no new privilege, the existing trust
+# Caddy access log into this cumulative stats.json in the SAME state dir; the curator Usage page
+# reads it SERVER-side (the ops-status.json seam - no new mount, no new privilege, the existing trust
 # boundary intact). The gateway NEVER writes it. It carries aggregates only: counts + dailies,
 # never an address or a UA.
 STATS_FILENAME = "stats.json"
@@ -265,7 +265,7 @@ def read_ops_status(state_dir: Path) -> dict | None:
 def read_stats(state_dir: Path) -> dict | None:
     """Return the parsed stats.json (usage-analytics aggregates), or None if it is absent (the
     aggregator timer is not installed / has not run) or unreadable/malformed. Never raises — mirrors
-    read_ops_status: a broken stats file must not 500 the Analytics screen; the caller treats None as
+    read_ops_status: a broken stats file must not 500 the curator Usage page; the caller treats None as
     'no analytics yet' and renders the empty state (never a partial/last-known-good crash)."""
     path = state_dir / STATS_FILENAME
     try:

@@ -323,7 +323,8 @@ def test_no_page_renderer_emits_inline_handlers_or_scripts():
     from pathlib import Path
     pkg = Path(__file__).resolve().parents[1]
     offenders = []
-    for name in ("curatorpage.py", "metaedit.py", "statuspage.py", "uploader_keys.py", "app.py"):
+    for name in ("curatorpage.py", "metaedit.py", "statuspage.py", "uploader_keys.py", "app.py",
+                 "usagepage.py"):
         p = pkg / name
         assert p.exists(), f"CSP sweep target vanished (renamed?): {name} - update this sweep"
         for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):

@@ -2,7 +2,7 @@
 """Usage-analytics aggregator.
 
 A host-side, STDLIB-ONLY daily job (deploy/systemd/ausmt-stats.timer fires it) that folds the Caddy
-access log into a cumulative `stats.json` the workbench Analytics screen reads. It is the same
+access log into a cumulative `stats.json` the curator Usage page reads. It is the same
 trust class as alert.sh's ops-status writer: it NEVER raises into the timer (main() catches
 everything and exits 0), writes atomically (tmp -> chmod 0644 -> os.replace), and stamps the shared
 UTC timestamp so the gateway's staleness clock parses it identically.
@@ -57,8 +57,12 @@ WHAT IT DOES, once a day:
   * APPENDS one line per newly folded day to a permanent archive beside stats.json, at the finest
     NON-GEOGRAPHIC granularity the fold sees. Nothing reads it and nothing serves it.
 
-RETENTION (aggregates only -- the RAW log keeps its own untouched ~7-day Caddy rotation):
-  * DAILY rows are a rolling window of AUSMT_STATS_DAILY_KEEP days (default 92, i.e. a quarter) ending
+RAW LOG RETENTION: the box's own log keeps Caddy's ~7-day rotation, and the front-door copies pulled
+onto the box (the access-frontdoor prefix followed by a hyphen) expire after AUSMT_STATS_LOG_RETAIN_DAYS once the
+fold has written stats.json and passed every line they can hold (see expire_pulled_logs).
+
+RETENTION (aggregates only):
+  * DAILY rows are a rolling window of AUSMT_STATS_DAILY_KEEP days (default 184, about six months) ending
     at the fold watermark. Older daily rows are pruned.
   * MONTHLY rollup rows are kept INDEFINITELY. They are tiny pure-count records (no address, no path,
     no identity) and they are what makes year-over-year funding reporting possible. Each month is
@@ -80,7 +84,8 @@ Config (env; every path derives from AUSMT_DATA_DIR, each overridable for tests)
                             (produced by deploy/scripts/prep_au_states.py; absent => country only)
   AUSMT_STATS_FILE          the cumulative stats.json      [default $AUSMT_DATA_DIR/gateway/state/stats.json]
   AUSMT_STATS_DAILY_ARCHIVE the append-only day archive    [default: daily_archive.jsonl beside stats.json]
-  AUSMT_STATS_DAILY_KEEP    daily-row retention, in DAYS   [default 92; monthly rollups are never pruned]
+  AUSMT_STATS_DAILY_KEEP    daily-row retention, in DAYS   [default 184; monthly rollups are never pruned]
+  AUSMT_STATS_LOG_RETAIN_DAYS pulled front-door log copies, in DAYS [default 7; 0 disables expiry]
   AUSMT_STATS_NOW           run instant (ISO %Y-%m-%dT%H:%M:%SZ or %Y-%m-%d) — TEST hook for determinism
 
 Exit code is ALWAYS 0 on the normal path (best-effort, timer-safe); a genuinely broken environment
@@ -96,7 +101,9 @@ import gzip
 import ipaddress
 import json
 import os
+import re
 import sys
+import time
 import zlib
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -116,12 +123,12 @@ TIMER_PERIOD_MIN = 1440
 # empty. Bumping the version would gate nothing and would only invite a migration step that is not
 # needed. That also covers the reverse case: a file folded by a build that briefly wrote a `states` map
 # onto each DAY row reads back fine here -- the key is simply carried forward untouched and ages out
-# with the 92-day daily window (see _count_geo for why no day-by-state cell is written any more).
+# with the daily window (see _count_geo for why no day-by-state cell is written any more).
 SCHEMA_VERSION = 2
 
-# The rolling window (in DAYS) of daily rows kept in stats.json. 92 days is one quarter, which is what
-# the quarterly funding view needs. Monthly rollups are NOT subject to this -- they are kept forever.
-DEFAULT_DAILY_KEEP_DAYS = 92
+# The rolling window (in DAYS) of daily rows kept in stats.json, about six months, which the day-by-day
+# charts show. Monthly rollups are NOT subject to this; they are kept forever.
+DEFAULT_DAILY_KEEP_DAYS = 184
 
 # The served download families (path prefixes under /data/) and the visit proxy. `h5` was excluded here
 # for as long as `/data/h5/*` was a latent Caddy force-download matcher with NO producer.
@@ -256,6 +263,77 @@ CLIENT_CRAWLER = "crawler"
 CLIENT_SCRIPTED = "scripted"
 CLIENT_BROWSER = "browser"
 
+# REQUEST LABELS. Closed sets: a stored joint key or block key outside them is dropped on read, so a
+# hand-edited file cannot push an arbitrary label onto the screen. A joint key is "<client>|<nettype>".
+_LABEL_CLIENTS = ("portal_session", "landing_page", "tool", "unknown")
+_LABEL_NETTYPES = ("hosting", "education_research", "access_provider", "other", "unknown")
+_LABEL_METRICS = ("downloads", "visits", "api", "handoffs")
+_OPERATOR_KEYS = _LABEL_METRICS + ("download_bytes",)
+_LABEL_DAY_COUNTERS = ("label_days", "nettype_days", "nettype_full_days", "operator_list_days")
+
+# THE OPERATOR LABEL: yes, no or unknown, and unknown counts as not operator. The first match is yes:
+#   * the line came from the box listener's own log, which is published on loopback only, so every
+#     request in it reached the box over the host or the tailnet. Only its exact names match, so a
+#     hand-placed file of any other name is never taken for it;
+#   * the user-agent opens with the client name the repository's own jobs send;
+#   * the masked address is in _INTERNAL_RANGES. This is an explicit list and never is_private,
+#     because is_private also covers the documentation ranges the tests use;
+#   * the masked address is inside an entry of the host operator list (OperatorNetworks).
+# Otherwise it is no when that list was read, and unknown when it is absent or unreadable.
+_BOX_LOG_NAME = "access.json"
+# A roll is the timestamp, an optional fraction, then the roll's optional lowercase reason word.
+_BOX_LOG_ROLL = re.compile(
+    r"^access-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(\.\d+)?(-[a-z]+)?\.(json|log)(\.gz)?$")
+_FRONTDOOR_LOG_PREFIX = "access-frontdoor"
+# The pulled copies that expire: the front-door name followed by a hyphen, which covers a timestamped
+# roll and a renamed retired-host copy and never the live access-frontdoor.json.
+_EXPIRING_LOG_PREFIX = _FRONTDOOR_LOG_PREFIX + "-"
+# The stated raw-log retention, in days, applied to the pulled copies on the box.
+DEFAULT_LOG_RETAIN_DAYS = 7
+_OPERATOR_UA_PREFIX = "ausmt-ops/"
+_INTERNAL_RANGES = tuple(ipaddress.ip_network(n) for n in (
+    "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16",
+    "100.64.0.0/10", "::/128", "fc00::/7", "fe80::/10"))
+OPERATOR_YES = "yes"
+OPERATOR_NO = "no"
+OPERATOR_UNKNOWN = "unknown"
+# The list lives outside the gateway state dir (which backup.sh snapshots and the gateway mounts) and
+# outside every compose volume source, so nothing served can read it.
+_OPERATOR_LIST_PARTS = ("stats-private", "operator-networks.txt")
+# The switch is the first day of a month, so a labelled month is labelled from its first day.
+_LABELS_FROM_RE = re.compile(r"^\d{4}-\d{2}-01$")
+# A bare ISO day, the only form a count-free date key in stats.json may take.
+_ISO_DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# THE CLIENT CLASS, for a non-operator request on a labelled day. Precedence:
+#   * a declared crawler is not a class: it stays excluded and is tallied in crawler_excluded;
+#   * tool: a scripted or empty user-agent (classify_client);
+#   * tool, downloads only: one (day, masked network, exact user-agent) that fetched more than
+#     SWEEP_DISTINCT_FILES distinct download paths without the export label that day. Every download
+#     of that triple that day is tool; its visits, API requests and hand-offs are not swept, and nor
+#     is any other user-agent on the same network;
+#   * portal_session: the network loaded the catalogue, or took a download carrying the export
+#     label, that day or the day before;
+#   * landing_page: the network opened a survey or collection page that day or the day before;
+#   * unknown: every other browser-like request.
+# The evidence comes only from non-operator, browser-like lines. It is built from the masked address
+# and the transient user-agent, held in memory for the run and never written (see _LabelEvidence).
+SWEEP_DISTINCT_FILES = 50
+_LANDING_PREFIXES = ("/surveys/", "/collections/")
+NETTYPE_UNKNOWN = "unknown"
+
+# THE NETWORK TYPE, for a non-operator request on a labelled day: the masked network looked up in the
+# table deploy/scripts/prep_nettype.py builds. The table holds only the four types below; unknown is
+# the miss and is never stored in it. The first line is a header naming the oldest source date, and
+# the table is used only while that source is no older than the maximum age, because prefixes change
+# hands. See NetTypes for the states.
+_NETTYPE_TABLE_VALUES = ("hosting", "education_research", "access_provider", "other")
+_NETTYPE_HEADER_RE = re.compile(r"^# ausmt-nettype v1 built=(\d{4}-\d{2}-\d{2}) "
+                                r"oldest_source=(\d{4}-\d{2}-\d{2}) "
+                                r"sources=([a-z0-9_]+(?:,[a-z0-9_]+)*)\s*$")
+_NETTYPE_PARTS = ("geoip", "nettype.csv")
+DEFAULT_NETTYPE_MAX_AGE_DAYS = 45
+
 # The append-only daily archive, written beside stats.json in the gateway state dir. See the archive
 # section further down for what it holds and, more importantly, what it deliberately does not.
 _ARCHIVE_FILENAME = "daily_archive.jsonl"
@@ -383,7 +461,7 @@ class GeoIP(_RangeTable):
 
 # The eight Australian states and territories, in the conventional listing order. This tuple is the
 # WHOLE vocabulary the fold will accept from the state table, so a hand-edited or mangled table cannot
-# push an arbitrary label onto the analytics screen.
+# push an arbitrary label onto the curator Usage page.
 AU_STATE_CODES = ("NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT")
 
 # The bucket an AU request lands in when the state table IS present but its prefix resolves to no
@@ -417,6 +495,311 @@ class AuStates(_RangeTable):
     def state(self, address: str | None) -> str | None:
         """The state/territory code for `address`, or None when the table does not cover it."""
         return self.lookup(address)
+
+
+class NetTypes(_RangeTable):
+    """The network-type table. Construct via `open_table(path, today=..., max_age_days=...)`; it
+    never raises.
+
+    `state` is absent (no file), unreadable (an error reading it, or no valid row), stale (the
+    header is missing or unparseable, or its oldest source is more than `max_age_days` old on
+    `today`), aging (in date, but older than half that age) or loaded. Only loaded and aging tables
+    are used: every other state is treated as empty, so every lookup reads unknown. `full` is true
+    when the header names peeringdb among its sources, that is when the table can say more than
+    hosting."""
+
+    USABLE_STATES = ("loaded", "aging")
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.state = "absent"
+        self.sources: tuple[str, ...] = ()
+        self.full = False
+
+    @staticmethod
+    def _coerce_value(raw: str) -> str | None:
+        v = raw.strip().lower()
+        return v if v in _NETTYPE_TABLE_VALUES else None
+
+    @classmethod
+    def open_table(cls, path, *, today: dt.date,
+                   max_age_days: int = DEFAULT_NETTYPE_MAX_AGE_DAYS) -> "NetTypes":
+        p = Path(path) if path else None
+        try:
+            if p is None or not p.exists():
+                return cls()
+            with open(p, encoding="utf-8", newline="") as fh:
+                first = fh.readline()
+            t = cls.load(p)
+        except (OSError, ValueError, csv.Error):
+            t = cls()
+            t.state = "unreadable"
+            return t
+        if t.row_count == 0:
+            t.state = "unreadable"
+            return t
+        t.state = "stale"
+        m = _NETTYPE_HEADER_RE.match(first.rstrip("\r\n"))
+        if m:
+            try:
+                dt.date.fromisoformat(m.group(1))
+                age = (today - dt.date.fromisoformat(m.group(2))).days
+            except ValueError:
+                age = None
+            if age is not None and age <= max_age_days:
+                t.state = "aging" if age > max_age_days / 2 else "loaded"
+                t.sources = tuple(m.group(3).split(","))
+                t.full = "peeringdb" in t.sources
+        if not t.usable:
+            t._starts = {4: [], 6: []}
+            t._ranges = {4: [], 6: []}
+            t.loaded = False
+        return t
+
+    @property
+    def usable(self) -> bool:
+        return self.state in self.USABLE_STATES
+
+    def nettype(self, address) -> str:
+        """The network type of a masked address, or unknown."""
+        return self.lookup(address) or NETTYPE_UNKNOWN
+
+
+class OperatorNetworks:
+    """The host operator list: one CIDR per line, with blank lines and # comments allowed. Construct
+    via `load(path)`; it never raises.
+
+    An IPv4 entry narrower than /24 is widened to its /24 and an IPv6 entry narrower than /48 to its
+    /48, because the address it is matched against was masked to that grain at the edge.
+
+    `state` is the only thing about the list that may leave this object: absent (no file),
+    unreadable (an OSError, or content with no valid entry), empty (comments and blanks only),
+    partial (a valid entry and a skipped line) or loaded. No entry, count or line number is ever
+    written or printed; the entries live only in this run-local list."""
+
+    READ_STATES = ("loaded", "empty", "partial")
+
+    def __init__(self) -> None:
+        self._nets: list = []
+        self.state = "absent"
+
+    @classmethod
+    def load(cls, path) -> "OperatorNetworks":
+        o = cls()
+        if not path:
+            return o
+        p = Path(path)
+        try:
+            if not p.exists():
+                return o
+            text = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            o.state = "unreadable"
+            return o
+        skipped = 0
+        for raw in text.splitlines():
+            entry = raw.split("#", 1)[0].strip()
+            if not entry:
+                continue
+            try:
+                net = ipaddress.ip_network(entry, strict=False)
+            except ValueError:
+                skipped += 1
+                continue
+            grain = 24 if net.version == 4 else 48
+            o._nets.append(net.supernet(new_prefix=grain) if net.prefixlen > grain else net)
+        if not o._nets:
+            o.state = "unreadable" if skipped else "empty"
+        else:
+            o.state = "partial" if skipped else "loaded"
+        return o
+
+    @property
+    def read(self) -> bool:
+        """True when the list was read (loaded, empty or partial), so a miss means not operator."""
+        return self.state in self.READ_STATES
+
+    def contains(self, address) -> bool:
+        if not self._nets or not isinstance(address, str):
+            return False
+        try:
+            ip = ipaddress.ip_address(address.strip())
+        except ValueError:
+            return False
+        return any(ip in net for net in self._nets if net.version == ip.version)
+
+
+def _log_source(name: str) -> str:
+    """'box', 'frontdoor' or 'other' for a log file basename. Box is a positive match on the box
+    listener's own names; any name that is neither is 'other' and is never operator by name."""
+    if name == _BOX_LOG_NAME or _BOX_LOG_ROLL.match(name):
+        return "box"
+    if name.startswith(_FRONTDOOR_LOG_PREFIX):
+        return "frontdoor"
+    return "other"
+
+
+def _is_internal(address) -> bool:
+    if not isinstance(address, str):
+        return False
+    try:
+        ip = ipaddress.ip_address(address.strip())
+    except ValueError:
+        return False
+    return any(ip in net for net in _INTERNAL_RANGES if net.version == ip.version)
+
+
+def _operator_label(source: str, address, ua: str, operator_nets: "OperatorNetworks | None") -> str:
+    """OPERATOR_YES, OPERATOR_NO or OPERATOR_UNKNOWN for one admitted request (see _INTERNAL_RANGES
+    for the rule). Unknown is counted as not operator."""
+    if source == "box":
+        return OPERATOR_YES
+    if (ua or "").strip().lower().startswith(_OPERATOR_UA_PREFIX):
+        return OPERATOR_YES
+    if _is_internal(address):
+        return OPERATOR_YES
+    if operator_nets is not None and operator_nets.contains(address):
+        return OPERATOR_YES
+    return OPERATOR_NO if operator_nets is not None and operator_nets.read else OPERATOR_UNKNOWN
+
+
+def _labels_from_cfg(raw) -> str | None:
+    """The labels switch as an ISO date, or None (labels off) when it is absent, malformed or not the
+    first day of a month."""
+    v = (raw or "").strip()
+    if not _LABELS_FROM_RE.match(v):
+        return None
+    try:
+        dt.date.fromisoformat(v)
+    except ValueError:
+        return None
+    return v
+
+
+def _default_operator_list(data_dir: str) -> Path:
+    return Path(data_dir).joinpath(*_OPERATOR_LIST_PARTS)
+
+
+def _nettype_max_age(raw) -> int:
+    """The maximum source age in days; absent, malformed or not positive reads the default."""
+    try:
+        v = int((raw or "").strip())
+    except ValueError:
+        return DEFAULT_NETTYPE_MAX_AGE_DAYS
+    return v if v > 0 else DEFAULT_NETTYPE_MAX_AGE_DAYS
+
+
+class _LabelEvidence:
+    """The run-local evidence behind the client class. `portal` and `landing` hold (date, masked
+    network) pairs; `sweep` maps (date, masked network, user-agent) to the set of distinct unlabelled
+    download paths it fetched. Nothing here is ever written, and an empty instance is the honest
+    state after a failed pre-pass: every browser-like request then reads unknown."""
+
+    def __init__(self) -> None:
+        self.portal: set = set()
+        self.landing: set = set()
+        self.sweep: dict = {}
+        self._prev: dict = {}
+
+    def _prev_day(self, date: str) -> str:
+        p = self._prev.get(date)
+        if p is None:
+            p = (dt.date.fromisoformat(date) - dt.timedelta(days=1)).isoformat()
+            self._prev[date] = p
+        return p
+
+    def seen(self, pairs: set, date: str, address) -> bool:
+        if not address:
+            return False
+        return (date, address) in pairs or (self._prev_day(date), address) in pairs
+
+    def swept(self, date: str, address, ua: str) -> bool:
+        return len(self.sweep.get((date, address or "", ua), ())) > SWEEP_DISTINCT_FILES
+
+
+class _Record:
+    """One parsed line as both passes read it, held only while labels are on. Slots rather than a
+    dict, because a labelled fold keeps every record of its window in memory at once."""
+
+    __slots__ = ("date", "method", "path", "status", "size", "address", "ua", "bulk", "source",
+                 "kind", "rel")
+
+    def __init__(self, rec: dict) -> None:
+        for name in self.__slots__:
+            setattr(self, name, rec[name])
+
+    def __getitem__(self, name: str):
+        return getattr(self, name)
+
+
+def _parse_records(lines, cutoff: str, prev_folded):
+    """Each line parsed once, lazily, into the reduced record both passes read: parse_caddy_line's
+    fields plus `source`, `kind` and `rel`. A record is yielded when its date is no later than
+    `cutoff` and no earlier than the prior watermark, so the day before the first new day is present
+    as evidence while the fold itself still skips it. Each item is a bare line, read as front door,
+    or a (source, line) pair."""
+    for item in lines:
+        source, raw = item if isinstance(item, tuple) and len(item) == 2 else ("frontdoor", item)
+        rec = parse_caddy_line(raw) if isinstance(raw, str) else None
+        if rec is None:
+            continue
+        date = rec["date"]
+        if date > cutoff or (prev_folded is not None and date < prev_folded):
+            continue
+        rec["source"] = source
+        rec["kind"], rec["rel"] = classify(rec["path"])
+        yield rec
+
+
+def _label_prepass(records: list, first: str,
+                   operator_nets: "OperatorNetworks | None") -> _LabelEvidence:
+    """The portal, landing and sweep evidence from every non-operator, browser-like record dated
+    `first` or later."""
+    ev = _LabelEvidence()
+    for rec in records:
+        date = rec["date"]
+        if date < first or rec["method"] not in ("GET", ""):
+            continue
+        if classify_client(rec["ua"]) != CLIENT_BROWSER:
+            continue
+        status, address = rec["status"], rec["address"]
+        if _operator_label(rec["source"], address, rec["ua"], operator_nets) == OPERATOR_YES:
+            continue
+        if address and ((rec["kind"] == "visit" and status in (200, 304))
+                        or (rec["bulk"] and status in (200, 206))):
+            ev.portal.add((date, address))
+        if address and status in (200, 304) and rec["path"].startswith(_LANDING_PREFIXES):
+            ev.landing.add((date, address))
+        if rec["kind"] == "download" and status in (200, 206) and not rec["bulk"]:
+            ev.sweep.setdefault((date, address or "", rec["ua"]), set()).add(rec["rel"])
+    return ev
+
+
+def _client_class(client: str, kind: str, rec: dict, ev: _LabelEvidence) -> str | None:
+    """The client class of one admitted non-operator request, or None for a declared crawler, which
+    has no class (see SWEEP_DISTINCT_FILES for the precedence)."""
+    if client == CLIENT_CRAWLER:
+        return None
+    if client == CLIENT_SCRIPTED:
+        return "tool"
+    date, address = rec["date"], rec["address"]
+    if kind == "download" and ev.swept(date, address, rec["ua"]):
+        return "tool"
+    if ev.seen(ev.portal, date, address):
+        return "portal_session"
+    if ev.seen(ev.landing, date, address):
+        return "landing_page"
+    return "unknown"
+
+
+def _bump_labels(totals: dict, month: dict, arc: dict, metric: str, client_class: str,
+                 nettype: str) -> None:
+    """One counted request on its joint client|network key at the cumulative and month grains, and
+    on its client class alone on the archive day, which carries no network type."""
+    key = f"{client_class}|{nettype}"
+    for row in (totals, month):
+        _bump(row.setdefault("labels", {}).setdefault(metric, {}), key)
+    _bump(arc.setdefault("by_client_class", {}).setdefault(metric, {}), client_class)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -812,7 +1195,7 @@ def _empty_month(month: str) -> dict:
     `geo_days` counts the days that actually contributed a country, which is what makes the forward-only
     country seam MACHINE-visible rather than a matter of reading the prose beside the table;
     `networks_peak` is the largest distinct-network count any of its folded days saw. That figure on
-    daily rows alone expires with the 92-day window and can never reach a quarterly report, which is
+    daily rows alone expires with the daily window and can never reach a quarterly report, which is
     exactly the horizon a funding report asks about. It accumulates as each day folds and is never
     recomputed from a tail that is about to be pruned.
 
@@ -838,6 +1221,17 @@ def _as_int(v, default: int = 0) -> int:
         return int(v)
     except (TypeError, ValueError):
         return default
+
+
+def _iso_day(value) -> str | None:
+    """`value` when it is a bare, real ISO day, else None."""
+    if not isinstance(value, str) or not _ISO_DAY_RE.match(value):
+        return None
+    try:
+        dt.date.fromisoformat(value)
+    except ValueError:
+        return None
+    return value
 
 
 def _next_day(date_str) -> str | None:
@@ -930,6 +1324,29 @@ def _coerce_dataset_map(raw) -> dict[str, dict]:
     return out
 
 
+def _is_label_key(key) -> bool:
+    parts = key.split("|") if isinstance(key, str) else []
+    return len(parts) == 2 and parts[0] in _LABEL_CLIENTS and parts[1] in _LABEL_NETTYPES
+
+
+def _coerce_label_blocks(src: dict, dst: dict, *, counters: bool = False) -> None:
+    """Carry the label blocks (and, on a month row, the label day counters) from `src` into `dst`.
+    Each is carried only when present in its stored shape, so a month or file folded without labels
+    stays without them. Keys are clamped to the closed sets and values read as integers."""
+    labels = src.get("labels")
+    if isinstance(labels, dict):
+        dst["labels"] = {metric: {k: _as_int(v) for k, v in labels[metric].items() if _is_label_key(k)}
+                         for metric in _LABEL_METRICS if isinstance(labels.get(metric), dict)}
+    for block, keys in (("operator", _OPERATOR_KEYS), ("crawler_excluded", _LABEL_METRICS)):
+        raw = src.get(block)
+        if isinstance(raw, dict):
+            dst[block] = {k: _as_int(raw[k]) for k in keys if k in raw}
+    if counters:
+        for k in _LABEL_DAY_COUNTERS:
+            if k in src:
+                dst[k] = _as_int(src[k])
+
+
 def _coerce_month_rows(raw) -> list[dict]:
     """Well-formed monthly rollup rows from a prior file, date-sorted. A malformed row is dropped rather
     than allowed to poison the arithmetic."""
@@ -960,6 +1377,7 @@ def _coerce_month_rows(raw) -> list[dict]:
             m["handoffs"] = _coerce_handoffs(row["handoffs"], geo=True)
         else:
             m.pop("handoffs", None)
+        _coerce_label_blocks(row, m, counters=True)
         out.append(m)
     out.sort(key=lambda r: r["month"])
     return out
@@ -1017,6 +1435,14 @@ def _coerce_prev(prev: dict | None) -> dict:
             s["totals"]["downloads_by_client"] = {str(k): _as_int(v)
                                                   for k, v in pt["downloads_by_client"].items()}
         s["totals"]["downloads_by_select"] = _coerce_select(pt.get("downloads_by_select"))
+        _coerce_label_blocks(pt, s["totals"])
+    # Stamped once by the first labelled fold and carried by name, never moved.
+    if isinstance(prev.get("labels_since"), str):
+        s["labels_since"] = prev["labels_since"]
+    # The last watermark the daily archive is known to hold: carried by name, and only as an ISO day,
+    # so nothing but a count-free date can ever ride under it.
+    if _iso_day(prev.get("archive_through")):
+        s["archive_through"] = prev["archive_through"]
     # The bulk/single split is the one dimension here whose start date IS recorded. `detail_since` marks
     # the v1 hinge and the dimensions after it were left undated on purpose (the fold that added them is
     # written nowhere), but this one is stamped as it begins, so the screen can NAME the day instead of
@@ -1055,7 +1481,7 @@ def _coerce_prev(prev: dict | None) -> dict:
     # back-filled -- those days hold no hand-off because there was no route to request.
     s["handoffs"] = _coerce_handoffs(prev.get("handoffs"), geo=True)
     # Day rows are carried forward WHOLE, unknown keys and all. A row written by a build that briefly
-    # recorded a per-day `states` map keeps it and simply ages out of the 92-day window; it is not
+    # recorded a per-day `states` map keeps it and simply ages out of the daily window; it is not
     # stripped, because rewriting history on upgrade is the one thing this file never does.
     if isinstance(prev.get("daily"), list):
         s["daily"] = [d for d in prev["daily"] if isinstance(d, dict) and isinstance(d.get("date"), str)]
@@ -1076,7 +1502,10 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
               run_dt: dt.datetime, *, daily_keep: int = DEFAULT_DAILY_KEEP_DAYS,
               au_states: "AuStates | None" = None, collections: dict[str, str] | None = None,
               served_build: str | None = None, archive_out: list | None = None,
-              ts_access: dict | None = None) -> dict:
+              ts_access: dict | None = None, labels_from: str | None = None,
+              operator_nets: "OperatorNetworks | None" = None,
+              nettypes: "NetTypes | None" = None,
+              label_stats_out: dict | None = None) -> dict:
     """Fold every COMPLETE day in `lines` into `prev`, returning the new cumulative stats dict.
 
     Only dates d with last_folded_date < d < run_dt.date() are folded (a strictly-earlier complete
@@ -1126,7 +1555,17 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     NON-GEO granularity, for the append-only archive (see _archive_line). It is an out channel and not
     a second return value, so every existing caller keeps its signature; `aggregate` stays a function
     of its inputs and simply hands the caller the rows it built. `served_build` is stamped onto those
-    rows when the served tree names itself."""
+    rows when the served tree names itself.
+
+    REQUEST LABELS. Each item of `lines` is a bare line, read as front door, or a (source, line) pair
+    from read_log_lines(with_source=True). A day D is labelled when `labels_from` is set and
+    D >= labels_from; every other day folds exactly as it would with no labels at all, and with
+    `labels_from` None the output is byte-identical to a fold that predates labels. On a labelled day
+    an admitted OPERATOR request (see _operator_label) is counted on the operator line in the totals
+    and its month, as a request count with no dedupe, and reaches no other figure. The derivation is
+    guarded: a fault costs that request its labels (operator unknown, so it is counted) and adds one
+    to `label_fallbacks` in `label_stats_out`, and never costs the fold. `nettypes` is the OPTIONAL
+    network-type table (NetTypes); absent or unusable, every network type reads unknown."""
     stats = _coerce_prev(prev)
     prev_folded = stats.get("last_folded_date")
     cutoff_date = (run_dt.date() - dt.timedelta(days=1))  # last complete day
@@ -1170,27 +1609,39 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     # is what lets the export state that rather than look self-consistent while under-reporting.
     geo_days_seen: dict[str, str] = {}
     # date -> the ARCHIVE row for that day, built only for the days THIS call folds. The daily rows in
-    # stats.json are a 92-day window that the render path reads; these are the permanent, never-read
+    # stats.json are the daily window that the render path reads; these are the permanent, never-read
     # record, so they carry the finer per-survey / per-dataset / per-collection detail that has no
     # place on a rendered day row. Geography is deliberately absent from them (see _archive_line).
     archive_index: dict[str, dict] = {}
+    label_fallbacks = 0
+    # date -> {metric: n} of declared crawler requests on labelled days, for THIS run only, so the
+    # archive line of a day with counted activity can carry that day's tally.
+    crawler_days: dict[str, dict] = {}
 
-    for raw in lines:
-        rec = parse_caddy_line(raw) if isinstance(raw, str) else None
-        if rec is None:
-            continue
+    # Records run from the day before the first new day to the cutoff; the fold below skips that
+    # earlier day, which is read only as evidence for the client class. With no labelled day in
+    # reach each line is parsed and folded in turn and none is kept, exactly as an unlabelled fold.
+    records = _parse_records(lines, cutoff, prev_folded)
+    evidence = _LabelEvidence()
+    prepass = "none"
+    if labels_from is not None and cutoff >= labels_from:
+        records = [_Record(rec) for rec in records]
+        try:
+            evidence = _label_prepass(records, _prev_day(labels_from), operator_nets)
+            prepass = "ok"
+        except Exception:  # noqa: BLE001 -- lost evidence reads unknown, it never costs the fold
+            evidence = _LabelEvidence()
+            prepass = "failed"
+
+    for rec in records:
+        source = rec["source"]
         date = rec["date"]
         # Only fold strictly-new, strictly-complete days.
-        if date > cutoff:
-            continue
         if prev_folded is not None and date <= prev_folded:
             continue
         if rec["method"] not in ("GET", ""):
             continue
-        client = classify_client(rec["ua"])
-        if client == CLIENT_CRAWLER:
-            continue
-        kind, rel = classify(rec["path"])
+        kind, rel = rec["kind"], rec["rel"]
         if kind == "ignore":
             continue
         if kind in ("visit", "api"):
@@ -1200,6 +1651,42 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             if rec["status"] != _HANDOFF_STATUS:  # the 302 IS the hand-off; a 404 is the table refusing
                 continue
         elif rec["status"] not in (200, 206):   # download: a complete OR a ranged/resumed transfer
+            continue
+        # Operator before crawler, so a crawler-named operator probe is still on the operator line.
+        # Moving the crawler drop after admission changes no result: both paths drop the line.
+        labelled = labels_from is not None and date >= labels_from
+        client_class = nettype = None
+        if labelled:
+            try:
+                operator = _operator_label(source, rec["address"], rec["ua"], operator_nets)
+                if operator != OPERATOR_YES:
+                    client_class = _client_class(classify_client(rec["ua"]), kind, rec, evidence)
+                    nettype = (nettypes.nettype(rec["address"]) if nettypes is not None
+                               else NETTYPE_UNKNOWN)
+            except Exception:  # noqa: BLE001 -- a label fault must never cost the request or the fold
+                operator, client_class, nettype = OPERATOR_UNKNOWN, "unknown", NETTYPE_UNKNOWN
+                label_fallbacks += 1
+            if operator == OPERATOR_YES:
+                metric = _KIND_METRIC[kind]
+                month = _month_row(month_index, stats["monthly"], date[:7])
+                for block in (totals.setdefault("operator", _empty_operator()),
+                              month.setdefault("operator", _empty_operator())):
+                    block[metric] = _as_int(block.get(metric)) + 1
+                    if kind == "download":
+                        block["download_bytes"] = (_as_int(block.get("download_bytes"))
+                                                   + max(rec["size"], 0))
+                continue
+        client = classify_client(rec["ua"])
+        if client == CLIENT_CRAWLER:
+            # On a labelled day each admitted crawler request is tallied, with no dedupe, and still
+            # reaches no counted figure.
+            if labelled:
+                metric = _KIND_METRIC[kind]
+                month = _month_row(month_index, stats["monthly"], date[:7])
+                for block in (totals.setdefault("crawler_excluded", _empty_crawler()),
+                              month.setdefault("crawler_excluded", _empty_crawler()),
+                              crawler_days.setdefault(date, {})):
+                    _bump(block, metric)
             continue
         day = _day_row(daily_index, stats["daily"], date)
         month = _month_row(month_index, stats["monthly"], date[:7])
@@ -1212,6 +1699,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             day["visits"] += 1
             month["visits"] += 1
             arc["visits"] += 1
+            if labelled:
+                _bump_labels(totals, month, arc, "visits", client_class, nettype)
             _count_geo(geoip, au_states, rec["address"], countries, by_country_detail, by_state,
                        by_state_detail, month, metric="visits")
             geo_days_seen[date] = date[:7]
@@ -1220,6 +1709,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             day["api_requests"] = _as_int(day.get("api_requests")) + 1
             month["api_requests"] += 1
             arc["api"] += 1
+            if labelled:
+                _bump_labels(totals, month, arc, "api", client_class, nettype)
             # The API line is a counted class WITH geography: leaving it out makes any reach claim
             # built from the country table silently exclude programmatic consumers.
             _count_geo(geoip, au_states, rec["address"], countries, by_country_detail, by_state,
@@ -1231,6 +1722,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             # Location it sent is not logged at all. So the size and the destination host come from the
             # served, register-derived index, and a route that index does not publish is drift -- one
             # request, no bytes, no survey and no level, in this family's own unattributed bucket.
+            if labelled:
+                _bump_labels(totals, month, arc, "handoffs", client_class, nettype)
             entry = _handoff_row(ts_access, rel)
             size = max(_as_int(entry.get("bytes")), 0) if entry else 0
             survey, _station, level = rel.split("/")
@@ -1291,6 +1784,9 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                 _bump(totals["downloads_by_client"], client)
                 _bump(month["downloads_by_client"], client)
                 _bump(arc["by_client"], client)
+                # The counted line's class is the download's class; a deduplicated line adds none.
+                if labelled:
+                    _bump_labels(totals, month, arc, "downloads", client_class, nettype)
             row = reverse_map.get(rel) or _release_bundle_row(reverse_map, rel)
             if row is None:
                 totals["unattributed"] += n
@@ -1342,7 +1838,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                 _bump_survey(month["surveys"], survey, size, counted=counted, country=cc,
                              kind=kind_key)
                 # The archive's per-survey row takes the SPLIT too (it is a day fact with no geography
-                # in it), so once the 92-day window has dropped the day, "file by file or taken whole"
+                # in it), so once the daily window has dropped the day, "file by file or taken whole"
                 # is still answerable for it. The collection rows below take no split: a collection is
                 # a programme rollup, and the manifest kind belongs to the artifact, not the programme.
                 _bump_volume(arc["by_survey"], survey, size, counted=counted, kind=kind_key)
@@ -1400,6 +1896,17 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     # One increment per distinct date that actually contributed a country to this month.
     for month_key in geo_days_seen.values():
         month_index[month_key]["geo_days"] = _as_int(month_index[month_key].get("geo_days")) + 1
+    if labels_from is not None:
+        _fold_label_days(stats, month_index, days_seen, prev_folded, cutoff, labels_from,
+                         operator_nets, nettypes)
+        for date in days_seen:
+            if date >= labels_from:
+                archive_index[date]["labelled"] = True
+                if date in crawler_days:
+                    archive_index[date]["crawler_excluded"] = crawler_days[date]
+    if label_stats_out is not None:
+        label_stats_out["label_fallbacks"] = label_fallbacks
+        label_stats_out["prepass"] = prepass
 
     # Advance the fold watermark to the run's date-1 (the cutoff), always — a window with no lines
     # still advances so old dates are never re-scanned.
@@ -1432,6 +1939,63 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
         archive_out.extend(_archive_line(archive_index[d], served_build=served_build)
                            for d in sorted(archive_index))
     return stats
+
+
+_KIND_METRIC = {"download": "downloads", "visit": "visits", "api": "api", "handoff": "handoffs"}
+
+
+def _empty_operator() -> dict:
+    """The operator line, dense once labels have started so that a zero is a measured zero."""
+    return dict.fromkeys(_OPERATOR_KEYS, 0)
+
+
+def _empty_crawler() -> dict:
+    """The crawler tally, dense once labels have started so that a zero is a measured zero."""
+    return dict.fromkeys(_LABEL_METRICS, 0)
+
+
+def _dense_label_blocks(row: dict) -> None:
+    row.setdefault("operator", _empty_operator())
+    crawler = row.setdefault("crawler_excluded", _empty_crawler())
+    labels = row.setdefault("labels", {})
+    for metric in _LABEL_METRICS:
+        crawler.setdefault(metric, 0)
+        labels.setdefault(metric, {})
+
+
+def _prev_day(date_str: str) -> str:
+    return (dt.date.fromisoformat(date_str) - dt.timedelta(days=1)).isoformat()
+
+
+def _fold_label_days(stats: dict, month_index: dict, days_seen: dict, prev_folded, cutoff: str,
+                     labels_from: str, operator_nets: "OperatorNetworks | None",
+                     nettypes: "NetTypes | None" = None) -> None:
+    """The label day counters and the labels_since stamp for the days this call folded.
+
+    labels_since is the first labelled day this fold could fold: labels_from, or the day after the
+    prior watermark when that is later. It is stamped once and never moved, so a later switch date
+    or a switch removed leaves it where it is. The label blocks are written only from that day on, at
+    the cumulative and month grains, never on a day row or an archive line."""
+    first = labels_from
+    after_prev = _next_day(prev_folded)
+    if after_prev is not None and after_prev > first:
+        first = after_prev
+    if first > cutoff:
+        return
+    stats.setdefault("labels_since", first)
+    _dense_label_blocks(stats["totals"])
+    list_read = operator_nets is not None and operator_nets.read
+    nettype_used = nettypes is not None and nettypes.usable
+    nettype_full = nettype_used and nettypes.full
+    for date, month_key in days_seen.items():
+        if date < labels_from:
+            continue
+        m = month_index[month_key]
+        _dense_label_blocks(m)
+        m["label_days"] = _as_int(m.get("label_days")) + 1
+        m["operator_list_days"] = _as_int(m.get("operator_list_days")) + (1 if list_read else 0)
+        m["nettype_days"] = _as_int(m.get("nettype_days")) + (1 if nettype_used else 0)
+        m["nettype_full_days"] = _as_int(m.get("nettype_full_days")) + (1 if nettype_full else 0)
 
 
 def _bump(counter: dict, key: str, n: int = 1) -> None:
@@ -1637,10 +2201,11 @@ def _month_row(index: dict, monthly: list, month: str) -> dict:
 # The APPEND-ONLY DAILY ARCHIVE: capture maximal non-geo granularity at day
 # grain now, so a report nobody has asked for yet can still be derived later.
 #
-# WHY IT EXISTS. The raw log rotates in about a week and the daily rows in stats.json roll off after 92
-# days, so today the only permanent record is the calendar-month rollup. Every question finer than a
-# month becomes unanswerable the moment the window passes, and it becomes unanswerable RETROACTIVELY:
-# the data existed, we folded it, and we threw the detail away. This file is the durable aggregate.
+# WHY IT EXISTS. The raw log rotates in about a week and the daily rows in stats.json roll off after
+# the daily window, so today the only permanent record is the calendar-month rollup. Every question
+# finer than a month becomes unanswerable the moment the window passes, and it becomes unanswerable
+# RETROACTIVELY: the data existed, we folded it, and we threw the detail away. This file is the
+# durable aggregate.
 #
 # WHAT IT IS NOT. It is not read by anything. The gateway never opens it, no route serves it, and it
 # lives in the gateway state dir, outside the published site-data tree. It is not pruned, and it is
@@ -1664,7 +2229,7 @@ def _archive_day(index: dict, date: str) -> dict:
                "by_kind": {}, "by_client": {}, "by_select": {}, "by_survey": {}, "by_dataset": {},
                "by_collection": {}, "handoffs": _empty_handoffs()}
         # The hand-off family's STATION-GRAIN cell, keyed on <survey>/<station>/<level>: the by_dataset
-        # of this family, and archive-only for the same reason. The 92-day window is exactly what
+        # of this family, and archive-only for the same reason. The daily window is exactly what
         # otherwise loses "which station, on which day" forever, and this file is never served.
         row["handoffs"]["by_route"] = {}
         index[date] = row
@@ -1699,7 +2264,7 @@ def _archive_line(row: dict, *, served_build: str | None = None) -> dict:
 
     `by_select` and `bulk_events` belong here for the same reason the format and client splits do: they
     are day facts with no geography in them, and the day grain is exactly what is otherwise lost once
-    the 92-day window drops the row."""
+    the daily window drops the row."""
     out: dict = {"date": row["date"]}
     for key in ("downloads", "visits", "api", "networks", "bulk_events", "download_bytes",
                 "unattributed"):
@@ -1712,6 +2277,13 @@ def _archive_line(row: dict, *, served_build: str | None = None) -> dict:
     handoffs = _handoff_archive_block(row.get("handoffs"))
     if handoffs:
         out["handoffs"] = handoffs
+    # A labelled day carries its client classes and crawler tally, and never a network type, an
+    # operator figure or anything per network.
+    if row.get("labelled"):
+        out["labelled"] = True
+        for key in ("by_client_class", "crawler_excluded"):
+            if row.get(key):
+                out[key] = row[key]
     if served_build:
         out["served_build"] = served_build
     return out
@@ -1720,7 +2292,8 @@ def _archive_line(row: dict, *, served_build: str | None = None) -> dict:
 # --------------------------------------------------------------------------------------------------
 # I/O: read the log dir, load inputs, write stats.json atomically (tmp -> chmod 0644 -> os.replace).
 # --------------------------------------------------------------------------------------------------
-def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
+def read_log_lines(log_dir, *, skipped: list | None = None, with_source: bool = False,
+                   other_files: list | None = None) -> list:
     """Every line of every Caddy access-log file under `log_dir`: the live access.json, its PLAIN
     rolled siblings (access*.json / access*.log), and its COMPRESSED rolled siblings (access*.json.gz).
 
@@ -1747,8 +2320,12 @@ def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
     A gzip archive gets the distinction it earns. Failing to OPEN it is the same fault as above and is
     reported. Opening it and finding it is not a gzip stream (or is truncated mid-stream) is the
     already-documented salvage case, expected of a hand-placed or half-pulled archive, and stays a
-    silent skip: it must not turn a routine recovery into a nightly warning."""
-    lines: list[str] = []
+    silent skip: it must not turn a routine recovery into a nightly warning.
+
+    `with_source` returns (source, line) pairs instead, where source is _log_source of the file name,
+    so the fold can tell a box-log line from a front-door one. `other_files`, when given, receives the
+    path of each file read whose name is neither; only their count is ever reported."""
+    lines: list = []
     if not log_dir:
         return lines
     d = Path(log_dir)
@@ -1761,11 +2338,18 @@ def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
         if skipped is not None:
             skipped.append(str(path))
 
+    def _take(path, text: str) -> None:
+        source = _log_source(Path(path).name)
+        if other_files is not None and source == "other":
+            other_files.append(str(path))
+        got = text.splitlines()
+        lines.extend([(source, ln) for ln in got] if with_source else got)
+
     files = sorted(glob.glob(str(d / "access*.json")) + glob.glob(str(d / "access*.log")))
     for f in files:
         try:
             with open(f, encoding="utf-8", errors="replace") as fh:
-                lines.extend(fh.read().splitlines())
+                _take(f, fh.read())
         except OSError as exc:
             _unreadable(f, exc)
     for f in sorted(glob.glob(str(d / "access*.json.gz"))):
@@ -1776,7 +2360,7 @@ def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
             continue
         try:
             with gzip.open(raw, "rt", encoding="utf-8", errors="replace") as fh:
-                lines.extend(fh.read().splitlines())
+                _take(f, fh.read())
         except (OSError, EOFError, zlib.error):
             # Not a gzip stream, truncated, or corrupt mid-stream. Skip this archive and keep the
             # readable ones: one bad file must never cost a whole fold (gzip.BadGzipFile is an OSError).
@@ -1843,6 +2427,7 @@ def append_daily_archive(archive_file, rows) -> int:
     counts as done."""
     if not archive_file or not rows:
         return 0
+    existed = os.path.exists(archive_file)
     try:
         with open(archive_file, "a", encoding="utf-8") as fh:
             for row in rows:
@@ -1852,7 +2437,70 @@ def append_daily_archive(archive_file, rows) -> int:
               f"{archive_file} ({type(exc).__name__}: {exc}) -- stats.json is unaffected, but those "
               f"days are not in the permanent archive", file=sys.stderr)
         return 0
+    # A file this call created is group-writable so the state dir's group can keep appending; the
+    # mode of a file that already existed is never changed.
+    if not existed:
+        try:
+            os.chmod(archive_file, 0o664)
+        except OSError:
+            pass
     return len(rows)
+
+
+def _next_archive_through(carried, start_watermark, folded, archived: int, offered: int):
+    """The archive_through a run leaves behind. It moves to the new watermark `folded` only when the
+    archive is known to hold every folded day: every offered line landed, or nothing was offered and
+    the archive already stood at the watermark the run started from. Otherwise it stays `carried`."""
+    if not _iso_day(folded):
+        return carried
+    if offered:
+        return folded if archived == offered else carried
+    return folded if carried == start_watermark else carried
+
+
+def _log_retain_days(raw) -> int:
+    """AUSMT_STATS_LOG_RETAIN_DAYS as whole days. 0 disables expiry; anything that is not a whole
+    number of zero or more reads as DEFAULT_LOG_RETAIN_DAYS."""
+    try:
+        days = int(str(raw).strip())
+    except ValueError:
+        return DEFAULT_LOG_RETAIN_DAYS
+    return days if days >= 0 else DEFAULT_LOG_RETAIN_DAYS
+
+
+def expire_pulled_logs(log_dir, run_dt: dt.datetime, last_folded, retain_days: int) -> tuple[int, int]:
+    """Remove the pulled front-door log copies that are past the stated raw-log retention, and
+    return (removed, failed). A file goes only when all of these hold:
+      * it is a regular file (never a symbolic link or a directory) whose name begins with
+        _EXPIRING_LOG_PREFIX, so the live access-frontdoor.json and the box listener's own files are
+        never considered;
+      * its modification time is more than `retain_days` before `run_dt`;
+      * its modification time is before 00:00 UTC of the day after `last_folded`, so a copy that may
+        hold a line later than the watermark stays however old it is.
+    0 days, no usable watermark or an unreadable directory removes nothing. Never raises."""
+    if retain_days <= 0 or not log_dir or not _iso_day(last_folded):
+        return 0, 0
+    try:
+        folded_end = (dt.datetime.strptime(last_folded, "%Y-%m-%d").replace(tzinfo=dt.timezone.utc)
+                      + dt.timedelta(days=1))
+        cutoff = min((run_dt - dt.timedelta(days=retain_days)).timestamp(), folded_end.timestamp())
+        entries = list(os.scandir(log_dir))
+    except (OSError, OverflowError, ValueError):
+        return 0, 0
+    removed = failed = 0
+    for entry in entries:
+        if not entry.name.startswith(_EXPIRING_LOG_PREFIX):
+            continue
+        try:
+            if not entry.is_file(follow_symlinks=False):
+                continue
+            if entry.stat(follow_symlinks=False).st_mtime >= cutoff:
+                continue
+            os.unlink(entry.path)
+            removed += 1
+        except OSError:
+            failed += 1
+    return removed, failed
 
 
 def _cfg(name: str, default: str) -> str:
@@ -1884,6 +2532,7 @@ def main(argv=None) -> int:
         daily_keep = DEFAULT_DAILY_KEEP_DAYS
 
     try:
+        started = time.monotonic()
         run_dt = _run_datetime()
         reverse_map = build_reverse_map(_load_json(manifest_path))
         geoip = GeoIP.load(dbip_csv)
@@ -1902,13 +2551,53 @@ def main(argv=None) -> int:
         # Absent, hand-offs still count as requests and carry no bytes -- see `aggregate`.
         ts_access = _load_json(served_dir / "ts_access.json") or {}
         prev = _load_json(stats_file)
+        start_watermark = (prev.get("last_folded_date") if isinstance(prev, dict)
+                           and isinstance(prev.get("last_folded_date"), str) else None)
+        # The labels switch. Absent or malformed, labels are off, the operator list is not opened,
+        # and the fold is exactly the unlabelled fold; removing the setting is the rollback.
+        labels_raw = os.environ.get("AUSMT_STATS_LABELS_FROM") or ""
+        labels_from = _labels_from_cfg(labels_raw)
+        operator_nets = nettypes = None
+        if labels_from is not None:
+            operator_nets = OperatorNetworks.load(
+                _cfg("AUSMT_STATS_OPERATOR_NETWORKS", str(_default_operator_list(data_dir))))
+            nettypes = NetTypes.open_table(
+                _cfg("AUSMT_STATS_NETTYPE_CSV", str(Path(data_dir).joinpath(*_NETTYPE_PARTS))),
+                today=run_dt.date(),
+                max_age_days=_nettype_max_age(os.environ.get("AUSMT_STATS_NETTYPE_MAX_AGE_DAYS")))
         skipped_logs: list[str] = []
-        lines = read_log_lines(log_dir, skipped=skipped_logs)
+        other_logs: list[str] = []
+        # The source of each line is read only when labels are set; unlabelled, the log is read as
+        # plain lines.
+        lines = read_log_lines(log_dir, skipped=skipped_logs,
+                               with_source=labels_from is not None, other_files=other_logs)
         archive_rows: list[dict] = []
+        label_stats: dict = {}
         stats = aggregate(prev, lines, reverse_map, geoip, run_dt, daily_keep=daily_keep,
                           au_states=au_states, collections=collections,
                           served_build=served_build, archive_out=archive_rows,
-                          ts_access=ts_access)
+                          ts_access=ts_access, labels_from=labels_from,
+                          operator_nets=operator_nets, nettypes=nettypes,
+                          label_stats_out=label_stats)
+        # The configured label start date, count-free, written only while the setting is valid and
+        # never carried from a previous file, so an unset or invalid setting writes no such key.
+        if labels_from is not None:
+            stats["labels_configured_from"] = labels_from
+        else:
+            stats.pop("labels_configured_from", None)
+        if labels_from is None:
+            # A set but rejected switch is named, never echoed.
+            label_journal = "labels=off" + (" from=invalid" if labels_raw.strip() else "")
+        else:
+            # Only the state of the operator list is ever printed: no entry, count or line number.
+            on = str(stats.get("last_folded_date") or "") >= labels_from
+            label_journal = (f"labels={'on' if on else 'waiting'} from={labels_from} "
+                             f"operator_list={operator_nets.state} "
+                             f"nettype={nettypes.state} nettype_rows={nettypes.row_count} "
+                             f"nettype_sources={','.join(nettypes.sources) or 'none'} "
+                             f"other_files={len(other_logs)} "
+                             f"label_fallbacks={label_stats.get('label_fallbacks', 0)} "
+                             f"prepass={label_stats.get('prepass', 'none')}")
         dest_dir = Path(stats_file).parent
         if not dest_dir.is_dir():
             print(f"aggregate_stats: state dir {dest_dir} does not exist -- not writing stats.json "
@@ -1918,6 +2607,24 @@ def main(argv=None) -> int:
         # AFTER the stats write, deliberately: a failed stats write leaves the watermark where it was,
         # so those days fold again next run and must not already sit in the append-only archive.
         archived = append_daily_archive(archive_file, archive_rows)
+        through = _next_archive_through(stats.get("archive_through"), start_watermark,
+                                        stats.get("last_folded_date"), archived, len(archive_rows))
+        if through != stats.get("archive_through"):
+            # A second write only when the date moves. No watermark moves with it, so the
+            # append-after-stats rule still holds; a failed write leaves the older date on disk.
+            try:
+                write_stats_atomic(stats_file, {**stats, "archive_through": through})
+                stats["archive_through"] = through
+            except OSError as exc:
+                print(f"aggregate_stats: could not record archive_through in stats.json "
+                      f"({type(exc).__name__}); the older date stands", file=sys.stderr)
+        # Only after stats.json has landed, so a fold that could not record its progress keeps every
+        # log it read. Only counts reach the journal, never a file name.
+        expired, expire_failed = expire_pulled_logs(
+            log_dir, run_dt, stats.get("last_folded_date"),
+            _log_retain_days(os.environ.get("AUSMT_STATS_LOG_RETAIN_DAYS", "")))
+        expire_journal = f"logs_expired={expired}" + (
+            f" logs_expire_failed={expire_failed}" if expire_failed else "")
         print(f"aggregate_stats: folded up to {stats.get('last_folded_date')} -- "
               f"downloads={stats['totals']['downloads']} visits={stats['totals']['visits']} "
               f"api={stats['totals']['api_requests']} "
@@ -1926,7 +2633,10 @@ def main(argv=None) -> int:
               f"manifest_rows={len(reverse_map)} geoip_rows={geoip.row_count} "
               f"au_state_rows={au_states.row_count} collections={len(collections)} "
               f"log_lines={len(lines)} files_skipped={len(skipped_logs)} "
-              f"archived_days={archived} -> {stats_file}", file=sys.stderr)
+              f"archived_days={archived} "
+              f"archive_through={stats.get('archive_through') or 'none'} {expire_journal} "
+              f"{label_journal} "
+              f"fold_seconds={time.monotonic() - started:.1f} -> {stats_file}", file=sys.stderr)
     except Exception as exc:  # noqa: BLE001 -- never raise into the timer; note loudly and exit 0
         print(f"aggregate_stats: aborted without writing ({type(exc).__name__}: {exc})", file=sys.stderr)
         return 0

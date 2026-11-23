@@ -1,0 +1,10 @@
+# ausmt-nettype v1 built=2026-07-01 oldest_source=2026-06-28 sources=x4bnet,iptoasn,peeringdb
+# Invented network-type table for the label tests: documentation ranges only.
+# Columns: start_ip,end_ip,type (hosting, education_research, access_provider, other).
+203.0.113.0,203.0.113.255,hosting
+2001:db8:2::,2001:db8:2:ffff:ffff:ffff:ffff:ffff,education_research
+2001:db8:3::,2001:db8:3:ffff:ffff:ffff:ffff:ffff,access_provider
+2001:db8:4::,2001:db8:4:ffff:ffff:ffff:ffff:ffff,other
+2001:db8:5::,2001:db8:5:ffff:ffff:ffff:ffff:ffff,government
+2001:db8:6::,2001:db8:6:ffff:ffff:ffff:ffff:ffff,unknown
+2001:db8:7::,2001:db8:7:ffff:ffff:ffff:ffff:ffff,AS64500

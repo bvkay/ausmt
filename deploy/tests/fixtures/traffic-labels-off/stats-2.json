@@ -1,0 +1,318 @@
+{
+ "schema": 2,
+ "timer_period_min": 1440,
+ "generated_at": "2026-07-14T03:30:00Z",
+ "since": "2026-07-10",
+ "last_folded_date": "2026-07-13",
+ "detail_since": null,
+ "select_since": null,
+ "totals": {
+  "downloads": 16,
+  "visits": 8,
+  "download_bytes": 7700,
+  "unattributed": 0,
+  "api_requests": 6,
+  "downloads_by_client": {
+   "browser": 12,
+   "scripted": 4
+  },
+  "downloads_by_select": {
+   "single": 12,
+   "bulk": 4
+  },
+  "bulk_export_events": 4
+ },
+ "downloads": {
+  "by_format": {
+   "edi": 12,
+   "edi-zip": 4
+  },
+  "by_survey": {
+   "Label Survey": {
+    "downloads": 16,
+    "bytes": 7700,
+    "countries": [
+     "AU",
+     "DE",
+     "ZZ",
+     "unknown"
+    ],
+    "files": 12,
+    "bundles": 4
+   }
+  },
+  "by_dataset": {
+   "edi/label-survey/L1.edi": {
+    "survey": "Label Survey",
+    "station": "L1",
+    "slug": null,
+    "format": "edi",
+    "kind": "file",
+    "downloads": 7,
+    "bytes": 2300
+   },
+   "edi/label-survey/L2.edi": {
+    "survey": "Label Survey",
+    "station": "L2",
+    "slug": null,
+    "format": "edi",
+    "kind": "file",
+    "downloads": 5,
+    "bytes": 1800
+   },
+   "bundles/label-survey-edi.zip": {
+    "survey": "Label Survey",
+    "station": null,
+    "slug": "label-survey",
+    "format": "edi-zip",
+    "kind": "bundle",
+    "downloads": 4,
+    "bytes": 3600
+   }
+  },
+  "by_kind": {
+   "file": 12,
+   "bundle": 4
+  }
+ },
+ "handoffs": {
+  "requests": 6,
+  "bytes": 0,
+  "unattributed": 6,
+  "by_survey": {},
+  "by_level": {},
+  "by_destination": {},
+  "countries": {
+   "DE": 2,
+   "AU": 4
+  }
+ },
+ "total_served_surveys": 1,
+ "by_collection": {},
+ "countries": {
+  "DE": 14,
+  "AU": 12,
+  "unknown": 3,
+  "ZZ": 1
+ },
+ "by_country_detail": {
+  "DE": {
+   "downloads": 10,
+   "visits": 2,
+   "api": 2,
+   "bytes": 4500
+  },
+  "AU": {
+   "downloads": 4,
+   "visits": 4,
+   "api": 4,
+   "bytes": 1200
+  },
+  "unknown": {
+   "downloads": 1,
+   "visits": 2,
+   "api": 0,
+   "bytes": 1000
+  },
+  "ZZ": {
+   "downloads": 1,
+   "visits": 0,
+   "api": 0,
+   "bytes": 1000
+  }
+ },
+ "by_state": {},
+ "by_state_detail": {},
+ "daily": [
+  {
+   "date": "2026-07-10",
+   "downloads": 3,
+   "visits": 2,
+   "download_bytes": 1400,
+   "api_requests": 1,
+   "formats": {
+    "edi": 2,
+    "edi-zip": 1
+   },
+   "kinds": {
+    "file": 2,
+    "bundle": 1
+   },
+   "handoffs": {
+    "requests": 1,
+    "bytes": 0,
+    "unattributed": 1,
+    "by_survey": {},
+    "by_level": {},
+    "by_destination": {}
+   },
+   "networks": 4
+  },
+  {
+   "date": "2026-07-11",
+   "downloads": 5,
+   "visits": 2,
+   "download_bytes": 2450,
+   "api_requests": 2,
+   "formats": {
+    "edi": 4,
+    "edi-zip": 1
+   },
+   "kinds": {
+    "file": 4,
+    "bundle": 1
+   },
+   "handoffs": {
+    "requests": 2,
+    "bytes": 0,
+    "unattributed": 2,
+    "by_survey": {},
+    "by_level": {},
+    "by_destination": {}
+   },
+   "networks": 5
+  },
+  {
+   "date": "2026-07-12",
+   "downloads": 4,
+   "visits": 2,
+   "download_bytes": 2400,
+   "api_requests": 1,
+   "formats": {
+    "edi": 3,
+    "edi-zip": 1
+   },
+   "kinds": {
+    "file": 3,
+    "bundle": 1
+   },
+   "handoffs": {
+    "requests": 1,
+    "bytes": 0,
+    "unattributed": 1,
+    "by_survey": {},
+    "by_level": {},
+    "by_destination": {}
+   },
+   "networks": 5
+  },
+  {
+   "date": "2026-07-13",
+   "downloads": 4,
+   "visits": 2,
+   "download_bytes": 1450,
+   "api_requests": 2,
+   "formats": {
+    "edi": 3,
+    "edi-zip": 1
+   },
+   "kinds": {
+    "file": 3,
+    "bundle": 1
+   },
+   "handoffs": {
+    "requests": 2,
+    "bytes": 0,
+    "unattributed": 2,
+    "by_survey": {},
+    "by_level": {},
+    "by_destination": {}
+   },
+   "networks": 4
+  }
+ ],
+ "monthly": [
+  {
+   "month": "2026-07",
+   "downloads": 16,
+   "visits": 8,
+   "download_bytes": 7700,
+   "unattributed": 0,
+   "api_requests": 6,
+   "days": 4,
+   "seeded_days": 0,
+   "geo_days": 4,
+   "detail_days": 4,
+   "networks_peak": 5,
+   "bulk_export_events": 4,
+   "formats": {
+    "edi": 12,
+    "edi-zip": 4
+   },
+   "kinds": {
+    "file": 12,
+    "bundle": 4
+   },
+   "surveys": {
+    "Label Survey": {
+     "downloads": 16,
+     "bytes": 7700,
+     "countries": [
+      "AU",
+      "DE",
+      "ZZ",
+      "unknown"
+     ],
+     "files": 12,
+     "bundles": 4
+    }
+   },
+   "countries": {
+    "DE": 14,
+    "AU": 12,
+    "unknown": 3,
+    "ZZ": 1
+   },
+   "by_country_detail": {
+    "DE": {
+     "downloads": 10,
+     "visits": 2,
+     "api": 2,
+     "bytes": 4500
+    },
+    "AU": {
+     "downloads": 4,
+     "visits": 4,
+     "api": 4,
+     "bytes": 1200
+    },
+    "unknown": {
+     "downloads": 1,
+     "visits": 2,
+     "api": 0,
+     "bytes": 1000
+    },
+    "ZZ": {
+     "downloads": 1,
+     "visits": 0,
+     "api": 0,
+     "bytes": 1000
+    }
+   },
+   "by_state": {},
+   "by_state_detail": {},
+   "downloads_by_client": {
+    "browser": 12,
+    "scripted": 4
+   },
+   "downloads_by_select": {
+    "single": 12,
+    "bulk": 4
+   },
+   "by_collection": {},
+   "handoffs": {
+    "requests": 6,
+    "bytes": 0,
+    "unattributed": 6,
+    "by_survey": {},
+    "by_level": {},
+    "by_destination": {},
+    "countries": {
+     "DE": 2,
+     "AU": 4
+    }
+   }
+  }
+ ],
+ "archive_through": "2026-07-13"
+}

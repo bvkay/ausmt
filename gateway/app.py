@@ -30,7 +30,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from . import checklist as checklist_mod
 from . import (clamd, curator_auth, curatorpage, db, editor_form, jobs, mailer as mailer_mod,
                metaedit, pidcheck, publish, serve_state, states, statuspage, totp,
-               uploader_keys as uploader_keys_mod, zipsafety)
+               uploader_keys as uploader_keys_mod, usagepage, zipsafety)
 from . import upload as upload_intake
 from .config import Config, fail_closed_startup, load_config
 from .curatorpage import _COLLECTION_STATUS_VOCAB, _COLLECTION_TYPE_VOCAB
@@ -652,21 +652,22 @@ class Gateway:
             audit_tail=audit_tail))
 
     def handle_analytics(self, request: Request) -> Response:
-        """GET /gateway/curator/analytics: the usage-analytics screen. READ-ONLY:
-        renders the host aggregator's stats.json (downloads/visits/countries + a daily series) read
-        SERVER-side (serve_state.read_stats - the ops-status.json seam; no new mount, no new
-        privilege). Fail-closed like the ops floor: a missing stats.json shows the honest empty state, a
-        stale one (old generated_at, the serve_state staleness band — fail-closed both directions) shows
-        a STALE banner; the page never 500s and never renders a stale file as live. ZERO JS (the daily
-        series is a server-rendered inline SVG), so it is clean under the strictPages CSP. `def`
-        (blocking file read -> Starlette threadpool, matching the serve-screen rationale)."""
+        """GET /gateway/curator/analytics: the curator Usage page. READ-ONLY: renders the host
+        aggregator's stats.json read SERVER-side (serve_state.read_stats, the ops-status.json seam;
+        no new mount, no new privilege). Fail-closed: a missing stats.json shows the empty state, a
+        stale one (old or future generated_at, the serve_state band) renders under a stale marker and
+        a health warning; the page never 500s and never renders a stale file as current. No inline
+        script: the charts are server-rendered SVG and every figure is printed or tabled, so the page
+        is complete without any script. One external read-out script (/gateway/curator/usage.js)
+        adds hover values copied from data attributes the server wrote. `def` (blocking file read,
+        Starlette threadpool)."""
         name = self._require_session(request)
         if isinstance(name, Response):
             return name
         stats = serve_state.read_stats(self.cfg.state_dir)
         stats_stale = serve_state.ops_status_stale(stats)
-        nav = self._nav_context(request, active="analytics", crumb="<b>Usage analytics</b>")
-        return self._html(curatorpage.render_analytics_page(
+        nav = self._nav_context(request, active="analytics", crumb="<b>Usage</b>")
+        return self._html(usagepage.render_usage_page(
             stats=stats, stats_stale=stats_stale, nav=nav))
 
     def handle_analytics_csv(self, request: Request, view: str) -> Response:
@@ -1082,6 +1083,19 @@ class Gateway:
         if not isinstance(name, str):
             return name
         return Response(curatorpage.DOI_HARVEST_JS,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
+    def handle_usage_js(self, request: Request) -> Response:
+        """GET /gateway/curator/usage.js - the Usage page's hover read-out as a same-origin EXTERNAL
+        script (script-src 'self' blocks inline). It reads only data attributes the server wrote and
+        changes only the crosshairs, the dimmed columns and the read-out box. Session-gated for
+        consistency with the page; the content is a public-repo constant. DEGRADES: without it every
+        value is still printed in a title and in the table twin."""
+        name = self._require_session(request)
+        if not isinstance(name, str):
+            return name
+        return Response(usagepage.USAGE_JS,
                         media_type="application/javascript; charset=utf-8",
                         headers={"Cache-Control": "no-store"})
 
@@ -3181,9 +3195,8 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_serve_build_detail(request: Request, build_ref: str):
         return gw.handle_serve_build_detail(request, build_ref)
 
-    # ---- Usage-analytics screen. READ-ONLY: renders the host aggregator's
-    # stats.json (downloads/visits/countries + a daily series). `def` (blocking file read -> threadpool,
-    # matching the serve-screen rationale). No POST, no privileged action — a reporting surface.
+    # ---- The curator Usage page. READ-ONLY: renders the host aggregator's stats.json. `def`
+    # (blocking file read, threadpool, as the serve screen). No POST and no privileged action.
     @app.get("/gateway/curator/analytics")
     def curator_analytics(request: Request):
         return gw.handle_analytics(request)
@@ -3269,6 +3282,12 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/doi-harvest.js")
     def curator_doi_harvest_js(request: Request):
         return gw.handle_doi_harvest_js(request)
+
+    # The Usage page's hover read-out - EXTERNAL for the same CSP reason. The page is complete
+    # without it.
+    @app.get("/gateway/curator/usage.js")
+    def curator_usage_js(request: Request):
+        return gw.handle_usage_js(request)
 
     # The nav-shell context bar's drift chip served-build half - EXTERNAL for the same CSP reason;
     # every shelled curator page loads it via a same-origin external script URL. Degrades gracefully.

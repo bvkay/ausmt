@@ -2377,12 +2377,17 @@ def _dt_html(ts: str) -> str:
     return f'<span class="dt" title="{_esc(ts)}">{_esc(short_utc(ts))}</span>'
 
 
-def _head(title: str) -> str:
-    return Template(_HEAD).substitute(
+def _head(title: str, extra_head: str = "") -> str:
+    """The shared head. `extra_head`, when given, is placed once directly before the end of the head,
+    after the shared style block; with none the head is byte-identical for every page."""
+    head = Template(_HEAD).substitute(
         title=_esc(title), bg=_PALETTE["bg"], ink=_PALETTE["ink"], muted=_PALETTE["muted"],
         accent=_PALETTE["accent"], panel=_PALETTE["panel"], ok=_PALETTE["ok"],
         warn=_PALETTE["warn"], bad=_PALETTE["bad"], info=_PALETTE["info"],
     )
+    if extra_head:
+        head = head.replace("</style></head>", "</style>" + extra_head + "</head>", 1)
+    return head
 
 
 def _page(title: str, body: str) -> str:
@@ -2410,11 +2415,11 @@ _RAIL = (
     # Security sits under Operations beside Serve state: it is an operator-facing account
     # concern — enrolling the authenticator that gates the destructive workbench actions — not a
     # per-survey editing surface, so Operations is its home rather than Surveys/Intake.
-    # Analytics sits under Operations beside Serve state: it is a read-only, operator/reporting
-    # surface over the box's own usage aggregates (downloads/visits/countries), the same trust class as
-    # the ops floor — not a per-survey editing surface.
+    # Usage sits under Operations beside Serve state: it is a read-only reporting surface over the
+    # box's own usage aggregates, the same trust class as the ops floor, not a per-survey editing
+    # surface. Its key and route stay "analytics".
     ("Operations", (("serve", "Serve state", "/gateway/curator/serve"),
-                    ("analytics", "Analytics", "/gateway/curator/analytics"),
+                    ("analytics", "Usage", "/gateway/curator/analytics"),
                     ("security", "Security", "/gateway/curator/security"))),
 )
 
@@ -2487,7 +2492,8 @@ def _context_bar(nav: "NavContext") -> str:
     )
 
 
-def _shell(title: str, body: str, *, nav: "NavContext", wide: bool = True) -> str:
+def _shell(title: str, body: str, *, nav: "NavContext", wide: bool = True, extra_head: str = "",
+           page_class: str = "") -> str:
     """Wrap a page body in the Stage-1 nav shell: left rail + context bar + main content. The external
     context-bar script (drift chip served-build half) loads at the tail, joining ui.js. Chrome-less
     pages (login, terminal confirms) use _page instead.
@@ -2496,10 +2502,14 @@ def _shell(title: str, body: str, *, nav: "NavContext", wide: bool = True) -> st
     viewport; a page that wants the centred reading measure passes wide=False (none do today — the
     only narrow survivors are the login page and the terminal confirm pages, which are chrome-less
     _page users). Pages that want a comfortable FORM measure inside the wide page cap the field column
-    locally (e.g. the Metadata TOC form, the uploader create form) rather than narrowing the shell."""
+    locally (e.g. the Metadata TOC form, the uploader create form) rather than narrowing the shell.
+
+    `extra_head` and `page_class` let one page add its own style block and a class on the shell div
+    to scope it; a page that passes neither renders exactly the shared shell."""
+    shell_open = f'<div class="shell {_esc(page_class)}">' if page_class else '<div class="shell">'
     return (
-        _head(title)
-        + '<div class="shell">'
+        _head(title, extra_head)
+        + shell_open
         + _rail_html(nav.active)
         + '<div class="main">'
         + _context_bar(nav)
@@ -3364,30 +3374,22 @@ def render_build_detail(*, build, generated_at, log_tail, ops_stale: bool, nav: 
     return _shell("AusMT build detail", body, nav=nav)
 
 
-# ---- Usage-analytics screen --------------------------------------------------------------------
-# A READ-ONLY Operations page rendering the host aggregator's stats.json (downloads/visits/countries +
-# a daily series). SAME trust class as the ops floor: the facts come from stats.json read SERVER-side
-# (serve_state.read_stats - the ops-status.json seam, no new mount). ZERO JS: the daily
-# series is a SERVER-RENDERED inline SVG sparkline, so nothing here touches the strictPages CSP
-# (script-src 'self'). Fail-closed: a missing stats.json shows an honest empty state; a stale one (old
-# generated_at, the serve_state band) shows a prominent STALE banner — never a 500, never a silent
-# last-known-good masquerading as live.
+# ---- Usage aggregates ----------------------------------------------------------------------------
+# Helpers shared by the Usage page (gateway/usagepage.py) and the CSV exports below, all over the
+# stats.json the host aggregator writes and serve_state.read_stats reads. Every read tolerates an
+# older schema and never raises.
 
 def _human_bytes(n) -> str:
-    """A compact human size for a byte count (aggregate download volume). Non-numeric -> '—'."""
+    """A compact human size for a byte count. A value that is not a number reads not measured."""
     try:
         v = float(n)
     except (TypeError, ValueError):
-        return "—"
+        return _NOT_MEASURED
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if v < 1024 or unit == "TB":
             return (f"{int(v)} {unit}" if unit == "B" else f"{v:.1f} {unit}")
         v /= 1024.0
     return f"{v:.1f} TB"
-
-
-def _num_card(value, label) -> str:
-    return f'<div class="card"><div class="n">{_esc(value)}</div><div class="l">{_esc(label)}</div></div>'
 
 
 def _as_int(v, default: int = 0) -> int:
@@ -3438,13 +3440,6 @@ def _kind_split(val: dict, downloads: int) -> tuple[int, int] | None:
     return files, bundles
 
 
-def _split_cell(split) -> str:
-    """'95 / 25' for a measured (files, bundles) pair, the plain not-measured words for None."""
-    if split is None:
-        return _NOT_MEASURED
-    return f"{_esc(split[0])} / {_esc(split[1])}"
-
-
 def _survey_rows(stats_or_month: dict) -> list[dict]:
     """The by_survey map as [{survey, downloads, bytes, countries, split}], sorted by downloads desc,
     where `countries` is a COUNT or None (never the list) and `split` is a (files, bundles) pair or
@@ -3487,277 +3482,6 @@ def _monthly_rows(stats: dict) -> list[dict]:
     return out
 
 
-def _month_label(month: str) -> str:
-    """'2026-07' -> 'Jul 2026'. An unparseable value renders verbatim (escaped), never a crash."""
-    try:
-        y, m = month.split("-")
-        names = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-        return f"{names[int(m) - 1]} {y}"
-    except (ValueError, IndexError):
-        return month
-
-
-def _analytics_cards(stats: dict) -> str:
-    totals = stats.get("totals") or {}
-    downloads = totals.get("downloads") or 0
-    visits = totals.get("visits") or 0
-    api = _as_int(totals.get("api_requests"))
-    unattributed = totals.get("unattributed") or 0
-    volume = _human_bytes(totals.get("download_bytes"))
-    countries = stats.get("countries") or {}
-    n_countries = len([c for c in countries if c and c != "unknown"])
-    by_dataset = (stats.get("downloads") or {}).get("by_dataset") or {}
-    surveys = _survey_rows((stats.get("downloads") or {}).get("by_survey") or {})
-    # The denominator the fold stamps from the manifest it is serving. "2 surveys downloaded" reads
-    # very differently against 3 served and against 300. Absent (an older stats.json) or zero (a
-    # manifest the fold could not read) falls back to the bare count: "2 of 0 served" is worse than no
-    # ratio at all.
-    #
-    # So does a numerator LARGER than the denominator, and that one is not hypothetical. The two sides
-    # come from different places and only one of them can shrink: by_survey accumulates every survey
-    # ever downloaded and nothing prunes it, while the denominator is restamped from the manifest being
-    # served right now. Withdraw or rename one survey that has historical downloads and the arithmetic
-    # honestly reads "41 of 40 served". The bare count is the smaller and safer claim, so an impossible
-    # ratio is dropped rather than rendered.
-    served = _as_int(stats.get("total_served_surveys"))
-    ratio = 0 < len(surveys) <= served
-    surveys_value = f"{len(surveys)} of {served}" if ratio else len(surveys)
-    surveys_label = "Surveys downloaded (of those served)" if ratio else "Surveys downloaded"
-    cards = (
-        _num_card(downloads, "Downloads")
-        + _num_card(visits, "Portal visits")
-        + _num_card(api, "API requests")
-        # The card counts distinct codes EXCLUDING 'unknown' while the table below lists 'unknown' as
-        # its own row, so the card always reads one lower than the table has rows. Say so on the card.
-        + _num_card(n_countries, "Countries (excluding unknown)")
-        + _num_card(surveys_value, surveys_label)
-        + _num_card(len(by_dataset), "Datasets downloaded")
-        + _num_card(volume, "Download volume")
-        + _num_card(unattributed, "Unattributed")
-    )
-    return f'<div class="cards">{cards}</div>'
-
-
-def _counter_line(counter: dict, *, limit: int = 12) -> str:
-    """'edi: 80, mth5: 13' for a {key: count} aggregate, biggest first. Empty -> ''."""
-    items = [(str(k), _as_int(v)) for k, v in (counter or {}).items()]
-    items.sort(key=lambda kv: (-kv[1], kv[0]))
-    return ", ".join(f"{_esc(k)}: <b>{_esc(v)}</b>" for k, v in items[:limit])
-
-
-def _format_breakdown(stats: dict) -> str:
-    dl = stats.get("downloads") or {}
-    by_format = dl.get("by_format") or {}
-    by_kind = dl.get("by_kind") or {}
-    out = ""
-    if by_format:
-        out += f'<p class="opsnote">Downloads by format &mdash; {_counter_line(by_format)}.</p>'
-    if by_kind:
-        files = _as_int(by_kind.get("file"))
-        bundles = _as_int(by_kind.get("bundle"))
-        other = sum(_as_int(v) for k, v in by_kind.items() if k not in ("file", "bundle"))
-        tail = f', unattributed paths: <b>{_esc(other)}</b>' if other else ""
-        out += (f'<p class="opsnote">Single-station files: <b>{_esc(files)}</b> &nbsp;·&nbsp; '
-                f'whole-survey bundles: <b>{_esc(bundles)}</b>{tail}.</p>')
-    return out + _bulk_export_line(stats) + _handoff_line(stats)
-
-
-def _bulk_export_line(stats: dict) -> str:
-    """The bulk-export line: how many map-selection exports the fold saw, and how many files they took.
-
-    BOTH figures, because one export fetches many files. The file count alone would read as far more
-    exports than happened; the event count alone would hide the volume. The event figure is distinct
-    (masked network, day) pairs that took at least one labelled download, which is a FLOOR: a second
-    export from the same network on the same day is not separable from the first, and the line says
-    proxy rather than count.
-
-    THE CITATION PACK. The portal does generate one in the browser, and it is genuinely uncountable
-    here because it fetches nothing from the server. It is NOT, however, produced by this export: in
-    portal/src/exports.js the three selection exports (#dlZip, #dlZipXml, #dlZipH5) write the selected
-    files of their format, a per-survey LICENSE.txt and the not-included pointer file, and the citation
-    pack is #dlCite, a separate control the reader clicks
-    separately. So the line names the pack and its uncountability, and states the relationship the code
-    actually has rather than the causal one it does not.
-
-    Rendered only when the fold produced the split. A box that folded before it shows nothing here: no
-    line, no zero, exactly like the collection rollup above."""
-    totals = stats.get("totals") if isinstance(stats, dict) else None
-    split = (totals or {}).get("downloads_by_select")
-    if not isinstance(split, dict) or not split:
-        return ""
-    events = _as_int((totals or {}).get("bulk_export_events"))
-    files = _as_int(split.get("bulk"))
-    since = stats.get("select_since")
-    # The one seam on this screen whose date IS recorded, so it is named rather than left to the
-    # markers. The other two are dated by `detail_since` or by nothing at all (see _detail_caveat).
-    seam = ("" if not isinstance(since, str) or not since else
-            f' The selection split is counted from <b>{_esc(since)}</b> onward; downloads folded '
-            f'before that are in the totals above and in neither class here.')
-    return (f'<p class="opsnote">Bulk map exports: <b>{_esc(events)}</b> event(s), '
-            f'<b>{_esc(files)}</b> file(s). An export is a map selection the portal zips in the '
-            f'browser, and it labels its own file requests so they can be told apart from single '
-            f'downloads. The event figure counts distinct networks per day, so two exports from one '
-            f'network on one day read as one: it is a floor, not a count of actions. The citation '
-            f'pack is a separate export the reader runs beside this one; it is assembled entirely in '
-            f'the browser and fetches nothing from the server, so it is not counted anywhere on this '
-            f'screen.{seam}</p>')
-
-
-def _handoff_line(stats: dict) -> str:
-    """The TIME-SERIES HAND-OFF line: how many times the front door handed a reader into the NCI
-    THREDDS archive, and how many bytes those files hold.
-
-    THE WORDING IS THE POINT, and it is the same discipline as the export-event proxy above. A hand-off
-    is a 302: AusMT answers with the archive's URL and never sees the transfer, so this is a count of
-    REQUESTS and can never be a count of completed downloads. The label says so in words rather than
-    leaving a reader to infer it from a figure that looks exactly like the download count beside it.
-
-    The volume is the REGISTER's size for each file handed off, not a measurement of anything served,
-    for the same reason: the log line for a 302 carries the redirect body's size and nothing else.
-
-    Keyed on the survey SLUG rather than the display label, because that is what the published route
-    carries; a slug is an identifier and a title is prose. Rendered only when the fold actually saw a
-    hand-off: a box that has never handed one off shows nothing here, no line and no zero."""
-    block = stats.get("handoffs") if isinstance(stats, dict) else None
-    if not isinstance(block, dict) or _as_int(block.get("requests")) <= 0:
-        return ""
-    requests = _as_int(block.get("requests"))
-    volume = _human_bytes(_as_int(block.get("bytes")))
-    levels = _counter_line({k: _as_int(v.get("requests")) for k, v in
-                            (block.get("by_level") or {}).items() if isinstance(v, dict)}, limit=6)
-    hosts = ", ".join(sorted(str(k) for k in (block.get("by_destination") or {})))
-    surveys = len(block.get("by_survey") or {})
-    codes = [k for k in (block.get("countries") or {}) if k and k != "unknown"]
-    unattributed = _as_int(block.get("unattributed"))
-    tail = ("" if not unattributed else
-            f' <b>{_esc(unattributed)}</b> resolved to a route the served index no longer publishes, '
-            f'which is table-versus-data drift rather than use.')
-    reach = f'{len(codes)} countr' + ("y" if len(codes) == 1 else "ies")
-    return (f'<p class="opsnote">Measured: time-series hand-offs to NCI THREDDS (requests, not '
-            f'completed transfers) &mdash; <b>{_esc(requests)}</b> request(s) across '
-            f'<b>{_esc(surveys)}</b> survey(s) and <b>{_esc(reach)}</b>, for '
-            f'<b>{_esc(volume)}</b> of archived files'
-            + (f' ({levels})' if levels else "") + f'. AusMT does not host those bytes: the front door '
-            f'answers with the archive\'s own URL ({_esc(hosts) or "no destination recorded"}) and the '
-            f'browser fetches them from there, so this counts what was ASKED for and nothing here can '
-            f'say whether a transfer completed. The volume is the size the verified-resource register '
-            f'records for each file handed off.{tail}</p>')
-
-
-def _collection_line(stats: dict) -> str:
-    """'Downloads by collection' -- the programme-level rollup (AusLAMP and its siblings), built by the
-    fold from the served mtcat.json's collection_id so a programme figure needs no join at report time.
-
-    Rendered only when the fold actually produced one. It is a THIRD forward-only starting point,
-    younger than both seams the rest of this screen marks, and neither `seeded_days` nor `detail_days`
-    speaks for it, so it carries its own one-line caveat rather than borrowing a marker that would
-    overstate its coverage. A box with no served mtcat.json shows nothing here: no line, no zero."""
-    rows = stats.get("by_collection") if isinstance(stats, dict) else None
-    if not isinstance(rows, dict) or not rows:
-        return ""
-    items = sorted(((str(k), _as_int(v.get("downloads")), _as_int(v.get("bytes")))
-                    for k, v in rows.items() if isinstance(v, dict)),
-                   key=lambda kv: (-kv[1], kv[0]))
-    if not items:
-        return ""
-    line = ", ".join(f'{_esc(k)}: <b>{_esc(n)}</b> ({_esc(_human_bytes(b))})' for k, n, b in items)
-    return (f'<p class="opsnote">Downloads by collection: {line}. A collection total is the '
-            f'sum of its member surveys over the days the served catalogue carried the collection '
-            f'map; a day folded without one is in the survey figures but in no collection. It is '
-            f'counted from the fold that added the rollup onward, so earlier downloads are in the '
-            f'totals above and in no figure here.</p>')
-
-
-def _detail_caveat(stats: dict) -> str:
-    """The honesty line for a box that was folding BEFORE the detailed dimensions existed. `detail_since`
-    is stamped by the aggregator when it upgrades an older stats.json in place; downloads before that day
-    are counted in the headline totals but were never broken down by the dimensions named here. Absent
-    detail_since (a box that has only ever run the detailed fold) renders nothing.
-
-    The enumeration is the whole point of the line, so it must be COMPLETE. Omitting per-month
-    countries and unattributed makes a month reading 'Countries: 1' beneath a headline of 11 look
-    like an arithmetic bug rather than the forward-only seam it is.
-
-    THERE ARE TWO SEAMS, and only the first one has a date. `detail_since` is the v1 -> v2 hinge and it
-    is stamped in the file. The dimensions in the second paragraph began at the later fold that
-    introduced them, which is months after that hinge and is recorded nowhere, so this line does not
-    claim a date for them: it names them, and points at the per-month and per-cell markers that say
-    exactly where they do and do not reach. Naming them under `detail_since` would overstate their
-    coverage by exactly the distance between the two seams.
-
-    WHAT IT POINTS AT MUST ALWAYS BE THERE. It must not send the reader to "the note under the
-    quarterly table", which is built from the THREE months that table shows while this line fires off
-    `detail_since` alone. The monthly rollups are never pruned, so the moment a second-seam month ages
-    out of that three-month window the citation names a note the page does not render. The export's
-    `detail_days` column carries the same coverage figure for EVERY retained month, so that is what is
-    cited; the quarterly note is offered for the months it can actually speak about."""
-    since = stats.get("detail_since")
-    if not isinstance(since, str) or not since:
-        return ""
-    return (f'<p class="opsnote">Per-survey volume, the format and station/bundle split, the API line, '
-            f'the network reach proxy and the per-month country and unattributed figures are all '
-            f'counted from <b>{_esc(since)}</b> onward. Earlier downloads and visits are in the '
-            f'headline totals but carry no such breakdown, so months spanning that date are marked '
-            f'below. The cumulative country and unattributed cards do cover the whole history, which '
-            f'is why a month can read lower than the card above it.</p>'
-            f'<p class="opsnote">A second set of dimensions began later still, at the fold that '
-            f'introduced them: the browser-versus-scripted download split, the within-day download '
-            f'de-duplication, the country count for API requests, the per-survey country counts and '
-            f'the monthly network peak. That fold date is not recorded in the file, so it is not '
-            f'claimed here. Every month and every cell they do not cover reads '
-            f'&quot;{_NOT_MEASURED}&quot; instead. The quarterly table names any such month among the '
-            f'three it shows, and the <code>detail_days</code> column of the monthly export carries '
-            f'the same coverage figure for every month retained, including the ones older than '
-            f'that.</p>')
-
-
-def _by_survey_table(stats: dict, *, n: int = 25) -> str:
-    """Downloads BY SURVEY (count + volume + country count) -- the funding-report unit, and the sentence
-    a custodian is written: "your survey was downloaded N times from M countries". A whole-survey bundle
-    is credited to its survey by the fold, so this is every byte served for that survey however it was
-    fetched. The country column is a COUNT; the codes behind it are never rendered.
-
-    The Files / bundles column answers the OTHER question a custodian asks: was the survey pulled
-    station by station, or taken whole. The global by_kind counter above could never say it per
-    survey."""
-    rows = _survey_rows((stats.get("downloads") or {}).get("by_survey") or {})
-    if not rows:
-        return '<p class="sub">No attributed downloads yet.</p>'
-    trs = "".join(
-        "<tr>"
-        f'<td>{_esc(r["survey"])}</td>'
-        f'<td class="num">{_esc(r["downloads"])}</td>'
-        f'<td class="num">{_esc(_human_bytes(r["bytes"]))}</td>'
-        # A survey the fold never recorded a country for says so rather than answering the custodian
-        # sentence with a zero it never measured. See _country_count for why an empty list is exactly
-        # that case and a measured nothing is not.
-        f'<td class="num">'
-        f'{_NOT_MEASURED if r["countries"] is None else _esc(r["countries"])}</td>'
-        # Same refusal for the kind split: both counters at zero beneath real downloads means the
-        # fold had not begun splitting them, not that they were neither files nor bundles.
-        f'<td class="num">{_split_cell(r["split"])}</td>'
-        "</tr>" for r in rows[:n])
-    more = ("" if len(rows) <= n else
-            f'<p class="opsnote">Showing the top {n} of {len(rows)} surveys by downloads.</p>')
-    note = ('<p class="opsnote">Countries counts the distinct countries a survey was downloaded from, '
-            'excluding unresolved addresses. It is the figure behind "downloaded N times from M '
-            'countries"; the countries themselves are not reported per survey, because a named survey '
-            'beside a named country is a small enough cell to point at one group. The count began '
-            'later than the downloads beside it and is never backfilled, so a survey whose downloads '
-            f'were all counted before it existed reads &quot;{_NOT_MEASURED}&quot; rather than zero, '
-            'and the export leaves that cell empty.</p>'
-            '<p class="opsnote">Files / bundles splits the same downloads into single-station files '
-            'and whole-survey packages. It began later than the count beside it and is never '
-            'backfilled, so a survey split on none of its downloads reads '
-            f'&quot;{_NOT_MEASURED}&quot; rather than &quot;0 / 0&quot;, and a survey split on some '
-            'of them shows a pair covering fewer downloads than the count beside it.</p>')
-    return ('<table><thead><tr><th>Survey</th><th class="num">Downloads</th>'
-            '<th class="num">Volume</th><th class="num">Countries</th>'
-            '<th class="num">Files / bundles</th></tr></thead><tbody>'
-            + trs + "</tbody></table>" + more + note)
-
-
 def _month_has_no_detail(month: dict) -> bool:
     """True when EVERY folded day in this month came from a pre-upgrade daily row, so the month holds
     real downloads and visits and no detailed dimension at all. A month with a single detailed day is
@@ -3785,260 +3509,11 @@ def _month_has_no_current_detail(month: dict) -> bool:
     return days > 0 and _as_int(month.get("detail_days")) <= 0
 
 
-def _monthly_table(stats: dict, *, months: int = 3) -> str:
-    """The quarterly view: the last `months` CALENDAR months SIDE BY SIDE, metrics down the left. Only
-    months the aggregator actually folded appear -- no earlier month is fabricated to fill the quarter,
-    and a month whose days were folded before the detailed dimensions existed is flagged in its own row
-    rather than silently showing a partial volume as if it were complete."""
-    rows = _monthly_rows(stats)
-    if not rows:
-        return ('<p class="sub">No monthly rollups yet. They begin at the next daily fold and fill in '
-                'one month at a time; nothing earlier is backfilled.</p>')
-    cols = rows[-months:]
-    heads = "".join(f'<th class="num">{_esc(_month_label(c["month"]))}</th>' for c in cols)
-
-    def _row(label, fn, *, note: str = "") -> str:
-        cells = "".join(f'<td class="num">{fn(c)}</td>' for c in cols)
-        hint = f' <span class="k">{note}</span>' if note else ""
-        return f"<tr><td>{label}{hint}</td>{cells}</tr>"
-
-    def _countries(c):
-        cc = c.get("countries") or {}
-        return _esc(len([k for k in cc if k and k != "unknown"]))
-
-    def _handoffs(c):
-        """The month's hand-off REQUESTS, or the plain refusal for a month that carries no such block.
-        The class is younger than both seams this table marks and neither marker speaks for it, so the
-        refusal keys on the block's own PRESENCE: a zero here would state that nobody was handed off
-        in a month when no route existed to hand anyone off."""
-        block = c.get("handoffs")
-        return _NOT_MEASURED if not isinstance(block, dict) else _esc(_as_int(block.get("requests")))
-
-    def _measured(fn):
-        """`fn` for a month that carries detail days, the plain 'not measured' text for one that does
-        not. A month EVERY day of which was seeded from a pre-upgrade daily row holds real downloads
-        and visits and nothing else; rendering the rest as '0 B', '0 / 0' and a bare 0 states a
-        measurement that was never taken. That is the same fabrication the state table refuses when it
-        omits itself rather than show eight zeroes, and this is the same refusal at cell grain."""
-        return lambda c: (_NOT_MEASURED if _month_has_no_detail(c) else fn(c))
-
-    def _currently_measured(fn):
-        """The same refusal at the SECOND seam. `_measured` above fires only on a month carried in from
-        a v1 daily tail; the dimensions this fold added are younger than that by months, so a month
-        with a real volume and a real format split can still hold no client split and no network peak
-        at all. Those rows must not read 0 and '0 / 0' for it (see _month_has_no_current_detail)."""
-        return lambda c: (_NOT_MEASURED if _month_has_no_current_detail(c) else fn(c))
-
-    body = (
-        _row("Downloads", lambda c: _esc(_as_int(c.get("downloads"))))
-        + _row("Download volume",
-               _measured(lambda c: _esc(_human_bytes(_as_int(c.get("download_bytes"))))))
-        + _row("Portal visits", lambda c: _esc(_as_int(c.get("visits"))))
-        + _row("API requests", _measured(lambda c: _esc(_as_int(c.get("api_requests")))))
-        + _row("Countries", _measured(_countries))
-        + _row("Unattributed", _measured(lambda c: _esc(_as_int(c.get("unattributed")))))
-        + _row("Active days folded", lambda c: _esc(_as_int(c.get("days"))))
-        + _row("Formats",
-               _measured(lambda c: (_counter_line(c.get("formats") or {}, limit=6) or "&mdash;")))
-        + _row("Station files / bundles",
-               _measured(lambda c: (f'{_esc(_as_int((c.get("kinds") or {}).get("file")))}'
-                                    f' / {_esc(_as_int((c.get("kinds") or {}).get("bundle")))}')))
-        + _row("Top survey",
-               _measured(lambda c: (_esc(_survey_rows(c.get("surveys") or {})[0]["survey"])
-                                    if (c.get("surveys") or {}) else "&mdash;")))
-        # A reach proxy on daily rows alone would expire with them after 92 days and could never
-        # appear in a quarterly report. The month keeps the peak of its own folded days.
-        + _row("Peak networks in a day",
-               _currently_measured(lambda c: _esc(_as_int(c.get("networks_peak")))))
-        # The evidence that scripted scientific use exists at all: discarding those clients as bots
-        # makes this row structurally zero and invisible.
-        + _row("Browser / scripted downloads",
-               _currently_measured(
-                   lambda c: (f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("browser")))}'
-                              f' / '
-                              f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("scripted")))}')))
-        # The archive hand-offs (THREDDS). The row is omitted entirely when NO month shown carries
-        # the class, exactly as the state table omits itself rather than render a column of refusals.
-        + (_row("Time-series hand-offs", _measured(_handoffs),
-                note="requests, not completed transfers")
-           if any(isinstance(c.get("handoffs"), dict) for c in cols) else "")
-    )
-    partial = [c for c in cols if _as_int(c.get("seeded_days")) > 0]
-    note = ""
-    if partial:
-        names = ", ".join(_esc(_month_label(c["month"])) for c in partial)
-        note = (f'<p class="opsnote">{names}: some days were folded before the detailed breakdown '
-                f'existed. Their downloads and visits are counted in full; their volume, format, '
-                f'station/bundle, per-survey, country and unattributed figures cover only the later '
-                f'days of the month, and a month with no detailed days at all reads '
-                f'&quot;{_NOT_MEASURED}&quot; rather than zero.</p>')
-    # The SECOND seam gets its own line, because it covers different dimensions and different months.
-    # A month can sit entirely after the seeded seam above (full volume, full formats) and still hold
-    # none of the figures the current fold added.
-    #
-    # And it must state the BIAS IN BOTH DIRECTIONS. Three admission rules changed at that seam, not
-    # one: counting every request over-counts, while discarding scripted clients as robots and
-    # refusing status 206 under-count twice over. Naming only the over-count tells a
-    # funding-report reader that the older figure is inflated, when its bias is two-sided and its net
-    # is not recoverable from anything still on disk.
-    later = [c for c in cols
-             if _as_int(c.get("detail_days")) < _as_int(c.get("days")) and _as_int(c.get("days")) > 0]
-    if later:
-        names = ", ".join(_esc(_month_label(c["month"])) for c in later)
-        note += (f'<p class="opsnote">{names}: some days were folded before the current counting rules '
-                 f'existed. The browser/scripted split, the peak-networks figure, the per-survey '
-                 f'country counts and the geo-day column of the export cover only the later days, and '
-                 f'read &quot;{_NOT_MEASURED}&quot; where they cover none of them. Their downloads '
-                 f'were admitted under the earlier rules, which err in both directions: every request '
-                 f'counted, so one repeated or resumed transfer counted twice, while scripted clients '
-                 f'were discarded as robots and ranged transfers were not admitted at all, so those '
-                 f'downloads went uncounted. The net of the three is not recoverable.</p>')
-    table = ('<div style="overflow-x:auto"><table><thead><tr><th>Metric</th>' + heads
-             + "</tr></thead><tbody>" + body + "</tbody></table></div>" + note)
-    if len(rows) > len(cols):
-        table += (f'<p class="opsnote">{len(rows)} month(s) of rollups are retained in full; the '
-                  f'export below carries every one.</p>')
-    return table
-
-
-def _export_links() -> str:
-    """The 'download report data' affordance: the monthly aggregates as CSV, straight into a funding
-    report. Plain links (no JS), served by the gateway from the same stats.json this screen renders."""
-    return ('<p class="opsnote">Download report data &mdash; '
-            '<a href="/gateway/curator/analytics.csv">monthly totals (CSV)</a> &nbsp;·&nbsp; '
-            '<a href="/gateway/curator/analytics-surveys.csv">monthly by survey (CSV)</a> '
-            '&nbsp;·&nbsp; '
-            '<a href="/gateway/curator/analytics-countries.csv">monthly by country (CSV)</a>. '
-            'Every retained month is included, not just the three shown.</p>')
-
-
-def _reach_note(daily: list) -> str:
-    """The privacy-safe reach proxy: distinct MASKED networks per day (the /24 or /48 the edge already
-    truncated to). Days folded before this was counted carry no value at all, so they are excluded
-    rather than read as zero.
-
-    The date shown is therefore the most recent day WITH a network count, which is not the fold
-    watermark: on a quiet service the fold can advance over days that carried no counted request, and
-    this date then lags it. The label says which of the two it is."""
-    vals = [(d.get("date"), _as_int(d.get("networks"))) for d in (daily or [])
-            if isinstance(d, dict) and isinstance(d.get("networks"), int)]
-    if not vals:
-        return ""
-    peak = max(v for _, v in vals)
-    last_date, last_val = vals[-1]
-    return (f'<p class="opsnote">Distinct networks &mdash; most recent day with a network count '
-            f'(<span class="k">{_esc(last_date)}</span>): <b>{_esc(last_val)}</b> &nbsp;·&nbsp; '
-            f'peak over the window: <b>{_esc(peak)}</b> &nbsp;·&nbsp; counted over '
-            f'{_esc(len(vals))} day(s). A reach proxy from the masked network the edge already wrote '
-            f'(IPv4 /24, IPv6 /48); no address is stored, and one network can be a whole institution.</p>')
-
-
-def _dataset_label(row: dict) -> str:
-    """The station id (a per-station file) or the survey-package slug + '(bundle)' (a per-survey
-    bundle) — the finest attribution the manifest reverse map yields."""
-    if row.get("station"):
-        return _esc(row.get("station"))
-    if row.get("slug"):
-        return f'{_esc(row.get("slug"))} <span class="k">(bundle)</span>'
-    return "—"
-
-
-def _top_datasets_table(stats: dict, *, n: int = 20) -> str:
-    by_dataset = (stats.get("downloads") or {}).get("by_dataset") or {}
-    if not by_dataset:
-        return '<p class="sub">No attributed downloads yet.</p>'
-    rows = sorted(by_dataset.values(), key=lambda r: (-int(r.get("downloads") or 0),
-                                                      str(r.get("survey") or "")))
-    trs = []
-    for r in rows[:n]:
-        trs.append(
-            "<tr>"
-            f'<td>{_esc(r.get("survey")) if r.get("survey") else "&mdash;"}</td>'
-            f'<td>{_dataset_label(r)}</td>'
-            f'<td>{_esc(r.get("format")) if r.get("format") else "&mdash;"}</td>'
-            f'<td class="num">{_esc(r.get("downloads") or 0)}</td>'
-            f'<td class="num">{_esc(_human_bytes(_as_int(r.get("bytes"))))}</td>'
-            "</tr>")
-    more = ("" if len(rows) <= n else
-            f'<p class="opsnote">Showing the top {n} of {len(rows)} datasets by downloads.</p>')
-    return ('<table><thead><tr><th>Survey</th><th>Station / package</th><th>Format</th>'
-            '<th class="num">Downloads</th><th class="num">Volume</th></tr></thead><tbody>'
-            + "".join(trs) + "</tbody></table>" + more)
-
-
-# The scope of every figure derived from the country map. Downloads, visits and API requests each
-# count toward a country, so the total of that map is exactly the counted requests. One constant, used
-# by both tables built on it, so the country table and the state breakdown beneath it cannot drift.
-_REQUEST_SCOPE = "Requests (downloads + visits + API)"
-
-
-def _country_table(stats: dict) -> str:
-    """The country table: the COMBINED request count per country, plus the same four-way breakdown the
-    state table carries beneath it.
-
-    The two column families are as load-bearing here as they are in the state table. REQUESTS is the
-    original combined count (downloads + visits + API), and it is what the AU state breakdown
-    reconciles against: those rows add up to this table's AU cell exactly, so nothing else in this
-    table may join that arithmetic. The DETAIL columns are a later, forward-only dimension that splits
-    those same requests; they are not a second measurement, they can never reach that total, and they
-    say 'not measured' wherever the fold had not begun taking them."""
-    countries = stats.get("countries") or {}
-    if not countries:
-        return '<p class="sub">No country data yet.</p>'
-    detail = stats.get("by_country_detail")
-    detail = detail if isinstance(detail, dict) else {}
-    rows = sorted(countries.items(), key=lambda kv: (-int(kv[1] or 0), str(kv[0])))
-    trs = []
-    for cc, count in rows:
-        label = "unknown" if (not cc or cc == "unknown") else cc
-        trs.append(f'<tr><td>{_esc(label)}</td><td class="num">{_esc(count)}</td>'
-                   + _detail_cells(detail, label) + '</tr>')
-    # The scope caption must match the fold exactly: downloads, visits AND API requests all count
-    # toward a country, and the state table beneath reconciles against this table's AU row, so the two
-    # captions are deliberately the same string.
-    #
-    # The caption states what the map counts NOW, and the API third of it is younger than the other
-    # two: API requests are the newest counted class to carry geography; before that change they
-    # carried none. This map is cumulative, so on a box with days folded before that change it is a
-    # MIXTURE, and the caption
-    # alone would overstate the historical portion. The note says so, and only where it is true: a box
-    # every folded day of which was counted under the current rules has no such history and gets no
-    # note.
-    #
-    # This trigger scans EVERY retained month, and the monthly rollups are never pruned, so it must
-    # not cite a note built from the three months the quarterly table happens to show: the moment a
-    # seam month ages out of that window the citation points at nothing. The export's `detail_days`
-    # column covers exactly the set this trigger scanned.
-    seam = any(_month_has_no_current_detail(m) for m in _monthly_rows(stats))
-    note = ("" if not seam else
-            '<p class="opsnote">API requests count toward a country only from the fold that began '
-            'counting them geographically. An API request folded before that is in the API total '
-            'above and in no row here, so this map is a mixture. The quarterly table names any such '
-            'month among the three it shows, and the <code>detail_days</code> column of the monthly '
-            'export covers every retained month. Downloads and visits carry their country for the '
-            'whole of the detailed history.</p>')
-    breakdown = ('<p class="opsnote">The Downloads, Visits, API and Volume columns are forward-only '
-                 'and began later than the request count beside them, so a country counted before '
-                 f'they existed reads &quot;{_NOT_MEASURED}&quot; rather than zero. They are a '
-                 'breakdown of the same requests, not an additional measurement, and only the '
-                 'Requests column carries the total the Australian breakdown below reconciles '
-                 'against.</p>')
-    return ('<table><thead><tr><th>Country</th>'
-            f'<th class="num">{_REQUEST_SCOPE}</th><th class="num">Downloads</th>'
-            '<th class="num">Visits</th><th class="num">API</th><th class="num">Volume</th>'
-            '</tr></thead><tbody>' + "".join(trs) + "</tbody></table>" + breakdown + note)
-
-
-# ---- Australia by state: the sub-country breakdown beneath the AU country row --------------------
-# WHY STATE, AND WHY NOT CITY -- a design decision, recorded here (and in the aggregator, and
-# in docs/docs/introduction/usage-analytics.md) so it is not casually "improved" into a city breakdown:
-#   * the address behind these counts was ALREADY TRUNCATED at the edge (IPv4 /24, IPv6 /48). A /24
-#     prefix does not place a request in a city reliably -- mobile carrier and CGNAT pools routinely
-#     serve a whole state from one prefix -- so a city figure would be confidently wrong;
-#   * the Australian magnetotelluric research community is small. A city cell is QUASI-IDENTIFYING:
-#     "3 downloads from Hobart" names a research group. A state cell is not.
-# State is the finest grain that is BOTH defensible from a /24 and non-identifying at this community's
-# scale. Do not add a city dimension to this screen.
+# ---- Australia by state ----------------------------------------------------------------------------
+# State is the finest place, and there is no city dimension. The address behind these counts was cut
+# at the edge to a /24 or /48, which cannot place a request in a city (carrier and CGNAT pools serve a
+# whole state from one prefix), and in a community this small a city cell would identify a group. The
+# same rule is recorded in the aggregator and in docs/docs/introduction/usage-analytics.md.
 _AU_STATE_NAMES = (
     ("NSW", "New South Wales"),
     ("VIC", "Victoria"),
@@ -4050,7 +3525,6 @@ _AU_STATE_NAMES = (
     ("ACT", "Australian Capital Territory"),
 )
 _AU_STATE_ORDER = [code for code, _name in _AU_STATE_NAMES]
-_AU_STATE_LABELS = dict(_AU_STATE_NAMES)
 
 
 def _au_requests(stats_or_month: dict) -> int:
@@ -4059,245 +3533,162 @@ def _au_requests(stats_or_month: dict) -> int:
     return _as_int(countries.get("AU")) if isinstance(countries, dict) else 0
 
 
-def _au_state_rows(by_state: dict, au_requests: int) -> list[tuple[str, str, int]]:
-    """[(code, label, count)] for the state breakdown, biggest state first, ALWAYS summing to
-    `au_requests` -- the AU country row this table sits beneath.
-
-    Three kinds of row, and the last two are the honesty of the thing:
-      * one per state the fold actually saw;
-      * `unattributed` -- AU traffic whose masked prefix the state table does not cover. It is counted
-        by the fold, never dropped, precisely so this table cannot be quietly smaller than its parent;
-      * `not_counted` -- the arithmetic remainder: AU requests folded on days BEFORE the state table
-        was in place. It is derived, not stored, and it is omitted when it is zero. Those days carry no
-        state data and never will (the raw logs that could tell us are long gone), so the row says so
-        rather than letting the reader assume the states account for every Australian request."""
-    counts = {str(k): _as_int(v) for k, v in (by_state or {}).items() if _as_int(v) > 0}
-    rows = [(code, _AU_STATE_LABELS.get(code, code), counts[code])
-            for code in _AU_STATE_ORDER if code in counts]
-    rows.sort(key=lambda r: (-r[2], _AU_STATE_ORDER.index(r[0])))
-    if counts.get("unattributed"):
-        rows.append(("unattributed", "Not in the state table", counts["unattributed"]))
-    remainder = _as_int(au_requests) - sum(n for _c, _l, n in rows)
-    if remainder > 0:
-        rows.append(("not_counted", "Counted before state data existed", remainder))
-    return rows
+# ---- Request labels: operator, client class and network type --------------------------------------
+# The fold stores, per labelled month, joint "<client>|<nettype>" counts per metric, an operator line,
+# a declared-crawler tally and four day counters. People, automated and unclassified are derived here
+# and never stored, so a different reading of the audience rule needs no refold. Labels are rendered
+# at month grain only and are never crossed with country, state, survey or dataset.
+_LABEL_CLIENTS = ("portal_session", "landing_page", "tool", "unknown")
+_LABEL_NETTYPES = ("hosting", "education_research", "access_provider", "other", "unknown")
+_LABEL_METRICS = ("downloads", "visits", "api", "handoffs")
+_AUDIENCES = ("people", "automated", "unclassified")
+_CLIENT_NAMES = (("portal_session", "Portal session"), ("landing_page", "Landing page"),
+                 ("tool", "Tool"), ("unknown", "Unknown client"))
+_NETTYPE_NAMES = (("hosting", "Hosting"), ("education_research", "Education or research"),
+                  ("access_provider", "Access provider"), ("other", "Other"),
+                  ("unknown", "Unknown network"))
+_MONTH_NAMES = ("January", "February", "March", "April", "May", "June", "July", "August",
+                "September", "October", "November", "December")
 
 
-def _detail_cells(detail: dict, code: str) -> str:
-    """The four DETAIL cells for one place row: downloads, visits, API requests, volume. Shared by the
-    country table and the state table beneath it, which carry the same four columns over the same
-    {code: {downloads, visits, api, bytes}} shape the fold writes for both grains.
-
-    A code with no detail row renders 'not measured' four times rather than four zeroes. That is not
-    cosmetic: the detail maps are forward-only, so a place whose requests were all counted before they
-    existed genuinely has no download figure, and a zero there would read as 'nobody in New South Wales
-    downloaded anything'. The derived `not_counted` remainder row is the same case by construction."""
-    row = detail.get(code) if isinstance(detail, dict) else None
-    if not isinstance(row, dict):
-        return f'<td class="num">{_NOT_MEASURED}</td>' * 4
-    return (f'<td class="num">{_esc(_as_int(row.get("downloads")))}</td>'
-            f'<td class="num">{_esc(_as_int(row.get("visits")))}</td>'
-            f'<td class="num">{_esc(_as_int(row.get("api")))}</td>'
-            f'<td class="num">{_esc(_human_bytes(_as_int(row.get("bytes"))))}</td>')
+def audience(client: str, nettype: str) -> str:
+    """The audience of one joint label key. Tools are automated; portal sessions and landing-page
+    visitors are people on any network; an unknown client is automated on a hosting network and
+    unclassified on every other, because nothing else about it is evidence either way."""
+    if client == "tool":
+        return "automated"
+    if client in ("portal_session", "landing_page"):
+        return "people"
+    return "automated" if nettype == "hosting" else "unclassified"
 
 
-def _au_state_table(stats: dict) -> str:
-    """The 'Australia by state' table -- rendered ONLY when the fold actually produced a breakdown. A
-    box with no state table installed sees nothing here: eight zeroes would read as 'no traffic from
-    Victoria' when the truth is 'not measured', and this screen omits rather than fabricates.
-
-    Two columns families sit side by side, and the distinction is load-bearing. REQUESTS is the
-    original bare count, and it is what the reconciliation rows and the exact-total promise operate on:
-    those rows add up to the AU country figure exactly, and nothing else in this table may join that
-    arithmetic. The DETAIL columns (downloads, visits, API, volume) are a later, forward-only dimension
-    that can never reach that total, and they say 'not measured' wherever they were not."""
-    by_state = stats.get("by_state") if isinstance(stats, dict) else None
-    if not isinstance(by_state, dict) or not any(_as_int(v) > 0 for v in by_state.values()):
-        return ""
-    detail = stats.get("by_state_detail")
-    detail = detail if isinstance(detail, dict) else {}
-    rows = _au_state_rows(by_state, _au_requests(stats))
-    trs = "".join(
-        f'<tr><td>{_esc(label)}'
-        + (f' <span class="k">{_esc(code)}</span>' if code in _AU_STATE_LABELS else "")
-        + f'</td><td class="num">{_esc(n)}</td>'
-        # The remainder row is an arithmetic derivation, not a measured state, so it never carries
-        # detail even if a state of the same name later did.
-        + (f'<td class="num">{_NOT_MEASURED}</td>' * 4 if code == "not_counted"
-           else _detail_cells(detail, code))
-        + '</tr>'
-        for code, label, n in rows)
-    total = sum(n for _c, _l, n in rows)
-    measured = [detail[c] for c, _l, _n in rows if c != "not_counted" and isinstance(detail.get(c), dict)]
-    # The detail totals sum only the rows that HAVE detail, so they are the measured Australian figure
-    # and not the whole one. With no detail at all there is nothing to sum and the row says so rather
-    # than reading as a measured zero, exactly like the cells above it.
-    detail_totals = (f'<td class="num">{_NOT_MEASURED}</td>' * 4 if not measured else
-                     "".join(f'<td class="num">{_esc(sum(_as_int(r.get(k)) for r in measured))}</td>'
-                             for k in ("downloads", "visits", "api"))
-                     + f'<td class="num">'
-                       f'{_esc(_human_bytes(sum(_as_int(r.get("bytes")) for r in measured)))}</td>')
-    trs += (f'<tr><td><b>Australia (all)</b></td>'
-            f'<td class="num"><b>{_esc(total)}</b></td>' + detail_totals + '</tr>')
-    return (
-        '<h2>Australia by state</h2>'
-        '<p class="sub">A breakdown beneath the AU row of the country table: the <b>Requests</b> '
-        'column adds up to the Australian figure exactly. <b>State is the finest grain reported.</b> '
-        'The address these counts come from is masked to a /24 (IPv4) or /48 (IPv6) before it is ever '
-        'written, which does not place a request in a city reliably, and a city-level count in a '
-        'research community this small could identify a single group. There is deliberately no city '
-        'breakdown, and no state figure for any single day.</p>'
-        '<p class="sub">The Downloads, Visits, API and Volume columns are forward-only and began '
-        'later than the request count beside them, so a state counted before they existed reads '
-        f'&quot;{_NOT_MEASURED}&quot; rather than zero. They are a breakdown of the same requests, '
-        'not an additional measurement, and only the Requests column carries the exact-total '
-        'promise.</p>'
-        '<table><thead><tr><th>State or territory</th>'
-        f'<th class="num">{_REQUEST_SCOPE}</th><th class="num">Downloads</th>'
-        '<th class="num">Visits</th><th class="num">API</th><th class="num">Volume</th>'
-        '</tr></thead><tbody>'
-        + trs + '</tbody></table>')
+def _has_label_days(month: dict) -> bool:
+    return isinstance(month, dict) and _as_int(month.get("label_days")) > 0
 
 
-def _daily_sparkline(daily: list) -> str:
-    """A SERVER-RENDERED inline SVG sparkline of the daily downloads (accent) and visits (info) series.
-    NO JS — pure SVG, so it is inert under the strictPages CSP. Empty/one-point series degrade to a
-    note / a single marker. Every interpolated value is numeric or _esc'd."""
-    pts = [d for d in (daily or []) if isinstance(d, dict) and isinstance(d.get("date"), str)]
-    if not pts:
-        return '<p class="sub">No daily series yet.</p>'
-    pts = sorted(pts, key=lambda d: d["date"])
-    downloads = [max(int(d.get("downloads") or 0), 0) for d in pts]
-    visits = [max(int(d.get("visits") or 0), 0) for d in pts]
-    peak = max(downloads + visits + [1])
-    w, h, pad = 720, 120, 10
-    plot_h = h - 2 * pad
-    n = len(pts)
-
-    def _coords(series):
-        out = []
-        for i, v in enumerate(series):
-            x = pad + (0 if n == 1 else (w - 2 * pad) * i / (n - 1))
-            y = pad + plot_h - (v / peak) * plot_h
-            out.append(f"{x:.1f},{y:.1f}")
-        return " ".join(out)
-
-    dl_accent = _PALETTE["accent"]
-    vis_info = _PALETTE["info"]
-    grid = "#2E4254"
-    baseline_y = pad + plot_h
-    if n == 1:
-        # A single day: draw two markers rather than a degenerate line.
-        dx = pad
-        marks = (f'<circle cx="{dx}" cy="{pad + plot_h - (downloads[0] / peak) * plot_h:.1f}" r="3" '
-                 f'fill="{dl_accent}"/>'
-                 f'<circle cx="{dx}" cy="{pad + plot_h - (visits[0] / peak) * plot_h:.1f}" r="3" '
-                 f'fill="{vis_info}"/>')
-        series_svg = marks
-    else:
-        series_svg = (
-            f'<polyline fill="none" stroke="{dl_accent}" stroke-width="2" points="{_coords(downloads)}"/>'
-            f'<polyline fill="none" stroke="{vis_info}" stroke-width="2" stroke-dasharray="4 3" '
-            f'points="{_coords(visits)}"/>')
-    first_date, last_date = _esc(pts[0]["date"]), _esc(pts[-1]["date"])
-    svg = (
-        f'<svg viewBox="0 0 {w} {h}" preserveAspectRatio="none" role="img" '
-        f'aria-label="Daily downloads and visits" style="width:100%;height:auto;max-width:100%">'
-        f'<line x1="{pad}" y1="{baseline_y}" x2="{w - pad}" y2="{baseline_y}" stroke="{grid}" '
-        f'stroke-width="1"/>'
-        f'{series_svg}'
-        f'<text x="{pad}" y="{h - 1}" fill="{_PALETTE["muted"]}" font-size="11">{first_date}</text>'
-        f'<text x="{w - pad}" y="{h - 1}" fill="{_PALETTE["muted"]}" font-size="11" '
-        f'text-anchor="end">{last_date}</text>'
-        f'<text x="{pad}" y="{pad + 8}" fill="{_PALETTE["muted"]}" font-size="11">peak {peak}</text>'
-        "</svg>")
-    legend = (f'<p class="opsnote"><span style="color:{dl_accent}">&#9644;</span> downloads &nbsp; '
-              f'<span style="color:{vis_info}">&#9644;</span> visits &nbsp;·&nbsp; {n} day(s)</p>')
-    return f'<div style="overflow-x:auto">{svg}</div>{legend}'
+def _is_labelled(month: dict) -> bool:
+    """True for a month the fold labelled on at least one day, so a month folded before labels began
+    reads as unmeasured rather than as zero. The day counter covers counted days only, so a labelled
+    month whose only admitted requests were the operator's or a crawler's is known by the operator
+    or crawler line the fold writes only on labelled days."""
+    return _has_label_days(month) or (isinstance(month, dict) and (
+        isinstance(month.get("operator"), dict) or isinstance(month.get("crawler_excluded"), dict)))
 
 
-def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str:
-    """The usage-analytics screen: summary cards, a top-datasets table, a country
-    table, and a server-rendered daily sparkline over the aggregator's stats.json. `stats` is the parsed
-    stats.json (or None); `stats_stale` is True when it is missing OR older than ~2 timer periods (the
-    serve_state band). Read-only, ZERO JS. A None stats renders the honest EMPTY state; a present-but-
-    stale one renders the data under a prominent STALE banner (never last-known-good silently as live)."""
-    generated_at = stats.get("generated_at") if isinstance(stats, dict) else None
-    intro = ('<h1>Usage analytics</h1>'
-             '<p class="sub">Downloads and portal visits from the server access log, aggregated daily '
-             '(masked-at-edge IPs, aggregates only — no addresses or user-agents are stored). '
-             'Per-station and per-survey <em>views</em> are not server-countable — the portal renders '
-             'them client-side with no per-navigation request (record D3), so this screen reports '
-             'downloads and whole-portal visits, honestly, not page views.</p>'
-             '<p class="sub">Every figure below is derived from request paths, the masked network and '
-             'the response size the access log already records. Nothing here is a beacon. One thing '
-             'is added, and it is the only one: when you export a map selection, the portal marks its '
-             'own file requests with a query flag (<code>sel=bulk</code>) so a bulk selection can be '
-             'told apart from a single download. That is a label on requests that already happen: '
-             'no new request, no beacon, no identity. The flag is stripped off before the file is '
-             'attributed, so a labelled and an unlabelled fetch of the same file are still one '
-             'download. <b>API requests</b> counts fetches of the four documented '
-             'machine-readable entry points the portal never fetches for itself '
-             '(<code>/data/products/manifest.json</code>, <code>/data/mtcat.json</code>, '
-             '<code>/data/mtcat.schema.json</code>, <code>/data/stations.geojson</code>): four counts '
-             'documents, not URLs, so where one of those is also published under '
-             '<code>/data/products/</code> the mirror counts as the same entry point. It is a '
-             'path-class signal and it is an upper bound, because the mtcat link also sits in the '
-             'page footer where a person can click it.</p>'
-             '<p class="sub">Clients are read from the user-agent for one purpose only, and it is '
-             'never stored: crawlers, previewers and uptime probes are excluded from every figure, '
-             'while <b>scripted</b> clients (curl, wget, python-requests, and anything that sends no '
-             'user-agent at all) are counted alongside browsers and reported as their own share of '
-             'downloads. Those are the clients the published API examples hand people, so counting '
-             'them as robots hid scientific use. A download is counted <b>once per day per masked '
-             'network per file</b>: one save action can log two requests (the browser cancels on the '
-             'download header and its download manager refetches) and a resumed transfer logs one per '
-             'range, so counting each request double-counted the headline figure. Every request\'s '
-             'bytes still sum, so the volume covers what was actually served.</p>')
-    if not isinstance(stats, dict):
-        body = (intro
-                + '<div class="opsband" style="background:' + _PALETTE["panel"] + '">'
-                + '<p style="margin:0"><b>No usage analytics yet.</b> The aggregator has not written a '
-                + 'stats.json. Install the <code>ausmt-stats</code> timer and place the db-ip CSV '
-                + '(deploy/README.md &rarr; "Usage analytics"); the first daily fold populates this '
-                + 'screen.</p></div>')
-        return _shell("AusMT usage analytics", body, nav=nav)
+def _labels_since(stats: dict) -> str | None:
+    since = stats.get("labels_since") if isinstance(stats, dict) else None
+    return since if isinstance(since, str) and since else None
 
-    if stats_stale:
-        chip = (f'<div class="opsband" style="background:{_PALETTE["warn"]};color:{_PALETTE["bg"]};'
-                f'font-weight:600">Usage analytics are STALE — stats.json is missing recent updates or '
-                f'is older than ~2 aggregation periods (last generated: '
-                f'{_esc(generated_at) if generated_at else "never"}). The ausmt-stats timer may not be '
-                f'running. The figures below are as of that time, not live.</div>')
-    else:
-        chip = (f'<p class="sub" style="margin-top:-.5rem">Updated '
-                f'<span class="dt" title="{_esc(generated_at)}">{_esc(short_utc(generated_at or ""))}</span>'
-                f' · aggregated daily.</p>')
-    daily = stats.get("daily") or []
-    body = (
-        intro
-        + chip
-        + _analytics_cards(stats)
-        + _format_breakdown(stats)
-        + _collection_line(stats)
-        + _detail_caveat(stats)
-        + '<h2>Quarterly breakdown</h2>'
-        + '<p class="sub">The last three calendar months side by side. Monthly rollups are kept '
-          'permanently (they are pure counts); the daily rows behind them roll off after 92 days.</p>'
-        + _monthly_table(stats)
-        + _export_links()
-        + '<h2>Downloads by survey</h2>'
-        + _by_survey_table(stats)
-        + '<h2>Daily downloads &amp; visits</h2>'
-        + _daily_sparkline(daily)
-        + _reach_note(daily)
-        + '<h2>Top datasets</h2>'
-        + _top_datasets_table(stats)
-        + '<h2>By country</h2>'
-        + _country_table(stats)
-        + _au_state_table(stats)
-    )
-    return _shell("AusMT usage analytics", body, nav=nav)
+
+def _label_counts(month: dict, metric: str) -> dict[tuple[str, str], int]:
+    """{(client, nettype): n} for one metric of a month, clamped to the closed sets."""
+    raw = (month.get("labels") or {}).get(metric) if isinstance(month.get("labels"), dict) else None
+    out: dict[tuple[str, str], int] = {}
+    for key, n in (raw or {}).items() if isinstance(raw, dict) else ():
+        parts = key.split("|") if isinstance(key, str) else []
+        if len(parts) == 2 and parts[0] in _LABEL_CLIENTS and parts[1] in _LABEL_NETTYPES:
+            out[(parts[0], parts[1])] = out.get((parts[0], parts[1]), 0) + _as_int(n)
+    return out
+
+
+def _audience_split(counts: dict) -> dict[str, int]:
+    split = dict.fromkeys(_AUDIENCES, 0)
+    for (client, nettype), n in counts.items():
+        split[audience(client, nettype)] += n
+    return split
+
+
+def _by_label(counts: dict, index: int, keys) -> dict[str, int]:
+    """One label summed over the other: index 0 gives per client, index 1 per network type."""
+    out = dict.fromkeys(keys, 0)
+    for key, n in counts.items():
+        out[key[index]] += n
+    return out
+
+
+def _has_handoff_class(month: dict) -> bool:
+    return isinstance(month.get("handoffs"), dict)
+
+
+def _block_sum(month: dict, block: str) -> int:
+    raw = month.get(block)
+    return sum(_as_int(raw.get(m)) for m in _LABEL_METRICS) if isinstance(raw, dict) else 0
+
+
+def _month_long(month: str) -> str:
+    """'2026-07' -> 'July 2026'. An unparseable value renders verbatim, never a crash."""
+    try:
+        y, m = month.split("-")
+        return f"{_MONTH_NAMES[int(m) - 1]} {y}"
+    except (ValueError, IndexError):
+        return month
+
+
+def _has_select_split(stats: dict) -> bool:
+    """True when the fold has taken the bulk and single download split at all."""
+    totals = stats.get("totals") if isinstance(stats, dict) else None
+    return isinstance(totals, dict) and isinstance(totals.get("downloads_by_select"), dict)
+
+
+def _select_measured(stats: dict, month: dict) -> bool:
+    """True when the bulk and single split covers this month. Month rows carry the split densely,
+    so a zero is told from an unmeasured month by `select_since` (a month wholly before it was
+    never split) and by the current-rules counter, never by the value."""
+    if not _has_select_split(stats) or _month_has_no_current_detail(month):
+        return False
+    since = stats.get("select_since")
+    return not isinstance(since, str) or not since or month["month"] >= since[:7]
+
+
+def _select_figures(month: dict) -> tuple[int, int]:
+    """(files, exports) for a month: downloads that carried the export label, and the export-event
+    count, which is distinct networks per day and so a floor on export actions."""
+    split = month.get("downloads_by_select")
+    files = _as_int(split.get("bulk")) if isinstance(split, dict) else 0
+    return files, _as_int(month.get("bulk_export_events"))
+
+
+def _select_csv_cells(stats: dict, month: dict) -> list:
+    """downloads_select_bulk, downloads_select_single and bulk_export_events, empty where the split
+    did not cover the month."""
+    if not _select_measured(stats, month):
+        return ["", "", ""]
+    split = month.get("downloads_by_select")
+    split = split if isinstance(split, dict) else {}
+    return [_as_int(split.get("bulk")), _as_int(split.get("single")),
+            _as_int(month.get("bulk_export_events"))]
+
+
+def _label_csv_cells(month: dict) -> list:
+    """The fixed label columns of the monthly export, empty for a month without labelled days."""
+    if not _is_labelled(month):
+        return [""] * len(_LABEL_CSV_COLUMNS)
+    cells = [_as_int(month.get(k)) for k in ("label_days", "nettype_days", "nettype_full_days",
+                                             "operator_list_days")]
+    for metric in _LABEL_METRICS:
+        if metric == "handoffs" and not _has_handoff_class(month):
+            cells += ["", "", ""]
+            continue
+        split = _audience_split(_label_counts(month, metric))
+        cells += [split[a] for a in _AUDIENCES]
+    operator = month.get("operator") if isinstance(month.get("operator"), dict) else {}
+    cells += [_as_int(operator.get(k)) for k in _LABEL_METRICS + ("download_bytes",)]
+    crawler = month.get("crawler_excluded")
+    crawler = crawler if isinstance(crawler, dict) else {}
+    cells += [_as_int(crawler.get(k)) for k in _LABEL_METRICS]
+    downloads = _label_counts(month, "downloads")
+    cells += list(_by_label(downloads, 0, _LABEL_CLIENTS).values())
+    cells += list(_by_label(downloads, 1, _LABEL_NETTYPES).values())
+    return cells
+
+
+_LABEL_CSV_COLUMNS = (
+    ["label_days", "nettype_days", "nettype_full_days", "operator_list_days"]
+    + [f"{m}_{a}" for m in _LABEL_METRICS for a in _AUDIENCES]
+    + [f"operator_{m}" for m in _LABEL_METRICS] + ["operator_download_bytes"]
+    + [f"crawler_excluded_{m}" for m in _LABEL_METRICS]
+    + [f"downloads_client_{c}" for c in _LABEL_CLIENTS]
+    + [f"downloads_net_{n}" for n in _LABEL_NETTYPES])
 
 
 # ---- CSV export of the monthly aggregates (the funding-report affordance) -------------------------
@@ -4367,6 +3758,8 @@ def analytics_monthly_csv(stats) -> str:
     header = (["month", "downloads", "download_bytes", "visits", "api_requests", "unattributed",
                "downloads_browser", "downloads_scripted", "networks_peak",
                "countries", "active_days", "days_without_detail", "geo_days", "detail_days"]
+              + _LABEL_CSV_COLUMNS
+              + ["downloads_select_bulk", "downloads_select_single", "bulk_export_events"]
               + [f"format_{f}" for f in formats] + [f"kind_{k}" for k in kinds])
     if states:
         header += (["au_requests"] + [f"state_{c}" for c in states]
@@ -4388,6 +3781,8 @@ def analytics_monthly_csv(stats) -> str:
                 len([k for k in cc if k and k != "unknown"]),
                 _as_int(r.get("days")), _as_int(r.get("seeded_days")),
                 "" if blank else _as_int(r.get("geo_days")), _as_int(r.get("detail_days"))]
+               + _label_csv_cells(r)
+               + _select_csv_cells(stats, r)
                + [_as_int((r.get("formats") or {}).get(f)) for f in formats]
                + [_as_int((r.get("kinds") or {}).get(k)) for k in kinds])
         if states:
