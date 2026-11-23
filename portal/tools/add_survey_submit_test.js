@@ -364,6 +364,9 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     ok(/lists this survey publicly/i.test(discText) && /coordinates/i.test(discText)
       && /withhold/i.test(discText),
       "the disclosure states public listing, coordinate visibility, and byte withholding");
+    ok(/embargoed/i.test(discText) && /occupation dates/i.test(discText)
+      && /run-metadata\.csv/.test(discText) && /metadata_only publishes none/i.test(discText),
+      "the disclosure states what an embargo still publishes from run-metadata.csv");
   }
 
   // --------------------------------------------------------------------------------------------------

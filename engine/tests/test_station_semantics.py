@@ -338,6 +338,26 @@ def test_the_violation_names_the_document_it_came_from():
     assert all(v.startswith("products/x/y/station.json: ") for v in _violations(doc))
 
 
+UNHASHABLE_IDS = [[], {}, ["a"], {"a": 1}]
+
+
+@pytest.mark.parametrize("rid", UNHASHABLE_IDS, ids=[repr(r) for r in UNHASHABLE_IDS])
+def test_an_unhashable_id_is_reported_not_raised(rid):
+    """The gate walks a whole served tree and must name every bad document, so a malformed id is a
+    violation of that document, never a traceback that stops the walk. Both branches and both id
+    kinds, because each carries its own uniqueness set."""
+    full = copy.deepcopy(CLEAN)
+    full["runs"][0]["id"] = rid
+    assert stcheck.violations(full), "a run id that is not a string is still a violation"
+    full = copy.deepcopy(CLEAN)
+    full["resources"][0]["id"] = rid
+    full["resources"][0]["represents_runs"] = [rid]
+    assert stcheck.violations(full)
+    withheld = copy.deepcopy(WITHHELD)
+    withheld["runs"] = [{"id": rid, "data_logger": {"model": "LEMI-424"}}]
+    assert [v for v in stcheck.violations(withheld) if "states no id" in v]
+
+
 # ---------------------------------------------------------------- the build site
 
 def _build(tmp_path, surveys=SURVEYS, products=True):

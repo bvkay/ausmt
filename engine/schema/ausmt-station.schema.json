@@ -2,7 +2,7 @@
  "$schema": "http://json-schema.org/draft-07/schema#",
  "$id": "https://ausmt.auscope.org.au/data/schemas/ausmt-station/0.1/ausmt-station.schema.json",
  "title": "AusMT Station Metadata 0.1-draft: canonical public representation of one published station record",
- "description": "Draft (0.x): the promoted station.json - one published station record within a survey context, not a globally unique physical site. Two formal branches: the full record keeps an open schema (existing keys frozen and permitted; runs[] and resources[] are the new canonical model), while the withheld record is closed-world by design - the one exception to the open-schema rule, so that nothing can ride in under unbanned key names. Runs describe acquisitions; resources describe files, services and data products; nesting never implies one-resource-to-one-run ownership. Frozen only when the freeze gates in AUSMT-STATION-METADATA-SCOPE.md pass.",
+ "description": "Draft (0.x): the promoted station.json - one published station record within a survey context, not a globally unique physical site. Two formal branches: the full record keeps an open schema (existing keys frozen and permitted; runs[] and resources[] are the new canonical model), while the withheld record is closed-world by design - the one exception to the open-schema rule, so that nothing can ride in under unbanned key names. An embargoed withheld record may still state when its station was occupied and by which instruments, through a closed runs[]. Runs describe acquisitions; resources describe files, services and data products; nesting never implies one-resource-to-one-run ownership. Frozen only when the freeze gates in AUSMT-STATION-METADATA-SCOPE.md pass.",
  "definitions": {
   "identifier_row": {
    "type": "object",
@@ -414,6 +414,126 @@
      }
     }
    ]
+  },
+  "withheld_instrument": {
+   "type": "object",
+   "additionalProperties": false,
+   "minProperties": 1,
+   "properties": {
+    "manufacturer": {
+     "type": "string",
+     "minLength": 1
+    },
+    "model": {
+     "type": "string",
+     "minLength": 1
+    },
+    "serial_number": {
+     "type": "string",
+     "minLength": 1
+    },
+    "identifiers": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "scheme",
+       "identifier"
+      ],
+      "properties": {
+       "scheme": {
+        "type": "string",
+        "minLength": 1
+       },
+       "identifier": {
+        "type": "string",
+        "minLength": 1
+       }
+      }
+     }
+    }
+   },
+   "description": "an instrument reduced to its identity (maker, model, serial, persistent identifiers); closed, so nothing else can ride inside it"
+  },
+  "withheld_run": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "id"
+   ],
+   "anyOf": [
+    {
+     "required": [
+      "time_period"
+     ]
+    },
+    {
+     "required": [
+      "data_logger"
+     ]
+    },
+    {
+     "required": [
+      "channels"
+     ]
+    }
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "time_period": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "start"
+     ],
+     "properties": {
+      "start": {
+       "type": "string",
+       "format": "date-time"
+      },
+      "end": {
+       "type": "string",
+       "format": "date-time"
+      },
+      "time_basis": {
+       "$ref": "#/definitions/time_period/properties/time_basis"
+      }
+     }
+    },
+    "data_logger": {
+     "$ref": "#/definitions/withheld_instrument"
+    },
+    "channels": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "component",
+       "sensor"
+      ],
+      "properties": {
+       "component": {
+        "enum": [
+         "hx",
+         "hy",
+         "hz"
+        ]
+       },
+       "sensor": {
+        "$ref": "#/definitions/withheld_instrument"
+       }
+      }
+     }
+    }
+   },
+   "description": "what an embargoed record may say about an acquisition: when the station was occupied and by which instruments, taken from the survey's curated run record and never from the withheld file. Closed at every level: no rate, no dipole, no azimuth, no electric channel. A run stating none of a window, a logger or a sensor is not published"
   }
  },
  "oneOf": [
@@ -523,9 +643,39 @@
     },
     "organisation": {
      "type": "string"
+    },
+    "runs": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/definitions/withheld_run"
+     },
+     "description": "embargoed records only; absent means the survey's run record states nothing for this station"
     }
    },
-   "description": "fail-closed leak protection: the withheld branch is CLOSED-WORLD (additionalProperties false, nested objects closed) - the one deliberate exception to the open-schema rule, because a withheld record's absence semantics are 'deliberately not exposed', and an open object would let coordinates, runs, or instrument identity ride in under unbanned key names. Extending the stub requires a schema change, by design."
+   "description": "fail-closed leak protection: the withheld branch is CLOSED-WORLD (additionalProperties false, nested objects closed) - the one deliberate exception to the open-schema rule, because a withheld record's absence semantics are 'deliberately not exposed', and an open object would let coordinates, acquisition detail or derived science ride in under unbanned key names. runs[] is the one acquisition member: an embargoed record states when its station was occupied and by which instruments, closed at every level, and a metadata_only record states none. Extending the stub requires a schema change, by design.",
+   "if": {
+    "required": [
+     "runs"
+    ]
+   },
+   "then": {
+    "required": [
+     "access"
+    ],
+    "properties": {
+     "access": {
+      "required": [
+       "level"
+      ],
+      "properties": {
+       "level": {
+        "const": "embargoed"
+       }
+      }
+     }
+    }
+   }
   },
   {
    "title": "full station record",

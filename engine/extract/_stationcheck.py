@@ -21,12 +21,28 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import quote, unquote
 
-# The withheld stub's WHOLE key set (schema oneOf[0]): the nine frozen keys plus the three promotion
-# markers. Closed world, so any other key in a withheld record is a leak, never an extension.
+from _runsheet import TIME_BASES   # stdlib leaf; the one statement of how a sheet time reached UTC
+
+# The withheld stub's WHOLE key set (schema oneOf[0]): the nine frozen keys, the three promotion
+# markers, and `runs` on an embargoed record. Closed world, so any other key in a withheld record
+# is a leak, never an extension.
 WITHHELD_KEYS = frozenset({"schema", "version", "ausmt_id", "station", "survey", "survey_id",
-                           "country", "organisation", "access", "distribution", "withheld", "note"})
+                           "country", "organisation", "access", "distribution", "withheld", "note",
+                           "runs"})
 _WITHHELD_BLOCK_KEYS = {"access": frozenset({"level", "embargo_until", "served"}),
                         "distribution": frozenset({"edi_available", "license", "edi_path"})}
+# What an embargoed record's run may state: when the station was occupied and by which instruments.
+# Closed at every level like the stub around it, so the rate, the dipoles, the azimuths and anything
+# read out of the withheld file stay withheld. The emitter projects through these same sets, so what
+# is published and what is checked cannot drift. A metadata_only record gains no run at all.
+WITHHELD_RUN_ACCESS_LEVEL = "embargoed"
+WITHHELD_RUN_KEYS = frozenset({"id", "time_period", "data_logger", "channels"})
+WITHHELD_PERIOD_KEYS = frozenset({"start", "end", "time_basis"})
+WITHHELD_INSTRUMENT_KEYS = frozenset({"manufacturer", "model", "serial_number", "identifiers"})
+WITHHELD_IDENTIFIER_KEYS = frozenset({"scheme", "identifier"})
+WITHHELD_CHANNEL_KEYS = frozenset({"component", "sensor"})
+# A withheld channel exists only to name its sensor, and the run sheet names one on these axes alone.
+WITHHELD_CHANNEL_COMPONENTS = ("hx", "hy", "hz")
 # Bare canonical form, the only form AusMT publishes: a resolver prefix makes a DOI a URL.
 _BARE_DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 # The electrode-circuit members. They attach to the electric measurement circuit and to nothing else.
@@ -111,10 +127,20 @@ def violations(doc) -> list:
     runs = doc.get("runs") or []
     resources = doc.get("resources") or []
     return (_run_violations(runs)
-            + _resource_violations(resources, {r.get("id") for r in runs if isinstance(r, dict)})
+            + _resource_violations(resources, {_id_key(r.get("id")) for r in runs if isinstance(r, dict)})
             + _doi_violations(doc)
             + _edi_path_violations(doc, resources)
             + _new_block_violations(doc))
+
+
+def _is_id(value) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _id_key(value):
+    """An id as a set member. A malformed id (a list, an object) is unhashable, and this layer must
+    name the document that carries it rather than raise out of a walk over a whole served tree."""
+    return value if _is_id(value) else ("malformed", repr(value))
 
 
 def _instant(value):
@@ -139,7 +165,99 @@ def _withheld_violations(doc) -> list:
             out += [f"withheld record's `{block}` carries `{k}`" for k in sorted(set(value) - allowed)]
     if (doc.get("distribution") or {}).get("edi_path") is not None:
         out.append("withheld record states a distribution.edi_path; nothing is distributed for it")
+    if "runs" in doc:
+        out += _withheld_run_violations(doc)
     return out
+
+
+def _closed(node, allowed, where) -> list:
+    """One object of a withheld run against its closed key set."""
+    if not isinstance(node, dict):
+        return [f"{where} is a {type(node).__name__}, not an object"]
+    return [f"{where} carries `{k}`, which a withheld record's run does not define"
+            for k in sorted(set(node) - allowed)]
+
+
+def _plain(value) -> bool:
+    """A non-empty string. Every leaf of a withheld run is one: a closed key set alone would let an
+    object ride inside an allowed member."""
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _withheld_instrument_violations(node, where) -> list:
+    out = _closed(node, WITHHELD_INSTRUMENT_KEYS, where)
+    if not isinstance(node, dict):
+        return out
+    out += [f"{where} {k} is not a non-empty string"
+            for k in sorted(WITHHELD_INSTRUMENT_KEYS - {"identifiers"}) if k in node and not _plain(node[k])]
+    rows = node.get("identifiers", [])
+    if not isinstance(rows, list):
+        return out + [f"{where} identifiers is a {type(rows).__name__}, not a list"]
+    for row in rows:
+        out += _closed(row, WITHHELD_IDENTIFIER_KEYS, f"{where} identifier")
+        if isinstance(row, dict) and not all(_plain(row.get(k)) for k in WITHHELD_IDENTIFIER_KEYS):
+            out.append(f"{where} identifier does not state a scheme and an identifier as strings")
+    return out
+
+
+def _withheld_period_violations(period, where) -> list:
+    out = _closed(period, WITHHELD_PERIOD_KEYS, where)
+    if not isinstance(period, dict):
+        return out
+    if not _plain(period.get("start")):
+        out.append(f"{where} states no start")
+    if "end" in period and not _plain(period["end"]):
+        out.append(f"{where} end is not a non-empty string")
+    if "time_basis" in period and period["time_basis"] not in TIME_BASES:
+        out.append(f"{where} time_basis is not one of {', '.join(TIME_BASES)}")
+    return out
+
+
+def _withheld_run_violations(doc) -> list:
+    """An embargoed record may say when its station was occupied and by which instruments, and
+    nothing else about the acquisition. Every level is closed, so a rate, a dipole or a position
+    cannot ride in under a run, and the general run rules still apply on top."""
+    runs, access = doc.get("runs"), doc.get("access")
+    out = []
+    if not isinstance(access, dict) or access.get("level") != WITHHELD_RUN_ACCESS_LEVEL:
+        out.append("withheld record carries `runs` while its access level is not embargoed")
+    if not isinstance(runs, list) or not runs:
+        return out + ["withheld record's `runs` is not a non-empty list"]
+    for run in runs:
+        if not isinstance(run, dict):
+            continue   # named by _run_violations below
+        where = f"withheld run {run.get('id')!r}"
+        out += _closed(run, WITHHELD_RUN_KEYS, where)
+        if not (isinstance(run.get("id"), str) and run["id"].strip()):
+            out.append(f"{where} states no id")
+        if not any(k in run for k in ("time_period", "data_logger", "channels")):
+            out.append(f"{where} states neither a window nor an instrument")
+        if "time_period" in run:
+            out += _withheld_period_violations(run["time_period"], f"{where} time_period")
+        if "data_logger" in run:
+            out += _withheld_instrument_violations(run["data_logger"], f"{where} data_logger")
+        channels = run.get("channels", [])
+        if not isinstance(channels, list):
+            out.append(f"{where} channels is a {type(channels).__name__}, not a list")
+            continue
+        for channel in channels:
+            out += _closed(channel, WITHHELD_CHANNEL_KEYS, f"{where} channel")
+            if not isinstance(channel, dict):
+                continue
+            component = channel.get("component")
+            if component not in WITHHELD_CHANNEL_COMPONENTS or "sensor" not in channel:
+                out.append(f"{where} channel {component!r} is not one of "
+                           f"{', '.join(WITHHELD_CHANNEL_COMPONENTS)} naming its sensor")
+            if "sensor" in channel:
+                out += _withheld_instrument_violations(channel["sensor"],
+                                                       f"{where} channel {component!r} sensor")
+    # A run whose containers are the wrong type is already named above; the general rules read
+    # only the ones they can walk.
+    walkable = [run for run in runs if not isinstance(run, dict)
+                or (isinstance(run.get("time_period", {}), dict)
+                    and isinstance(run.get("channels", []), list))]
+    return (out + _run_violations(walkable) + _doi_violations({"runs": runs})
+            + _added_violations(runs, "$.runs", "runs[]"))
 
 
 def _run_violations(runs) -> list:
@@ -149,9 +267,11 @@ def _run_violations(runs) -> list:
             out.append(f"runs[] carries a {type(run).__name__}, not a run object")
             continue
         rid = run.get("id")
-        if rid in seen:
+        if not _is_id(rid):
+            out.append(f"run id {rid!r} is not a non-empty string")
+        if _id_key(rid) in seen:
             out.append(f"run id {rid!r} appears twice; run ids are unique within a station record")
-        seen.add(rid)
+        seen.add(_id_key(rid))
         period = run.get("time_period") or {}
         start, end = _instant(period.get("start")), _instant(period.get("end"))
         for key, value, parsed in (("start", period.get("start"), start), ("end", period.get("end"), end)):
@@ -188,12 +308,14 @@ def _resource_violations(resources, run_ids) -> list:
             out.append(f"resources[] carries a {type(resource).__name__}, not a resource object")
             continue
         rid = resource.get("id")
-        if rid in seen:
+        if not _is_id(rid):
+            out.append(f"resource id {rid!r} is not a non-empty string")
+        if _id_key(rid) in seen:
             out.append(f"resource id {rid!r} appears twice; resource ids are stable within the document")
-        seen.add(rid)
+        seen.add(_id_key(rid))
         for key in ("represents_runs", "derived_from_runs"):
             out += [f"resource {rid}: {key} names run {ref!r}, which this record does not publish"
-                    for ref in (resource.get(key) or []) if ref not in run_ids]
+                    for ref in (resource.get(key) or []) if _id_key(ref) not in run_ids]
         out += [f"resource {rid}: service_urls advertises {str(entry.get('kind') or '')!r}. A "
                 f"resource states a direct route or nothing: a service endpoint is operational "
                 f"state, and the one this record could name (OPeNDAP) answers 500 for the archive's "
@@ -233,14 +355,14 @@ def _archive_membership_violations(resources) -> list:
     """An archive row may only ride a record that also publishes the rendition the bundle was built
     from. Fail-closed on an unrecognised archive id: a bundle nothing in this map names has no stated
     membership rule, so it cannot be claimed."""
-    served = {r.get("id") for r in resources
+    served = {_id_key(r.get("id")) for r in resources
               if isinstance(r, dict) and r.get("kind") == "transfer_function"}
     out = []
     for resource in resources:
         if not isinstance(resource, dict) or resource.get("kind") != "archive":
             continue
         rid = resource.get("id")
-        member = ARCHIVE_MEMBER_FORMAT.get(rid)
+        member = ARCHIVE_MEMBER_FORMAT.get(_id_key(rid))
         if member is None:
             out.append(f"resource {rid!r} is an archive with no stated membership rule, so this "
                        f"record cannot claim to be in it")

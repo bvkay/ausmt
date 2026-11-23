@@ -539,8 +539,9 @@ period range, the derived diagnostics, the processing strings read from the sour
 distribution state, the coordinate QC verdict, any canonical conditioning notes, and a `provenance`
 block naming the input file and its SHA-256. It is documented field by field in
 [Per-station products](../reference/station-products.md); its schema is served at
-`/data/ausmt-station.schema.json` and, under the immutable `$id` the schema states for itself, at
-`/data/schemas/ausmt-station/0.1/ausmt-station.schema.json`.
+`/data/ausmt-station.schema.json` and, under the `$id` the schema states for itself, at
+`/data/schemas/ausmt-station/0.1/ausmt-station.schema.json`. Version 0.1 is a draft, so the bytes at
+that route can widen; fetch the schema rather than validate against a cached copy.
 
 Two blocks describe the station rather than the record. `runs` is the acquisition: the run ids, the
 window, the nominal rate, the logger and the channels the source metadata states. It is ABSENT on most
@@ -563,7 +564,7 @@ The two files are gated differently, and the difference matters if you loop over
 
 | | Open survey | Withheld survey |
 |---|---|---|
-| `station.json` | Full record | `200`, with `"withheld": true`, an `access` block, and no derived science, no `runs` and no `resources` |
+| `station.json` | Full record | `200`, with `"withheld": true`, an `access` block, and no derived science and no `resources`; `runs` only on an embargoed survey's record, reduced to when the station was occupied and by which logger and magnetic sensors |
 | `dimensionality.json` | Full record | `404`, never written |
 
 So `station.json` always resolves and is worth requesting for any station; `dimensionality.json` should

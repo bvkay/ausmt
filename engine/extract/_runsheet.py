@@ -73,18 +73,20 @@ def _number(v):
 
 
 def _isotime(v):
-    """The schema types time_period members as format: date-time, so a value passes only as a
-    FULL date+time (fromisoformat accepts a bare date, which the schema rejects - the sheets'
-    date-only retrieve entries must go absent, never published as a non-time)."""
+    """The schema types time_period members as format: date-time, which is RFC 3339: a full date,
+    the T separator, a time and an offset. fromisoformat is laxer on all three (a bare date, a space
+    separator, no offset), and the schema refuses each, so the sheets' date-only retrieve entries
+    and naive times go absent, never published as a non-time. Requiring the offset also keeps
+    _window's comparison between two aware instants."""
     from datetime import datetime
     v = _text(v)
     if not v:
         return None
     try:
-        datetime.fromisoformat(v.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(v.replace("Z", "+00:00").replace("z", "+00:00"))
     except ValueError:
         return None
-    return v if ("T" in v or " " in v.strip()) else None
+    return v if (v[10:11] in ("T", "t") and parsed.tzinfo is not None) else None
 
 
 def _window(row):

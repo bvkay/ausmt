@@ -1729,6 +1729,9 @@ and never writes an empty/undefined value (guards below).
 Same show/hide idiom as #gatewayBlock / #dmsChoice. The disclosure hint (#accessDisclosure) is always
 visible; this only toggles the input block, so a submitter who never touches a non-open level sees no
 extra fields, and buildSurveyYaml already null-guards on level==open regardless of any stale value.
+The hint is where a custodian chooses a level, so it names what each withheld level still
+publishes: under embargoed, each station's occupation dates and the serial numbers and DOIs of its
+logger and magnetic sensors from run-metadata.csv; under metadata_only, none of them.
 ```
 
 #### Per-EDI rename preview: shows "originalname.edi → ROX000.edi" so the ...

@@ -143,7 +143,11 @@ index built from the catalogue shows the survey exists and says who to ask.
 
 Per-station products follow the same rule with one wrinkle. `station.json` is written for every
 station, and a withheld one carries `"withheld": true`, an `access` block giving the level and the
-embargo date, and no derived science, no acquisition metadata and no resource list.
+embargo date, and no derived science, no position and no resource list. An embargoed station's record
+still states when it was occupied and by which data logger and magnetic sensors, with their persistent
+identifiers, in a closed `runs` block taken from the survey's acquisition sheet and never from the
+withheld file; the sample rate, dipole lengths, azimuths and electric channels stay withheld, and a
+`metadata_only` station's record has no `runs`.
 `dimensionality.json`, served alongside it and not a contract, is not written at all for a withheld
 station, because it is a pure interpretation of the transfer function being withheld, so that path
 answers `404`.

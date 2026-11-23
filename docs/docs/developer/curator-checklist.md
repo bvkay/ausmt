@@ -87,6 +87,15 @@ the human review a curator does before a survey is published. The rationale is i
 
 - [ ] The licence permits what the access level claims; redistribution gating is correct.
 - [ ] Any CARE/embargo considerations are recorded and respected.
+- [ ] For an `embargoed` survey, the custodian knows what the embargo does not hide: each station's
+      public record states when it was occupied and the serials and PIDs of its logger and magnetic
+      sensors, from `run-metadata.csv`. If occupation dates must stay private, those columns are blank
+      or the level is `metadata_only`, which publishes no run.
+- [ ] For an `embargoed` survey, the sheet's free-text instrument cells hold only a maker, a model or
+      a serial: `logger_manufacturer`, `logger_model`, `logger_serial`, `sensor_manufacturer`,
+      `sensor_model`, `sensor_bx_serial`, `sensor_by_serial`, `sensor_bz_serial`,
+      `magnetometer_manufacturer`, `magnetometer_model` and `magnetometer_serial` are published as
+      written, with no check on their content, and a note typed into one is published with it.
 
 **Provenance**
 
