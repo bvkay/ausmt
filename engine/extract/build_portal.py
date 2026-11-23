@@ -4536,6 +4536,24 @@ def _tensor_max_abs_diff(a, b):
     return float(np.nanmax(diff)) if diff.size else 0.0
 
 
+def _mth5_source_tf(p):
+    """The transfer function an MTH5 stores for source file `p`, and the reference the round-trip
+    gate compares the stored copy with: the engine reader's parse, the one the catalogue row and
+    the served EMTF XML hold. Its `fn` is `p`, never a temporary copy."""
+    return mtm.read_with_parse_facts(Path(p))[0]
+
+
+def _mth5_require_addressable(tf) -> None:
+    """Raise when mth5 could not find this transfer function again. Its summary table keeps tf_id
+    in a fixed-width column and a lookup goes by that value, so a longer id is stored, missed by
+    the round-trip gate and costs the whole file."""
+    from mth5 import TF_DTYPE  # noqa: PLC0415
+    width = TF_DTYPE["tf_id"].itemsize
+    if len(str(tf.tf_id).encode("utf-8")) > width:
+        raise ValueError(f"the transfer function id is longer than the {width} bytes the MTH5 "
+                         f"summary table keeps: {tf.tf_id!r}")
+
+
 def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
     """Blocking round-trip gate. Reopen a built survey MTH5 and compare every stored TF's impedance tensor
     (and tipper) + coordinates to a FRESH parse of its source EDI, exact-or-tolerance. Also asserts the
@@ -4545,7 +4563,6 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
     -scope pattern), so a silently-wrong TF is never shipped. Never raises: an unexpected failure returns
     ok=False with the reason recorded, matching the producer's withhold-not-crash contract."""
     from mth5.mth5 import MTH5  # noqa: PLC0415
-    from mt_metadata.transfer_functions.core import TF  # noqa: PLC0415
     # Key each source EDI by (survey, sanitised-station-id). A collection file holds the SAME station id
     # under different survey groups (that non-collision is the whole point of tier 3), so a survey-agnostic
     # key would compare a station against the wrong survey's EDI. `_survey` is tagged by the collection
@@ -4588,7 +4605,7 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
                 report["mismatches"].append({"station": sid, "reason": "no source EDI mapped"})
                 continue
             tf_h5 = m.get_transfer_function(sid, row.get("tf_id", sid), survey=row.get("survey"))
-            tf_ed = TF(fn=str(src)); tf_ed.read()
+            tf_ed = _mth5_source_tf(src)
             report["checked"] += 1
             for a, b in ((tf_ed.latitude, tf_h5.latitude), (tf_ed.longitude, tf_h5.longitude),
                          (tf_ed.elevation, tf_h5.elevation)):
@@ -4663,7 +4680,6 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None, failure_rows=None,
     writes; a manifest sha256 over one is a download-integrity hash for the bytes served, not a
     cross-build invariant. A build-cache hit serves the bytes of the write that populated the
     entry, so the sha256 holds across warm builds and moves whenever the file is written again."""
-    from mt_metadata.transfer_functions.core import TF  # noqa: PLC0415
     from mth5.mth5 import MTH5  # noqa: PLC0415
     hpath = Path(hpath)
     hpath.parent.mkdir(parents=True, exist_ok=True)
@@ -4686,8 +4702,8 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None, failure_rows=None,
     try:
         for (p, r) in stations:
             try:
-                tf = TF(fn=str(p))
-                tf.read()
+                tf = _mth5_source_tf(p)
+                _mth5_require_addressable(tf)
                 _apply_mth5_survey_metadata(tf.survey_metadata, smeta, slug, label)
                 tf.station_metadata.id = _sanitise_station_id(r["id"])
                 _stamp_mth5_source_provenance(tf.station_metadata, r)
@@ -5130,7 +5146,6 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
     round-trip + grouping gate (each member under a DISTINCT survey_metadata.id) before it is returned,
     else the collection is WITHHELD. Returns (rel_url, h5_path, n_written) or (None, None, 0).
     DISABLED BY CONSTRUCTION: gate callers on collection_h5_allowed(flags, n_stations) first."""
-    from mt_metadata.transfer_functions.core import TF  # noqa: PLC0415
     from mth5.mth5 import MTH5  # noqa: PLC0415
     smeta_by_slug = smeta_by_slug or {}
     hdir = out / "bundles"; hdir.mkdir(parents=True, exist_ok=True)
@@ -5150,8 +5165,8 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
         for (slug, label, stations) in members:
             for (p, r) in stations:
                 try:
-                    tf = TF(fn=str(p))
-                    tf.read()
+                    tf = _mth5_source_tf(p)
+                    _mth5_require_addressable(tf)
                     _apply_mth5_survey_metadata(tf.survey_metadata, smeta_by_slug.get(slug), slug, label)
                     tf.station_metadata.id = _sanitise_station_id(r["id"])
                     _stamp_mth5_source_provenance(tf.station_metadata, r)
@@ -6379,8 +6394,8 @@ def _main_build(argv=None):
                                                         custodian=_custodian))
                 _bundle_formats.setdefault(slug, {})["xml-zip"] = _xrel
             if flags["survey_h5_enabled"]:
-                # emit_survey_mth5 rebuilds the bundle by RE-READING the RAW source files
-                # (TF(fn=...)), bypassing the masked record entirely — an unfiltered station list served
+                # emit_survey_mth5 rebuilds the bundle by RE-READING the RAW source files,
+                # bypassing the masked record entirely: an unfiltered station list served
                 # a withheld station's exact lat/lon/elev inside the h5 while every JSON surface was
                 # correctly null (the leak-sweep's HDF5 leg pins this). Filter to the byte-gated
                 # exact-only set (the same per-station predicate as the EDI copy loop above): the

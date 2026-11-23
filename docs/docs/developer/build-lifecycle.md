@@ -206,7 +206,9 @@ the files read through a normalised temporary copy (the mt_metadata 1.0.9 `>INFO
 custodian's bytes are what is served. `source_section_selections` is written only where it fires: it
 names, per station, which `>=MTSECT` section of a multi-section source file the published transfer
 function came from and how many sections went unread, because an EPI-KIT file carries an averaged
-solution of record and then the per-frequency realisations that produced it.
+solution of record and then the per-frequency realisations that produced it. The MTH5 writers and the
+reference parse of their round-trip gate read each source through the same reader, so an MTH5 holds
+the same parse as the catalogue row and the EMTF XML, conditioning included.
 
 `source_parse_failures` is a GATE, not a note. It lists the files the reader refused outright, and
 `scripts/verify.py` FAILS on any entry not named in the curator's allow file
@@ -239,7 +241,10 @@ to the ledger.
   line with the count and one example file. `product_failures` carries every file, keyed by producer,
   with the producer path each fault was first seen in (`station product` or `survey bundle`). Both
   MTH5 tiers re-read the same source files, so a fault both hit is one row and one line, whether the
-  bundles were written serially or drained from the worker pool.
+  bundles were written serially or drained from the worker pool. One such fault is a transfer function
+  id longer than the 30 bytes mth5's summary table keeps: mth5 finds a transfer function by that
+  value, so the station is recorded here and skipped rather than written where no reader could find
+  it.
 - `PRECEDENCE` folds to one line per survey naming the count and up to eight ids;
   `precedence_skipped` lists every superseded EMTF XML.
 - The placeholder-tipper `NOTICE` folds the same way; its ledger is the existing `tipper_masked` list.

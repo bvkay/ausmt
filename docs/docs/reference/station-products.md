@@ -38,9 +38,12 @@ the [data reference](../interoperability/api-reference.md#per-station-fetch-thro
 [Tool integration](../interoperability/tool-integration.md).
 
 The station MTH5 is written by the same writer that produces the per-survey bundle and passes the same
-round-trip gate against its source transfer function, so a station reads identically out of either. It
-carries the survey's licence and credit inside the file (`Experiment/Surveys/<slug>` holds
-`release_license` and the credit attributes), which is why it ships with no licence sidecar beside it.
+round-trip gate against its source transfer function, so a station reads identically out of either. Both
+hold the same parse of the source file as the catalogue row and the EMTF XML: for a multi-section
+source that is the section `provenance.section_selected` names (section 1.11.2), and a file read
+through a conditioned temporary copy is written from that same parse. It carries the survey's licence
+and credit inside the file (`Experiment/Surveys/<slug>` holds `release_license` and the credit
+attributes), which is why it ships with no licence sidecar beside it.
 
 ## Normative artifact
 
@@ -392,7 +395,7 @@ is reported separately under `file_written_by` rather than being published as th
 | Type | object |
 | Default | absent, which is every station whose source file carries one data section |
 | Example | `{ "sectid": "Wp01_avg", "sections_dropped": 100 }` |
-| Note | An EPI-KIT processor writes its solution twice over: one `>=MTSECT` block carries the averaged solution, named `<DATAID>_avg`, and after it come the per-frequency realisations `XPR-0` to `XPR-n`. The averaged block is the transfer function of record. AusMT reads the section of record and states which one it was: `<DATAID>_avg`, else the section named for the `DATAID`, else the first section. The selection is applied to a temporary copy carrying that section alone, so the served file stays byte-identical to the custodian's and `input_sha256` still hashes it. A station whose source names no such stack of sections carries no member at all. |
+| Note | An EPI-KIT processor writes its solution twice over: one `>=MTSECT` block carries the averaged solution, named `<DATAID>_avg`, and after it come the per-frequency realisations `XPR-0` to `XPR-n`. The averaged block is the transfer function of record. AusMT reads the section of record and states which one it was: `<DATAID>_avg`, else the section named for the `DATAID`, else the first section. The selection is applied to a temporary copy carrying that section alone, so the served file stays byte-identical to the custodian's and `input_sha256` still hashes it. The catalogue row, the EMTF XML and the MTH5 all hold the selected section. A station whose source names no such stack of sections carries no member at all. |
 
 #### 1.11.3 provenance.coordinate_signs_collapsed
 
